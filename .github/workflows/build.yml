@@ -33,15 +33,13 @@ jobs:
           # The artefacts folder name depends on the project name in CMakeLists.txt.
           # Try both casings so this survives future renames.
           VST3=$(find build -type d -name "*.vst3" | head -1)
-          EXE=$(find build -name "INTERSECT.exe" | head -1)
           [ -n "$VST3" ] && cp -r "$VST3" staging/
-          [ -n "$EXE"  ] && cp    "$EXE"  staging/
           cd staging && 7z a ../INTERSECT-Windows-x64.zip .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: INTERSECT-Windows-x64
-          path: INTERSECT-Windows-x64.zip
+          name: DYSEKT-Windows-x64
+          path: DYSEKT-Windows-x64.zip
           retention-days: 30
 
   # ── macOS arm64 VST3 + AU + Standalone ─────────────────────────────────────
