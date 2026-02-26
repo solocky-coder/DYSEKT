@@ -1,69 +1,137 @@
-name: Build DYSEKT
+name: Build
+
+# Runs on every push to main (or any branch).
+# Artifacts appear in the Actions tab → click the run → scroll to "Artifacts".
+# No tagging or releasing needed.
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:   # allows manual trigger from GitHub Actions tab
+    branches:
+      - main
+      - master
+  workflow_dispatch:   # lets you trigger a build manually from the Actions tab
 
 jobs:
+  # ── Windows VST3 + Standalone ──────────────────────────────────────────────
   build-windows:
-    name: Windows (VST3 + Standalone)
     runs-on: windows-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: recursive   # pulls JUCE, bungee, signalsmith etc.
+          submodules: recursive
 
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: build
-          key: ${{ runner.os }}-cmake-${{ hashFiles('CMakeLists.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-cmake-
-
-      - name: Configure CMake
-        run: |
-          cmake -B build -S . `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DJUCE_BUILD_EXTRAS=OFF `
-            -DJUCE_BUILD_EXAMPLES=OFF
+      - name: Configure
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config Release
 
-      - name: Collect VST3
-        shell: pwsh
+      - name: Package
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path artifacts/VST3
-          $vst3 = Get-ChildItem -Recurse -Filter "*.vst3" build/
-          foreach ($f in $vst3) {
-            Copy-Item -Recurse -Force $f.FullName artifacts/VST3/
-          }
+          mkdir staging
+          # The artefacts folder name depends on the project name in CMakeLists.txt.
+          # Try both casings so this survives future renames.
+          VST3=$(find build -type d -name "*.vst3" | head -1)
+          EXE=$(find build -name "INTERSECT.exe" | head -1)
+          [ -n "$VST3" ] && cp -r "$VST3" staging/
+          [ -n "$EXE"  ] && cp    "$EXE"  staging/
+          cd staging && 7z a ../INTERSECT-Windows-x64.zip .
 
-      - name: Collect Standalone
-        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-Windows-x64
+          path: INTERSECT-Windows-x64.zip
+          retention-days: 30
+
+  # ── macOS arm64 VST3 + AU + Standalone ─────────────────────────────────────
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
         run: |
-          New-Item -ItemType Directory -Force -Path artifacts/Standalone
-          $exes = Get-ChildItem -Recurse -Filter "DYSEKT*.exe" build/
-          foreach ($f in $exes) {
-            Copy-Item -Force $f.FullName artifacts/Standalone/
-          }
+          mkdir staging
+          find build -type d -name "*.vst3"       -exec cp -r {} staging/ \;
+          find build -type d -name "*.component"  -exec cp -r {} staging/ \;
+          find build -type d -name "*.app"        -exec cp -r {} staging/ \;
+          cd staging && zip -r ../INTERSECT-macOS-arm64.zip .
 
-      - name: Upload VST3 artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: DYSEKT-VST3-Windows
-          path: artifacts/VST3/
-          if-no-files-found: warn
+          name: INTERSECT-macOS-arm64
+          path: INTERSECT-macOS-arm64.zip
+          retention-days: 30
 
-      - name: Upload Standalone artifact
-        uses: actions/upload-artifact@v4
+  # ── macOS Intel VST3 + AU + Standalone ─────────────────────────────────────
+  build-macos-x64:
+    runs-on: macos-13          # last Intel runner (macos-15-intel is not yet GA)
+    steps:
+      - uses: actions/checkout@v4
         with:
-          name: DYSEKT-Standalone-Windows
-          path: artifacts/Standalone/
-          if-no-files-found: warn
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          find build -type d -name "*.vst3"       -exec cp -r {} staging/ \;
+          find build -type d -name "*.component"  -exec cp -r {} staging/ \;
+          find build -type d -name "*.app"        -exec cp -r {} staging/ \;
+          cd staging && zip -r ../INTERSECT-macOS-x64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-macOS-x64
+          path: INTERSECT-macOS-x64.zip
+          retention-days: 30
+
+  # ── Linux VST3 + Standalone ─────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install JUCE Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libfreetype-dev \
+            libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev \
+            libwebkit2gtk-4.1-dev libcurl4-openssl-dev
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          find build -type d -name "*.vst3" -exec cp -r {} staging/ \;
+          find build -type f -name "INTERSECT" -not -path "*/CMakeFiles/*" \
+               -exec cp {} staging/ \;
+          cd staging && zip -r ../INTERSECT-Linux-x64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-Linux-x64
+          path: INTERSECT-Linux-x64.zip
+          retention-days: 30
