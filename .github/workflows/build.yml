@@ -34,7 +34,7 @@ jobs:
           # Try both casings so this survives future renames.
           VST3=$(find build -type d -name "*.vst3" | head -1)
           [ -n "$VST3" ] && cp -r "$VST3" staging/
-          cd staging && 7z a ../INTERSECT-Windows-x64.zip .
+          cd staging && 7z a ../DYSEKT-Windows-x64.zip .
 
       - uses: actions/upload-artifact@v4
         with:
