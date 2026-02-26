@@ -1,0 +1,69 @@
+name: Build DYSEKT
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:   # allows manual trigger from GitHub Actions tab
+
+jobs:
+  build-windows:
+    name: Windows (VST3 + Standalone)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive   # pulls JUCE, bungee, signalsmith etc.
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-cmake-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -S . `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DJUCE_BUILD_EXTRAS=OFF `
+            -DJUCE_BUILD_EXAMPLES=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Collect VST3
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/VST3
+          $vst3 = Get-ChildItem -Recurse -Filter "*.vst3" build/
+          foreach ($f in $vst3) {
+            Copy-Item -Recurse -Force $f.FullName artifacts/VST3/
+          }
+
+      - name: Collect Standalone
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/Standalone
+          $exes = Get-ChildItem -Recurse -Filter "DYSEKT*.exe" build/
+          foreach ($f in $exes) {
+            Copy-Item -Force $f.FullName artifacts/Standalone/
+          }
+
+      - name: Upload VST3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DYSEKT-VST3-Windows
+          path: artifacts/VST3/
+          if-no-files-found: warn
+
+      - name: Upload Standalone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DYSEKT-Standalone-Windows
+          path: artifacts/Standalone/
+          if-no-files-found: warn

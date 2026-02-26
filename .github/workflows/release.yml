@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          cp -r build/Intersect_artefacts/Release/VST3/INTERSECT.vst3 staging/
+          cp build/Intersect_artefacts/Release/Standalone/INTERSECT.exe staging/
+          cd staging && 7z a ../INTERSECT-${{ github.ref_name }}-Windows-x64.zip *
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-Windows-x64
+          path: INTERSECT-${{ github.ref_name }}-Windows-x64.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfreetype-dev libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          cp -r build/Intersect_artefacts/Release/VST3/INTERSECT.vst3 staging/
+          cp build/Intersect_artefacts/Release/Standalone/INTERSECT staging/
+          cd staging && zip -r ../INTERSECT-${{ github.ref_name }}-Linux-x64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-Linux-x64
+          path: INTERSECT-${{ github.ref_name }}-Linux-x64.zip
+
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          cp -r build/Intersect_artefacts/Release/VST3/INTERSECT.vst3 staging/
+          cp -r build/Intersect_artefacts/Release/Standalone/INTERSECT.app staging/
+          cp -r build/Intersect_artefacts/Release/AU/INTERSECT.component staging/
+          cd staging && zip -r ../INTERSECT-${{ github.ref_name }}-macOS-arm64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-macOS-arm64
+          path: INTERSECT-${{ github.ref_name }}-macOS-arm64.zip
+
+  build-macos-x64:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          cp -r build/Intersect_artefacts/Release/VST3/INTERSECT.vst3 staging/
+          cp -r build/Intersect_artefacts/Release/Standalone/INTERSECT.app staging/
+          cp -r build/Intersect_artefacts/Release/AU/INTERSECT.component staging/
+          cd staging && zip -r ../INTERSECT-${{ github.ref_name }}-macOS-x64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-macOS-x64
+          path: INTERSECT-${{ github.ref_name }}-macOS-x64.zip
+
+  release:
+    needs: [build-windows, build-linux, build-macos-arm64, build-macos-x64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/INTERSECT-Windows-x64/INTERSECT-${{ github.ref_name }}-Windows-x64.zip
+            artifacts/INTERSECT-Linux-x64/INTERSECT-${{ github.ref_name }}-Linux-x64.zip
+            artifacts/INTERSECT-macOS-arm64/INTERSECT-${{ github.ref_name }}-macOS-arm64.zip
+            artifacts/INTERSECT-macOS-x64/INTERSECT-${{ github.ref_name }}-macOS-x64.zip
