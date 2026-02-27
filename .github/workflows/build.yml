@@ -1,135 +1,45 @@
-name: Build
-
-# Runs on every push to main (or any branch).
-# Artifacts appear in the Actions tab → click the run → scroll to "Artifacts".
-# No tagging or releasing needed.
+name: Build DYSEKT VST3
 
 on:
   push:
-    branches:
-      - main
-      - master
-  workflow_dispatch:   # lets you trigger a build manually from the Actions tab
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
-  # ── Windows VST3 + Standalone ──────────────────────────────────────────────
   build-windows:
+    name: Windows VST3
     runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Configure
-        run: cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DJUCE_BUILD_EXTRAS=OFF `
+            -DJUCE_BUILD_EXAMPLES=OFF
 
       - name: Build
-        run: cmake --build build --config Release
+        shell: pwsh
+        run: cmake --build build --config Release --parallel
 
-      - name: Package
-        shell: bash
+      - name: Collect VST3
+        shell: pwsh
         run: |
-          mkdir staging
-          # The artefacts folder name depends on the project name in CMakeLists.txt.
-          # Try both casings so this survives future renames.
-          VST3=$(find build -type d -name "*.vst3" | head -1)
-          [ -n "$VST3" ] && cp -r "$VST3" staging/
-          cd staging && 7z a ../DYSEKT-Windows-x64.zip .
+          New-Item -ItemType Directory -Force -Path artifacts
+          $files = Get-ChildItem -Recurse -Filter "*.vst3" build/
+          foreach ($f in $files) {
+            Copy-Item -Recurse -Force $f.FullName artifacts/
+          }
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload VST3
+        uses: actions/upload-artifact@v4
         with:
-          name: DYSEKT-Windows-x64
-          path: DYSEKT-Windows-x64.zip
-          retention-days: 30
-
-  # ── macOS arm64 VST3 + AU + Standalone ─────────────────────────────────────
-  build-macos-arm64:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Package
-        run: |
-          mkdir staging
-          find build -type d -name "*.vst3"       -exec cp -r {} staging/ \;
-          find build -type d -name "*.component"  -exec cp -r {} staging/ \;
-          find build -type d -name "*.app"        -exec cp -r {} staging/ \;
-          cd staging && zip -r ../INTERSECT-macOS-arm64.zip .
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: INTERSECT-macOS-arm64
-          path: INTERSECT-macOS-arm64.zip
-          retention-days: 30
-
-  # ── macOS Intel VST3 + AU + Standalone ─────────────────────────────────────
-  build-macos-x64:
-    runs-on: macos-13          # last Intel runner (macos-15-intel is not yet GA)
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Package
-        run: |
-          mkdir staging
-          find build -type d -name "*.vst3"       -exec cp -r {} staging/ \;
-          find build -type d -name "*.component"  -exec cp -r {} staging/ \;
-          find build -type d -name "*.app"        -exec cp -r {} staging/ \;
-          cd staging && zip -r ../INTERSECT-macOS-x64.zip .
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: INTERSECT-macOS-x64
-          path: INTERSECT-macOS-x64.zip
-          retention-days: 30
-
-  # ── Linux VST3 + Standalone ─────────────────────────────────────────────────
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install JUCE Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libasound2-dev libfreetype-dev \
-            libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev \
-            libwebkit2gtk-4.1-dev libcurl4-openssl-dev
-
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Package
-        run: |
-          mkdir staging
-          find build -type d -name "*.vst3" -exec cp -r {} staging/ \;
-          find build -type f -name "INTERSECT" -not -path "*/CMakeFiles/*" \
-               -exec cp {} staging/ \;
-          cd staging && zip -r ../INTERSECT-Linux-x64.zip .
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: INTERSECT-Linux-x64
-          path: INTERSECT-Linux-x64.zip
-          retention-days: 30
+          name: DYSEKT-VST3
+          path: artifacts/
+          if-no-files-found: error
