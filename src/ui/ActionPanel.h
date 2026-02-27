@@ -20,18 +20,21 @@ public:
     std::function<void()> onKeysToggle;
     std::function<void()> onBrowserToggle;
     std::function<void()> onWaveToggle;
+    std::function<void()> onChromaticToggle;
 
-    void setKeysActive    (bool v) { keysActive    = v; repaint(); }
-    void setBrowserActive (bool v) { browserActive = v; repaint(); }
-    void setWaveActive    (bool v) { waveActive    = v; repaint(); }
+    void setKeysActive       (bool v) { keysActive       = v; repaint(); }
+    void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
+    void setWaveActive       (bool v) { waveActive       = v; repaint(); }
+    void setChromaticActive  (bool v) { chromaticActive  = v; repaint(); }
 
 private:
     DysektProcessor& processor;
     WaveformView&    waveformView;
 
-    bool keysActive    = false;
-    bool browserActive = false;
-    bool waveActive    = false;   // true = soft waveform mode
+    bool keysActive       = false;
+    bool browserActive    = false;
+    bool waveActive       = false;
+    bool chromaticActive  = false;
 
     void updateToggleBtn (juce::TextButton& btn, bool active);
     void updateMidiButtonAppearance (bool active);
@@ -47,6 +50,7 @@ private:
     juce::TextButton keysBtn       { "KEYS" };
     juce::TextButton browserBtn    { "FILES" };
     juce::TextButton waveBtn       { "WAVE" };
+    juce::TextButton chromaticBtn  { "CHRO" };
 
     std::unique_ptr<AutoChopPanel> autoChopPanel;
 };

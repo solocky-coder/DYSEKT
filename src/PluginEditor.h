@@ -29,6 +29,7 @@ public:
     void toggleKeysPanel();
     void toggleBrowserPanel();
     void toggleSoftWave();
+    void toggleChromatic();
 
 private:
     void timerCallback() override;

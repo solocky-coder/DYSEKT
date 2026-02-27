@@ -34,6 +34,16 @@ struct Voice
     int          bufferEnd    = 0;       // actual end of sample buffer (for release tail)
     int          outputBus    = 0;       // output bus index (0-15)
 
+    // Pan — constant-power, calculated at note-on
+    float        panL         = 1.0f;
+    float        panR         = 1.0f;
+
+    // Filter — one-pole IIR low-pass with resonance
+    float        filterCoeff  = 1.0f;   // 1.0 = bypass
+    float        filterRes    = 0.0f;
+    float        filterStateL = 0.0f;
+    float        filterStateR = 0.0f;
+
     // Signalsmith stretch fields
     bool         stretchActive = false;
     std::shared_ptr<signalsmith::stretch::SignalsmithStretch<float, void>> stretcher;

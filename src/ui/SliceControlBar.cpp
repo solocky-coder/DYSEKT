@@ -3,6 +3,7 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 #include "../audio/GrainEngine.h"
+#include <cmath>
 
 namespace
 {
@@ -117,11 +118,16 @@ float SliceControlBar::toNorm (int fieldId, float v) const
         case F::FieldDecay:       return juce::jlimit (0.f, 1.f, v / 5.f);
         case F::FieldSustain:     return juce::jlimit (0.f, 1.f, v);
         case F::FieldRelease:     return juce::jlimit (0.f, 1.f, v / 5.f);
-        case F::FieldMuteGroup:   return juce::jlimit (0.f, 1.f, v / 32.f);
-        case F::FieldMidiNote:    return juce::jlimit (0.f, 1.f, v / 127.f);
-        case F::FieldVolume:      return juce::jlimit (0.f, 1.f, (v + 100.f) / 124.f);
-        case F::FieldOutputBus:   return juce::jlimit (0.f, 1.f, v / 15.f);
-        default:                  return 0.5f;
+        case F::FieldMuteGroup:    return juce::jlimit (0.f, 1.f, v / 32.f);
+        case F::FieldMidiNote:     return juce::jlimit (0.f, 1.f, v / 127.f);
+        case F::FieldVolume:       return juce::jlimit (0.f, 1.f, (v + 100.f) / 124.f);
+        case F::FieldOutputBus:    return juce::jlimit (0.f, 1.f, v / 15.f);
+        case F::FieldPan:          return juce::jlimit (0.f, 1.f, (v + 1.f) / 2.f);
+        case F::FieldFilterCutoff: { const float logMin = std::log (20.f), logMax = std::log (20000.f);
+                                     return juce::jlimit (0.f, 1.f,
+                                         (std::log (juce::jlimit (20.f, 20000.f, v)) - logMin) / (logMax - logMin)); }
+        case F::FieldFilterRes:    return juce::jlimit (0.f, 1.f, v);
+        default:                   return 0.5f;
     }
 }
 
@@ -658,6 +664,48 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
+    // PAN — knob (-1 L .. 0 C .. +1 R)
+    {
+        float gPan  = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
+        bool locked = (s.lockMask & kLockPan) != 0;
+        float pv    = locked ? s.pan : gPan;
+        juce::String panStr = (pv == 0.0f) ? "C"
+                            : (pv < 0.0f   ? juce::String ((int) std::round (-pv * 100.0f)) + "L"
+                                           : juce::String ((int) std::round ( pv * 100.0f)) + "R");
+        drawKnobCell (g, x, row2y, "PAN", panStr,
+                      (pv + 1.0f) * 0.5f,          // normalise -1..+1 → 0..1
+                      locked, kLockPan, F::FieldPan, -1.f, 1.f, 0.01f, cw);
+        x += cw + 4;
+    }
+
+    // FCUT — filter cutoff knob (Hz, log feel)
+    {
+        float gFC   = processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load();
+        bool locked = (s.lockMask & kLockFilter) != 0;
+        float fv    = locked ? s.filterCutoff : gFC;
+        juce::String fcStr = (fv >= 10000.0f) ? juce::String ((int) (fv / 1000.0f)) + "k"
+                                               : juce::String ((int) fv) + "Hz";
+        // Normalise on a log scale for display
+        const float logMin = std::log (20.0f), logMax = std::log (20000.0f);
+        float fcNorm = (std::log (juce::jlimit (20.0f, 20000.0f, fv)) - logMin) / (logMax - logMin);
+        drawKnobCell (g, x, row2y, "FCUT", fcStr,
+                      fcNorm,
+                      locked, kLockFilter, F::FieldFilterCutoff, 20.f, 20000.f, 1.f, cw);
+        x += cw + 4;
+    }
+
+    // FRES — filter resonance knob (0..1)
+    {
+        float gFR   = processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
+        bool locked = (s.lockMask & kLockFilter) != 0;
+        float rv    = locked ? s.filterRes : gFR;
+        drawKnobCell (g, x, row2y, "FRES",
+                      juce::String ((int) (rv * 100.0f)) + "%",
+                      rv,
+                      locked, kLockFilter, F::FieldFilterRes, 0.f, 1.f, 0.01f, cw);
+        x += cw + 4;
+    }
+
     // OUT — knob
     {
         bool locked = (s.lockMask & kLockOutputBus) != 0;
@@ -666,6 +714,8 @@ void SliceControlBar::paint (juce::Graphics& g)
                       juce::String (ov + 1),
                       toNorm (F::FieldOutputBus, (float) ov),
                       locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f, cw);
+        x += cw + 4;
+    }
         x += cw + 4;
     }
 
@@ -759,12 +809,15 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                     case F::FieldAttack:      pid = ParamIds::defaultAttack;        break;
                     case F::FieldDecay:       pid = ParamIds::defaultDecay;         break;
                     case F::FieldSustain:     pid = ParamIds::defaultSustain;       break;
-                    case F::FieldRelease:     pid = ParamIds::defaultRelease;       break;
-                    case F::FieldMuteGroup:   pid = ParamIds::defaultMuteGroup;     break;
-                    case F::FieldVolume:      pid = ParamIds::masterVolume;         break;
-                    case F::FieldSliceStart:  pid = ParamIds::sliceStart;           break;
-                    case F::FieldSliceEnd:    pid = ParamIds::sliceEnd;             break;
-                    default:                  break;
+                    case F::FieldRelease:       pid = ParamIds::defaultRelease;       break;
+                    case F::FieldMuteGroup:     pid = ParamIds::defaultMuteGroup;     break;
+                    case F::FieldVolume:        pid = ParamIds::masterVolume;         break;
+                    case F::FieldSliceStart:    pid = ParamIds::sliceStart;           break;
+                    case F::FieldSliceEnd:      pid = ParamIds::sliceEnd;             break;
+                    case F::FieldPan:           pid = ParamIds::defaultPan;           break;
+                    case F::FieldFilterCutoff:  pid = ParamIds::defaultFilterCutoff;  break;
+                    case F::FieldFilterRes:     pid = ParamIds::defaultFilterRes;     break;
+                    default:                    break;
                 }
                 if (pid.isNotEmpty())
                     if (auto* p = processor.apvts.getParameter (pid))
@@ -805,6 +858,9 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                     case F::FieldMidiNote:    dragStartValue = (float) sl.midiNote;              break;
                     case F::FieldVolume:      dragStartValue = (sl.lockMask & kLockVolume)      ? sl.volume               : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();            break;
                     case F::FieldOutputBus:   dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
+                    case F::FieldPan:         dragStartValue = (sl.lockMask & kLockPan)    ? sl.pan          : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();           break;
+                    case F::FieldFilterCutoff: dragStartValue = (sl.lockMask & kLockFilter) ? sl.filterCutoff : processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load(); break;
+                    case F::FieldFilterRes:   dragStartValue = (sl.lockMask & kLockFilter) ? sl.filterRes    : processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();    break;
                     default:                  dragStartValue = 0.f; break;
                 }
             }
@@ -992,15 +1048,18 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
                 case F::FieldCentsDetune: pid = ParamIds::defaultCentsDetune;   break;
                 case F::FieldTonality:    pid = ParamIds::defaultTonality;      break;
                 case F::FieldFormant:     pid = ParamIds::defaultFormant;       break;
-                case F::FieldAttack:      pid = ParamIds::defaultAttack;        break;
-                case F::FieldDecay:       pid = ParamIds::defaultDecay;         break;
-                case F::FieldSustain:     pid = ParamIds::defaultSustain;       break;
-                case F::FieldRelease:     pid = ParamIds::defaultRelease;       break;
-                case F::FieldMuteGroup:   pid = ParamIds::defaultMuteGroup;     break;
-                case F::FieldVolume:      pid = ParamIds::masterVolume;         break;
-                case F::FieldSliceStart:  pid = ParamIds::sliceStart;           break;
-                case F::FieldSliceEnd:    pid = ParamIds::sliceEnd;             break;
-                default:                  break;
+                case F::FieldAttack:         pid = ParamIds::defaultAttack;        break;
+                case F::FieldDecay:          pid = ParamIds::defaultDecay;         break;
+                case F::FieldSustain:        pid = ParamIds::defaultSustain;       break;
+                case F::FieldRelease:        pid = ParamIds::defaultRelease;       break;
+                case F::FieldMuteGroup:      pid = ParamIds::defaultMuteGroup;     break;
+                case F::FieldVolume:         pid = ParamIds::masterVolume;         break;
+                case F::FieldSliceStart:     pid = ParamIds::sliceStart;           break;
+                case F::FieldSliceEnd:       pid = ParamIds::sliceEnd;             break;
+                case F::FieldPan:            pid = ParamIds::defaultPan;           break;
+                case F::FieldFilterCutoff:   pid = ParamIds::defaultFilterCutoff;  break;
+                case F::FieldFilterRes:      pid = ParamIds::defaultFilterRes;     break;
+                default:                     break;
             }
             if (pid.isNotEmpty())
                 if (auto* p = processor.apvts.getParameter (pid))
@@ -1073,8 +1132,11 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
                 case F::FieldRelease:     currentVal = ((sl.lockMask & kLockRelease) ? sl.releaseSec  : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load()  / 1000.f) * 1000.f; break;
                 case F::FieldMuteGroup:   currentVal = (float)((sl.lockMask & kLockMuteGroup)  ? sl.muteGroup  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load()); break;
                 case F::FieldMidiNote:    currentVal = (float) sl.midiNote;  break;
-                case F::FieldVolume:      currentVal = (sl.lockMask & kLockVolume)     ? sl.volume    : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();     break;
-                case F::FieldOutputBus:   currentVal = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
+                case F::FieldVolume:       currentVal = (sl.lockMask & kLockVolume)     ? sl.volume       : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();       break;
+                case F::FieldOutputBus:    currentVal = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
+                case F::FieldPan:          currentVal = (sl.lockMask & kLockPan)    ? sl.pan          : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();           break;
+                case F::FieldFilterCutoff: currentVal = (sl.lockMask & kLockFilter) ? sl.filterCutoff : processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load(); break;
+                case F::FieldFilterRes:    currentVal = (sl.lockMask & kLockFilter) ? sl.filterRes    : processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();    break;
                 default: break;
             }
         }

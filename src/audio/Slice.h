@@ -4,14 +4,14 @@
 
 enum LockBit : uint32_t
 {
-    kLockBpm       = 1,
-    kLockPitch     = 2,
-    kLockAlgorithm = 4,
-    kLockAttack    = 8,
-    kLockDecay     = 16,
-    kLockSustain   = 32,
-    kLockRelease   = 64,
-    kLockMuteGroup = 128,
+    kLockBpm         = 1,
+    kLockPitch       = 2,
+    kLockAlgorithm   = 4,
+    kLockAttack      = 8,
+    kLockDecay       = 16,
+    kLockSustain     = 32,
+    kLockRelease     = 64,
+    kLockMuteGroup   = 128,
     // 256 was kLockPingPong (removed — merged into kLockLoop)
     kLockStretch       = 512,
     kLockTonality      = 1024,
@@ -23,36 +23,45 @@ enum LockBit : uint32_t
     kLockReverse       = 65536,
     kLockOutputBus     = 131072,
     kLockLoop          = 262144,
-    kLockOneShot       = 524288,   // bit 19
-    kLockCentsDetune   = 1048576   // bit 20
+    kLockOneShot       = 524288,    // bit 19
+    kLockCentsDetune   = 1048576,   // bit 20
+    kLockPan           = 2097152,   // bit 21  ← NEW
+    kLockFilter        = 4194304,   // bit 22  ← NEW (locks cutoff + res together)
 };
 
 struct Slice
 {
-    bool     active        = false;
-    int      startSample   = 0;
-    int      endSample     = 0;
-    int      midiNote      = 36;
-    float    bpm           = 120.0f;
+    bool     active         = false;
+    int      startSample    = 0;
+    int      endSample      = 0;
+    int      midiNote       = 36;
+    float    bpm            = 120.0f;
     float    pitchSemitones = 0.0f;
-    int      algorithm     = 0;       // 0=Repitch, 1=Stretch, 2=Bungee
-    float    attackSec     = 0.005f;
-    float    decaySec      = 0.1f;
-    float    sustainLevel  = 1.0f;
-    float    releaseSec    = 0.02f;
-    int      muteGroup     = 1;
-    int      loopMode      = 0;       // 0=Off, 1=Loop, 2=Ping-Pong
+    int      algorithm      = 0;        // 0=Repitch, 1=Stretch, 2=Bungee
+    float    attackSec      = 0.005f;
+    float    decaySec       = 0.1f;
+    float    sustainLevel   = 1.0f;
+    float    releaseSec     = 0.02f;
+    int      muteGroup      = 1;
+    int      loopMode       = 0;        // 0=Off, 1=Loop, 2=Ping-Pong
     bool     stretchEnabled = false;
-    float    tonalityHz    = 0.0f;
+    float    tonalityHz     = 0.0f;
     float    formantSemitones = 0.0f;
-    bool     formantComp   = false;
-    int      grainMode     = 0;       // Bungee: -1=Fast, 0=Normal, +1=Smooth
-    float    volume        = 0.0f;
-    bool     releaseTail   = false;
-    bool     reverse       = false;
-    int      outputBus     = 0;
-    bool     oneShot       = false;
-    float    centsDetune   = 0.0f;      // fine pitch: -100..+100 cents
-    uint32_t lockMask      = 0;
-    juce::Colour colour    { 0.4f, 0.7f, 0.95f, 1.0f };
+    bool     formantComp    = false;
+    int      grainMode      = 0;        // Bungee: 0=Fast, 1=Normal, 2=Smooth
+    float    volume         = 0.0f;     // dB, -100..+24
+    bool     releaseTail    = false;
+    bool     reverse        = false;
+    int      outputBus      = 0;
+    bool     oneShot        = false;
+    float    centsDetune    = 0.0f;     // fine pitch: -100..+100 cents
+
+    // ── v17 additions ─────────────────────────────────────────────────────────
+    float    pan            = 0.0f;     // stereo pan: -1 (L) .. 0 (C) .. +1 (R)
+    float    filterCutoff   = 20000.0f; // low-pass cutoff Hz: 20..20000
+    float    filterRes      = 0.0f;     // resonance: 0..1
+    int      rrCounter      = 0;        // round-robin playback counter (not saved)
+
+    uint32_t lockMask       = 0;
+    juce::Colour colour     { 0.4f, 0.7f, 0.95f, 1.0f };
 };

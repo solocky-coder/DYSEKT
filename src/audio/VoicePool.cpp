@@ -206,6 +206,23 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
 
     v.volume = dbToLinear (sm.resolveParam (sliceIdx, kLockVolume, s.volume, p.globalVolume));
 
+    // ── Pan (constant-power law) ──────────────────────────────────────────────
+    float resolvedPan = sm.resolveParam (sliceIdx, kLockPan, s.pan, p.globalPan);
+    resolvedPan = juce::jlimit (-1.0f, 1.0f, resolvedPan);
+    float panAngle = (resolvedPan + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
+    v.panL = std::cos (panAngle);
+    v.panR = std::sin (panAngle);
+
+    // ── Filter (one-pole IIR low-pass with resonance feedback) ───────────────
+    float resolvedCutoff = sm.resolveParam (sliceIdx, kLockFilter, s.filterCutoff, p.globalFilterCutoff);
+    float resolvedFRes   = sm.resolveParam (sliceIdx, kLockFilter, s.filterRes,    p.globalFilterRes);
+    resolvedCutoff = juce::jlimit (20.0f, 20000.0f, resolvedCutoff);
+    float w = 2.0f * juce::MathConstants<float>::pi * resolvedCutoff / (float) sampleRate;
+    v.filterCoeff  = juce::jlimit (0.0f, 1.0f, 1.0f - std::exp (-w));
+    v.filterRes    = juce::jlimit (0.0f, 1.0f, resolvedFRes);
+    v.filterStateL = 0.0f;
+    v.filterStateR = 0.0f;
+
     v.releaseTail = sm.resolveParam (sliceIdx, kLockReleaseTail,
                                       s.releaseTail ? 1.0f : 0.0f,
                                       p.globalReleaseTail ? 1.0f : 0.0f) > 0.5f;
@@ -760,6 +777,24 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
         v.position = newPos;
         voicePositions[i].store ((float) v.position, std::memory_order_relaxed);
     }
+
+    // ── Filter (applied to all rendering paths) ───────────────────────────────
+    // One-pole IIR low-pass with resonance feedback.
+    // filterCoeff == 1.0 means bypass (cutoff at Nyquist).
+    if (v.filterCoeff < 0.9999f)
+    {
+        float fbL = voiceL - v.filterRes * 3.5f * v.filterStateL;
+        v.filterStateL += v.filterCoeff * (fbL - v.filterStateL);
+        voiceL = v.filterStateL;
+
+        float fbR = voiceR - v.filterRes * 3.5f * v.filterStateR;
+        v.filterStateR += v.filterCoeff * (fbR - v.filterStateR);
+        voiceR = v.filterStateR;
+    }
+
+    // ── Pan ───────────────────────────────────────────────────────────────────
+    voiceL *= v.panL;
+    voiceR *= v.panR;
 
     outL = voiceL;
     outR = voiceR;

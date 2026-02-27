@@ -53,7 +53,8 @@ static constexpr uint32_t kValidLockMask =
     kLockBpm | kLockPitch | kLockAlgorithm | kLockAttack | kLockDecay | kLockSustain
     | kLockRelease | kLockMuteGroup | kLockStretch | kLockTonality | kLockFormant
     | kLockFormantComp | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
-    | kLockOutputBus | kLockLoop | kLockOneShot | kLockCentsDetune;
+    | kLockOutputBus | kLockLoop | kLockOneShot | kLockCentsDetune
+    | kLockPan | kLockFilter;
 
 static Slice sanitiseRestoredSlice (Slice s)
 {
@@ -78,6 +79,9 @@ static Slice sanitiseRestoredSlice (Slice s)
     s.volume = juce::jlimit (-100.0f, 24.0f, s.volume);
     s.outputBus = juce::jlimit (0, 15, s.outputBus);
     s.centsDetune = juce::jlimit (-100.0f, 100.0f, s.centsDetune);
+    s.pan         = juce::jlimit (-1.0f, 1.0f, s.pan);
+    s.filterCutoff = juce::jlimit (20.0f, 20000.0f, s.filterCutoff);
+    s.filterRes    = juce::jlimit (0.0f, 1.0f, s.filterRes);
     s.lockMask &= kValidLockMask;
     return s;
 }
@@ -150,7 +154,10 @@ DysektProcessor::DysektProcessor()
     loopParam        = apvts.getRawParameterValue (ParamIds::defaultLoop);
     oneShotParam     = apvts.getRawParameterValue (ParamIds::defaultOneShot);
     maxVoicesParam   = apvts.getRawParameterValue (ParamIds::maxVoices);
-    centsDetuneParam = apvts.getRawParameterValue (ParamIds::defaultCentsDetune);
+    centsDetuneParam  = apvts.getRawParameterValue (ParamIds::defaultCentsDetune);
+    panParam          = apvts.getRawParameterValue (ParamIds::defaultPan);
+    filterCutoffParam = apvts.getRawParameterValue (ParamIds::defaultFilterCutoff);
+    filterResParam    = apvts.getRawParameterValue (ParamIds::defaultFilterRes);
     sliceStartParam  = apvts.getRawParameterValue (ParamIds::sliceStart);
     sliceEndParam    = apvts.getRawParameterValue (ParamIds::sliceEnd);
     publishUiSliceSnapshot();
@@ -661,6 +668,9 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockFormantComp)  s.formantComp       = formantCompParam->load() > 0.5f;
                     else if (bit == kLockGrainMode)    s.grainMode         = (int) grainModeParam->load();
                     else if (bit == kLockVolume)       s.volume            = masterVolParam->load();
+                    else if (bit == kLockPan)          s.pan               = panParam->load();
+                    else if (bit == kLockFilter)       { s.filterCutoff    = filterCutoffParam->load();
+                                                         s.filterRes       = filterResParam->load(); }
                     // kLockOutputBus: no global default param — slice default (0) is correct
                 }
 
@@ -699,7 +709,10 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldOutputBus:  s.outputBus = juce::jlimit (0, 15, (int) val); s.lockMask |= kLockOutputBus; break;
                     case FieldLoop:       s.loopMode = (int) val;    s.lockMask |= kLockLoop;      break;
                     case FieldOneShot:    s.oneShot = val > 0.5f;    s.lockMask |= kLockOneShot;   break;
-                    case FieldCentsDetune: s.centsDetune = val;         s.lockMask |= kLockCentsDetune; break;
+                    case FieldCentsDetune:   s.centsDetune    = val;       s.lockMask |= kLockCentsDetune; break;
+                    case FieldPan:           s.pan            = val;       s.lockMask |= kLockPan;         break;
+                    case FieldFilterCutoff:  s.filterCutoff   = val;       s.lockMask |= kLockFilter;      break;
+                    case FieldFilterRes:     s.filterRes      = val;       s.lockMask |= kLockFilter;      break;
                     case FieldMidiNote:
                         s.midiNote = juce::jlimit (0, 127, (int) val);
                         sliceManager.rebuildMidiMap();
@@ -958,7 +971,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     {
                         case FieldBpm:         nativeVal = 20.0f + outNorm * (999.0f - 20.0f); break;
                         case FieldPitch:       nativeVal = -24.0f + outNorm * 48.0f;           break;
-                        case FieldCentsDetune: nativeVal = -100.0f + outNorm * 200.0f;         break;
+                        case FieldCentsDetune: nativeVal = -100.0f + outNorm * 200.0f;           break;
+                        case FieldPan:         nativeVal = -1.0f + outNorm * 2.0f;               break;
+                        case FieldFilterCutoff: nativeVal = 20.0f + outNorm * (20000.0f - 20.0f); break;
+                        case FieldFilterRes:   nativeVal = outNorm;                               break;
                         case FieldTonality:    nativeVal = outNorm * 8000.0f;                  break;
                         case FieldFormant:     nativeVal = -24.0f + outNorm * 48.0f;           break;
                         case FieldAttack:      nativeVal = outNorm * 1.0f;                     break;
@@ -1059,30 +1075,99 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.globalReverse    = reverseParam->load()      > 0.5f;
                 p.globalLoopMode   = (int) loopParam->load();
                 p.globalOneShot    = oneShotParam->load()      > 0.5f;
-                p.globalCentsDetune = centsDetuneParam->load();
+                p.globalCentsDetune  = centsDetuneParam->load();
+                p.globalPan          = panParam->load();
+                p.globalFilterCutoff = filterCutoffParam->load();
+                p.globalFilterRes    = filterResParam->load();
 
                 const auto& sliceIndices = sliceManager.midiNoteToSlices (note);
-                for (int sliceIdx : sliceIndices)
+
+                // ── Chromatic mode ─────────────────────────────────────────────
+                // Any note plays the selected slice, pitched relative to root note.
+                if (chromaticMode.load (std::memory_order_relaxed))
                 {
-                    if (midiSelectsSlice.load (std::memory_order_relaxed))
+                    const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+                    if (sel >= 0 && sel < sliceManager.getNumSlices())
                     {
-                        const int previous = sliceManager.selectedSlice.load (std::memory_order_relaxed);
-                        sliceManager.selectedSlice.store (sliceIdx, std::memory_order_relaxed);
-                        if (previous != sliceIdx)
+                        const int root = sliceManager.rootNote.load (std::memory_order_relaxed);
+                        const float semitoneOffset = (float) (note - root);
+
+                        int voiceIdx = voicePool.allocate();
+
+                        const auto& s = sliceManager.getSlice (sel);
+                        int mg = (int) sliceManager.resolveParam (sel, kLockMuteGroup,
+                                                                   (float) s.muteGroup,
+                                                                   (float) p.globalMuteGroup);
+                        voicePool.muteGroup (mg, voiceIdx);
+
+                        p.sliceIdx    = sel;
+                        // Add chromatic offset on top of any existing pitch setting
+                        const float savedGlobalPitch = p.globalPitch;
+                        p.globalPitch = savedGlobalPitch + semitoneOffset;
+                        voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
+                        p.globalPitch = savedGlobalPitch;   // restore for subsequent voices
+
+                        if (midiSelectsSlice.load (std::memory_order_relaxed))
+                        {
+                            sliceManager.selectedSlice.store (sel, std::memory_order_relaxed);
                             uiSnapshotDirty.store (true, std::memory_order_release);
+                        }
                     }
-
-                    int voiceIdx = voicePool.allocate();
-
-                    // Handle mute groups
-                    const auto& s = sliceManager.getSlice (sliceIdx);
-                    int mg = (int) sliceManager.resolveParam (sliceIdx, kLockMuteGroup,
-                                                              (float) s.muteGroup, (float) p.globalMuteGroup);
-                    voicePool.muteGroup (mg, voiceIdx);
-
-                    p.sliceIdx = sliceIdx;
-                    voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
                 }
+                else
+                {
+                    // ── Round Robin ───────────────────────────────────────────
+                    // If multiple slices share this note, cycle through them
+                    // one at a time rather than firing all simultaneously.
+                    const int numMatches = (int) sliceIndices.size();
+                    if (numMatches > 1)
+                    {
+                        // Use the first matching slice's rrCounter to track position
+                        auto& pivot = sliceManager.getSlice (sliceIndices[0]);
+                        const int rrIdx = pivot.rrCounter % numMatches;
+                        pivot.rrCounter++;
+
+                        const int sliceIdx = sliceIndices[rrIdx];
+
+                        if (midiSelectsSlice.load (std::memory_order_relaxed))
+                        {
+                            const int previous = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+                            sliceManager.selectedSlice.store (sliceIdx, std::memory_order_relaxed);
+                            if (previous != sliceIdx)
+                                uiSnapshotDirty.store (true, std::memory_order_release);
+                        }
+
+                        int voiceIdx = voicePool.allocate();
+                        const auto& s = sliceManager.getSlice (sliceIdx);
+                        int mg = (int) sliceManager.resolveParam (sliceIdx, kLockMuteGroup,
+                                                                  (float) s.muteGroup, (float) p.globalMuteGroup);
+                        voicePool.muteGroup (mg, voiceIdx);
+                        p.sliceIdx = sliceIdx;
+                        voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
+                    }
+                    else
+                    {
+                        // Standard: fire all slices on this note (usually just one)
+                        for (int sliceIdx : sliceIndices)
+                        {
+                            if (midiSelectsSlice.load (std::memory_order_relaxed))
+                            {
+                                const int previous = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+                                sliceManager.selectedSlice.store (sliceIdx, std::memory_order_relaxed);
+                                if (previous != sliceIdx)
+                                    uiSnapshotDirty.store (true, std::memory_order_release);
+                            }
+
+                            int voiceIdx = voicePool.allocate();
+                            const auto& s = sliceManager.getSlice (sliceIdx);
+                            int mg = (int) sliceManager.resolveParam (sliceIdx, kLockMuteGroup,
+                                                                      (float) s.muteGroup, (float) p.globalMuteGroup);
+                            voicePool.muteGroup (mg, voiceIdx);
+                            p.sliceIdx = sliceIdx;
+                            voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
+                        }
+                    }
+                } // end chromatic else
             }
         }
         else if (msg.isNoteOff())
@@ -1334,7 +1419,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (16);
+    stream.writeInt (17);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -1347,6 +1432,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     stream.writeFloat (scroll.load());
     stream.writeInt (sliceManager.selectedSlice);
     stream.writeBool (midiSelectsSlice.load());
+    stream.writeBool (chromaticMode.load());
     stream.writeInt (sliceManager.rootNote.load());
 
     // Slice data
@@ -1388,6 +1474,10 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
         stream.writeBool (s.oneShot);
         // v16 fields
         stream.writeFloat (s.centsDetune);
+        // v17 fields
+        stream.writeFloat (s.pan);
+        stream.writeFloat (s.filterCutoff);
+        stream.writeFloat (s.filterRes);
     }
 
     // v9: store file path only (no PCM)
@@ -1406,7 +1496,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version != 16)
+    if (version != 16 && version != 17)
         return;
 
     // APVTS state
@@ -1420,6 +1510,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     int savedSelectedSlice = stream.readInt();
 
     midiSelectsSlice.store (stream.readBool());
+    chromaticMode.store (stream.readBool());
     sliceManager.rootNote.store (juce::jlimit (0, 127, stream.readInt()));
 
     // Slice data
@@ -1460,6 +1551,10 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         parsed.outputBus      = stream.readInt();
         parsed.oneShot        = stream.readBool();
         parsed.centsDetune    = stream.readFloat();
+        // v17 fields (with defaults for v16 presets)
+        parsed.pan          = (version >= 17) ? stream.readFloat() : 0.0f;
+        parsed.filterCutoff = (version >= 17) ? stream.readFloat() : 20000.0f;
+        parsed.filterRes    = (version >= 17) ? stream.readFloat() : 0.0f;
 
         if (i < validatedNumSlices)
             sliceManager.getSlice (i) = sanitiseRestoredSlice (parsed);

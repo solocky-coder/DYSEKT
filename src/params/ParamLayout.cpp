@@ -148,5 +148,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f),
         1.0f));
 
+    // ── v17: Pan, Filter ──────────────────────────────────────────────────────
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultPan, 1 },
+        "Pan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.01f),
+        0.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultFilterCutoff, 1 },
+        "Filter Cutoff",
+        juce::NormalisableRange<float> (20.0f, 20000.0f, 1.0f, 0.25f),  // skewed toward low end
+        20000.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultFilterRes, 1 },
+        "Filter Resonance",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.01f),
+        0.0f));
+
     return { params.begin(), params.end() };
 }

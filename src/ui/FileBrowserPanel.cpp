@@ -14,26 +14,192 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     ioThread.startThread();
     browser.addListener (this);
     addAndMakeVisible (browser);
+
+    // ── Audio device setup ────────────────────────────────────────────────────
+    formatManager.registerBasicFormats();
+    deviceManager.initialiseWithDefaultDevices (0, 2);
+    deviceManager.addAudioCallback (&sourcePlayer);
+    sourcePlayer.setSource (&transport);
+    transport.addChangeListener (this);
+
+    // ── Play/Stop button ──────────────────────────────────────────────────────
+    playStopBtn.setColour (juce::TextButton::buttonColourId,
+                           juce::Colour (0xFF1A6B3A));
+    playStopBtn.setColour (juce::TextButton::textColourOffId,
+                           juce::Colours::white);
+    playStopBtn.onClick = [this]
+    {
+        if (transport.isPlaying())
+            stopPreview();
+        else
+            startPreview (previewFile);
+    };
+    addChildComponent (playStopBtn);
+
+    // ── Volume slider ─────────────────────────────────────────────────────────
+    volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+    volumeSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    volumeSlider.setRange (0.0, 1.0);
+    volumeSlider.setValue (0.8);
+    volumeSlider.setColour (juce::Slider::thumbColourId,
+                            juce::Colour (0xFF4AABFF));
+    volumeSlider.setColour (juce::Slider::trackColourId,
+                            juce::Colour (0xFF2A4060));
+    volumeSlider.onValueChange = [this]
+    {
+        transport.setGain ((float) volumeSlider.getValue());
+    };
+    transport.setGain (0.8f);
+    addChildComponent (volumeSlider);
+
+    // ── File name label ───────────────────────────────────────────────────────
+    fileNameLabel.setFont (juce::Font (11.0f));
+    fileNameLabel.setColour (juce::Label::textColourId,
+                             juce::Colours::white.withAlpha (0.7f));
+    fileNameLabel.setMinimumHorizontalScale (0.5f);
+    addChildComponent (fileNameLabel);
 }
 
 FileBrowserPanel::~FileBrowserPanel()
 {
+    transport.removeChangeListener (this);
+    transport.stop();
+    transport.setSource (nullptr);
+    readerSource.reset();
+    sourcePlayer.setSource (nullptr);
+    deviceManager.removeAudioCallback (&sourcePlayer);
     browser.removeListener (this);
     ioThread.stopThread (2000);
 }
 
+// ── Layout ────────────────────────────────────────────────────────────────────
+
 void FileBrowserPanel::resized()
 {
-    browser.setBounds (getLocalBounds());
+    auto bounds = getLocalBounds();
+
+    if (previewVisible)
+    {
+        // Reserve bar at the bottom
+        auto bar = bounds.removeFromBottom (kBarH);
+
+        // Play/stop button — square on the left
+        playStopBtn.setBounds (bar.removeFromLeft (kBarH).reduced (4));
+
+        // Volume slider — fixed width on the right
+        volumeSlider.setBounds (bar.removeFromRight (90).reduced (4, 8));
+
+        // File name label fills the rest
+        fileNameLabel.setBounds (bar.reduced (6, 4));
+    }
+
+    browser.setBounds (bounds);
 }
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().darkBar);
+
+    if (previewVisible)
+    {
+        // Draw a slightly raised bar behind the preview controls
+        auto bar = getLocalBounds().removeFromBottom (kBarH);
+        g.setColour (juce::Colour (0xFF0D0F12));
+        g.fillRect (bar);
+        g.setColour (juce::Colour (0xFF2A3040));
+        g.drawLine ((float) bar.getX(), (float) bar.getY(),
+                    (float) bar.getRight(), (float) bar.getY(), 1.0f);
+    }
+}
+
+// ── FileBrowserListener ───────────────────────────────────────────────────────
+
+void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&)
+{
+    if (! f.existsAsFile()) return;
+
+    // Show the preview bar if not already visible
+    const bool wasVisible = previewVisible;
+    previewFile    = f;
+    previewVisible = true;
+
+    fileNameLabel.setText (f.getFileName(), juce::dontSendNotification);
+    updatePlayButton();
+
+    playStopBtn.setVisible   (true);
+    volumeSlider.setVisible  (true);
+    fileNameLabel.setVisible (true);
+
+    // Auto-start preview on single click
+    stopPreview();
+    startPreview (f);
+
+    if (! wasVisible)
+        resized();    // re-layout to make room for bar
+
+    repaint();
 }
 
 void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
 {
+    stopPreview();
     if (f.existsAsFile())
         processor.loadFileAsync (f);
+}
+
+// ── Preview engine ────────────────────────────────────────────────────────────
+
+void FileBrowserPanel::startPreview (const juce::File& f)
+{
+    if (! f.existsAsFile()) return;
+
+    transport.stop();
+    transport.setSource (nullptr);
+    readerSource.reset();
+
+    auto* reader = formatManager.createReaderFor (f);
+    if (reader == nullptr) return;
+
+    readerSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
+    transport.setSource (readerSource.get(), 0, nullptr,
+                         reader->sampleRate);
+    transport.setGain ((float) volumeSlider.getValue());
+    transport.setPosition (0.0);
+    transport.start();
+
+    updatePlayButton();
+}
+
+void FileBrowserPanel::stopPreview()
+{
+    transport.stop();
+    transport.setPosition (0.0);
+    updatePlayButton();
+}
+
+void FileBrowserPanel::updatePlayButton()
+{
+    if (transport.isPlaying())
+    {
+        playStopBtn.setButtonText ("STOP");
+        playStopBtn.setColour (juce::TextButton::buttonColourId,
+                               juce::Colour (0xFF8B1A1A));
+    }
+    else
+    {
+        playStopBtn.setButtonText ("PLAY");
+        playStopBtn.setColour (juce::TextButton::buttonColourId,
+                               juce::Colour (0xFF1A6B3A));
+    }
+}
+
+void FileBrowserPanel::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    // Called on audio thread — use async to safely update UI
+    juce::MessageManager::callAsync ([this]
+    {
+        // Auto-stop UI when playback reaches end naturally
+        if (! transport.isPlaying())
+            updatePlayButton();
+    });
 }

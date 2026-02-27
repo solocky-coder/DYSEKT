@@ -105,6 +105,9 @@ public:
         FieldCentsDetune,
         FieldSliceStart,   // 21 — normalised 0-1 → startSample via MIDI CC
         FieldSliceEnd,     // 22 — normalised 0-1 → endSample via MIDI CC
+        FieldPan,          // 23 — per-slice pan -1..+1
+        FieldFilterCutoff, // 24 — per-slice LP filter cutoff Hz
+        FieldFilterRes,    // 25 — per-slice LP filter resonance 0..1
     };
 
     struct Command
@@ -162,6 +165,9 @@ public:
 
     // MIDI-selects-slice toggle
     std::atomic<bool> midiSelectsSlice { false };
+
+    // Chromatic mode — any MIDI note plays the selected slice pitched relative to rootNote
+    std::atomic<bool> chromaticMode { false };
 
     // Snap-to-zero-crossing toggle
     std::atomic<bool> snapToZeroCrossing { false };
@@ -255,18 +261,18 @@ private:
     bool heldNotes[128] = {};
 
     // Cached parameter pointers
-    std::atomic<float>* masterVolParam  = nullptr;
-    std::atomic<float>* bpmParam        = nullptr;
-    std::atomic<float>* pitchParam      = nullptr;
-    std::atomic<float>* algoParam       = nullptr;
-    std::atomic<float>* attackParam     = nullptr;
-    std::atomic<float>* decayParam      = nullptr;
-    std::atomic<float>* sustainParam    = nullptr;
-    std::atomic<float>* releaseParam    = nullptr;
-    std::atomic<float>* muteGroupParam  = nullptr;
-    std::atomic<float>* stretchParam    = nullptr;
-    std::atomic<float>* tonalityParam   = nullptr;
-    std::atomic<float>* formantParam    = nullptr;
+    std::atomic<float>* masterVolParam   = nullptr;
+    std::atomic<float>* bpmParam         = nullptr;
+    std::atomic<float>* pitchParam       = nullptr;
+    std::atomic<float>* algoParam        = nullptr;
+    std::atomic<float>* attackParam      = nullptr;
+    std::atomic<float>* decayParam       = nullptr;
+    std::atomic<float>* sustainParam     = nullptr;
+    std::atomic<float>* releaseParam     = nullptr;
+    std::atomic<float>* muteGroupParam   = nullptr;
+    std::atomic<float>* stretchParam     = nullptr;
+    std::atomic<float>* tonalityParam    = nullptr;
+    std::atomic<float>* formantParam     = nullptr;
     std::atomic<float>* formantCompParam = nullptr;
     std::atomic<float>* grainModeParam   = nullptr;
     std::atomic<float>* releaseTailParam = nullptr;
@@ -275,6 +281,9 @@ private:
     std::atomic<float>* oneShotParam     = nullptr;
     std::atomic<float>* maxVoicesParam   = nullptr;
     std::atomic<float>* centsDetuneParam = nullptr;
+    std::atomic<float>* panParam         = nullptr;
+    std::atomic<float>* filterCutoffParam = nullptr;
+    std::atomic<float>* filterResParam   = nullptr;
     std::atomic<float>* sliceStartParam  = nullptr;   // normalised 0-1, selected slice start
     std::atomic<float>* sliceEndParam    = nullptr;   // normalised 0-1, selected slice end
 

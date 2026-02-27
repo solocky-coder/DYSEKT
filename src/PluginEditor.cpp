@@ -57,9 +57,10 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     sliceLane.setWaveformView (&waveformView);
 
     // Wire up KEYS and BROWSER buttons in ActionPanel
-    actionPanel.onKeysToggle    = [this] { toggleKeysPanel(); };
-    actionPanel.onBrowserToggle = [this] { toggleBrowserPanel(); };
-    actionPanel.onWaveToggle    = [this] { toggleSoftWave(); };
+    actionPanel.onKeysToggle       = [this] { toggleKeysPanel(); };
+    actionPanel.onBrowserToggle    = [this] { toggleBrowserPanel(); };
+    actionPanel.onWaveToggle       = [this] { toggleSoftWave(); };
+    actionPanel.onChromaticToggle  = [this] { toggleChromatic(); };
 
     ensureDefaultThemes();
     loadUserSettings();
@@ -114,6 +115,13 @@ void DysektEditor::toggleSoftWave()
     actionPanel.setWaveActive (softWave);
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
     saveUserSettings (scale, getTheme().name);
+}
+
+void DysektEditor::toggleChromatic()
+{
+    const bool newVal = ! processor.chromaticMode.load();
+    processor.chromaticMode.store (newVal);
+    actionPanel.setChromaticActive (newVal);
 }
 
 void DysektEditor::paint (juce::Graphics& g)
@@ -345,4 +353,7 @@ void DysektEditor::loadUserSettings()
     // Apply persisted wave style
     waveformView.setSoftWaveform (softWave);
     actionPanel.setWaveActive (softWave);
+
+    // Sync chromatic button with processor state (restored from project)
+    actionPanel.setChromaticActive (processor.chromaticMode.load());
 }
