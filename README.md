@@ -2,7 +2,7 @@
 
 **A non-destructive, time-stretching sample slicer instrument plugin for Windows (VST3).**
 
-DYSEKT is a fork of [INTERSECT](https://github.com/tucktuckg00se/INTERSECT) by tucktuckg00se, extended and modified with the assistance of AI (Claude by Anthropic). It retains the full core engine of INTERSECT while adding a reworked GUI, expanded DAW integration, and quality-of-life improvements throughout.
+DYSEKT is a fork of [INTERSECT](https://github.com/tucktuckg00se/INTERSECT) by tucktuckg00se, extended and modified with the assistance of AI (Claude by Anthropic). It retains the full core engine of INTERSECT while adding a reworked GUI and expanded DAW integration features.
 
 > INTERSECT is licensed under the GNU General Public License v3.0. DYSEKT inherits that licence — source code is open and free to modify and redistribute under the same terms.
 
