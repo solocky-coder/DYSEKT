@@ -59,11 +59,13 @@ jobs:
       - name: Collect VST3
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path artifacts
-          $files = Get-ChildItem -Recurse -Filter "*.vst3" build/
-          foreach ($f in $files) {
-            Copy-Item -Recurse -Force $f.FullName artifacts/
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $dirs = Get-ChildItem -Recurse -Filter "*.vst3" build/ | Where-Object { $_.PSIsContainer }
+          foreach ($d in $dirs) {
+            Copy-Item -Recurse -Force $d.FullName artifacts/
           }
+          Write-Host "Collected VST3 bundles:"
+          Get-ChildItem artifacts/
 
       - name: Upload VST3
         uses: actions/upload-artifact@v4
