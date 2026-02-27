@@ -87,9 +87,6 @@ target_sources(Dysekt PRIVATE
     src/ui/LogoBar.cpp
     src/ui/KeysPanel.cpp
     src/ui/FileBrowserPanel.cpp
-    src/ui/LogoBar.cpp
-    src/ui/KeysPanel.cpp
-    src/ui/FileBrowserPanel.cpp	
 )
 
 target_include_directories(Dysekt PRIVATE
