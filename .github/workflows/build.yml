@@ -13,8 +13,36 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Fetch JUCE
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force JUCE -ErrorAction SilentlyContinue
+          git clone --depth 1 --branch 8.0.4 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Fetch bungee
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "bungee/src")) {
+            Remove-Item -Recurse -Force bungee -ErrorAction SilentlyContinue
+            git clone --depth 1 --recurse-submodules https://github.com/kupix/bungee.git bungee
+          }
+
+      - name: Fetch signalsmith-stretch
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "signalsmith-stretch/signalsmith-stretch.h")) {
+            Remove-Item -Recurse -Force signalsmith-stretch -ErrorAction SilentlyContinue
+            git clone --depth 1 https://github.com/Signalsmith-Audio/signalsmith-stretch.git signalsmith-stretch
+          }
+
+      - name: Fetch signalsmith-linear
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "signalsmith-linear")) {
+            Remove-Item -Recurse -Force signalsmith-linear -ErrorAction SilentlyContinue
+            git clone --depth 1 https://github.com/Signalsmith-Audio/linear.git signalsmith-linear
+          }
 
       - name: Configure CMake
         shell: pwsh
