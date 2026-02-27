@@ -16,7 +16,7 @@ DYSEKT is a fork of [INTERSECT](https://github.com/tucktuckg00se/INTERSECT) by t
 | Logo bar | Part of controls bar | Separate dedicated bar |
 | MIDI keyboard panel | ✗ | ✓ Toggleable 2-octave piano with transpose and per-slice MIDI note highlighting |
 | File browser panel | ✗ | ✓ Toggleable embedded browser — double-click to load |
-| Waveform rendering | Flat solid fill | ✓ Switchable — original hard mode or soft TAL-style gradient + glowing outline |
+| Waveform rendering | Flat solid fill | ✓ Switchable — original hard mode or soft gradient + glowing outline |
 | Slice overlap prevention | ✗ | ✓ Slices cannot be dragged to physically overlap |
 | MIDI Learn context menu | Appears at fixed position | ✓ Appears at mouse cursor |
 | DAW Quick Controls | ✗ | ✓ All knobs fire begin/end gesture — assignable in Cubase and other hosts |
