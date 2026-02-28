@@ -773,7 +773,6 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         dragPreviewEnd = juce::jlimit (dragPreviewStart + 64,
                                        sampleSnap->buffer.getNumSamples(), samplePos);
     }
-    }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
     {
         int newStart = samplePos - dragOffset;

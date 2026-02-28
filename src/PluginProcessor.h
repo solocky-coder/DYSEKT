@@ -205,7 +205,9 @@ public:
 
 private:
     friend class SoundFontLoader;
+#if DYSEKT_HAS_SFIZZ
     friend class SoundFontLoader::LoadJob;
+#endif
 
     struct FailedLoadResult
     {
