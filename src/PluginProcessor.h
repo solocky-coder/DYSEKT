@@ -64,8 +64,7 @@ private:
     // ==============================================================================
     /** 
      * Replacing the standard JUCE stub with SFZero.
-     * This engine handles the actual audio playback, velocity layers, 
-     * and key-mapping required for professional SoundFonts.
+     * This fulfills the "actual playback" requirement by mapping samples to keys.
      */
     sfzero::Synth sampler;
 

@@ -13,13 +13,6 @@ constexpr int kParamCellWidth    = kParamCellTextX + kParamCellTextWidth;
 
 constexpr float kKnobStart = juce::MathConstants<float>::pi * 1.25f;
 constexpr float kKnobEnd   = juce::MathConstants<float>::pi * 2.75f;
-
-// Minimum text area width for knob cells — ensures full labels display
-// Layout: kKnobR*2 + gap(3+4) + textW  total = kKnobCellMinW
-// With kKnobR=9: 18 + 7 = 25 prefix; we want at least 36px text area → min 61px
-// "MIDI NOTE" at 10pt ≈ 56px text, so we need at least 25+57 = 82px cell width.
-// We compute cellW dynamically in drawKnobCell based on label text.
-constexpr int kKnobCellPadRight = 6;  // extra padding to the right of label text
 }
 
 SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p) {}
@@ -139,7 +132,6 @@ float SliceControlBar::toNorm (int fieldId, float v) const
 
 // =============================================================================
 //  drawKnobCell  — rotary knob cell for all numeric params
-//  Cell width is computed dynamically so full label text always fits.
 // =============================================================================
 void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
                                     const juce::String& label,
@@ -150,20 +142,8 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
                                     float minVal, float maxVal, float step,
                                     int& outWidth)
 {
-    const int cellH  = 32;
-    const int prefix = kKnobR + 3 + kKnobR + 4;  // knobCX offset + knobR + gap4
-
-    // Measure label at 10pt to ensure it fits
-    juce::Font labelFont = DysektLookAndFeel::makeFont (10.0f);
-    int labelW = labelFont.getStringWidth (label);
-
-    // Also measure value text at 11pt
-    juce::Font valFont = DysektLookAndFeel::makeFont (11.0f);
-    int valW = valFont.getStringWidth (valueText);
-
-    int textAreaW = juce::jmax (labelW, valW) + kKnobCellPadRight;
-    int cellW = prefix + textAreaW;
-
+    const int cellW = kParamCellWidth;
+    const int cellH = 32;
     const int knobCX = x + kKnobR + 3;
     const int knobCY = y + cellH / 2;
 
@@ -187,17 +167,18 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
                     juce::Justification::centred);
     }
 
-    const int textX = x + prefix;
+    const int textX = knobCX + kKnobR + 4;
+    const int textW = cellW - (textX - x) - 1;
 
-    g.setFont (labelFont);
+    g.setFont (DysektLookAndFeel::makeFont (10.0f));
     g.setColour (locked ? getTheme().lockActive.withAlpha (0.8f)
                         : getTheme().foreground.withAlpha (0.42f));
-    g.drawText (label, textX, y + 2, textAreaW, 12, juce::Justification::centredLeft);
+    g.drawText (label, textX, y + 2,  textW, 12, juce::Justification::centredLeft);
 
-    g.setFont (valFont);
+    g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.setColour (locked ? getTheme().foreground
                         : getTheme().foreground.withAlpha (0.38f));
-    g.drawText (valueText, textX, y + 14, textAreaW, 14, juce::Justification::centredLeft);
+    g.drawText (valueText, textX, y + 14, textW, 14, juce::Justification::centredLeft);
 
     outWidth = cellW;
 
@@ -258,7 +239,7 @@ void SliceControlBar::drawMidiLearnCell (juce::Graphics& g, int x, int y,
 // =============================================================================
 //  showMidiLearnMenu
 // =============================================================================
-void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos)
+void SliceControlBar::showMidiLearnMenu (int fieldId)
 {
     const bool mapped = processor.midiLearn.isMapped (fieldId);
     juce::PopupMenu menu;
@@ -270,7 +251,7 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos
     float ms = DysektLookAndFeel::getMenuScale();
     menu.showMenuAsync (
         juce::PopupMenu::Options()
-            .withTargetScreenArea (juce::Rectangle<int> (screenPos.x, screenPos.y, 1, 1))
+            .withTargetComponent (this)
             .withParentComponent (topLvl)
             .withStandardItemHeight ((int) (24 * ms)),
         [this, fieldId] (int result)
@@ -292,12 +273,7 @@ void SliceControlBar::paint (juce::Graphics& g)
     int idx       = ui.selectedSlice;
     int numSlices = ui.numSlices;
     int rightEdge = getWidth() - 8;
-
-    // Two rows: row1y = top row (toggles + START/END + LINK)
-    //           row2y = bottom row (all knobs except START/END)
-    const int row1y = 2;
-    const int row2y = 36;
-    const int cellH = 32;
+    int row1y = 2, row2y = 36;
 
     if (idx < 0 || idx >= numSlices)
     {
@@ -309,7 +285,7 @@ void SliceControlBar::paint (juce::Graphics& g)
 
     const auto& s = ui.slices[(size_t) idx];
 
-    // ── Global defaults ──────────────────────────────────────────────────────
+    float gBpm      = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
     float gPitch    = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
     int   gAlgo     = (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
     float gAttack   = processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load();
@@ -320,16 +296,16 @@ void SliceControlBar::paint (juce::Graphics& g)
     int   gLoopMode = (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
     bool  gStretch  = processor.apvts.getRawParameterValue (ParamIds::defaultStretchEnabled)->load() > 0.5f;
 
-    bool algoLocked     = (s.lockMask & kLockAlgorithm) != 0;
-    int  algoVal        = algoLocked ? s.algorithm : gAlgo;
-    bool stretchLocked  = (s.lockMask & kLockStretch) != 0;
-    bool stretchVal     = stretchLocked ? s.stretchEnabled : gStretch;
+    bool algoLocked    = (s.lockMask & kLockAlgorithm) != 0;
+    int  algoVal       = algoLocked ? s.algorithm : gAlgo;
+    bool stretchLocked = (s.lockMask & kLockStretch) != 0;
+    bool stretchVal    = stretchLocked ? s.stretchEnabled : gStretch;
     bool repitchStretch = (algoVal == 0) && stretchVal;
 
     int cw;
     using F = DysektProcessor;
 
-    // ── Row 1 right: slice info (sample range only — no time length) ─────────
+    // ── Row 1 right: slice info ───────────────────────────────────────
     {
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (getTheme().accent.withAlpha (0.7f));
@@ -337,151 +313,42 @@ void SliceControlBar::paint (juce::Graphics& g)
                     8, row1y + 2, rightEdge - 8, 13, juce::Justification::right);
         g.setFont (DysektLookAndFeel::makeFont (14.0f));
         g.setColour (getTheme().foreground.withAlpha (0.5f));
-        // Sample range only — no time display per request
-        g.drawText (juce::String (s.startSample) + " — " + juce::String (s.endSample),
+        double srate = processor.getSampleRate();
+        if (srate <= 0) srate = 44100.0;
+        double lenSec = (s.endSample - s.startSample) / srate;
+        g.drawText (juce::String (s.startSample) + "-" + juce::String (s.endSample)
+                    + " (" + juce::String (lenSec, 2) + "s)",
                     8, row1y + 15, rightEdge - 8, 14, juce::Justification::right);
     }
 
-    // =========================================================================
-    //  ROW 1: Toggle buttons (ALGO, STRETCH, 1SHOT, TAIL, REV, LOOP) + START + END + LINK
-    // =========================================================================
+    // ── Row 1 params ──────────────────────────────────────────────────
     int x = 8;
 
-    // ALGO — choice toggle
+    // BPM — knob
     {
-        juce::String algoNames[] = { "Repitch", "Stretch", "Bungee" };
-        drawParamCell (g, x, row1y, "ALGO",
-                       algoNames[juce::jlimit (0, 2, algoVal)],
-                       algoLocked, kLockAlgorithm, F::FieldAlgorithm,
-                       0.f, 2.f, 1.f, false, true, cw);
-        x += cw + 6;
+        bool locked = (s.lockMask & kLockBpm) != 0;
+        float bpmVal = locked ? s.bpm : gBpm;
+        juce::String bpmStr = juce::String (bpmVal, 2);
+        if (bpmStr.contains ("."))
+        {
+            while (bpmStr.endsWith ("0")) bpmStr = bpmStr.dropLastCharacters (1);
+            if (bpmStr.endsWith ("."))    bpmStr = bpmStr.dropLastCharacters (1);
+        }
+        drawKnobCell (g, x, row1y, "BPM", bpmStr,
+                      toNorm (F::FieldBpm, bpmVal),
+                      locked, kLockBpm, F::FieldBpm, 20.f, 999.f, 0.01f, cw);
+        x += cw + 4;
     }
 
-    // STRETCH — boolean toggle
+    // SET BPM
     {
-        bool locked = (s.lockMask & kLockStretch) != 0;
-        bool sv     = locked ? s.stretchEnabled : gStretch;
-        drawParamCell (g, x, row1y, "STRETCH", sv ? "ON" : "OFF",
-                       locked, kLockStretch, F::FieldStretchEnabled,
-                       0.f, 1.f, 1.f, true, false, cw);
-        x += cw + 6;
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
+        g.setColour (getTheme().accent);
+        g.drawText ("SET", x + 2, row1y + 2,  34, 13, juce::Justification::centredLeft);
+        g.drawText ("BPM", x + 2, row1y + 15, 34, 13, juce::Justification::centredLeft);
+        cells.push_back ({ x, row1y, 38, 32, 0, 0, 0.f, 0.f, 0.f, false, false, false, true });
+        x += 42;
     }
-
-    // 1SHOT — boolean toggle
-    {
-        bool gOS    = processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load() > 0.5f;
-        bool locked = (s.lockMask & kLockOneShot) != 0;
-        bool osv    = locked ? s.oneShot : gOS;
-        drawParamCell (g, x, row1y, "1SHOT", osv ? "ON" : "OFF",
-                       locked, kLockOneShot, F::FieldOneShot,
-                       0.f, 1.f, 1.f, true, false, cw);
-        x += cw + 6;
-    }
-
-    // TAIL — boolean toggle
-    {
-        bool gTail  = processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load() > 0.5f;
-        bool locked = (s.lockMask & kLockReleaseTail) != 0;
-        bool tv     = locked ? s.releaseTail : gTail;
-        drawParamCell (g, x, row1y, "TAIL", tv ? "ON" : "OFF",
-                       locked, kLockReleaseTail, F::FieldReleaseTail,
-                       0.f, 1.f, 1.f, true, false, cw);
-        x += cw + 6;
-    }
-
-    // REV — boolean toggle
-    {
-        bool gRev   = processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load() > 0.5f;
-        bool locked = (s.lockMask & kLockReverse) != 0;
-        bool rv     = locked ? s.reverse : gRev;
-        drawParamCell (g, x, row1y, "REV", rv ? "ON" : "OFF",
-                       locked, kLockReverse, F::FieldReverse,
-                       0.f, 1.f, 1.f, true, false, cw);
-        x += cw + 6;
-    }
-
-    // LOOP — choice toggle
-    {
-        bool locked = (s.lockMask & kLockLoop) != 0;
-        int  lv     = locked ? s.loopMode : gLoopMode;
-        juce::String loopNames[] = { "OFF", "LOOP", "PP" };
-        drawParamCell (g, x, row1y, "LOOP",
-                       loopNames[juce::jlimit (0, 2, lv)],
-                       locked, kLockLoop, F::FieldLoop,
-                       0.f, 2.f, 1.f, false, true, cw);
-        x += cw + 6;
-    }
-
-    // Algo-conditional toggles
-    if (algoVal == 1)
-    {
-        bool gFmntC = processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load() > 0.5f;
-        bool locked = (s.lockMask & kLockFormantComp) != 0;
-        bool fmntCVal = locked ? s.formantComp : gFmntC;
-        drawParamCell (g, x, row1y, "FMNT C", fmntCVal ? "ON" : "OFF",
-                       locked, kLockFormantComp, F::FieldFormantComp,
-                       0.f, 1.f, 1.f, true, false, cw);
-        x += cw + 6;
-    }
-
-    // Separator before START/END
-    g.setColour (getTheme().separator);
-    g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
-    x += 10;
-
-    // START knob (row 1)
-    {
-        float startNorm = (ui.sampleNumFrames > 0)
-            ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames) : 0.f;
-        drawKnobCell (g, x, row1y, "START", juce::String (s.startSample),
-                      startNorm, false, 0, F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
-        cells.back().isMidiLearnable = true;
-        x += cw + 6;
-    }
-
-    // END knob (row 1)
-    {
-        float endNorm = (ui.sampleNumFrames > 0)
-            ? (float) s.endSample / (float) juce::jmax (1, ui.sampleNumFrames) : 1.f;
-        drawKnobCell (g, x, row1y, "END", juce::String (s.endSample),
-                      endNorm, false, 0, F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
-        cells.back().isMidiLearnable = true;
-        x += cw + 6;
-    }
-
-    // LINK button — smaller, sits on the row separator line
-    {
-        const bool linked = processor.slicesLinked.load (std::memory_order_relaxed);
-        const int btnW = 30;   // smaller than before
-        const int btnH = 18;   // short — straddles the separator
-        // Centre it vertically on the separator line (y=34)
-        const int btnY = 34 - btnH / 2;
-        linkBtnArea = { x, btnY, btnW, btnH };
-
-        g.setColour (linked ? getTheme().accent.withAlpha (0.25f)
-                            : getTheme().darkBar.brighter (0.08f));
-        g.fillRoundedRectangle ((float) x, (float) btnY, (float) btnW, (float) btnH, 3.f);
-        g.setColour (linked ? getTheme().accent : getTheme().foreground.withAlpha (0.22f));
-        g.drawRoundedRectangle ((float) x + 0.5f, (float) btnY + 0.5f,
-                                (float) btnW - 1.f, (float) btnH - 1.f, 3.f, 1.f);
-        g.setFont (DysektLookAndFeel::makeFont (9.0f));
-        g.setColour (linked ? getTheme().accent : getTheme().foreground.withAlpha (0.35f));
-        g.drawText ("LINK", x, btnY, btnW, btnH, juce::Justification::centred);
-
-        ParamCell lc{};
-        lc.x = x; lc.y = btnY; lc.w = btnW; lc.h = btnH;
-        lc.isLinkBtn = true;
-        cells.push_back (lc);
-    }
-
-    // ── Separator line between rows ───────────────────────────────────────────
-    g.setColour (getTheme().separator);
-    g.drawHorizontalLine (34, 8.0f, (float) getWidth() - 8.0f);
-
-    // =========================================================================
-    //  ROW 2: All knobs except START/END
-    // =========================================================================
-    x = 8;
 
     // PITCH — knob
     {
@@ -489,19 +356,19 @@ void SliceControlBar::paint (juce::Graphics& g)
         float pv = locked ? s.pitchSemitones : gPitch;
         if (repitchStretch)
         {
-            float daw    = processor.dawBpm.load();
-            float bpmVal = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
-            float semis  = (daw > 0.f && bpmVal > 0.f)
-                           ? 12.f * std::log2 (daw / bpmVal) : 0.f;
+            float daw     = processor.dawBpm.load();
+            float bpmVal  = (s.lockMask & kLockBpm) ? s.bpm : gBpm;
+            float semis   = (daw > 0.f && bpmVal > 0.f)
+                            ? 12.f * std::log2 (daw / bpmVal) : 0.f;
             pv = (float) std::round (semis);
         }
         int pvi = (int) std::round (pv);
-        drawKnobCell (g, x, row2y, "PITCH",
+        drawKnobCell (g, x, row1y, "PITCH",
                       (pvi >= 0 ? "+" : "") + juce::String (pvi) + "st",
                       toNorm (F::FieldPitch, pv),
                       locked, kLockPitch, F::FieldPitch, -48.f, 48.f, 0.1f, cw);
         if (repitchStretch) cells.back().isReadOnly = true;
-        x += cw + 6;
+        x += cw + 4;
     }
 
     // TUNE — knob
@@ -512,41 +379,58 @@ void SliceControlBar::paint (juce::Graphics& g)
         if (repitchStretch)
         {
             float daw    = processor.dawBpm.load();
-            float bpmVal = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
+            float bpmVal = (s.lockMask & kLockBpm) ? s.bpm : gBpm;
             float semis  = (daw > 0.f && bpmVal > 0.f)
                            ? 12.f * std::log2 (daw / bpmVal) : 0.f;
             int semisI   = (int) std::round (semis);
             cv = (semis - (float) semisI) * 100.f;
         }
         int cvi = juce::jlimit (-100, 100, (int) std::round (cv));
-        drawKnobCell (g, x, row2y, "TUNE",
+        drawKnobCell (g, x, row1y, "TUNE",
                       (cvi >= 0 ? "+" : "") + juce::String (cvi) + "ct",
                       toNorm (F::FieldCentsDetune, cv),
                       locked, kLockCentsDetune, F::FieldCentsDetune, -100.f, 100.f, 0.1f, cw);
         if (repitchStretch) cells.back().isReadOnly = true;
-        x += cw + 6;
+        x += cw + 4;
     }
 
-    // Algo-conditional knobs
+    // ALGO — choice
+    {
+        juce::String algoNames[] = { "Repitch", "Stretch", "Bungee" };
+        drawParamCell (g, x, row1y, "ALGO",
+                       algoNames[juce::jlimit (0, 2, algoVal)],
+                       algoLocked, kLockAlgorithm, F::FieldAlgorithm,
+                       0.f, 2.f, 1.f, false, true, cw);
+        x += cw + 4;
+    }
+
     if (algoVal == 1)
     {
         float gTonal = processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load();
         bool locked  = (s.lockMask & kLockTonality) != 0;
         float tv     = locked ? s.tonalityHz : gTonal;
-        drawKnobCell (g, x, row2y, "TONAL",
+        drawKnobCell (g, x, row1y, "TONAL",
                       juce::String ((int) tv) + "Hz",
                       toNorm (F::FieldTonality, tv),
                       locked, kLockTonality, F::FieldTonality, 0.f, 8000.f, 100.f, cw);
-        x += cw + 6;
+        x += cw + 4;
 
         float gFmnt = processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load();
         locked = (s.lockMask & kLockFormant) != 0;
         float fv = locked ? s.formantSemitones : gFmnt;
-        drawKnobCell (g, x, row2y, "FMNT",
+        drawKnobCell (g, x, row1y, "FMNT",
                       (fv >= 0.f ? "+" : "") + juce::String (fv, 1),
                       toNorm (F::FieldFormant, fv),
                       locked, kLockFormant, F::FieldFormant, -24.f, 24.f, 0.1f, cw);
-        x += cw + 6;
+        x += cw + 4;
+
+        bool gFmntC = processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load() > 0.5f;
+        locked = (s.lockMask & kLockFormantComp) != 0;
+        bool fmntCVal = locked ? s.formantComp : gFmntC;
+        drawParamCell (g, x, row1y, "FMNT C", fmntCVal ? "ON" : "OFF",
+                       locked, kLockFormantComp, F::FieldFormantComp,
+                       0.f, 1.f, 1.f, true, false, cw);
+        x += cw + 4;
     }
     else if (algoVal == 2)
     {
@@ -554,14 +438,106 @@ void SliceControlBar::paint (juce::Graphics& g)
         bool locked = (s.lockMask & kLockGrainMode) != 0;
         int gmVal   = locked ? s.grainMode : gGM;
         juce::String gmNames[] = { "Fast", "Normal", "Smooth" };
-        drawParamCell (g, x, row2y, "GRAIN",
+        drawParamCell (g, x, row1y, "GRAIN",
                        gmNames[juce::jlimit (0, 2, gmVal)],
                        locked, kLockGrainMode, F::FieldGrainMode,
                        0.f, 2.f, 1.f, false, true, cw);
-        x += cw + 6;
+        x += cw + 4;
     }
 
-    // ATK — knob
+    // STRETCH — boolean
+    {
+        bool locked = (s.lockMask & kLockStretch) != 0;
+        bool sv     = locked ? s.stretchEnabled : gStretch;
+        drawParamCell (g, x, row1y, "STRETCH", sv ? "ON" : "OFF",
+                       locked, kLockStretch, F::FieldStretchEnabled,
+                       0.f, 1.f, 1.f, true, false, cw);
+        x += cw + 4;
+    }
+
+    // 1SHOT — boolean
+    {
+        bool gOS   = processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load() > 0.5f;
+        bool locked = (s.lockMask & kLockOneShot) != 0;
+        bool osv    = locked ? s.oneShot : gOS;
+        drawParamCell (g, x, row1y, "1SHOT", osv ? "ON" : "OFF",
+                       locked, kLockOneShot, F::FieldOneShot,
+                       0.f, 1.f, 1.f, true, false, cw);
+        x += cw + 4;
+    }
+
+    // START / END as knobs + LINK toggle
+    {
+        g.setColour (getTheme().separator);
+        g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
+        x += 8;
+
+        // START knob — normalised 0-1 over sample length
+        {
+            float startNorm = (ui.numSlices > 0 && idx >= 0)
+                ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames)
+                : 0.f;
+            juce::String startStr = juce::String (s.startSample);
+            drawKnobCell (g, x, row1y, "START", startStr,
+                          startNorm, false, 0,
+                          F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
+            cells.back().isMidiLearnable = true;
+            x += cw + 4;
+        }
+
+        // END knob
+        {
+            float endNorm = (ui.numSlices > 0 && idx >= 0)
+                ? (float) s.endSample / (float) juce::jmax (1, ui.sampleNumFrames)
+                : 1.f;
+            juce::String endStr = juce::String (s.endSample);
+            drawKnobCell (g, x, row1y, "END", endStr,
+                          endNorm, false, 0,
+                          F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
+            cells.back().isMidiLearnable = true;
+            x += cw + 4;
+        }
+
+        // LINK toggle button
+        {
+            const bool linked = processor.slicesLinked.load (std::memory_order_relaxed);
+            const int btnW = 42, btnH = 32;
+            linkBtnArea = { x, row1y, btnW, btnH };
+
+            g.setColour (linked ? getTheme().accent.withAlpha (0.25f)
+                                : getTheme().darkBar.brighter (0.08f));
+            g.fillRoundedRectangle ((float) x, (float) row1y, (float) btnW, (float) btnH, 3.f);
+
+            g.setColour (linked ? getTheme().accent
+                                : getTheme().foreground.withAlpha (0.22f));
+            g.drawRoundedRectangle ((float) x + 0.5f, (float) row1y + 0.5f,
+                                    (float) btnW - 1.f, (float) btnH - 1.f, 3.f, 1.f);
+
+            g.setFont (DysektLookAndFeel::makeFont (10.0f));
+            g.setColour (linked ? getTheme().accent
+                                : getTheme().foreground.withAlpha (0.35f));
+            g.drawText ("LINK", x, row1y + 2, btnW, 13, juce::Justification::centred);
+
+            g.setFont (DysektLookAndFeel::makeFont (9.0f));
+            g.setColour (linked ? getTheme().foreground.withAlpha (0.7f)
+                                : getTheme().foreground.withAlpha (0.22f));
+            g.drawText (linked ? "ON" : "OFF", x, row1y + 15, btnW, 13, juce::Justification::centred);
+
+            ParamCell lc{};
+            lc.x = x; lc.y = row1y; lc.w = btnW; lc.h = btnH;
+            lc.isLinkBtn = true;
+            cells.push_back (lc);
+        }
+    }
+
+    // ── Separator ─────────────────────────────────────────────────────
+    g.setColour (getTheme().separator);
+    g.drawHorizontalLine (34, 8.0f, (float) getWidth() - 8.0f);
+
+    // ── Row 2 ─────────────────────────────────────────────────────────
+    x = 8;
+
+    // ATK — knob (stored seconds, display ms)
     {
         bool locked = (s.lockMask & kLockAttack) != 0;
         float atk   = locked ? s.attackSec : gAttack / 1000.f;
@@ -569,7 +545,7 @@ void SliceControlBar::paint (juce::Graphics& g)
                       juce::String ((int) (atk * 1000.f)) + "ms",
                       toNorm (F::FieldAttack, atk),
                       locked, kLockAttack, F::FieldAttack, 0.f, 1.f, 0.001f, cw);
-        x += cw + 6;
+        x += cw + 4;
     }
 
     // DEC — knob
@@ -580,10 +556,10 @@ void SliceControlBar::paint (juce::Graphics& g)
                       juce::String ((int) (dec * 1000.f)) + "ms",
                       toNorm (F::FieldDecay, dec),
                       locked, kLockDecay, F::FieldDecay, 0.f, 5.f, 0.001f, cw);
-        x += cw + 6;
+        x += cw + 4;
     }
 
-    // SUS — knob
+    // SUS — knob (stored 0-1, display %)
     {
         bool locked = (s.lockMask & kLockSustain) != 0;
         float sus   = locked ? s.sustainLevel : gSustain / 100.f;
@@ -591,7 +567,7 @@ void SliceControlBar::paint (juce::Graphics& g)
                       juce::String ((int) (sus * 100.f)) + "%",
                       toNorm (F::FieldSustain, sus),
                       locked, kLockSustain, F::FieldSustain, 0.f, 1.f, 0.01f, cw);
-        x += cw + 6;
+        x += cw + 4;
     }
 
     // REL — knob
@@ -602,7 +578,52 @@ void SliceControlBar::paint (juce::Graphics& g)
                       juce::String ((int) (rel * 1000.f)) + "ms",
                       toNorm (F::FieldRelease, rel),
                       locked, kLockRelease, F::FieldRelease, 0.f, 5.f, 0.001f, cw);
-        x += cw + 6;
+        x += cw + 4;
+    }
+
+    // TAIL — boolean
+    {
+        bool gTail = processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load() > 0.5f;
+        bool locked = (s.lockMask & kLockReleaseTail) != 0;
+        bool tv = locked ? s.releaseTail : gTail;
+        drawParamCell (g, x, row2y, "TAIL", tv ? "ON" : "OFF",
+                       locked, kLockReleaseTail, F::FieldReleaseTail,
+                       0.f, 1.f, 1.f, true, false, cw);
+        x += cw + 4;
+    }
+
+    // REV — boolean
+    {
+        bool gRev = processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load() > 0.5f;
+        bool locked = (s.lockMask & kLockReverse) != 0;
+        bool rv = locked ? s.reverse : gRev;
+        drawParamCell (g, x, row2y, "REV", rv ? "ON" : "OFF",
+                       locked, kLockReverse, F::FieldReverse,
+                       0.f, 1.f, 1.f, true, false, cw);
+        x += cw + 4;
+    }
+
+    // LOOP — choice
+    {
+        bool locked = (s.lockMask & kLockLoop) != 0;
+        int lv = locked ? s.loopMode : gLoopMode;
+        juce::String loopNames[] = { "OFF", "LOOP", "PP" };
+        drawParamCell (g, x, row2y, "LOOP",
+                       loopNames[juce::jlimit (0, 2, lv)],
+                       locked, kLockLoop, F::FieldLoop,
+                       0.f, 2.f, 1.f, false, true, cw);
+        x += cw + 4;
+    }
+
+    // MUTE — knob
+    {
+        bool locked = (s.lockMask & kLockMuteGroup) != 0;
+        int mv = locked ? s.muteGroup : gMG;
+        drawKnobCell (g, x, row2y, "MUTE",
+                      juce::String (mv),
+                      toNorm (F::FieldMuteGroup, (float) mv),
+                      locked, kLockMuteGroup, F::FieldMuteGroup, 0.f, 32.f, 1.f, cw);
+        x += cw + 4;
     }
 
     // GAIN — knob
@@ -614,10 +635,10 @@ void SliceControlBar::paint (juce::Graphics& g)
                       (gv >= 0.f ? "+" : "") + juce::String (gv, 1) + "dB",
                       toNorm (F::FieldVolume, gv),
                       locked, kLockVolume, F::FieldVolume, -100.f, 24.f, 0.1f, cw);
-        x += cw + 6;
+        x += cw + 4;
     }
 
-    // PAN — knob
+    // PAN — knob (-1 L .. 0 C .. +1 R)
     {
         float gPan  = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
         bool locked = (s.lockMask & kLockPan) != 0;
@@ -626,48 +647,40 @@ void SliceControlBar::paint (juce::Graphics& g)
                             : (pv < 0.0f   ? juce::String ((int) std::round (-pv * 100.0f)) + "L"
                                            : juce::String ((int) std::round ( pv * 100.0f)) + "R");
         drawKnobCell (g, x, row2y, "PAN", panStr,
-                      (pv + 1.0f) * 0.5f,
+                      (pv + 1.0f) * 0.5f,          // normalise -1..+1 → 0..1
                       locked, kLockPan, F::FieldPan, -1.f, 1.f, 0.01f, cw);
-        x += cw + 6;
+        x += cw + 4;
     }
 
-    // FCUT — filter cutoff knob
+    // FCUT — filter cutoff knob (Hz, log feel)
     {
         float gFC   = processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load();
         bool locked = (s.lockMask & kLockFilter) != 0;
         float fv    = locked ? s.filterCutoff : gFC;
         juce::String fcStr = (fv >= 10000.0f) ? juce::String ((int) (fv / 1000.0f)) + "k"
                                                : juce::String ((int) fv) + "Hz";
+        // Normalise on a log scale for display
         const float logMin = std::log (20.0f), logMax = std::log (20000.0f);
         float fcNorm = (std::log (juce::jlimit (20.0f, 20000.0f, fv)) - logMin) / (logMax - logMin);
         drawKnobCell (g, x, row2y, "FCUT", fcStr,
-                      fcNorm, locked, kLockFilter, F::FieldFilterCutoff, 20.f, 20000.f, 1.f, cw);
-        x += cw + 6;
+                      fcNorm,
+                      locked, kLockFilter, F::FieldFilterCutoff, 20.f, 20000.f, 1.f, cw);
+        x += cw + 4;
     }
 
-    // FRES — filter resonance knob
+    // FRES — filter resonance knob (0..1)
     {
         float gFR   = processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
         bool locked = (s.lockMask & kLockFilter) != 0;
         float rv    = locked ? s.filterRes : gFR;
         drawKnobCell (g, x, row2y, "FRES",
                       juce::String ((int) (rv * 100.0f)) + "%",
-                      rv, locked, kLockFilter, F::FieldFilterRes, 0.f, 1.f, 0.01f, cw);
-        x += cw + 6;
+                      rv,
+                      locked, kLockFilter, F::FieldFilterRes, 0.f, 1.f, 0.01f, cw);
+        x += cw + 4;
     }
 
-    // MUTE GROUP — knob
-    {
-        bool locked = (s.lockMask & kLockMuteGroup) != 0;
-        int mv = locked ? s.muteGroup : gMG;
-        drawKnobCell (g, x, row2y, "MUTE GRP",
-                      juce::String (mv),
-                      toNorm (F::FieldMuteGroup, (float) mv),
-                      locked, kLockMuteGroup, F::FieldMuteGroup, 0.f, 32.f, 1.f, cw);
-        x += cw + 6;
-    }
-
-    // OUT — output bus knob
+    // OUT — knob
     {
         bool locked = (s.lockMask & kLockOutputBus) != 0;
         int ov      = locked ? s.outputBus : 0;
@@ -675,17 +688,18 @@ void SliceControlBar::paint (juce::Graphics& g)
                       juce::String (ov + 1),
                       toNorm (F::FieldOutputBus, (float) ov),
                       locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f, cw);
-        x += cw + 6;
+        x += cw + 4;
     }
 
-    // MIDI NOTE — knob (always per-slice, renamed from "MIDI")
+    // MIDI — knob (always per-slice, lockBit=0)
     {
-        drawKnobCell (g, x, row2y, "MIDI NOTE",
+        drawKnobCell (g, x, row2y, "MIDI",
                       juce::String (s.midiNote),
                       toNorm (F::FieldMidiNote, (float) s.midiNote),
                       false, 0, F::FieldMidiNote, 0.f, 127.f, 1.f, cw);
     }
 }
+
 // =============================================================================
 //  mouseDown
 // =============================================================================
@@ -704,7 +718,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
         // MIDI Learn boundary button
         if (cell.isMidiLearnBtn)
         {
-            if (e.mods.isRightButtonDown()) showMidiLearnMenu (cell.fieldId, localPointToGlobal (e.getPosition()));
+            if (e.mods.isRightButtonDown()) showMidiLearnMenu (cell.fieldId);
             else
             {
                 if (processor.midiLearn.getArmedSlot() == cell.fieldId)
@@ -719,7 +733,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
         // Knob right-click → MIDI Learn menu
         if (cell.isKnob && e.mods.isRightButtonDown())
         {
-            showMidiLearnMenu (cell.fieldId, localPointToGlobal (e.getPosition())); return;
+            showMidiLearnMenu (cell.fieldId); return;
         }
 
         if (cell.isSetBpm) { showSetBpmPopup(); return; }

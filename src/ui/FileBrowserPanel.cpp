@@ -4,7 +4,7 @@
 
 FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     : processor (p),
-      fileFilter ("*.wav;*.aif;*.aiff;*.ogg;*.flac;*.mp3;*.sf2;*.sfz", "*", "Audio & SoundFont Files"),
+      fileFilter ("*.wav;*.aif;*.aiff;*.ogg;*.flac;*.mp3", "*", "Audio Files"),
       dirList (&fileFilter, ioThread),
       browser (juce::FileBrowserComponent::openMode
                | juce::FileBrowserComponent::canSelectFiles,
@@ -145,20 +145,8 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
 void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
 {
     stopPreview();
-    if (! f.existsAsFile()) return;
-
-    auto ext = f.getFileExtension().toLowerCase();
-
-    if (ext == ".sf2" || ext == ".sfz")
-    {
-        // SF2/SFZ loading: hand off to the processor's soundfont loader
-        processor.loadSoundFontAsync (f);
-        if (onFileLoaded) onFileLoaded();
-        return;
-    }
-
-    processor.loadFileAsync (f);
-    if (onFileLoaded) onFileLoaded();
+    if (f.existsAsFile())
+        processor.loadFileAsync (f);
 }
 
 // ── Preview engine ────────────────────────────────────────────────────────────

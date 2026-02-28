@@ -71,9 +71,6 @@ public:
     void resized() override;
     void paint   (juce::Graphics& g) override;
 
-    // Called after double-click load so editor can close the panel
-    std::function<void()> onFileLoaded;
-
 private:
     // FileBrowserListener
     void selectionChanged() override {}

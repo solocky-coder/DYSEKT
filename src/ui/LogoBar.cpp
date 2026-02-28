@@ -75,7 +75,7 @@ void LogoBar::paint (juce::Graphics& g)
     const int wordW = dyW + sektW;
 
     g.setFont (DysektLookAndFeel::makeFont (8.0f));
-    g.setColour (fg.withAlpha (0.90f));  // same family as "DY"
+    g.setColour (fg.withAlpha (0.22f));
     // right-align tagline under the wordmark
     g.drawText ("sample slicer", tagX, cy + 8, wordW, 12,
                 juce::Justification::centredRight);
