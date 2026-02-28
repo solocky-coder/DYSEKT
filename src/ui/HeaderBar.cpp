@@ -13,16 +13,24 @@ HeaderBar::HeaderBar (DysektProcessor& p) : processor (p)
     addAndMakeVisible (redoBtn);
     addAndMakeVisible (panicBtn);
     addAndMakeVisible (themeBtn);
-    undoBtn.setAlwaysOnTop (true);
-    redoBtn.setAlwaysOnTop (true);
-    panicBtn.setAlwaysOnTop (true);
-    themeBtn.setAlwaysOnTop (true);
+    addAndMakeVisible (filBtn);
+    addAndMakeVisible (waBtn);
+    addAndMakeVisible (chBtn);
 
     for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn })
     {
+        btn->setAlwaysOnTop (true);
         btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
         btn->setColour (juce::TextButton::textColourOnId, getTheme().foreground);
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
+    }
+
+    for (auto* btn : { &filBtn, &waBtn, &chBtn })
+    {
+        btn->setAlwaysOnTop (true);
+        btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
+        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);
+        btn->setColour (juce::TextButton::textColourOffId, getTheme().accent);
     }
 
     panicBtn.setTooltip ("Panic: kill all sound");
@@ -48,23 +56,78 @@ HeaderBar::HeaderBar (DysektProcessor& p) : processor (p)
     };
 
     themeBtn.onClick = [this] { showThemePopup(); };
+
+    filBtn.setTooltip ("Toggle File Browser");
+    filBtn.onClick = [this] {
+        browserActive = ! browserActive;
+        updateAccentBtn (filBtn, browserActive);
+        if (onBrowserToggle) onBrowserToggle();
+    };
+
+    waBtn.setTooltip ("Toggle Soft Waveform");
+    waBtn.onClick = [this] {
+        waveActive = ! waveActive;
+        updateAccentBtn (waBtn, waveActive);
+        if (onWaveToggle) onWaveToggle();
+    };
+
+    chBtn.setTooltip ("Chromatic Mode — play selected slice across full keyboard");
+    chBtn.onClick = [this] {
+        chromaticActive = ! chromaticActive;
+        updateAccentBtn (chBtn, chromaticActive);
+        if (onChromaticToggle) onChromaticToggle();
+    };
 }
 
 void HeaderBar::resized()
 {
     int right  = getWidth() - 8;
-    int cy     = (getHeight() - 28) / 2;  // vertically centre buttons
+    int cy     = (getHeight() - 28) / 2;
     int panicW = 56;
     int undoW  = 48;
     int gap    = 4;
+    int btnH   = 28;
+    int accentH = 22;
+    int accentW = 32;
+    int accentCY = (getHeight() - accentH) / 2;
 
-    themeBtn.setBounds  (right - 26,                             cy, 26,    28);
-    panicBtn.setBounds  (right - 26 - gap - panicW,             cy, panicW, 28);
+    // Right side: UI | PANIC | UNDO/REDO
+    themeBtn.setBounds  (right - 26,                             cy, 26,    btnH);
+    panicBtn.setBounds  (right - 26 - gap - panicW,             cy, panicW, btnH);
 
     int undoX = right - 26 - gap - panicW - gap - undoW;
     undoBtn.setBounds   (undoX, cy,      undoW, 13);
     redoBtn.setBounds   (undoX, cy + 15, undoW, 13);
+
+    // FIL / WA / CH — just left of UNDO, with a small gap
+    int chX  = undoX - gap - accentW;
+    int waX  = chX  - gap - accentW;
+    int filX = waX  - gap - accentW;
+
+    filBtn.setBounds (filX, accentCY, accentW, accentH);
+    waBtn.setBounds  (waX,  accentCY, accentW, accentH);
+    chBtn.setBounds  (chX,  accentCY, accentW, accentH);
 }
+
+void HeaderBar::updateAccentBtn (juce::TextButton& btn, bool active)
+{
+    if (active)
+    {
+        btn.setColour (juce::TextButton::buttonColourId,  getTheme().accent.withAlpha (0.2f));
+        btn.setColour (juce::TextButton::textColourOnId,  getTheme().accent);
+        btn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
+    }
+    else
+    {
+        btn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
+        btn.setColour (juce::TextButton::textColourOnId,  getTheme().accent);
+        btn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
+    }
+}
+
+void HeaderBar::setBrowserActive   (bool v) { browserActive    = v; updateAccentBtn (filBtn, v); }
+void HeaderBar::setWaveActive      (bool v) { waveActive       = v; updateAccentBtn (waBtn,  v); }
+void HeaderBar::setChromaticActive (bool v) { chromaticActive  = v; updateAccentBtn (chBtn,  v); }
 
 void HeaderBar::adjustScale (float delta)
 {
@@ -78,12 +141,16 @@ void HeaderBar::adjustScale (float delta)
 
 void HeaderBar::paint (juce::Graphics& g)
 {
+    // Refresh all button colours every paint (theme may have changed)
     for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
         btn->setColour (juce::TextButton::textColourOnId, getTheme().foreground);
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
+    updateAccentBtn (filBtn, browserActive);
+    updateAccentBtn (waBtn,  waveActive);
+    updateAccentBtn (chBtn,  chromaticActive);
 
     g.fillAll (getTheme().header);
     headerCells.clear();
@@ -100,6 +167,10 @@ void HeaderBar::paint (juce::Graphics& g)
         const int lw   = 55;   // width of each info cell
         const int gap  = 6;
 
+        // SLICES and ROOT x-positions (computed early so maxW can reference slcX)
+        int slcX = filBtn.getX() - gap - lw - gap - lw;
+        int rnX  = filBtn.getX() - gap - lw;
+
         // SAMPLE label + filename (left-aligned, expands rightward)
         int sampleX = lx;
 
@@ -111,7 +182,7 @@ void HeaderBar::paint (juce::Graphics& g)
             g.setFont (DysektLookAndFeel::makeFont (14.0f));
             g.setColour (juce::Colours::orange.withAlpha (0.9f));
             // filename truncated to available width before SLICES cell
-            int maxW = undoBtn.getX() - gap - lw - gap - lw - gap - sampleX - 8;
+            int maxW = slcX - gap - sampleX;
             g.drawText (ui.sampleFileName + " (click to relink)",
                         sampleX, cellY + 15, maxW, 14, juce::Justification::left);
             sampleInfoBounds = { sampleX, cellY, maxW, cellH };
@@ -126,7 +197,7 @@ void HeaderBar::paint (juce::Graphics& g)
             g.drawText ("SAMPLE", sampleX, cellY + 2, 65, 13, juce::Justification::left);
             g.setFont (DysektLookAndFeel::makeFont (14.0f));
             g.setColour (getTheme().foreground.withAlpha (0.7f));
-            int maxW = undoBtn.getX() - gap - lw - gap - lw - gap - sampleX - 8;
+            int maxW = slcX - gap - sampleX;
             g.drawText (ui.sampleFileName + " (" + juce::String (lenSec, 2) + "s)",
                         sampleX, cellY + 15, maxW, 14, juce::Justification::left);
             sampleInfoBounds = { sampleX, cellY, maxW, cellH };
@@ -135,10 +206,6 @@ void HeaderBar::paint (juce::Graphics& g)
         {
             sampleInfoBounds = {};
         }
-
-        // SLICES — right of the sample info, left of ROOT, left of UNDO
-        int slcX = undoBtn.getX() - gap - lw - gap - lw;
-        int rnX  = undoBtn.getX() - gap - lw;
 
         // SLICES (read-only count)
         g.setFont (DysektLookAndFeel::makeFont (12.0f));

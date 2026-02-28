@@ -100,15 +100,15 @@ void FileBrowserPanel::resized()
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
-    g.fillAll (getTheme().darkBar);
+    g.fillAll (juce::Colour (0xFF050608));
 
     if (previewVisible)
     {
         // Draw a slightly raised bar behind the preview controls
         auto bar = getLocalBounds().removeFromBottom (kBarH);
-        g.setColour (juce::Colour (0xFF0D0F12));
+        g.setColour (juce::Colour (0xFF040507));
         g.fillRect (bar);
-        g.setColour (juce::Colour (0xFF2A3040));
+        g.setColour (juce::Colour (0xFF0C1018));
         g.drawLine ((float) bar.getX(), (float) bar.getY(),
                     (float) bar.getRight(), (float) bar.getY(), 1.0f);
     }

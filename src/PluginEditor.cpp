@@ -54,10 +54,15 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     sliceLane.setWaveformView (&waveformView);
 
-    // Wire up BROWSER button in ActionPanel
-    actionPanel.onBrowserToggle    = [this] { toggleBrowserPanel(); };
-    actionPanel.onWaveToggle       = [this] { toggleSoftWave(); };
-    actionPanel.onChromaticToggle  = [this] { toggleChromatic(); };
+    // FIL / WA / CH now live in headerBar — wire their callbacks there
+    headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
+    headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
+    headerBar.onChromaticToggle = [this] { toggleChromatic(); };
+
+    // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
+    actionPanel.onBrowserToggle    = nullptr;
+    actionPanel.onWaveToggle       = nullptr;
+    actionPanel.onChromaticToggle  = nullptr;
 
     ensureDefaultThemes();
     loadUserSettings();
@@ -94,6 +99,7 @@ void DysektEditor::toggleBrowserPanel()
 {
     browserOpen = ! browserOpen;
     browserPanel.setVisible (browserOpen);
+    headerBar.setBrowserActive (browserOpen);
     setSize (kBaseW, computeTotalHeight());
     resized();
 }
@@ -103,6 +109,9 @@ void DysektEditor::toggleSoftWave()
     softWave = ! softWave;
     waveformView.setSoftWaveform (softWave);
     actionPanel.setWaveActive (softWave);
+    headerBar.setBrowserActive (browserOpen);
+    headerBar.setWaveActive (softWave);
+    headerBar.setWaveActive (softWave);
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
     saveUserSettings (scale, getTheme().name);
 }
@@ -112,6 +121,7 @@ void DysektEditor::toggleChromatic()
     const bool newVal = ! processor.chromaticMode.load();
     processor.chromaticMode.store (newVal);
     actionPanel.setChromaticActive (newVal);
+    headerBar.setChromaticActive (newVal);
 }
 
 void DysektEditor::paint (juce::Graphics& g)
@@ -343,4 +353,5 @@ void DysektEditor::loadUserSettings()
 
     // Sync chromatic button with processor state (restored from project)
     actionPanel.setChromaticActive (processor.chromaticMode.load());
+    headerBar.setChromaticActive (processor.chromaticMode.load());
 }

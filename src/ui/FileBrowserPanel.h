@@ -9,6 +9,21 @@ class DysektProcessor;
 class SmallListLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    SmallListLookAndFeel()
+    {
+        // Very dark list background
+        setColour (juce::ListBox::backgroundColourId,         juce::Colour (0xFF060709));
+        setColour (juce::DirectoryContentsDisplayComponent::textColourId,
+                   juce::Colour (0xFF8aacbc));
+        setColour (juce::DirectoryContentsDisplayComponent::highlightColourId,
+                   juce::Colour (0xFF0a1822));
+        setColour (juce::DirectoryContentsDisplayComponent::highlightedTextColourId,
+                   juce::Colour (0xFF00d4e8));
+        setColour (juce::FileChooserDialogBox::titleTextColourId,
+                   juce::Colour (0xFF8aacbc));
+    }
+private:
+public:
     void drawFileBrowserRow (juce::Graphics& g, int width, int height,
                              const juce::File& /*file*/,
                              const juce::String& filename,

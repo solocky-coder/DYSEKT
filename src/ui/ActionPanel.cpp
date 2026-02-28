@@ -17,16 +17,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
-    // FILES, WAVE, CHRO get accent styling
-    addAndMakeVisible (browserBtn);
-    addAndMakeVisible (waveBtn);
-    addAndMakeVisible (chromaticBtn);
-    for (auto* btn : { &browserBtn, &waveBtn, &chromaticBtn })
-    {
-        btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
-        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);
-        btn->setColour (juce::TextButton::textColourOffId, getTheme().accent);
-    }
+    // FIL/WA/CH buttons moved to HeaderBar — keep members for state sync only
 
     addSliceBtn.onClick = [this] { waveformView.setSliceDrawMode (! waveformView.isSliceDrawModeActive()); repaint(); };
 
@@ -118,15 +109,13 @@ void ActionPanel::toggleAutoChop()
 
 void ActionPanel::resized()
 {
-    const int gap     = 5;
-    const int h       = getHeight();
-    const int thinW   = 30;   // ZX, FM
-    const int accentW = 38;   // FILES, WAVE, CHRO
-    const int thinTotal   = thinW * 2 + gap;
-    const int accentTotal = accentW * 3 + gap * 2;
-    const int availW  = getWidth() - thinTotal - gap - accentTotal - gap;
+    const int gap   = 5;
+    const int h     = getHeight();
+    const int thinW = 30;   // ZX, FM
+    const int thinTotal = thinW * 2 + gap;
+    const int availW = getWidth() - thinTotal - gap;
     const int numMain = 5;
-    const int btnW    = (availW - gap * (numMain - 1)) / numMain;
+    const int btnW  = (availW - gap * (numMain - 1)) / numMain;
     int x = 0;
 
     addSliceBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
@@ -136,11 +125,12 @@ void ActionPanel::resized()
     deleteBtn.setBounds   (x, 0, btnW, h); x += btnW + gap;
 
     snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
-    midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
+    midiSelectBtn.setBounds (x, 0, thinW, h);
 
-    browserBtn.setBounds   (x, 0, accentW, h); x += accentW + gap;
-    waveBtn.setBounds      (x, 0, accentW, h); x += accentW + gap;
-    chromaticBtn.setBounds (x, 0, accentW, h);
+    // browserBtn/waveBtn/chromaticBtn moved to HeaderBar — hide them
+    browserBtn.setVisible (false);
+    waveBtn.setVisible    (false);
+    chromaticBtn.setVisible (false);
 }
 
 void ActionPanel::paint (juce::Graphics& g)
@@ -153,9 +143,7 @@ void ActionPanel::paint (juce::Graphics& g)
     }
     updateMidiButtonAppearance (processor.midiSelectsSlice.load());
     updateSnapButtonAppearance (processor.snapToZeroCrossing.load());
-    updateToggleBtn (browserBtn,    browserActive);
-    updateToggleBtn (waveBtn,       waveActive);
-    updateToggleBtn (chromaticBtn,  chromaticActive);
+    // FIL/WA/CH toggle state managed by HeaderBar
 
     if (waveformView.isSliceDrawModeActive())
     { g.setColour (getTheme().accent.withAlpha (0.25f)); g.fillRect (addSliceBtn.getBounds()); }
