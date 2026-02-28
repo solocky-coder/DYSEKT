@@ -1,164 +1,147 @@
-// From Page 4 through Page 8
-void WaveformView::drawWaveform (juce::Graphics& g)
+#include "WaveformView.h"
+#include "UIHelpers.h"
+#include "DysektLookAndFeel.h"
+#include "../PluginProcessor.h"
+#include "../audio/AudioAnalysis.h"
+
+WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
+
+void WaveformView::setSliceDrawMode (bool active)
 {
-    const int cy = getHeight() / 2;
-    const float scale = (float) getHeight() * UILayout::waveformVerticalScale;
+    sliceDrawMode = active;
+    setMouseCursor (active ? juce::MouseCursor::IBeamCursor : juce::MouseCursor::NormalCursor);
+}
 
-    auto& peaks = cache.getPeaks();
-    const int numPeaks = std::min (cache.getNumPeaks(), getWidth());
-    if (numPeaks <= 0)
-        return;
+bool WaveformView::hasActiveSlicePreview() const noexcept
+{
+    if (dragSliceIdx < 0) return false;
+    return dragMode == DragEdgeLeft || dragMode == DragEdgeRight || dragMode == MoveSlice;
+}
 
-    float samplesPerPixel = 1.0f;
+bool WaveformView::getActiveSlicePreview (int& sliceIdx, int& startSample, int& endSample) const
+{
+    if (! hasActiveSlicePreview()) return false;
+    sliceIdx = dragSliceIdx;
+    startSample = dragPreviewStart;
+    endSample = dragPreviewEnd;
+    return true;
+}
+
+bool WaveformView::isInteracting() const noexcept
+{
+    return dragMode != None || midDragging || shiftPreviewActive;
+}
+
+WaveformView::ViewState WaveformView::buildViewState (const SampleData::SnapshotPtr& sampleSnap) const
+{
+    ViewState state;
+    if (sampleSnap == nullptr) return state;
+    const int numFrames = sampleSnap->buffer.getNumSamples();
+    const int width = getWidth();
+    if (numFrames <= 0 || width <= 0) return state;
+    const float z = std::max (1.0f, processor.zoom.load());
+    const float sc = processor.scroll.load();
+    const int visibleLen = juce::jlimit (1, numFrames, (int) (numFrames / z));
+    const int maxStart = juce::jmax (0, numFrames - visibleLen);
+    const int visibleStart = juce::jlimit (0, maxStart, (int) (sc * (float) maxStart));
+    state.numFrames = numFrames;
+    state.visibleStart = visibleStart;
+    state.visibleLen = visibleLen;
+    state.width = width;
+    state.samplesPerPixel = (float) visibleLen / (float) width;
+    state.valid = true;
+    return state;
+}
+
+int WaveformView::pixelToSample (int px) const
+{
     if (paintViewStateActive && cachedPaintViewState.valid)
-        samplesPerPixel = cachedPaintViewState.samplesPerPixel;
-    else
-    {
-        const auto view = buildViewState (processor.sampleData.getSnapshot());
-        if (view.valid)
-            samplesPerPixel = view.samplesPerPixel;
+        return cachedPaintViewState.visibleStart + (int) ((float) px / (float) cachedPaintViewState.width * cachedPaintViewState.visibleLen);
+    const auto state = buildViewState (processor.sampleData.getSnapshot());
+    if (! state.valid) return 0;
+    return state.visibleStart + (int) ((float) px / (float) state.width * state.visibleLen);
+}
+
+int WaveformView::sampleToPixel (int sample) const
+{
+    if (paintViewStateActive && cachedPaintViewState.valid)
+        return (int) ((float) (sample - cachedPaintViewState.visibleStart) / (float) cachedPaintViewState.visibleLen * (float) cachedPaintViewState.width);
+    const auto state = buildViewState (processor.sampleData.getSnapshot());
+    if (! state.valid) return 0;
+    return (int) ((float) (sample - state.visibleStart) / (float) state.visibleLen * (float) state.width);
+}
+
+void WaveformView::rebuildCacheIfNeeded()
+{
+    auto sampleSnap = processor.sampleData.getSnapshot();
+    const auto view = buildViewState (sampleSnap);
+    if (! view.valid) return;
+    const CacheKey key { view.visibleStart, view.visibleLen, view.width, view.numFrames, sampleSnap.get() };
+    if (key == prevCacheKey) return;
+    cache.rebuild (sampleSnap->buffer, sampleSnap->peakMipmaps, view.numFrames, processor.zoom.load(), processor.scroll.load(), view.width);
+    prevCacheKey = key;
+}
+
+void WaveformView::paint (juce::Graphics& g)
+{
+    auto sampleSnap = processor.sampleData.getSnapshot();
+    g.fillAll (getTheme().waveformBg);
+    int cy = getHeight() / 2;
+    g.setColour (getTheme().gridLine.withAlpha (0.5f));
+    g.drawHorizontalLine (cy, 0.0f, (float) getWidth());
+    if (sampleSnap != nullptr) {
+        cachedPaintViewState = buildViewState (sampleSnap);
+        paintViewStateActive = cachedPaintViewState.valid;
+        rebuildCacheIfNeeded();
+        drawWaveform (g);
+        drawSlices (g);
+        paintDrawSlicePreview (g);
+        paintLazyChopOverlay (g);
+        paintTransientMarkers (g);
+        drawPlaybackCursors (g);
+        paintViewStateActive = false;
+    } else {
+        paintViewStateActive = false;
+        g.setColour (getTheme().foreground.withAlpha (0.25f));
+        g.setFont (DysektLookAndFeel::makeFont (22.0f));
+        g.drawText ("DROP AUDIO FILE", getLocalBounds(), juce::Justification::centred);
     }
+}
 
-    // Build top/bottom path once (shared by both modes)
-    juce::Path fillPath;
-    if (samplesPerPixel >= 1.0f)
-    {
-        fillPath.startNewSubPath (0.0f, (float) cy - peaks[0].maxVal * scale);
-        for (int px = 1; px < numPeaks; ++px)
-            fillPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
-        for (int px = numPeaks - 1; px >= 0; --px)
-            fillPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].minVal * scale);
-        fillPath.closeSubPath();
-    }
-
-    if (! softWaveform)
-    {
-        // HARD MODE (original flat-fill rendering)
-        if (samplesPerPixel < 1.0f)
-        {
-            g.setColour (getTheme().waveform.withAlpha (0.9f));
-            juce::Path path;
-            bool started = false;
-            for (int px = 0; px < numPeaks; ++px)
-            {
-                float y = (float) cy - peaks[(size_t) px].maxVal * scale;
-                if (! started) { path.startNewSubPath ((float) px, y); started = true; }
-                else path.lineTo ((float) px, y);
-            }
-            g.strokePath (path, juce::PathStrokeType (1.5f));
-            if (samplesPerPixel < 0.125f)
-            {
-                const float dotR = 2.5f;
-                for (int px = 0; px < numPeaks; ++px)
-                {
-                    float exactPos = (float) pixelToSample (0) + (float) px * samplesPerPixel;
-                    float frac = exactPos - std::floor (exactPos);
-                    if (frac < samplesPerPixel)
-                    {
-                        float y = (float) cy - peaks[(size_t) px].maxVal * scale;
-                        g.fillEllipse ((float) px - dotR, y - dotR, dotR * 2.0f, dotR * 2.0f);
-                    }
-                }
-            }
-        }
-        else // samplesPerPixel >= 1.0f
-        {
-            g.setColour (getTheme().waveform);
-            g.fillPath (fillPath);
-            if (samplesPerPixel < 8.0f)
-            {
-                juce::Path midPath;
-                float midY0 = (float) cy - (peaks[0].maxVal + peaks[0].minVal) * 0.5f * scale;
-                midPath.startNewSubPath (0.0f, midY0);
-                for (int px = 1; px < numPeaks; ++px)
-                {
-                    float mid = (peaks[(size_t) px].maxVal + peaks[(size_t) px].minVal) * 0.5f;
-                    midPath.lineTo ((float) px, (float) cy - mid * scale);
-                }
-                g.strokePath (midPath, juce::PathStrokeType (1.5f));
-            }
-        }
-    }
-    else // softWaveform == true
-    {
-        // SOFT MODE (TAL-style: gradient fill + bright outline stroke)
-        const juce::Colour waveCol = getTheme().waveform;
-        const juce::Colour bgCol = getTheme().waveformBg;
-        const int h = getHeight();
-        if (samplesPerPixel < 1.0f)
-        {
-            // Sub-sample zoom: single bright line, no fill needed
-            g.setColour (waveCol.withAlpha (0.95f));
-            juce::Path path;
-            bool started = false;
-            for (int px = 0; px < numPeaks; ++px)
-            {
-                float y = (float) cy - peaks[(size_t) px].maxVal * scale;
-                if (! started) { path.startNewSubPath ((float) px, y); started = true; }
-                else path.lineTo ((float) px, y);
-            }
-            g.strokePath (path, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            if (samplesPerPixel < 0.125f)
-            {
-                g.setColour (waveCol);
-                const float dotR = 3.0f;
-                for (int px = 0; px < numPeaks; ++px)
-                {
-                    float exactPos = (float) pixelToSample (0) + (float) px * samplesPerPixel;
-                    float frac = exactPos - std::floor (exactPos);
-                    if (frac < samplesPerPixel)
-                    {
-                        float y = (float) cy - peaks[(size_t) px].maxVal * scale;
-                        g.fillEllipse ((float) px - dotR, y - dotR, dotR * 2.0f, dotR * 2.0f);
-                    }
-                }
-            }
-        }
-        else // samplesPerPixel >= 1.0f
-        {
-            // 1. Translucent gradient fill
-            const juce::ColourGradient grad (waveCol.withAlpha (0.0f), 0.0f, 0.0f, waveCol.withAlpha (0.0f), 0.0f, (float) h, false);
-            grad.addColour (0.35, waveCol.withAlpha (0.18f));
-            grad.addColour (0.5, waveCol.withAlpha (0.28f));
-            grad.addColour (0.65, waveCol.withAlpha (0.18f));
-            g.setGradientFill (grad);
-            g.fillPath (fillPath);
-
-            // 2. Top outline (max envelope)
-            juce::Path topPath;
-            topPath.startNewSubPath (0.0f, (float) cy - peaks[0].maxVal * scale);
-            for (int px = 1; px < numPeaks; ++px)
-                topPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
-            g.setColour (waveCol.withAlpha (0.25f));
-            g.strokePath (topPath, juce::PathStrokeType (3.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour (waveCol.withAlpha (0.90f));
-            g.strokePath (topPath, juce::PathStrokeType (1.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-            // 3. Bottom outline (min envelope)
-            juce::Path botPath;
-            botPath.startNewSubPath (0.0f, (float) cy - peaks[0].minVal * scale);
-            for (int px = 1; px < numPeaks; ++px)
-                botPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].minVal * scale);
-            g.setColour (waveCol.withAlpha (0.25f));
-            g.strokePath (botPath, juce::PathStrokeType (3.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour (waveCol.withAlpha (0.90f));
-            g.strokePath (botPath, juce::PathStrokeType (1.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-            // 4. Transition midline (close zoom)
-            if (samplesPerPixel < 8.0f)
-            {
-                juce::Path midPath;
-                float midY0 = (float) cy - (peaks[0].maxVal + peaks[0].minVal) * 0.5f * scale;
-                midPath.startNewSubPath (0.0f, midY0);
-                for (int px = 1; px < numPeaks; ++px)
-                {
-                    float mid = (peaks[(size_t) px].maxVal + peaks[(size_t) px].minVal) * 0.5f;
-                    midPath.lineTo ((float) px, (float) cy - mid * scale);
-                }
-                g.setColour (waveCol.withAlpha (0.85f));
-                g.strokePath (midPath, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            }
+void WaveformView::paintDrawSlicePreview (juce::Graphics& g)
+{
+    if (dragMode == DrawSlice) {
+        int x1 = sampleToPixel (std::min (drawStart, drawEnd));
+        int x2 = sampleToPixel (std::max (drawStart, drawEnd));
+        if (x2 > x1) {
+            g.setColour (getTheme().accent.withAlpha (0.2f));
+            g.fillRect (x1, 0, x2 - x1, getHeight());
         }
     }
 }
-// Note: drawSlices and drawPlaybackCursors definitions are elsewhere in your code (Pages 8-10).
+
+void WaveformView::paintLazyChopOverlay (juce::Graphics& g) {}
+void WaveformView::paintTransientMarkers (juce::Graphics& g) {}
+
+void WaveformView::drawWaveform (juce::Graphics& g)
+{
+    const int cy = getHeight() / 2;
+    const float scale = (float) getHeight() * 0.9f;
+    auto& peaks = cache.getPeaks();
+    const int numPeaks = std::min (cache.getNumPeaks(), getWidth());
+    if (numPeaks <= 0) return;
+
+    juce::Path fillPath;
+    fillPath.startNewSubPath (0.0f, (float) cy - peaks.maxVal * scale);
+    for (int px = 1; px < numPeaks; ++px)
+        fillPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
+    for (int px = numPeaks - 1; px >= 0; --px)
+        fillPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].minVal * scale);
+    fillPath.closeSubPath();
+
+    g.setColour (getTheme().waveform);
+    g.fillPath (fillPath);
+}
+
+void WaveformView::drawSlices (juce::Graphics& g) {}
+void WaveformView::drawPlaybackCursors (juce::Graphics& g) {}
