@@ -92,6 +92,8 @@ private:
     int dragSliceLen = 0;  // for MoveSlice: original slice length
     int dragPreviewStart = 0; // for edge/move drags: preview start sample
     int dragPreviewEnd = 0;   // for edge/move drags: preview end sample
+    int dragOrigStart = 0;    // slice start at the moment drag began (for overlap clamping)
+    int dragOrigEnd = 0;      // slice end at the moment drag began (for overlap clamping)
     int ghostStart = 0;    // for DuplicateSlice: ghost overlay start sample
     int ghostEnd   = 0;    // for DuplicateSlice: ghost overlay end sample
 

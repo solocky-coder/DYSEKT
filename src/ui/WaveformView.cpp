@@ -676,6 +676,8 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 dragSliceIdx = sel;
                 dragPreviewStart = s.startSample;
                 dragPreviewEnd = s.endSample;
+                dragOrigStart = s.startSample;
+                dragOrigEnd   = s.endSample;
                 return;
             }
             if (std::abs (e.x - x2) < 6)
@@ -687,6 +689,8 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 dragSliceIdx = sel;
                 dragPreviewStart = s.startSample;
                 dragPreviewEnd = s.endSample;
+                dragOrigStart = s.startSample;
+                dragOrigEnd   = s.endSample;
                 return;
             }
 
@@ -761,34 +765,52 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
 
-        // Clamp left edge: must not cross start of previous slice (or sample start)
+        // Clamp left edge: must stay within the gap to the left of this slice.
+        // minStart = end of the closest slice that ends to the LEFT of our current start.
+        // maxStart = start of the closest slice that starts to the RIGHT of our current start
+        //            (i.e. the slice's own end, so it can't shrink below 64 samples).
         const auto& ui2 = processor.getUiSliceSnapshot();
         int minStart = 0;
+        int maxStart = dragPreviewEnd - 64;
         for (int i = 0; i < ui2.numSlices; ++i)
         {
             if (i == dragSliceIdx) continue;
             const auto& other = ui2.slices[(size_t) i];
-            if (other.endSample <= dragPreviewEnd)
+            if (! other.active) continue;
+            // A slice to our left: its end is at or before our original start
+            if (other.endSample <= dragOrigStart)
                 minStart = juce::jmax (minStart, other.endSample);
+            // A slice to our right (or overlapping): its start constrains how far right we move
+            if (other.startSample >= dragOrigStart)
+                maxStart = juce::jmin (maxStart, other.startSample - 64);
         }
-        dragPreviewStart = juce::jlimit (minStart, dragPreviewEnd - 64, samplePos);
+        dragPreviewStart = juce::jlimit (minStart, maxStart, samplePos);
     }
     else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
     {
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
 
-        // Clamp right edge: must not cross start of next slice (or sample end)
+        // Clamp right edge: must stay within the gap to the right of this slice.
+        // maxEnd = start of the closest slice that starts to the RIGHT of our current end.
+        // minEnd = end of closest slice that ends to the LEFT of our current end
+        //          (i.e. our own start + 64, so it can't shrink below 64 samples).
         const auto& ui2 = processor.getUiSliceSnapshot();
         int maxEnd = sampleSnap->buffer.getNumSamples();
+        int minEnd = dragPreviewStart + 64;
         for (int i = 0; i < ui2.numSlices; ++i)
         {
             if (i == dragSliceIdx) continue;
             const auto& other = ui2.slices[(size_t) i];
-            if (other.startSample >= dragPreviewStart)
+            if (! other.active) continue;
+            // A slice to our right: its start is at or after our original end
+            if (other.startSample >= dragOrigEnd)
                 maxEnd = juce::jmin (maxEnd, other.startSample);
+            // A slice to our left (or overlapping): its end constrains how far left we move
+            if (other.endSample <= dragOrigEnd)
+                minEnd = juce::jmax (minEnd, other.endSample + 64);
         }
-        dragPreviewEnd = juce::jlimit (dragPreviewStart + 64, maxEnd, samplePos);
+        dragPreviewEnd = juce::jlimit (minEnd, maxEnd, samplePos);
     }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
     {

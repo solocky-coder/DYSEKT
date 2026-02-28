@@ -696,7 +696,7 @@ void SliceControlBar::paint (juce::Graphics& g)
         drawKnobCell (g, x, row2y, "MIDI",
                       juce::String (s.midiNote),
                       toNorm (F::FieldMidiNote, (float) s.midiNote),
-                      true, 0, F::FieldMidiNote, 0.f, 127.f, 1.f, cw);
+                      false, 0, F::FieldMidiNote, 0.f, 127.f, 1.f, cw);
     }
 }
 
