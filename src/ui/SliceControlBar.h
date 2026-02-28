@@ -57,7 +57,7 @@ private:
     void drawLockIcon (juce::Graphics& g, int x, int y, bool locked);
     void showTextEditor (const ParamCell& cell, float currentValue);
     void showSetBpmPopup();
-    void showMidiLearnMenu (int fieldId);
+    void showMidiLearnMenu (int fieldId, juce::Point<int> screenPos);
 
     // Per-field helpers
     float getCurrentValue (int fieldId) const;

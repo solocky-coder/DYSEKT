@@ -4,24 +4,29 @@ project(Dysekt VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# --- 1. SFZero (SoundFont support) ---
-# We download this BEFORE JUCE so the module is ready to be registered
-include(FetchContent)
-FetchContent_Declare(
-    sfzero_module
-    GIT_REPOSITORY https://github.com/Dreamtonics/SFZero.git
-    GIT_TAG        master
-)
-FetchContent_MakeAvailable(sfzero_module)
-
-# --- 2. JUCE Setup ---
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 
-# Register the downloaded SFZero as a JUCE module
-# This makes sfzero::Synth available in your C++ code
-juce_add_module("${sfzero_module_SOURCE_DIR}")
+# --- sfizz (SF2 / SFZ soundfont engine) ---
+# Clone with: git submodule add https://github.com/sfztools/sfizz.git sfizz
+#             git submodule update --init --recursive sfizz
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sfizz/CMakeLists.txt")
+    set(SFIZZ_CLIENTS OFF CACHE BOOL "" FORCE)      # don't build stand-alone apps
+    set(SFIZZ_SHARED  OFF CACHE BOOL "" FORCE)      # static lib only
+    set(SFIZZ_JACK    OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_LV2     OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_VST     OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_BENCHMARKS OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_TESTS   OFF CACHE BOOL "" FORCE)
+    add_subdirectory(sfizz EXCLUDE_FROM_ALL)
+    set(DYSEKT_HAS_SFIZZ TRUE)
+    message(STATUS "sfizz found — SF2/SFZ support enabled")
+else()
+    set(DYSEKT_HAS_SFIZZ FALSE)
+    message(STATUS "sfizz NOT found at ./sfizz — SF2/SFZ support disabled. "
+                   "Run: git submodule add https://github.com/sfztools/sfizz.git sfizz")
+endif()
 
-# --- 3. Bungee (built as static library) ---
+# --- Bungee (built as static library) ---
 set(BUNGEE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/bungee)
 
 # pffft (C library used by Bungee)
@@ -63,7 +68,6 @@ else()
 endif()
 target_link_libraries(bungee_lib PRIVATE pffft)
 
-# --- 4. Dysekt Plugin Definition ---
 juce_add_plugin(Dysekt
     COMPANY_NAME "DunSoft"
     PLUGIN_MANUFACTURER_CODE Dnst
@@ -90,6 +94,7 @@ target_sources(Dysekt PRIVATE
     src/audio/VoicePool.cpp
     src/audio/GrainEngine.cpp
     src/audio/LazyChopEngine.cpp
+    src/audio/SoundFontLoader.cpp
     src/params/ParamLayout.cpp
     src/ui/DysektLookAndFeel.cpp
     src/ui/HeaderBar.cpp
@@ -117,6 +122,7 @@ target_compile_definitions(Dysekt PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
+    DYSEKT_HAS_SFIZZ=$<BOOL:${DYSEKT_HAS_SFIZZ}>
 )
 
 target_link_libraries(Dysekt
@@ -125,7 +131,7 @@ target_link_libraries(Dysekt
         juce::juce_dsp
         bungee_lib
         DysektFonts
-        sfzero  # Linked SoundFont engine logic
+        $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:sfizz::sfizz>
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

@@ -59,6 +59,15 @@ private:
     juce::Rectangle<int> sampleInfoBounds;
     juce::Rectangle<int> rootNoteArea;
     juce::Rectangle<int> slicesInfoArea;
+    juce::Rectangle<int> globalBoxBounds;
+    juce::Rectangle<int> globalPitchKnobArea;
+    juce::Rectangle<int> globalVolKnobArea;
+
+    // Global knob drag state
+    enum class GlobalDragTarget { None, Pitch, Volume };
+    GlobalDragTarget globalDragTarget = GlobalDragTarget::None;
+    float  globalDragStartValue = 0.f;
+    int    globalDragStartY     = 0;
 
     struct HeaderCell { int x = 0, y = 0, w = 0, h = 0; juce::String paramId;
                         float minVal = 0, maxVal = 1, step = 1;

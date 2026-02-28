@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include "audio/GrainEngine.h"
 #include "audio/AudioAnalysis.h"
+#include "audio/SoundFontLoader.h"
 #include <functional>
 #include <memory>
 
@@ -257,6 +258,14 @@ void DysektProcessor::requestSampleLoad (const juce::File& file, LoadKind kind)
 void DysektProcessor::loadFileAsync (const juce::File& file)
 {
     requestSampleLoad (file, LoadKindReplace);
+}
+
+void DysektProcessor::loadSoundFontAsync (const juce::File& file)
+{
+    // Delegate to SoundFontLoader which uses sfizz to render all active notes
+    // into a single stereo buffer and posts the result back via completedLoadData.
+    SoundFontLoader loader (*this);
+    loader.load (file);
 }
 
 void DysektProcessor::relinkFileAsync (const juce::File& file)
@@ -1252,6 +1261,26 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 clampSlicesToSampleBounds();
                 sliceManager.rebuildMidiMap();
             }
+
+            // ── SF2/SFZ: auto-create slices (one per rendered note) ──────────
+            auto* sfzPayload = pendingSfzSlices.exchange (nullptr, std::memory_order_acq_rel);
+            if (sfzPayload != nullptr)
+            {
+                std::unique_ptr<SfzSlicePayload> sfzOwner (sfzPayload);
+                // sliceManager was just cleared above — safe to create fresh slices
+                for (auto& desc : sfzOwner->slices)
+                {
+                    int idx = sliceManager.createSlice (desc.startSample, desc.endSample);
+                    if (idx >= 0)
+                    {
+                        auto& s = sliceManager.getSlice (idx);
+                        s.midiNote = juce::jlimit (0, 127, desc.midiNote);
+                    }
+                }
+                sliceManager.rebuildMidiMap();
+            }
+            // ────────────────────────────────────────────────────────────────
+
             loadStateChanged = true;
             uiSnapshotDirty.store (true, std::memory_order_release);
         }
