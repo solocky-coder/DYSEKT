@@ -3,7 +3,7 @@
 
 static constexpr int kBaseW      = 900;
 static constexpr int kLogoH      = 44;
-static constexpr int kHeaderH    = 66;
+static constexpr int kHeaderH    = 36;
 static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
