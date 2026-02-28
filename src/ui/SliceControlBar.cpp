@@ -123,10 +123,9 @@ float SliceControlBar::toNorm (int fieldId, float v) const
         case F::FieldVolume:       return juce::jlimit (0.f, 1.f, (v + 100.f) / 124.f);
         case F::FieldOutputBus:    return juce::jlimit (0.f, 1.f, v / 15.f);
         case F::FieldPan:          return juce::jlimit (0.f, 1.f, (v + 1.f) / 2.f);
-        case F::FieldFilterCutoff: { const float logMin = std::log (20.f), logMax = std::log (20000.f);
-                                     return juce::jlimit (0.f, 1.f,
-                                         (std::log (juce::jlimit (20.f, 20000.f, v)) - logMin) / (logMax - logMin)); }
-        case F::FieldFilterRes:    return juce::jlimit (0.f, 1.f, v);
+        case F::FieldFilterCutoff: return juce::jlimit (0.f, 1.f,
+                                       (std::log (juce::jlimit (20.f, 20000.f, v)) - std::log (20.f))
+                                       / (std::log (20000.f) - std::log (20.f)));        case F::FieldFilterRes:    return juce::jlimit (0.f, 1.f, v);
         default:                   return 0.5f;
     }
 }
@@ -716,7 +715,6 @@ void SliceControlBar::paint (juce::Graphics& g)
                       locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f, cw);
         x += cw + 4;
     }
-       
 
     // MIDI — knob (always per-slice, lockBit=0)
     {

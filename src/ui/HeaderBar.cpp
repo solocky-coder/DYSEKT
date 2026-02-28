@@ -95,26 +95,6 @@ void HeaderBar::paint (juce::Graphics& g)
     g.fillAll (getTheme().header);
     headerCells.clear();
 
-    // ── DYSEKT logo — drawn from embedded SVG, accent-coloured ────────────
-    {
-        auto logoDrawable = juce::Drawable::createFromImageData (
-            BinaryData::dysekt_logo_svg, BinaryData::dysekt_logo_svgSize);
-        if (logoDrawable != nullptr)
-        {
-            // Replace currentColor with the theme accent
-            logoDrawable->replaceColour (juce::Colours::black,       getTheme().accent);
-            logoDrawable->replaceColour (juce::Colour (0xFF000000),  getTheme().accent);
-
-            // Size: fit inside a 140 x 36px area starting at (8, 8)
-            const int lx = 8, ly = 5, lw = 140, lh = 36;
-            logoDrawable->setTransformToFit (
-                juce::Rectangle<float> ((float)lx, (float)ly, (float)lw, (float)lh),
-                juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid
-                | juce::RectanglePlacement::onlyReduceInSize);
-            logoDrawable->draw (g, 1.0f);
-        }
-    }
-
     paintRow1 (g);
     paintRow2 (g);
 }

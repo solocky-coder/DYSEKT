@@ -1016,7 +1016,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 ccCmd.positions[0] = newEnd;
                             }
                             ccCmd.numPositions = 1;
-                            handleCommand (ccCmd);
+                            // Route through the coalescing queue — NOT handleCommand directly.
+                            // handleCommand calls rebuildMidiMap() which allocates on the audio
+                            // thread and causes freezes / erratic jumps.
+                            enqueueCoalescedCommand (ccCmd);
                         }
                     }
                     else
