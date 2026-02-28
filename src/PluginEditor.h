@@ -9,7 +9,7 @@
 #include "ui/WaveformView.h"
 #include "ui/ScrollZoomBar.h"
 #include "ui/ActionPanel.h"
-#include "ui/KeysPanel.h"
+
 #include "ui/FileBrowserPanel.h"
 
 class DysektEditor : public juce::AudioProcessorEditor,
@@ -26,7 +26,7 @@ public:
     juce::StringArray getAvailableThemes();
     void applyTheme (const juce::String& themeName);
 
-    void toggleKeysPanel();
+
     void toggleBrowserPanel();
     void toggleSoftWave();
     void toggleChromatic();
@@ -49,7 +49,6 @@ private:
     float savedScale = -1.0f;
     uint32_t lastUiSnapshotVersion = 0;
 
-    bool keysOpen    = false;
     bool browserOpen = false;
     bool softWave    = false;
 
@@ -61,7 +60,7 @@ private:
     ScrollZoomBar   scrollZoomBar;
     SliceControlBar sliceControlBar;
     ActionPanel     actionPanel;
-    KeysPanel       keysPanel;
+
     FileBrowserPanel browserPanel;
 
     juce::TooltipWindow tooltipWindow { this, 500 };

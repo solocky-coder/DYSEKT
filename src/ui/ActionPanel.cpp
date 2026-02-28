@@ -17,12 +17,11 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
-    // KEYS and FILES get accent styling
-    addAndMakeVisible (keysBtn);
+    // FILES, WAVE, CHRO get accent styling
     addAndMakeVisible (browserBtn);
     addAndMakeVisible (waveBtn);
     addAndMakeVisible (chromaticBtn);
-    for (auto* btn : { &keysBtn, &browserBtn, &waveBtn, &chromaticBtn })
+    for (auto* btn : { &browserBtn, &waveBtn, &chromaticBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
         btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);
@@ -62,7 +61,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         updateMidiButtonAppearance (ns); repaint();
     };
 
-    keysBtn.onClick       = [this] { keysActive       = ! keysActive;       if (onKeysToggle)       onKeysToggle();       updateToggleBtn (keysBtn,       keysActive); };
+
     browserBtn.onClick    = [this] { browserActive    = ! browserActive;    if (onBrowserToggle)    onBrowserToggle();    updateToggleBtn (browserBtn,    browserActive); };
     waveBtn.onClick       = [this] { waveActive       = ! waveActive;       if (onWaveToggle)       onWaveToggle();       updateToggleBtn (waveBtn,       waveActive); };
     chromaticBtn.onClick  = [this] { chromaticActive  = ! chromaticActive;  if (onChromaticToggle)  onChromaticToggle();  updateToggleBtn (chromaticBtn,  chromaticActive); };
@@ -73,7 +72,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     splitBtn.setTooltip    ("Auto Chop (C)");
     deleteBtn.setTooltip   ("Delete Slice (Del)");
     snapBtn.setTooltip     ("Snap to Zero-Crossing (Z)");
-    keysBtn.setTooltip     ("Toggle MIDI Keyboard");
+
     browserBtn.setTooltip  ("Toggle File Browser");
     waveBtn.setTooltip     ("Toggle Soft Waveform");
     chromaticBtn.setTooltip ("Chromatic Mode — play selected slice across full keyboard");
@@ -122,9 +121,9 @@ void ActionPanel::resized()
     const int gap     = 5;
     const int h       = getHeight();
     const int thinW   = 30;   // ZX, FM
-    const int accentW = 38;   // KEYS, FILES, WAVE, CHRO
+    const int accentW = 38;   // FILES, WAVE, CHRO
     const int thinTotal   = thinW * 2 + gap;
-    const int accentTotal = accentW * 4 + gap * 3;
+    const int accentTotal = accentW * 3 + gap * 2;
     const int availW  = getWidth() - thinTotal - gap - accentTotal - gap;
     const int numMain = 5;
     const int btnW    = (availW - gap * (numMain - 1)) / numMain;
@@ -139,7 +138,6 @@ void ActionPanel::resized()
     snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
     midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
 
-    keysBtn.setBounds      (x, 0, accentW, h); x += accentW + gap;
     browserBtn.setBounds   (x, 0, accentW, h); x += accentW + gap;
     waveBtn.setBounds      (x, 0, accentW, h); x += accentW + gap;
     chromaticBtn.setBounds (x, 0, accentW, h);
@@ -155,7 +153,6 @@ void ActionPanel::paint (juce::Graphics& g)
     }
     updateMidiButtonAppearance (processor.midiSelectsSlice.load());
     updateSnapButtonAppearance (processor.snapToZeroCrossing.load());
-    updateToggleBtn (keysBtn,       keysActive);
     updateToggleBtn (browserBtn,    browserActive);
     updateToggleBtn (waveBtn,       waveActive);
     updateToggleBtn (chromaticBtn,  chromaticActive);

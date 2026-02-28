@@ -8,7 +8,7 @@ static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
-static constexpr int kKeysH      = 102;   // transpose row (28) + keys (74)
+
 static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
 static constexpr int kBaseHCore  = kLogoH + kHeaderH + kSliceLaneH
@@ -34,7 +34,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       scrollZoomBar  (p),
       sliceControlBar(p),
       actionPanel    (p, waveformView),
-      keysPanel      (p),
+
       browserPanel   (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
@@ -49,15 +49,12 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (actionPanel);
 
     // Panels start hidden
-    keysPanel.setVisible (false);
     browserPanel.setVisible (false);
-    addChildComponent (keysPanel);
     addChildComponent (browserPanel);
 
     sliceLane.setWaveformView (&waveformView);
 
-    // Wire up KEYS and BROWSER buttons in ActionPanel
-    actionPanel.onKeysToggle       = [this] { toggleKeysPanel(); };
+    // Wire up BROWSER button in ActionPanel
     actionPanel.onBrowserToggle    = [this] { toggleBrowserPanel(); };
     actionPanel.onWaveToggle       = [this] { toggleSoftWave(); };
     actionPanel.onChromaticToggle  = [this] { toggleChromatic(); };
@@ -88,17 +85,10 @@ int DysektEditor::computeTotalHeight() const
 {
     int h = kBaseHCore;
     if (browserOpen) h += kBrowserH;
-    if (keysOpen)    h += kKeysH;
+
     return h;
 }
 
-void DysektEditor::toggleKeysPanel()
-{
-    keysOpen = ! keysOpen;
-    keysPanel.setVisible (keysOpen);
-    setSize (kBaseW, computeTotalHeight());
-    resized();
-}
 
 void DysektEditor::toggleBrowserPanel()
 {
@@ -145,11 +135,7 @@ void DysektEditor::resized()
     // 4. Slice control bar — bottom
     sliceControlBar.setBounds (area.removeFromBottom (kSliceCtrlH));
 
-    // 5. Keys panel — above slice ctrl (if open)
-    if (keysOpen)
-        keysPanel.setBounds (area.removeFromBottom (kKeysH));
-
-    // 6. Browser panel — above keys (if open)
+    // 5. Browser panel — above slice ctrl (if open)
     if (browserOpen)
         browserPanel.setBounds (area.removeFromBottom (kBrowserH));
 
