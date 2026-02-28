@@ -716,8 +716,7 @@ void SliceControlBar::paint (juce::Graphics& g)
                       locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f, cw);
         x += cw + 4;
     }
-        x += cw + 4;
-    }
+       
 
     // MIDI — knob (always per-slice, lockBit=0)
     {
