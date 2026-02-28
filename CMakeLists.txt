@@ -4,7 +4,8 @@ project(Dysekt VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# --- SFZero (SoundFont support) ---
+# --- 1. SFZero (SoundFont support) ---
+# We download this BEFORE JUCE so the module is ready to be registered
 include(FetchContent)
 FetchContent_Declare(
     sfzero_module
@@ -13,14 +14,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(sfzero_module)
 
-# --- JUCE Setup ---
+# --- 2. JUCE Setup ---
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 
 # Register the downloaded SFZero as a JUCE module
-# This ensures classes like sfzero::Synth are available to your C++ code
+# This makes sfzero::Synth available in your C++ code
 juce_add_module("${sfzero_module_SOURCE_DIR}")
 
-# --- Bungee (built as static library) ---
+# --- 3. Bungee (built as static library) ---
 set(BUNGEE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/bungee)
 
 # pffft (C library used by Bungee)
@@ -62,7 +63,7 @@ else()
 endif()
 target_link_libraries(bungee_lib PRIVATE pffft)
 
-# --- Dysekt Plugin Definition ---
+# --- 4. Dysekt Plugin Definition ---
 juce_add_plugin(Dysekt
     COMPANY_NAME "DunSoft"
     PLUGIN_MANUFACTURER_CODE Dnst
