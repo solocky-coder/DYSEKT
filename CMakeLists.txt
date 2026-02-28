@@ -4,7 +4,19 @@ project(Dysekt VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# --- SFZero (SoundFont support) ---
+include(FetchContent)
+FetchContent_Declare(
+    sfzero_module
+    GIT_REPOSITORY https://github.com
+    GIT_TAG        master
+)
+FetchContent_MakeAvailable(sfzero_module)
+
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
+
+# Register the downloaded SFZero as a JUCE module
+juce_add_module("${sfzero_module_SOURCE_DIR}")
 
 # --- Bungee (built as static library) ---
 set(BUNGEE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/bungee)
@@ -109,6 +121,7 @@ target_link_libraries(Dysekt
         juce::juce_dsp
         bungee_lib
         DysektFonts
+        sfzero  # <--- Linked SFZero target
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
