@@ -54,7 +54,7 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     addChildComponent (volumeSlider);
 
     // ── File name label ───────────────────────────────────────────────────────
-    fileNameLabel.setFont (juce::Font (11.0f));
+    fileNameLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
     fileNameLabel.setColour (juce::Label::textColourId,
                              juce::Colours::white.withAlpha (0.7f));
     fileNameLabel.setMinimumHorizontalScale (0.5f);

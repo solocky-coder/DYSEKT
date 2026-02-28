@@ -9,9 +9,6 @@ class DysektProcessor;
 class SmallListLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    juce::Font getListBoxFont() { return juce::Font (11.0f); }
-
-    // FileBrowserComponent uses this for its list rows
     void drawFileBrowserRow (juce::Graphics& g, int width, int height,
                              const juce::File& /*file*/,
                              const juce::String& filename,
@@ -26,24 +23,26 @@ public:
             g.fillAll (findColour (juce::DirectoryContentsDisplayComponent::highlightColourId)
                            .withAlpha (0.6f));
 
-        g.setColour (isItemSelected
+        auto textCol = isItemSelected
                      ? findColour (juce::DirectoryContentsDisplayComponent::highlightedTextColourId)
-                     : findColour (juce::DirectoryContentsDisplayComponent::textColourId));
+                     : findColour (juce::DirectoryContentsDisplayComponent::textColourId);
 
-        g.setFont (juce::Font (11.0f));
+        g.setColour (textCol);
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
         g.drawText (filename, 2, 0, width - 4, height, juce::Justification::centredLeft, true);
 
         if (! fileSizeDescription.isEmpty())
         {
-            g.setFont (juce::Font (9.5f));
-            g.setColour (g.getCurrentColour().withAlpha (0.6f));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f)));
+            g.setColour (textCol.withAlpha (0.6f));
             g.drawText (fileSizeDescription,
                         width - 80, 0, 78, height,
                         juce::Justification::centredRight, true);
         }
     }
 
-    int getFileBrowserRowHeight() override { return 18; }
+    // Row height — not a virtual override, just call it directly where needed
+    int smallRowHeight() const { return 18; }
 };
 
 class FileBrowserPanel : public juce::Component,
