@@ -54,6 +54,9 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     sliceLane.setWaveformView (&waveformView);
 
+    // Auto-close browser when a file is loaded via double-click
+    browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
+
     // FIL / WA / CH now live in headerBar — wire their callbacks there
     headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
     headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
@@ -75,6 +78,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     }
 
     setWantsKeyboardFocus (true);
+    setResizable (true, true);
+    setResizeLimits (600, 400, 1920, 1200);
     setSize (kBaseW, computeTotalHeight());
     lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
     startTimerHz (30);
@@ -100,7 +105,7 @@ void DysektEditor::toggleBrowserPanel()
     browserOpen = ! browserOpen;
     browserPanel.setVisible (browserOpen);
     headerBar.setBrowserActive (browserOpen);
-    setSize (kBaseW, computeTotalHeight());
+    setSize (getWidth(), computeTotalHeight());
     resized();
 }
 

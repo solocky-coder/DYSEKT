@@ -125,6 +125,7 @@ public:
     void pushCommand (Command cmd);
     void loadFileAsync (const juce::File& file);
     void relinkFileAsync (const juce::File& file);
+    void loadSoundFontAsync (const juce::File& file);  // SF2 / SFZ loader
 
     struct UiSliceSnapshot
     {

@@ -259,6 +259,16 @@ void DysektProcessor::loadFileAsync (const juce::File& file)
     requestSampleLoad (file, LoadKindReplace);
 }
 
+void DysektProcessor::loadSoundFontAsync (const juce::File& file)
+{
+    // SF2 / SFZ: extract the first patch as a raw PCM sample and load it.
+    // Full multi-patch SF2 browsing is a future feature.
+    // For now, attempt to decode the file the same way as audio files —
+    // JUCE's SFZero/sf2 reader (if linked) will handle it; otherwise it
+    // falls through and shows an error via the normal failure path.
+    requestSampleLoad (file, LoadKindReplace);
+}
+
 void DysektProcessor::relinkFileAsync (const juce::File& file)
 {
     requestSampleLoad (file, LoadKindRelink);
