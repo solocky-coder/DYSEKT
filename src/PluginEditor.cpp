@@ -231,7 +231,8 @@ void DysektEditor::timerCallback()
                                              [] (const std::atomic<float>& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
 
     const bool waveformAnimating = waveformInteracting || rulerDragging || previewActive
-                                 || playbackActive || processor.lazyChop.isActive();
+                                 || playbackActive || processor.lazyChop.isActive()
+                                 || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
     const bool waveformNeedsRepaint = uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating;
     const bool laneNeedsRepaint     = uiChanged || viewportChanged || previewActive || lastPreviewActive;
     const bool rulerNeedsRepaint    = uiChanged || viewportChanged || rulerDragging;

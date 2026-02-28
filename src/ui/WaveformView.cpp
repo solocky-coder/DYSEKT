@@ -440,6 +440,16 @@ void WaveformView::drawSlices (juce::Graphics& g)
             drawStartSample = dragPreviewStart;
             drawEndSample = dragPreviewEnd;
         }
+        else if (dragMode == None)
+        {
+            // Live preview from SliceControlBar knob drag (processor atomics)
+            const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
+            if (liveIdx == i)
+            {
+                drawStartSample = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
+                drawEndSample   = processor.liveDragBoundsEnd.load   (std::memory_order_relaxed);
+            }
+        }
 
         int x1 = std::max (0, sampleToPixel (drawStartSample));
         int x2 = std::min (getWidth(), sampleToPixel (drawEndSample));
