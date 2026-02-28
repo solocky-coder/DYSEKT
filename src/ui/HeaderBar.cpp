@@ -91,72 +91,76 @@ void HeaderBar::paint (juce::Graphics& g)
     const int h   = getHeight();
     const int cy  = h / 2;
 
-    // ── SLICES / ROOT — left of UNDO ─────────────────────────────────────
+    // ── SAMPLE info + SLICES + ROOT — left side, under logo ──────────────
     {
         const auto& ui = processor.getUiSliceSnapshot();
-        int rnX    = undoBtn.getX() - 4 - 55;
-        int slcX   = rnX - 4 - 55;
-        int cellY  = cy - 15;
-        int cellH  = 30;
+        const int lx   = 10;   // align with logo left edge
+        const int cellY = cy - 15;
+        const int cellH = 30;
+        const int lw   = 55;   // width of each info cell
+        const int gap  = 6;
+
+        // SAMPLE label + filename (left-aligned, expands rightward)
+        int sampleX = lx;
+
+        if (ui.sampleMissing)
+        {
+            g.setFont (DysektLookAndFeel::makeFont (12.0f));
+            g.setColour (juce::Colours::orange);
+            g.drawText ("MISSING", sampleX, cellY + 2, 65, 13, juce::Justification::left);
+            g.setFont (DysektLookAndFeel::makeFont (14.0f));
+            g.setColour (juce::Colours::orange.withAlpha (0.9f));
+            // filename truncated to available width before SLICES cell
+            int maxW = undoBtn.getX() - gap - lw - gap - lw - gap - sampleX - 8;
+            g.drawText (ui.sampleFileName + " (click to relink)",
+                        sampleX, cellY + 15, maxW, 14, juce::Justification::left);
+            sampleInfoBounds = { sampleX, cellY, maxW, cellH };
+        }
+        else if (ui.sampleLoaded)
+        {
+            double srate = processor.getSampleRate();
+            if (srate <= 0) srate = 44100.0;
+            double lenSec = ui.sampleNumFrames / srate;
+            g.setFont (DysektLookAndFeel::makeFont (12.0f));
+            g.setColour (getTheme().foreground.withAlpha (0.35f));
+            g.drawText ("SAMPLE", sampleX, cellY + 2, 65, 13, juce::Justification::left);
+            g.setFont (DysektLookAndFeel::makeFont (14.0f));
+            g.setColour (getTheme().foreground.withAlpha (0.7f));
+            int maxW = undoBtn.getX() - gap - lw - gap - lw - gap - sampleX - 8;
+            g.drawText (ui.sampleFileName + " (" + juce::String (lenSec, 2) + "s)",
+                        sampleX, cellY + 15, maxW, 14, juce::Justification::left);
+            sampleInfoBounds = { sampleX, cellY, maxW, cellH };
+        }
+        else
+        {
+            sampleInfoBounds = {};
+        }
+
+        // SLICES — right of the sample info, left of ROOT, left of UNDO
+        int slcX = undoBtn.getX() - gap - lw - gap - lw;
+        int rnX  = undoBtn.getX() - gap - lw;
 
         // SLICES (read-only count)
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (getTheme().foreground.withAlpha (0.35f));
-        g.drawText ("SLICES", slcX, cellY + 2, 55, 13, juce::Justification::right);
+        g.drawText ("SLICES", slcX, cellY + 2, lw, 13, juce::Justification::left);
         g.setFont (DysektLookAndFeel::makeFont (14.0f));
         g.setColour (getTheme().foreground.withAlpha (0.55f));
-        g.drawText (juce::String (ui.numSlices), slcX, cellY + 15, 55, 14, juce::Justification::right);
+        g.drawText (juce::String (ui.numSlices), slcX, cellY + 15, lw, 14, juce::Justification::left);
 
         // ROOT (draggable/editable when no slices exist)
         bool editable = (ui.numSlices == 0);
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (editable ? getTheme().accent.withAlpha (0.7f)
                               : getTheme().foreground.withAlpha (0.35f));
-        g.drawText ("ROOT", rnX, cellY + 2, 55, 13, juce::Justification::right);
+        g.drawText ("ROOT", rnX, cellY + 2, lw, 13, juce::Justification::left);
         g.setFont (DysektLookAndFeel::makeFont (14.0f));
         g.setColour (editable ? getTheme().foreground.withAlpha (0.6f)
                               : getTheme().foreground.withAlpha (0.4f));
-        g.drawText (juce::String (ui.rootNote), rnX, cellY + 15, 55, 14, juce::Justification::right);
+        g.drawText (juce::String (ui.rootNote), rnX, cellY + 15, lw, 14, juce::Justification::left);
 
-        rootNoteArea  = { rnX,  cellY, 55, cellH };
-        slicesInfoArea = { slcX, cellY, 55, cellH };
-    }
-
-    // ── Filename / sample info — left of SLICES ──────────────────────────
-    {
-        const auto& ui2 = processor.getUiSliceSnapshot();
-        int rightEdge = slicesInfoArea.getX() - 6;
-        int tx = 8;
-        int ty = cy - 15;
-
-        if (ui2.sampleMissing)
-        {
-            g.setFont (DysektLookAndFeel::makeFont (12.0f));
-            g.setColour (juce::Colours::orange);
-            g.drawText ("MISSING", tx, ty + 2, rightEdge - tx, 13, juce::Justification::right);
-            g.setFont (DysektLookAndFeel::makeFont (14.0f));
-            g.setColour (juce::Colours::orange.withAlpha (0.9f));
-            g.drawText (ui2.sampleFileName + " (click to relink)", tx, ty + 15, rightEdge - tx, 14, juce::Justification::right);
-            sampleInfoBounds = { tx, ty, rightEdge - tx, 30 };
-        }
-        else if (ui2.sampleLoaded)
-        {
-            double srate = processor.getSampleRate();
-            if (srate <= 0) srate = 44100.0;
-            double lenSec = ui2.sampleNumFrames / srate;
-            g.setFont (DysektLookAndFeel::makeFont (12.0f));
-            g.setColour (getTheme().foreground.withAlpha (0.35f));
-            g.drawText ("SAMPLE", tx, ty + 2, rightEdge - tx, 13, juce::Justification::right);
-            g.setFont (DysektLookAndFeel::makeFont (14.0f));
-            g.setColour (getTheme().foreground.withAlpha (0.7f));
-            g.drawText (ui2.sampleFileName + " (" + juce::String (lenSec, 2) + "s)",
-                        tx, ty + 15, rightEdge - tx, 14, juce::Justification::right);
-            sampleInfoBounds = { tx, ty, rightEdge - tx, 30 };
-        }
-        else
-        {
-            sampleInfoBounds = {};
-        }
+        rootNoteArea   = { rnX,  cellY, lw, cellH };
+        slicesInfoArea = { slcX, cellY, lw, cellH };
     }
 }
 

@@ -13,6 +13,7 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
 {
     ioThread.startThread();
     browser.addListener (this);
+    browser.setLookAndFeel (&smallLAF);
     addAndMakeVisible (browser);
 
     // ── Audio device setup ────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
 
 FileBrowserPanel::~FileBrowserPanel()
 {
+    browser.setLookAndFeel (nullptr);
     transport.removeChangeListener (this);
     transport.stop();
     transport.setSource (nullptr);

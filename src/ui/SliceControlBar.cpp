@@ -7,8 +7,8 @@
 
 namespace
 {
-constexpr int kParamCellTextX    = 14;
-constexpr int kParamCellTextWidth = 60;
+constexpr int kParamCellTextX    = 10;
+constexpr int kParamCellTextWidth = 42;
 constexpr int kParamCellWidth    = kParamCellTextX + kParamCellTextWidth;
 
 constexpr float kKnobStart = juce::MathConstants<float>::pi * 1.25f;
