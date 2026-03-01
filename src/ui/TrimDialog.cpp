@@ -10,6 +10,7 @@ TrimDialog::TrimDialog (DysektProcessor& p, WaveformView& wv)
 
     applyBtn.onClick = [this]
     {
+        // Retrieve both trim points at once to ensure they are consistent
         const int tIn  = waveformView.getTrimIn();
         const int tOut = waveformView.getTrimOut();
         if (tOut > tIn)
