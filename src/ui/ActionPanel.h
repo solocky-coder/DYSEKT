@@ -15,6 +15,7 @@ public:
     void paint (juce::Graphics& g) override;
     void toggleAutoChop();
     bool isAutoChopOpen() const { return autoChopPanel != nullptr; }
+    void paintOverChildren (juce::Graphics& g) override;
 
     // Callbacks wired up by DysektEditor
 
@@ -43,8 +44,8 @@ private:
     juce::TextButton dupBtn        { "COPY" };
     juce::TextButton splitBtn      { "AUTO" };
     juce::TextButton deleteBtn     { "DEL" };
-    juce::TextButton snapBtn       { "ZX" };
-    juce::TextButton midiSelectBtn { "FM" };
+    juce::TextButton snapBtn       { "" };
+    juce::TextButton midiSelectBtn { "" };
 
     juce::TextButton browserBtn    { "FILES" };
     juce::TextButton waveBtn       { "WAVE" };

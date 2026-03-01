@@ -9,6 +9,7 @@ WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
 void WaveformView::setSliceDrawMode (bool active)
 {
     sliceDrawMode = active;
+    if (! active) addClickStart = -1;
     setMouseCursor (active ? juce::MouseCursor::IBeamCursor : juce::MouseCursor::NormalCursor);
 }
 
@@ -144,6 +145,20 @@ void WaveformView::paint (juce::Graphics& g)
 
 void WaveformView::paintDrawSlicePreview (juce::Graphics& g)
 {
+    // ADD mode: waiting for second click — show start marker and live region preview
+    if (sliceDrawMode && addClickStart >= 0 && dragMode == None)
+    {
+        int x1 = sampleToPixel (addClickStart);
+        int x2 = sampleToPixel (drawEnd);
+        if (x2 > x1)
+        {
+            g.setColour (getTheme().accent.withAlpha (0.15f));
+            g.fillRect (x1, 0, x2 - x1, getHeight());
+        }
+        g.setColour (getTheme().accent.withAlpha (0.8f));
+        g.drawVerticalLine (x1, 0.0f, (float) getHeight());
+    }
+
     // Draw active slice region while dragging in +SLC mode
     if (dragMode == DrawSlice)
     {
@@ -593,6 +608,17 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
             : juce::MouseCursor::NormalCursor);
 
     if (newEdge != hoveredEdge) { hoveredEdge = newEdge; repaint(); }
+
+    // ADD mode: update live region preview as mouse moves
+    if (sliceDrawMode && addClickStart >= 0)
+    {
+        auto sampleSnap2 = processor.sampleData.getSnapshot();
+        if (sampleSnap2 != nullptr)
+        {
+            drawEnd = std::max (0, std::min (pixelToSample (e.x), sampleSnap2->buffer.getNumSamples()));
+            repaint();
+        }
+    }
 }
 
 void WaveformView::mouseEnter (const juce::MouseEvent& e) { mouseMove (e); }
@@ -647,9 +673,41 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
 
     if (sliceDrawMode || altModeActive)
     {
+        if (sliceDrawMode)
+        {
+            // Two-click ADD mode: first click sets START, second click sets END
+            if (addClickStart >= 0)
+            {
+                // Second click: commit the slice
+                int endPos = samplePos;
+                if (sampleSnap != nullptr && processor.snapToZeroCrossing.load())
+                {
+                    addClickStart = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, addClickStart);
+                    endPos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, endPos);
+                }
+                if (std::abs (endPos - addClickStart) >= 64)
+                {
+                    DysektProcessor::Command cmd;
+                    cmd.type      = DysektProcessor::CmdCreateSlice;
+                    cmd.intParam1 = std::min (addClickStart, endPos);
+                    cmd.intParam2 = std::max (addClickStart, endPos);
+                    processor.pushCommand (cmd);
+                }
+                addClickStart = -1;
+                sliceDrawMode = false;
+                setMouseCursor (juce::MouseCursor::NormalCursor);
+                return;
+            }
+            // First click: record start position, wait for second click
+            addClickStart = samplePos;
+            drawStart = samplePos;
+            drawEnd   = samplePos;
+            return;
+        }
+        // altModeActive: original drag-to-draw behaviour
         drawStart = samplePos;
         drawEnd = samplePos;
-        drawStartedFromAlt = (! sliceDrawMode && e.mods.isAltDown());
+        drawStartedFromAlt = e.mods.isAltDown();
         dragMode = DrawSlice;
         return;
     }
@@ -776,15 +834,20 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         return;
     }
 
+    // ADD mode waiting for second click: update drawEnd for live region preview
+    if (sliceDrawMode && addClickStart >= 0 && dragMode == None)
+    {
+        drawEnd = samplePos;
+        repaint();
+        return;
+    }
+
     if (dragMode == DragEdgeLeft && dragSliceIdx >= 0)
     {
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
         int newStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
-        int delta = newStart - dragPreviewStart;
         dragPreviewStart = newStart;
-        if (processor.slicesLinked.load())
-            dragPreviewEnd = juce::jlimit (newStart + 64, (int) sampleSnap->buffer.getNumSamples(), dragPreviewEnd + delta);
     }
     else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
     {
@@ -792,10 +855,7 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
         int newEnd = juce::jlimit (dragPreviewStart + 64,
                                    (int) sampleSnap->buffer.getNumSamples(), samplePos);
-        int delta = newEnd - dragPreviewEnd;
         dragPreviewEnd = newEnd;
-        if (processor.slicesLinked.load())
-            dragPreviewStart = juce::jlimit (0, dragPreviewEnd - 64, dragPreviewStart + delta);
     }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
     {
