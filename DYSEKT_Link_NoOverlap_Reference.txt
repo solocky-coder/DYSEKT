@@ -1,0 +1,261 @@
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+
+
+
+
+
+
+
+LINK &
+NO-OVERLAP
+
+
+DYSEKT - Technical Reference for Developers
+
+
+This document covers two inter-related slice editing features in DYSEKT: the LINK toggle (which locks START and END knobs so they move together, preserving slice length) and the No-Overlap constraint (which prevents adjacent slice boundaries from crossing each other). It explains what each feature does, why it exists, how they differ, when to use each, and the exact C++ implementation strategy within the DYSEKT codebase.
+
+
+
+ProjectDYSEKT - Sample Slicer VST3ScopeSliceControlBar · WaveformView · PluginProcessorStatusLINK: implemented · No-Overlap: removed (see §4)AudiencePartner developer / future maintainer
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+1. Overview
+
+
+1.1 The Problem Space
+A DYSEKT slice is defined by two sample-position integers: startSample and endSample. The user edits these via the START and END knobs in the Slice Control Bar, and by dragging slice edges directly on the waveform. Two distinct usability problems emerge from this simple model:
+
+Problem 1: Moving a slice without resizing it
+If a user wants to shift a slice earlier or later in the timeline, they must move START and END by exactly the same amount. With two independent knobs this is nearly impossible to do accurately by hand - even a 1-sample difference changes the slice length.
+
+Problem 2: Preventing slices from crossing each other
+When dragging an edge, nothing stops it from moving past a neighbouring edge, which would invert the slice (endSample < startSample) or cause two slices to overlap - both invalid states that crash the audio engine or produce silence.
+
+1.2 The Two Features
+DYSEKT addresses these problems with two separate mechanisms that operate at different layers of the stack and serve different purposes:
+
+FeatureLayerPurposeUser-visible
+
+LINK
+
+UI / audio threadMove START+END together - preserves slice lengthYes - LINK button in row 1
+
+No-Overlap
+
+UI drag handlerPrevent adjacent edges from crossing during dragNo - silent constraint (now removed, see §4)
+
+
+2. The LINK Feature
+
+
+2.1 What It Does
+When LINK is active, any change to START also applies the same delta to END, and vice versa. The slice behaves as a rigid window - it translates along the waveform without changing length. LINK is a toggle: one click enables it, another disables it. Its state is stored in an atomic boolean on the processor (processor.slicesLinked) so it is accessible safely from both the UI and audio threads.
+
+2.2 User Workflow
+
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+- Repositioning a slice
+Enable LINK, then scrub the START knob. The entire slice moves with it. Disable LINK when the new position is found.
+
+- Auditioning different regions
+Lock slice length, enable LINK, and use the MIDI NOTE to trigger the slice while scrubbing START - effectively scrubbing through the sample in fixed windows, like a looping playhead.
+
+- Batch shifting
+If multiple slices share a layout that needs to be shifted earlier or later (e.g. after a sample was trimmed at the start), LINK on each one in turn avoids accidental resize.
+
+2.3 Architecture
+LINK touches three files. The table below maps each responsibility:
+
+FileResponsibilityPluginProcessor.hstd::atomic<bool> slicesLinked { false }; Single source of truth. Atomic so the audio thread can read it without a lock when deciding how to apply commands.SliceControlBar.cppReads slicesLinked in paint() to colour the LINK button. On click, flips the atomic. In the knob drag handler, when LINK is active, pushes both CmdSetSliceBounds for START and END simultaneously.PluginProcessor.cpp (handleCommand)Receives CmdSetSliceBounds. If slicesLinked is true and the field is FieldSliceStart or FieldSliceEnd, computes the delta and clamps both boundaries within [0, sampleNumFrames].
+
+
+2.4 Code - Processor Command Handler
+The key logic lives in handleCommand() inside PluginProcessor.cpp, in the CmdSetSliceBounds case:
+
+
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+
+
+2.5 Code - LINK Button in SliceControlBar
+The LINK button is drawn in paint() and handled in mouseDown():
+
+
+2.6 Edge Cases & Clamping
+
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+- Slice at the start of the sample (startSample == 0)
+If LINK is active and the user drags START left past 0, the clamp at 0 will shorten the delta applied to END. Both boundaries stop moving when START hits 0. This is correct - the slice "jams" against the left wall.
+
+- Slice at the end of the sample
+Symmetrically, when END hits sampleNumFrames the slice stops translating rightward. START is also clamped to maxLen - sliceLength so the length is still preserved as long as there is room.
+
+- LINK toggled mid-drag
+LINK state is read once per command execution on the audio thread. If the user clicks LINK during a knob drag, the next command will use the new state. There is no partial-apply problem because each command is fully self-contained.
+
+- Multiple slices
+LINK applies only to the currently selected slice. It does not gang-move all slices simultaneously - that would require a separate "global shift" command not yet implemented.
+
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+3. The No-Overlap Constraint
+
+
+3.1 What It Does
+No-Overlap is a drag-time guard that prevents a slice edge from being dragged past its neighbour. When dragging the left edge of slice N, it cannot move right of the left edge of slice N's end, and cannot move left past the right edge of slice N-1. Similarly for the right edge. The constraint is enforced silently - the edge simply stops moving at the boundary rather than crossing it.
+
+3.2 Why It Existed
+Early in DYSEKT's development, the SliceManager had no validation against inverted or overlapping slices. An inverted slice (startSample > endSample) would cause the audio engine to read negative sample counts, producing undefined behaviour or silence. No-Overlap was a defensive UI guard to make that state unreachable through normal interaction.
+
+3.3 Where It Lived in the Code
+The constraint was implemented inside WaveformView::mouseDrag(), in the DragEdgeLeft and DragEdgeRight branches:
+
+
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+
+
+
+3.4 Why It Was Removed
+The constraint created two friction points that outweighed its safety benefit once the SliceManager was made robust:
+
+- Frustrating for intentional overlap workflows
+Certain techniques - crossfade editing, overlapping loops, granular layering - require adjacent slices to share sample ranges. The clamp made these impossible without a workaround.
+
+- Confusing drag behaviour near boundaries
+When the cursor crossed the neighbour boundary, the edge would suddenly stop while the cursor kept moving - creating a "sticky" feel that confused users into thinking the drag had ended.
+
+- SliceManager now validates at apply time
+clampSlicesToSampleBounds() and rebuildMidiMap() in the processor already prevent truly invalid states (start >= end, out-of-buffer positions) at the command-apply layer. The UI guard was redundant.
+
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+4. Current State in the Codebase
+
+
+4.1 What Is Implemented
+
+FeatureStatusLocationLINK button - visual? Complete
+SliceControlBar.cpp paint()LINK button - toggle? CompleteSliceControlBar.cpp mouseDown()
+LINK state storage
+? CompletePluginProcessor.h slicesLinked atomicLINK - knob drag enforcement? CompletePluginProcessor.cpp handleCommand()
+LINK - waveform edge drag¦ Partial - see
+§4.2
+
+WaveformView.cpp mouseDrag()
+
+No-Overlap constraint? Removed intentionallyWaveformView.cpp (deleted)
+Inversion guard (start >= end)? In processor at apply
+PluginProcessor.cpp clampSlicesToSampleBounds()
+
+4.2 Remaining Work - LINK During Waveform Drag
+LINK is correctly enforced when the user edits START/END via the knobs in SliceControlBar. However, when the user drags a slice edge directly on the waveform in WaveformView, LINK is not yet applied. The drag updates dragPreviewStart and dragPreviewEnd independently, then pushes a CmdSetSliceBounds which the processor handles - but the preview positions shown during the drag do not reflect the linked constraint, so the display is misleading even if the final result is correct.
+
+How to implement it:
+In WaveformView::mouseDrag(), after computing the new edge position and before storing it to dragPreviewStart/dragPreviewEnd, check slicesLinked and apply the delta to the other boundary:
+
+
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+
+
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+5. Key Differences - Side by Side
+
+
+DimensionLINKNo-OverlapDirection of effectCouples two parameters on the same sliceConstrains one parameter relative to an adjacent sliceUser controlExplicit toggle - user chooses when it is activeImplicit - always active (when it existed)PersistenceStored in project state; survives DAW reloadNever stored - was a pure UI drag constraintThreadUI thread (toggle) + audio thread (enforce)UI thread only - never reached audio threadCurrent statusImplemented and activeRemoved in v18ReplacementN/A - still neededclampSlicesToSampleBounds() in processor handles validityRisk if missingUsers must manually keep START/END in sync - tedious but safeSlices can overlap - now handled gracefully by the engine
+
+
+6. Implementation Checklist
+
+
+Use this checklist to verify full LINK implementation or to re-introduce a refined version of the No-Overlap constraint if ever needed:
+
+6.1 LINK - Verification Checklist
+
+?File / LocationRequirement? PluginProcessor.hstd::atomic slicesLinked { false }; declared in public section? SliceControlBar.cpp paint()linkBtnArea set; button drawn with accent colour when active, dim when not? SliceControlBar.cpp paint()LINK button vertically centred at row1y + cellH/2 - btnH/2 (not on separator line)? SliceControlBar.cpp mouseDown()isLinkBtn cell detected; slicesLinked toggled via atomic store; repaint() called? PluginProcessor.cpp handleCommand()CmdSetSliceBounds case reads slicesLinked; applies delta to other boundary when true? PluginProcessor.cpp handleCommand()Both boundaries clamped to [0, sampleNumFrames] after LINK delta applied
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+¦WaveformView.cpp mouseDrag()DragEdgeLeft: if slicesLinked, compute delta and apply to dragPreviewEnd
+- PENDING¦WaveformView.cpp mouseDrag()DragEdgeRight: if slicesLinked, compute delta and apply to dragPreviewStart - PENDING?State serialisationslicesLinked written/read in getStateInformation / setStateInformation
+
+6.2 No-Overlap - If Re-introducing
+If a future decision is made to re-add No-Overlap (for example, as an optional toggle rather than always-on), follow this pattern:
+
+// WaveformView.cpp - add an atomic flag to the processor
+
+// PluginProcessor.h:
+
+std::atomic enforceNoOverlap { false }; // off by default
+
+
+// WaveformView::mouseDrag() - DragEdgeLeft if (processor.enforceNoOverlap.load())
+{
+
+auto snap = processor.sampleData.getSnapshot(); if (dragSliceIdx > 0)
+{
+
+auto& prev = processor.sliceManager.getSlice(dragSliceIdx - 1); samplePos = juce::jmax(samplePos, prev.endSample + 1);
+}
+
+}
+
+dragPreviewStart = juce::jlimit(0, dragPreviewEnd - 64, samplePos);DESIGN RECOMMENDATIONIf re-introducing No-Overlap, make it a user-facing toggle in the UI (e.g. a button in ActionPanel or a preference) rather than always-on. Always-on constraints that silently stop cursor movement are frustrating. A visual indicator showing "locked against neighbour" (e.g. flashing the neighbouring edge) would also improve discoverability.
+
+
+DYSEKT / Link & No-Overlap: Technical Reference
+
+
+7. Quick Reference
+
+
+Key Atomics on PluginProcessor
+
+std::atomic slicesLinked { false }; // LINK toggle
+
+// (No-Overlap was never an atomic - it was a pure drag-time clamp)
+Files Modified for Each Feature
+
+FileLINK changesNo-Overlap changesPluginProcessor.hAdded slicesLinked atomicNonePluginProcessor.cpphandleCommand() applies delta when linkedNone (guard was UI-only)SliceControlBar.cppButton draw + toggle + knob drag enforcementNoneWaveformView.cppDrag enforcement PENDING (see
+§4.2)Clamping removed from mouseDrag()
+
+Thread Safety Summary
+
