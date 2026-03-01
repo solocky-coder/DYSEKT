@@ -71,7 +71,7 @@ public:
     }
 
 private:
-    static constexpr float kPeakDecayRate = 0.008f;  // per-frame decay
+    static constexpr float kPeakDecayRate = 0.008f;  // per-timer-tick decay (assumes ~30 Hz timer)
 
     // Decay rate ticks; colours
     static constexpr float kYellowThreshold = 0.7f;  // linear ~-3 dBFS

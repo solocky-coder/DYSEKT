@@ -418,22 +418,21 @@ void MixerStrip::mouseDoubleClick (const juce::MouseEvent& e)
     {
         pushSliceParam (KnobVolume, 0.0f);
         repaint();
-        return;
     }
     // Reset pan to centre
-    if (knobs[KnobPan].bounds.contains (pt))
+    else if (knobs[KnobPan].bounds.contains (pt))
     {
         pushSliceParam (KnobPan, 0.0f);
         repaint();
     }
     // Reset cutoff to max
-    if (knobs[KnobCutoff].bounds.contains (pt))
+    else if (knobs[KnobCutoff].bounds.contains (pt))
     {
         pushSliceParam (KnobCutoff, 20000.0f);
         repaint();
     }
     // Reset resonance to 0
-    if (knobs[KnobRes].bounds.contains (pt))
+    else if (knobs[KnobRes].bounds.contains (pt))
     {
         pushSliceParam (KnobRes, 0.0f);
         repaint();

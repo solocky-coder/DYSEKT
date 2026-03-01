@@ -131,6 +131,8 @@ void MixerPanel::updateFromSnapshot()
     }
 
     // Master strip metering from processor peak atomics
+    // These are updated once per processBlock; the atomic load is cheap enough
+    // to read every timer tick without caching.
     const float peakL = processor.masterPeakL.load (std::memory_order_relaxed);
     const float peakR = processor.masterPeakR.load (std::memory_order_relaxed);
     masterStrip.setMeterLevels (peakL, peakR);
