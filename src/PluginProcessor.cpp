@@ -1111,13 +1111,30 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.globalFilterRes    = filterResParam->load();
 
                 const auto& sliceIndices = sliceManager.midiNoteToSlices (note);
+                const int numCurrentSlices = sliceManager.getNumSlices();
 
                 // ── Chromatic mode ─────────────────────────────────────────────
+                // When no slices exist, play the full sample chromatically by default.
                 // Any note plays the selected slice, pitched relative to root note.
-                if (chromaticMode.load (std::memory_order_relaxed))
+                const bool effectiveChromaticMode = chromaticMode.load (std::memory_order_relaxed)
+                                                    || (numCurrentSlices == 0);
+                if (effectiveChromaticMode)
                 {
-                    const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
-                    if (sel >= 0 && sel < sliceManager.getNumSlices())
+                    int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+
+                    // No slices: synthesize a full-sample slice in slot 0.
+                    // Safe: all SliceManager mutations occur in processBlock (audio thread),
+                    // so there is no concurrent writer. The UI reads a snapshot copy.
+                    if (numCurrentSlices == 0 && sampleData.isLoaded())
+                    {
+                        auto& defaultSlice = sliceManager.getSlice (0);
+                        defaultSlice.startSample = 0;
+                        defaultSlice.endSample   = sampleData.getNumFrames();
+                        defaultSlice.active      = true;
+                        sel = 0;
+                    }
+
+                    if (sel >= 0 && sel < juce::jmax (1, numCurrentSlices))
                     {
                         const int root = sliceManager.rootNote.load (std::memory_order_relaxed);
                         const float semitoneOffset = (float) (note - root);

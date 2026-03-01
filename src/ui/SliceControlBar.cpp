@@ -310,7 +310,7 @@ void SliceControlBar::paint (juce::Graphics& g)
     if (idx < 0 || idx >= numSlices)
     {
         g.setFont (DysektLookAndFeel::makeFont (15.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.35f));
+        g.setColour (juce::Colours::white);
         g.drawText ("No slice selected", 8, 24, 220, 18, juce::Justification::centredLeft);
         return;
     }

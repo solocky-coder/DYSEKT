@@ -88,6 +88,7 @@ private:
     int drawStart = 0;
     int drawEnd = 0;
     bool drawStartedFromAlt = false;
+    int addClickStart = -1; // ADD click mode: -1 = waiting for first click, >= 0 = waiting for second click
     int dragOffset = 0;    // for MoveSlice: offset from mouse to slice start
     int dragSliceLen = 0;  // for MoveSlice: original slice length
     int dragPreviewStart = 0; // for edge/move drags: preview start sample

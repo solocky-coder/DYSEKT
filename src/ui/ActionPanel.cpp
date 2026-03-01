@@ -171,3 +171,50 @@ void ActionPanel::updateSnapButtonAppearance (bool active)
     snapBtn.setColour (juce::TextButton::textColourOffId, col);
     snapBtn.setColour (juce::TextButton::buttonColourId,  bg);
 }
+
+void ActionPanel::paintOverChildren (juce::Graphics& g)
+{
+    // Draw MIDI (musical note) icon for midiSelectBtn
+    {
+        bool active = processor.midiSelectsSlice.load();
+        auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
+        g.setColour (col);
+
+        auto b   = midiSelectBtn.getBounds();
+        float cx = (float) b.getCentreX();
+        float cy = (float) b.getCentreY();
+
+        // Note head (filled ellipse)
+        juce::Path head;
+        head.addEllipse (cx - 5.0f, cy + 1.5f, 8.0f, 5.5f);
+        g.fillPath (head);
+
+        // Stem (vertical line from right of head upward)
+        g.drawLine (cx + 3.0f, cy + 4.0f, cx + 3.0f, cy - 7.0f, 1.5f);
+
+        // Flag (two lines forming a curl to the right)
+        g.drawLine (cx + 3.0f, cy - 7.0f, cx + 8.0f, cy - 3.0f, 1.5f);
+        g.drawLine (cx + 8.0f, cy - 3.0f, cx + 3.5f, cy - 1.0f, 1.5f);
+    }
+
+    // Draw zero-crossing icon for snapBtn
+    {
+        bool active = processor.snapToZeroCrossing.load();
+        auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
+        g.setColour (col);
+
+        auto b   = snapBtn.getBounds();
+        float cx = (float) b.getCentreX();
+        float cy = (float) b.getCentreY();
+
+        // Horizontal zero line
+        g.drawLine (cx - 9.0f, cy, cx + 9.0f, cy, 1.0f);
+
+        // Sine wave crossing through the zero line
+        juce::Path wave;
+        wave.startNewSubPath (cx - 9.0f, cy);
+        wave.cubicTo (cx - 5.0f, cy,        cx - 5.0f, cy - 6.5f, cx,        cy);
+        wave.cubicTo (cx + 5.0f, cy,        cx + 5.0f, cy + 6.5f, cx + 9.0f, cy);
+        g.strokePath (wave, juce::PathStrokeType (1.5f));
+    }
+}
