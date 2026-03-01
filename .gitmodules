@@ -10,3 +10,6 @@
 [submodule "signalsmith-linear"]
 	path = signalsmith-linear
 	url = https://github.com/Signalsmith-Audio/linear.git
+[submodule "sfizz"]
+	path = sfizz
+	url = https://github.com/sfztools/sfizz.git
