@@ -951,7 +951,9 @@ bool WaveformView::isInterestedInFileDrag (const juce::StringArray& files)
     for (auto& f : files)
     {
         auto ext = juce::File (f).getFileExtension().toLowerCase();
-        if (ext == ".wav" || ext == ".ogg" || ext == ".aiff" || ext == ".flac" || ext == ".mp3")
+        if (ext == ".wav"  || ext == ".ogg"  || ext == ".aif"  ||
+            ext == ".aiff" || ext == ".flac"  || ext == ".mp3"  ||
+            ext == ".sf2"  || ext == ".sfz")
             return true;
     }
     return false;
@@ -959,11 +961,17 @@ bool WaveformView::isInterestedInFileDrag (const juce::StringArray& files)
 
 void WaveformView::filesDropped (const juce::StringArray& files, int, int)
 {
-    if (! files.isEmpty())
-    {
-        processor.loadFileAsync (juce::File (files[0]));
-        processor.zoom.store (1.0f);
-        processor.scroll.store (0.0f);
-        prevCacheKey = {};
-    }
+    if (files.isEmpty()) return;
+
+    juce::File f (files[0]);
+    auto ext = f.getFileExtension().toLowerCase();
+
+    processor.zoom.store (1.0f);
+    processor.scroll.store (0.0f);
+    prevCacheKey = {};
+
+    if (ext == ".sf2" || ext == ".sfz")
+        processor.loadSoundFontAsync (f);
+    else
+        processor.loadFileAsync (f);
 }

@@ -360,3 +360,37 @@ void DysektEditor::loadUserSettings()
     actionPanel.setChromaticActive (processor.chromaticMode.load());
     headerBar.setChromaticActive (processor.chromaticMode.load());
 }
+
+// =============================================================================
+//  FileDragAndDropTarget  — catches file drops anywhere on the editor window
+//  This is the critical top-level handler; WaveformView's handler only fires
+//  when the cursor is precisely over that child component.
+// =============================================================================
+bool DysektEditor::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (auto& f : files)
+    {
+        auto ext = juce::File (f).getFileExtension().toLowerCase();
+        if (ext == ".wav"  || ext == ".aif"  || ext == ".aiff" ||
+            ext == ".ogg"  || ext == ".flac"  || ext == ".mp3"  ||
+            ext == ".sf2"  || ext == ".sfz")
+            return true;
+    }
+    return false;
+}
+
+void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
+{
+    if (files.isEmpty()) return;
+
+    juce::File f (files[0]);
+    auto ext = f.getFileExtension().toLowerCase();
+
+    processor.zoom.store (1.0f);
+    processor.scroll.store (0.0f);
+
+    if (ext == ".sf2" || ext == ".sfz")
+        processor.loadSoundFontAsync (f);
+    else
+        processor.loadFileAsync (f);
+}

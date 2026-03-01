@@ -13,6 +13,7 @@
 #include "ui/FileBrowserPanel.h"
 
 class DysektEditor : public juce::AudioProcessorEditor,
+                             public juce::FileDragAndDropTarget,
                              private juce::Timer
 {
 public:
@@ -22,6 +23,10 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress& key) override;
+
+    // FileDragAndDropTarget — catches drops anywhere on the editor
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void filesDropped (const juce::StringArray& files, int x, int y) override;
 
     juce::StringArray getAvailableThemes();
     void applyTheme (const juce::String& themeName);
