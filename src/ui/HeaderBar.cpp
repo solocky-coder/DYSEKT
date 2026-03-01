@@ -82,32 +82,36 @@ HeaderBar::HeaderBar (DysektProcessor& p) : processor (p)
 void HeaderBar::resized()
 {
     const int h    = getHeight();
-    const int cy   = (h - 28) / 2;
     const int gap  = 4;
     int right = getWidth() - 8;
 
+    // ── Lower row: UI, PANIC, UNDO/REDO buttons ───────────────────────────
+    const int btnH = 20;
+    const int btnY = h - btnH - 2;
+
     // Rightmost: UI (theme) button
-    themeBtn.setBounds (right - 26, cy, 26, 28);
+    themeBtn.setBounds (right - 26, btnY, 26, btnH);
     right -= 30;
 
-    // PANIC button — full height
+    // PANIC button
     const int panicW = 52;
-    panicBtn.setBounds (right - panicW, cy, panicW, 28);
+    panicBtn.setBounds (right - panicW, btnY, panicW, btnH);
     right -= panicW + gap;
 
     // UNDO / REDO stacked
     const int undoW = 44;
-    undoBtn.setBounds (right - undoW, cy,      undoW, 13);
-    redoBtn.setBounds (right - undoW, cy + 15, undoW, 13);
+    undoBtn.setBounds (right - undoW, btnY,      undoW, 9);
+    redoBtn.setBounds (right - undoW, btnY + 11, undoW, 9);
     right -= undoW + gap;
 
-    // GLOBAL box: pitch + volume knobs — 72px wide
-    // Hidden as real buttons; drawn in paint(). Store bounds for hit-test.
-    globalBoxBounds = { right - 72, 2, 72, h - 4 };
+    // ── Upper row: GLOBAL box above the button row, right-aligned ─────────
+    // Reserve glbLabelH pixels above the box frame for the "GLOBAL" label.
+    const int glbLabelH = 11;
+    globalBoxBounds = { right - 72, glbLabelH, 72, btnY - glbLabelH - 4 };
     right -= 76;
 
     // Icon buttons: CH | WA | FIL  (right-to-left)
-    const int iconW = 28;
+    const int iconW  = 28;
     const int iconCY = (h - iconW) / 2;
     chBtn.setBounds  (right - iconW, iconCY, iconW, iconW);
     right -= iconW + gap;
@@ -220,10 +224,10 @@ void HeaderBar::paint (juce::Graphics& g)
         // Box frame
         g.setColour (accent.withAlpha (0.5f));
         g.drawRoundedRectangle (gb.toFloat().reduced (0.5f), 2.f, 1.f);
-        // Label
+        // Label drawn ABOVE the frame border
         g.setFont (DysektLookAndFeel::makeFont (8.0f));
         g.setColour (accent.withAlpha (0.7f));
-        g.drawText ("GLOBAL", gb.getX(), gb.getY() + 1, gb.getWidth(), 9,
+        g.drawText ("GLOBAL", gb.getX(), gb.getY() - 10, gb.getWidth(), 9,
                     juce::Justification::centred);
 
         // Two mini knobs: PITCH (left) and VOLUME (right)
@@ -232,7 +236,7 @@ void HeaderBar::paint (juce::Graphics& g)
         float pitchN = (gPitch + 48.f) / 96.f;
         float volN   = (gVol + 100.f) / 124.f;
 
-        const int kr = 8;
+        const int kr = 6;
         const float kStart = juce::MathConstants<float>::pi * 1.25f;
         const float kEnd   = juce::MathConstants<float>::pi * 2.75f;
 
@@ -258,7 +262,7 @@ void HeaderBar::paint (juce::Graphics& g)
 
         int k1cx = gb.getX() + gb.getWidth()/4;
         int k2cx = gb.getX() + 3*gb.getWidth()/4;
-        int kcy  = gb.getY() + 11 + kr;
+        int kcy  = gb.getY() + kr + 3;  // knob centre: kr+3 px from box top (no label inside box)
 
         int pvi = (int)std::round(gPitch);
         juce::String pitchStr = (pvi>=0?"+":"")+juce::String(pvi)+"st";
@@ -267,9 +271,9 @@ void HeaderBar::paint (juce::Graphics& g)
         drawGlobalKnob (k1cx, kcy, pitchN, "PITCH", pitchStr);
         drawGlobalKnob (k2cx, kcy, volN,   "VOL",   volStr);
 
-        // Store hit areas for mouse interaction
-        globalPitchKnobArea  = { k1cx-kr-4, kcy-kr-2, (kr+4)*2, (kr+4)*2+10 };
-        globalVolKnobArea    = { k2cx-kr-4, kcy-kr-2, (kr+4)*2, (kr+4)*2+10 };
+        // Store hit areas for mouse interaction (sized to the knob arc, no extra extension)
+        globalPitchKnobArea  = { k1cx-kr-4, kcy-kr-2, (kr+4)*2, (kr+4)*2 };
+        globalVolKnobArea    = { k2cx-kr-4, kcy-kr-2, (kr+4)*2, (kr+4)*2 };
     }
 
     // ── SAMPLE info + SLICES + SET ROOT — left side ───────────────────────
@@ -320,24 +324,46 @@ void HeaderBar::paint (juce::Graphics& g)
             sampleInfoBounds = {};
         }
 
-        // SLICES — white label, right-aligned count
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (white);
-        g.drawText ("SLICES", slcX, cellY + 2, lw, 13, juce::Justification::left);
-        g.setFont (DysektLookAndFeel::makeFont (14.0f));
-        g.setColour (fg.withAlpha (0.65f));
-        g.drawText (juce::String (ui.numSlices), slcX, cellY + 15, lw, 14,
-                    juce::Justification::right);  // right-aligned
+        // SLICES — white label, value centered under last 'S' of "SLICES"
+        {
+            const juce::Font lblFont = DysektLookAndFeel::makeFont (12.0f);
+            const juce::Font valFont = DysektLookAndFeel::makeFont (14.0f);
+            g.setFont (lblFont);
+            g.setColour (white);
+            g.drawText ("SLICES", slcX, cellY + 2, lw, 13, juce::Justification::left);
+            // Centre value under the last 'S' in "SLICES"
+            int lastSCenterX = slcX + lblFont.getStringWidth ("SLICES")
+                                     - lblFont.getStringWidth ("S") / 2;
+            juce::String slcValStr = juce::String (ui.numSlices);
+            int slcValW = valFont.getStringWidth (slcValStr) + 4; // +4: margin so text isn't clipped
+            g.setFont (valFont);
+            g.setColour (fg.withAlpha (0.65f));
+            g.drawText (slcValStr, lastSCenterX - slcValW / 2, cellY + 15, slcValW, 14,
+                        juce::Justification::centred);
+        }
 
-        // SET ROOT — white label, accent value
+        // SET ROOT — white label, accent value; last digit centred under 'T' of "ROOT"
         bool editable = (ui.numSlices == 0);
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (white);
-        g.drawText ("SET ROOT", rnX, cellY + 2, lw, 13, juce::Justification::left);
-        g.setFont (DysektLookAndFeel::makeFont (14.0f));
-        g.setColour (editable ? accent : fg.withAlpha (0.5f));
-        g.drawText (juce::String (ui.rootNote), rnX, cellY + 15, lw, 14,
-                    juce::Justification::left);
+        {
+            const juce::Font lblFont = DysektLookAndFeel::makeFont (12.0f);
+            const juce::Font valFont = DysektLookAndFeel::makeFont (14.0f);
+            g.setFont (lblFont);
+            g.setColour (white);
+            g.drawText ("SET ROOT", rnX, cellY + 2, lw, 13, juce::Justification::left);
+            // Centre last digit of root-note value under 'T' in "ROOT"
+            int rootTCenterX = rnX + lblFont.getStringWidth ("SET ROO")
+                                    + lblFont.getStringWidth ("T") / 2;
+            juce::String rootStr = juce::String (ui.rootNote);
+            juce::String rootPrev = rootStr.length() > 1 ? rootStr.dropLastCharacters (1)
+                                                         : juce::String();
+            int prevW  = valFont.getStringWidth (rootPrev);
+            int lastHW = valFont.getStringWidth (rootStr.getLastCharacters (1)) / 2;
+            int startX = rootTCenterX - prevW - lastHW;
+            g.setFont (valFont);
+            g.setColour (editable ? accent : fg.withAlpha (0.5f));
+            g.drawText (rootStr, startX, cellY + 15, valFont.getStringWidth (rootStr) + 4, 14, // +4: margin so text isn't clipped
+                        juce::Justification::left);
+        }
 
         rootNoteArea   = { rnX,  cellY, lw, cellH };
         slicesInfoArea = { slcX, cellY, lw, cellH };
