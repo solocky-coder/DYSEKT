@@ -65,12 +65,12 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     dupBtn.setTooltip      ("Duplicate Slice (D)");
     splitBtn.setTooltip    ("Auto Chop (C)");
     deleteBtn.setTooltip   ("Delete Slice (Del)");
-    trimBtn.setTooltip     ("Trim — crop sample to a selected region");
+    trimBtn.setTooltip     ("Trim - crop sample to a selected region");
     snapBtn.setTooltip     ("Snap to Zero-Crossing (Z)");
 
     browserBtn.setTooltip  ("Toggle File Browser");
     waveBtn.setTooltip     ("Toggle Soft Waveform");
-    chromaticBtn.setTooltip ("Chromatic Mode — play selected slice across full keyboard");
+    chromaticBtn.setTooltip ("Chromatic Mode - play selected slice across full keyboard");
 
     updateMidiButtonAppearance (false);
     updateSnapButtonAppearance (false);
@@ -220,27 +220,13 @@ void ActionPanel::updateSnapButtonAppearance (bool active)
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // Draw MIDI (musical note) icon for midiSelectBtn
+    // Draw MIDI text icon for midiSelectBtn
     {
         bool active = processor.midiSelectsSlice.load();
         auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
         g.setColour (col);
-
-        auto b   = midiSelectBtn.getBounds();
-        float cx = (float) b.getCentreX();
-        float cy = (float) b.getCentreY();
-
-        // Note head (filled ellipse)
-        juce::Path head;
-        head.addEllipse (cx - 5.0f, cy + 1.5f, 8.0f, 5.5f);
-        g.fillPath (head);
-
-        // Stem (vertical line from right of head upward)
-        g.drawLine (cx + 3.0f, cy + 4.0f, cx + 3.0f, cy - 7.0f, 1.5f);
-
-        // Flag (two lines forming a curl to the right)
-        g.drawLine (cx + 3.0f, cy - 7.0f, cx + 8.0f, cy - 3.0f, 1.5f);
-        g.drawLine (cx + 8.0f, cy - 3.0f, cx + 3.5f, cy - 1.0f, 1.5f);
+        g.setFont (DysektLookAndFeel::makeFont (9.0f, true));
+        g.drawText ("MIDI", midiSelectBtn.getBounds(), juce::Justification::centred);
     }
 
     // Draw zero-crossing icon for snapBtn

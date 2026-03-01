@@ -793,8 +793,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     processor.pushCommand (cmd);
                 }
                 addClickStart = -1;
-                sliceDrawMode = false;
-                setMouseCursor (juce::MouseCursor::NormalCursor);
                 return;
             }
             // First click: record start position, wait for second click
