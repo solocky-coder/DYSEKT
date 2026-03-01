@@ -65,18 +65,9 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     // Route file double-clicks through trim dialog
     browserPanel.onFileSelected = [this] (const juce::File& f)
     {
-        juce::AudioFormatManager fmtMgr;
-        fmtMgr.registerBasicFormats();
-        double dur = 0.0;
-        if (auto* reader = fmtMgr.createReaderFor (f))
-        {
-            const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
-            dur = (double) reader->lengthInSamples / sr;
-            delete reader;
-        }
         processor.zoom.store (1.0f);
         processor.scroll.store (0.0f);
-        showTrimDialog (f, dur);
+        showTrimDialog (f, getFileDurationSeconds (f));
     };
 
     // FIL / WA / CH now live in headerBar — wire their callbacks there
@@ -85,31 +76,13 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     headerBar.onChromaticToggle = [this] { toggleChromatic(); };
     headerBar.onFileOpen        = [this] (const juce::File& f)
     {
-        juce::AudioFormatManager fmtMgr;
-        fmtMgr.registerBasicFormats();
-        double dur = 0.0;
-        if (auto* reader = fmtMgr.createReaderFor (f))
-        {
-            const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
-            dur = (double) reader->lengthInSamples / sr;
-            delete reader;
-        }
-        showTrimDialog (f, dur);
+        showTrimDialog (f, getFileDurationSeconds (f));
     };
 
     // Route waveform file drops through trim dialog
     waveformView.onFileDropped = [this] (const juce::File& f)
     {
-        juce::AudioFormatManager fmtMgr;
-        fmtMgr.registerBasicFormats();
-        double dur = 0.0;
-        if (auto* reader = fmtMgr.createReaderFor (f))
-        {
-            const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
-            dur = (double) reader->lengthInSamples / sr;
-            delete reader;
-        }
-        showTrimDialog (f, dur);
+        showTrimDialog (f, getFileDurationSeconds (f));
     };
 
     // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
@@ -458,19 +431,22 @@ void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
     if (ext == ".sf2" || ext == ".sfz")
         processor.loadSoundFontAsync (f);
     else
+        showTrimDialog (f, getFileDurationSeconds (f));
+}
+
+double DysektEditor::getFileDurationSeconds (const juce::File& file) const
+{
+    // Quick metadata-only read to get duration without decoding the full file
+    juce::AudioFormatManager fmtMgr;
+    fmtMgr.registerBasicFormats();
+    if (auto* reader = fmtMgr.createReaderFor (file))
     {
-        // Quick metadata-only read to get duration
-        juce::AudioFormatManager fmtMgr;
-        fmtMgr.registerBasicFormats();
-        double dur = 0.0;
-        if (auto* reader = fmtMgr.createReaderFor (f))
-        {
-            const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
-            dur = (double) reader->lengthInSamples / sr;
-            delete reader;
-        }
-        showTrimDialog (f, dur);
+        const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
+        const double dur = (double) reader->lengthInSamples / sr;
+        delete reader;
+        return dur;
     }
+    return 0.0;
 }
 
 // ── Trim dialog helpers ────────────────────────────────────────────────────────
@@ -484,7 +460,9 @@ void DysektEditor::showTrimDialog (const juce::File& file, double durationSecond
     }
 
     const int pref = processor.trimPreference.load();
-    if (pref == 2 || durationSeconds < 5.0)
+    // Files shorter than this threshold are loaded without a trim dialog
+    static constexpr double kTrimDialogMinDurationSeconds = 5.0;
+    if (pref == 2 || durationSeconds < kTrimDialogMinDurationSeconds)
     {
         // "never" preference or short file — load immediately
         processor.loadFileAsync (file);

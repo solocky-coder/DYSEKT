@@ -48,6 +48,7 @@ private:
     void showTrimDialog (const juce::File& file, double durationSeconds);
     void showTrimMode();
     void onTrimConfirmed (bool userClickedYes, bool rememberChoice);
+    double getFileDurationSeconds (const juce::File& file) const;
 
     DysektProcessor& processor;
     float lastScale = 1.0f;

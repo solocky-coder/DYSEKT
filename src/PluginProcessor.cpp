@@ -1730,17 +1730,16 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     else if (version < 18)
         slicesLinked.store (false);
 
-    // v19 fields
+    // v19 fields: trimInSample/trimOutSample were added first; trimPreference and
+    // trimRegion* were added later. Nested isExhausted() guards ensure backward
+    // compatibility with early v19 presets that don't have the newer fields.
     if (version >= 19 && ! stream.isExhausted())
     {
         trimInSample.store    (juce::jmax (0, stream.readInt()));
         trimOutSample.store   (juce::jmax (0, stream.readInt()));
-        if (! stream.isExhausted())
-            trimPreference.store  (juce::jlimit (0, 2, stream.readInt()));
-        if (! stream.isExhausted())
-            trimRegionStart.store (juce::jmax (0, stream.readInt()));
-        if (! stream.isExhausted())
-            trimRegionEnd.store   (juce::jmax (0, stream.readInt()));
+        trimPreference.store  (stream.isExhausted() ? 0 : juce::jlimit (0, 2, stream.readInt()));
+        trimRegionStart.store (stream.isExhausted() ? 0 : juce::jmax  (0, stream.readInt()));
+        trimRegionEnd.store   (stream.isExhausted() ? 0 : juce::jmax  (0, stream.readInt()));
     }
     else
     {
