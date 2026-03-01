@@ -52,17 +52,24 @@ void SliceControlBar::drawParamCell (juce::Graphics& g, int x, int y,
                                      bool isBoolean, bool isChoice, int& outWidth)
 {
     const int cellH = 32;
-    const int cellW = kParamCellWidth;
 
-    g.setFont (DysektLookAndFeel::makeFont (12.0f));
+    // Measure label at 12pt and value at 14pt — take the wider, add padding
+    juce::Font labelFont = DysektLookAndFeel::makeFont (12.0f);
+    juce::Font valueFont = DysektLookAndFeel::makeFont (14.0f);
+    const int labelW = labelFont.getStringWidth (label);
+    const int valueW = valueFont.getStringWidth (value);
+    const int textW  = juce::jmax (labelW, valueW) + 14;  // 14px pad — same as knob cells
+    const int cellW  = kParamCellTextX + textW;
+
+    g.setFont (labelFont);
     g.setColour (locked ? getTheme().lockActive.withAlpha (0.8f)
                         : getTheme().foreground.withAlpha (0.45f));
-    g.drawText (label, x + kParamCellTextX, y + 2,  kParamCellTextWidth, 13, juce::Justification::centredLeft);
+    g.drawText (label, x + kParamCellTextX, y + 2,  textW, 13, juce::Justification::centredLeft);
 
-    g.setFont (DysektLookAndFeel::makeFont (14.0f));
+    g.setFont (valueFont);
     g.setColour (locked ? getTheme().foreground
                         : getTheme().foreground.withAlpha (0.4f));
-    g.drawText (value, x + kParamCellTextX, y + 15, kParamCellTextWidth, 14, juce::Justification::centredLeft);
+    g.drawText (value, x + kParamCellTextX, y + 15, textW, 14, juce::Justification::centredLeft);
 
     outWidth = cellW;
     cells.push_back ({ x, y, outWidth, cellH, lockBit, fieldId,
