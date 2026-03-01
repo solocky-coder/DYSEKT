@@ -127,6 +127,7 @@ public:
     void loadFileAsync (const juce::File& file);
     void relinkFileAsync (const juce::File& file);
     void loadSoundFontAsync (const juce::File& file);  // SF2 / SFZ loader
+    void applyTrimToCurrentSample (int trimStart, int trimEnd);
 
     struct UiSliceSnapshot
     {
@@ -197,6 +198,14 @@ public:
     static constexpr int kOscRingBufferSize = 1024; // must be power of 2
     std::array<float, kOscRingBufferSize> oscRingBuffer {};
     std::atomic<int> oscRingWriteHead { 0 };
+
+    // Trim preference (0 = ask every time, 1 = always trim, 2 = never trim)
+    enum TrimPreference { TrimPrefAsk = 0, TrimPrefAlways = 1, TrimPrefNever = 2 };
+    std::atomic<int> trimPreference { (int) TrimPrefAsk };
+
+    // Trim region stored in samples (set when user applies trim)
+    std::atomic<int> trimRegionStart { 0 };
+    std::atomic<int> trimRegionEnd   { 0 };
 
     // Missing sample state (for relink UI)
     std::atomic<bool> sampleMissing { false };

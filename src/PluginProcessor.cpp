@@ -291,6 +291,24 @@ void DysektProcessor::relinkFileAsync (const juce::File& file)
     requestSampleLoad (file, LoadKindRelink);
 }
 
+void DysektProcessor::applyTrimToCurrentSample (int trimStart, int trimEnd)
+{
+    auto snap = sampleData.getSnapshot();
+    if (snap == nullptr)
+        return;
+
+    auto trimmed = SampleData::applyTrim (snap.get(), trimStart, trimEnd);
+    if (trimmed == nullptr)
+        return;
+
+    clearVoicesBeforeSampleSwap();
+    trimRegionStart.store (trimStart, std::memory_order_relaxed);
+    trimRegionEnd.store   (trimEnd,   std::memory_order_relaxed);
+    sampleData.applyDecodedSample (std::move (trimmed));
+    clampSlicesToSampleBounds();
+    publishUiSliceSnapshot();
+}
+
 void DysektProcessor::clearVoicesBeforeSampleSwap()
 {
     // Stop lazy chop before killing voices; its preview voice and buffer pointer
@@ -1501,7 +1519,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (18);
+    stream.writeInt (19);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -1574,6 +1592,9 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // v18 fields
     stream.writeBool (slicesLinked.load());
+
+    // v19 fields
+    stream.writeInt (trimPreference.load (std::memory_order_relaxed));
 }
 
 void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -1581,7 +1602,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version != 16 && version != 17 && version != 18)
+    if (version != 16 && version != 17 && version != 18 && version != 19)
         return;
 
     // APVTS state
@@ -1689,6 +1710,13 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         slicesLinked.store (stream.readBool());
     else if (version < 18)
         slicesLinked.store (false);
+
+    // v19 fields
+    if (version >= 19 && ! stream.isExhausted())
+        trimPreference.store (juce::jlimit ((int) TrimPrefAsk, (int) TrimPrefNever, stream.readInt()),
+                              std::memory_order_relaxed);
+    else
+        trimPreference.store ((int) TrimPrefAsk, std::memory_order_relaxed);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
