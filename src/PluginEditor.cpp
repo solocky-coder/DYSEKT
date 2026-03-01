@@ -8,11 +8,13 @@ static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
+static constexpr int kOscilloscopeH = 120;
 
 static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
 static constexpr int kBaseHCore  = kLogoH + kHeaderH + kSliceLaneH
                                  + kScrollbarH + kSliceCtrlH + kActionH
+                                 + kOscilloscopeH
                                  + 120; // minimum waveform height
 
 static juce::File getSettingsDir()
@@ -35,7 +37,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       sliceControlBar(p),
       actionPanel    (p, waveformView),
 
-      browserPanel   (p)
+      browserPanel   (p),
+      oscilloscopeView (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     setLookAndFeel (&lnf);
@@ -47,6 +50,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (scrollZoomBar);
     addAndMakeVisible (sliceControlBar);
     addAndMakeVisible (actionPanel);
+
+    addAndMakeVisible (oscilloscopeView);
 
     // Panels start hidden
     browserPanel.setVisible (false);
@@ -79,7 +84,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     setWantsKeyboardFocus (true);
     setResizable (true, true);
-    setResizeLimits (600, 400, 1920, 1200);
+    setResizeLimits (600, 500, 1920, 1200);
     setSize (kBaseW, computeTotalHeight());
     lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
     startTimerHz (30);
@@ -162,7 +167,10 @@ void DysektEditor::resized()
     // 8. Scrollbar
     scrollZoomBar.setBounds (area.removeFromBottom (kScrollbarH).reduced (kMargin, 0));
 
-    // 9. Waveform — remaining
+    // 9. Oscilloscope — below waveform
+    oscilloscopeView.setBounds (area.removeFromBottom (kOscilloscopeH).reduced (kMargin, 0));
+
+    // 10. Waveform — remaining
     waveformView.setBounds (area.reduced (kMargin, 0));
 }
 
@@ -261,6 +269,8 @@ void DysektEditor::timerCallback()
     if (waveformNeedsRepaint) waveformView.repaint();
     if (laneNeedsRepaint)     sliceLane.repaint();
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
+
+    oscilloscopeView.repaint();
 
     headerBar.repaint();
     sliceControlBar.repaint();

@@ -108,6 +108,7 @@ target_sources(Dysekt PRIVATE
     src/ui/LogoBar.cpp
     src/ui/KeysPanel.cpp
     src/ui/FileBrowserPanel.cpp
+    src/ui/OscilloscopeView.cpp
 )
 
 target_include_directories(Dysekt PRIVATE
@@ -132,6 +133,7 @@ target_link_libraries(Dysekt
         bungee_lib
         DysektFonts
         $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:sfizz::sfizz>
+        $<$<PLATFORM_ID:Linux>:asound>
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

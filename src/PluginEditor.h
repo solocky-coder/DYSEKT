@@ -11,6 +11,7 @@
 #include "ui/ActionPanel.h"
 
 #include "ui/FileBrowserPanel.h"
+#include "ui/OscilloscopeView.h"
 
 class DysektEditor : public juce::AudioProcessorEditor,
                              public juce::FileDragAndDropTarget,
@@ -67,6 +68,7 @@ private:
     ActionPanel     actionPanel;
 
     FileBrowserPanel browserPanel;
+    OscilloscopeView oscilloscopeView;
 
     juce::TooltipWindow tooltipWindow { this, 500 };
 

@@ -193,6 +193,11 @@ public:
     std::atomic<int> liveDragBoundsStart {  0 };
     std::atomic<int> liveDragBoundsEnd   {  0 };
 
+    // Ring buffer for oscilloscope display (written on audio thread, read on UI thread)
+    static constexpr int kOscRingBufferSize = 1024; // must be power of 2
+    std::array<float, kOscRingBufferSize> oscRingBuffer {};
+    std::atomic<int> oscRingWriteHead { 0 };
+
     // Missing sample state (for relink UI)
     std::atomic<bool> sampleMissing { false };
     juce::String missingFilePath;
