@@ -48,6 +48,9 @@ void DysektLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
     auto btnCol = button.findColour (juce::TextButton::buttonColourId);
     auto baseBg = (btnCol != juce::Colour()) ? btnCol : getTheme().button;
 
+    if (baseBg.isTransparent())
+        return;
+
     g.setColour (isDown ? baseBg.brighter (0.15f)
                         : isHighlighted ? baseBg.brighter (0.08f)
                                         : baseBg);

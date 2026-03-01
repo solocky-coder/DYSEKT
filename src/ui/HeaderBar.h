@@ -29,7 +29,7 @@ private:
     void adjustScale (float delta);
     void openFileBrowser();
     void openRelinkBrowser();
-    void updateAccentBtn (juce::TextButton& btn, bool active);
+    void updateAccentBtn (juce::TextButton& btn);
 
     DysektProcessor& processor;
 
