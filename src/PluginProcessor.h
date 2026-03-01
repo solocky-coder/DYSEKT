@@ -65,6 +65,7 @@ public:
         CmdPanic,
         CmdSelectSlice,
         CmdSetRootNote,
+        CmdApplyTrim,
     };
 
     enum LoadKind
@@ -176,6 +177,10 @@ public:
 
     // Link mode — moving a slice end automatically moves the next slice's start
     std::atomic<bool> slicesLinked { false };
+
+    // Trim preference — in/out markers set by the user (0 = no trim, updated after apply)
+    std::atomic<int> trimInSample  { 0 };
+    std::atomic<int> trimOutSample { 0 };
 
     // Undo/redo
     UndoManager undoMgr;

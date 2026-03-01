@@ -41,6 +41,11 @@ public:
     void applyDecodedSample (std::unique_ptr<DecodedSample> decoded);
     bool loadFromFile (const juce::File& file, double projectSampleRate);
     void clear();
+
+    /** Create a new DecodedSample containing only the audio from [trimIn, trimOut).
+        Returns nullptr if the range is invalid or the source has no audio. */
+    static std::unique_ptr<DecodedSample> createTrimmed (const DecodedSample& src,
+                                                          int trimIn, int trimOut);
     SnapshotPtr getSnapshot() const;
 
     float getInterpolatedSample (double pos, int channel) const;
