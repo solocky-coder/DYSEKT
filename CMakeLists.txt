@@ -94,6 +94,7 @@ target_sources(Dysekt PRIVATE
     src/audio/VoicePool.cpp
     src/audio/GrainEngine.cpp
     src/audio/LazyChopEngine.cpp
+    src/audio/TransientDetector.cpp
     src/audio/SoundFontLoader.cpp
     src/params/ParamLayout.cpp
     src/ui/DysektLookAndFeel.cpp
