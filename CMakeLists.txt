@@ -110,6 +110,7 @@ target_sources(Dysekt PRIVATE
     src/ui/FileBrowserPanel.cpp
     src/ui/OscilloscopeView.cpp
     src/ui/TrimDialog.cpp
+    src/ui/ShortcutsPanel.cpp
 )
 
 target_include_directories(Dysekt PRIVATE

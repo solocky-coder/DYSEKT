@@ -10,7 +10,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
     for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn,
-                       &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn })
+                       &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -42,6 +42,9 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     };
 
     trimBtn.onClick = [this] { toggleTrimMode(); };
+
+    shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
+    shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");
 
     snapBtn.onClick = [this] {
         bool ns = ! processor.snapToZeroCrossing.load();
@@ -144,8 +147,8 @@ void ActionPanel::resized()
 {
     const int gap   = 5;
     const int h     = getHeight();
-    const int thinW = 30;   // ZX, MIDI icons
-    const int thinTotal = thinW * 2 + gap;
+    const int thinW = 30;   // snap, MIDI select, and shortcuts buttons
+    const int thinTotal = thinW * 3 + gap * 2;
     const int trimW = 40;   // TRIM button
     const int availW = getWidth() - thinTotal - trimW - gap * 2;
     const int numMain = 5;
@@ -160,7 +163,8 @@ void ActionPanel::resized()
 
     trimBtn.setBounds       (x, 0, trimW, h); x += trimW + gap;
     snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
-    midiSelectBtn.setBounds (x, 0, thinW, h);
+    midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
+    shortcutsBtn.setBounds  (x, 0, thinW, h);
 
     // browserBtn/waveBtn/chromaticBtn moved to HeaderBar — hide them
     browserBtn.setVisible (false);
