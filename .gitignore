@@ -2,6 +2,7 @@
 build/
 cmake-build-*/
 out/
+_codeql_build_dir/
 
 # IDE
 .vs/
