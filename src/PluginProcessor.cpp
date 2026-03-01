@@ -1510,14 +1510,19 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     {
         int wh = oscRingWriteHead.load (std::memory_order_relaxed);
         const int numSamples = buffer.getNumSamples();
+        float peakL = 0.0f, peakR = 0.0f;
         for (int i = 0; i < numSamples; ++i)
         {
-            float s = busL[0][i];
-            if (busR[0] != nullptr) s = (s + busR[0][i]) * 0.5f;
-            oscRingBuffer[(size_t) wh] = s;
+            const float sL = busL[0][i];
+            const float sR = (busR[0] != nullptr) ? busR[0][i] : sL;
+            peakL = std::max (peakL, std::abs (sL));
+            peakR = std::max (peakR, std::abs (sR));
+            oscRingBuffer[(size_t) wh] = (sL + sR) * 0.5f;
             wh = (wh + 1) & (kOscRingBufferSize - 1);
         }
         oscRingWriteHead.store (wh, std::memory_order_release);
+        masterPeakL.store (peakL, std::memory_order_relaxed);
+        masterPeakR.store (peakR, std::memory_order_relaxed);
     }
 
     // Pass through MIDI

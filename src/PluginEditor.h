@@ -12,6 +12,7 @@
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
+#include "ui/MixerPanel.h"
 
 class DysektEditor : public juce::AudioProcessorEditor,
                              public juce::FileDragAndDropTarget,
@@ -36,6 +37,7 @@ public:
     void toggleBrowserPanel();
     void toggleSoftWave();
     void toggleChromatic();
+    void toggleMixerPanel();
 
 private:
     void timerCallback() override;
@@ -57,6 +59,7 @@ private:
 
     bool browserOpen = false;
     bool softWave    = false;
+    bool mixerOpen   = false;
 
     DysektLookAndFeel lnf;
     LogoBar         logoBar;
@@ -69,6 +72,7 @@ private:
 
     FileBrowserPanel browserPanel;
     OscilloscopeView oscilloscopeView;
+    MixerPanel       mixerPanel;
 
     juce::TooltipWindow tooltipWindow { this, 500 };
 
