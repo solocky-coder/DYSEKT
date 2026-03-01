@@ -437,8 +437,9 @@ void DysektEditor::showTrimDialog (const juce::File& file)
     }
 
     // Skip the dialog for very short files (< 5 s at assumed 44100 Hz)
-    // We use a conservative estimate without actually decoding the whole file
-    const int64_t approxSamples = static_cast<int64_t> (file.getSize()) / 2; // rough lower bound
+    // Divide file size by 2 (bytes per 16-bit sample) for a conservative lower bound;
+    // this intentionally under-counts multi-channel files so short files are never shown the dialog.
+    const int64_t approxSamples = static_cast<int64_t> (file.getSize()) / 2;
     const bool likelyLong = (approxSamples > 44100 * 5);
 
     if (pref == 0 && ! likelyLong)

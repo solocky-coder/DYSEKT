@@ -314,7 +314,6 @@ std::vector<int> WaveformView::collectBoundaries() const
 
 int WaveformView::findNearestBoundary (int pixelX) const
 {
-    const int samplePos = pixelToSample (pixelX);
     const auto boundaries = collectBoundaries();
     if (boundaries.empty())
         return -1;
@@ -332,7 +331,6 @@ int WaveformView::findNearestBoundary (int pixelX) const
             best = b;
         }
     }
-    (void) samplePos;
     return best;
 }
 
@@ -755,7 +753,12 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
     syncAltStateFromMods (e.mods);
 
     // Track mouse position for ADD mode v2 hover highlighting
-    if (lastMouseX != e.x) { lastMouseX = e.x; if (sliceDrawMode) repaint(); }
+    if (lastMouseX != e.x)
+    {
+        lastMouseX = e.x;
+        if (sliceDrawMode)
+            repaint();
+    }
 
     auto sampleSnap = processor.sampleData.getSnapshot();
     if (sampleSnap == nullptr) return;

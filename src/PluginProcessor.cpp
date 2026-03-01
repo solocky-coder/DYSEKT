@@ -1769,17 +1769,23 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         slicesLinked.store (false);
 
     // v19 fields
+    // TrimPreference constants: 0 = ask, 1 = always trim, 2 = never trim
+    static constexpr int kTrimPrefAsk    = 0;
+    static constexpr int kTrimPrefAlways = 1;
+    static constexpr int kTrimPrefNever  = 2;
+
     if (version >= 19 && ! stream.isExhausted())
     {
         trimInSample.store  (juce::jmax (0, stream.readInt()));
         trimOutSample.store (juce::jmax (0, stream.readInt()));
-        trimPreference.store (stream.isExhausted() ? 0 : juce::jlimit (0, 2, stream.readInt()));
+        trimPreference.store (stream.isExhausted() ? kTrimPrefAsk
+                                                   : juce::jlimit (kTrimPrefAsk, kTrimPrefNever, stream.readInt()));
     }
     else
     {
         trimInSample.store  (0);
         trimOutSample.store (0);
-        trimPreference.store (0);
+        trimPreference.store (kTrimPrefAsk);
     }
 }
 

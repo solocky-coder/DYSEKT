@@ -117,7 +117,6 @@ private:
     int ghostEnd   = 0;    // for DuplicateSlice: ghost overlay end sample
 
     // ADD mode v2 state
-    int draggedMarkerIndex = -1;    ///< index into collectBoundaries() while dragging (unused — ADD mode doesn't drag)
     int flashBoundaryPos   = -1;    ///< sample pos of boundary to flash orange (-1 = none)
     juce::Time flashStartTime;      ///< when the flash began (for 300 ms timer)
     int lastMouseX         = -1;    ///< most recent mouse x position for hover highlighting
