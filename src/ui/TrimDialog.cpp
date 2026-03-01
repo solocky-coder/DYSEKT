@@ -1,55 +1,61 @@
-#include <QDialog>
-#include <QPushButton>
-#include <QPainter>
-#include <QVBoxLayout>
+#include "TrimDialog.h"  
 
-class TrimDialog : public QDialog {
-    Q_OBJECT
+TrimDialog::TrimDialog() : DialogWindow("Trim Dialog", juce::Colours::white, true)
+{
+    setResizable(true, true);
+    setUsingNativeTitleBar(true);
 
-public:
-    explicit TrimDialog(QWidget *parent = nullptr);
-    void paintEvent(QPaintEvent *event) override;
-    void resizeEvent(QResizeEvent *event) override;
+    messageLabel.setText("Are you sure you want to trim?", juce::dontSendNotification);
+    addAndMakeVisible(messageLabel);
 
-private slots:
-    void onYesClicked();
-    void onNoClicked();
+    yesBtn.setButtonText("Yes");
+    yesBtn.onClick = [this]() { onYesClicked(); };
+    addAndMakeVisible(yesBtn);
 
-public:
-    void show();
-};
+    noBtn.setButtonText("No");
+    noBtn.onClick = [this]() { onNoClicked(); };
+    addAndMakeVisible(noBtn);
 
-TrimDialog::TrimDialog(QWidget *parent) : QDialog(parent) {
-    QPushButton *yesButton = new QPushButton("Yes", this);
-    QPushButton *noButton = new QPushButton("No", this);
-    connect(yesButton, &QPushButton::clicked, this, &TrimDialog::onYesClicked);
-    connect(noButton, &QPushButton::clicked, this, &TrimDialog::onNoClicked);
+    rememberBtn.setButtonText("Remember this choice");
+    addAndMakeVisible(rememberBtn);
 
-    QVBoxLayout *layout = new QVBoxLayout;
-    layout->addWidget(yesButton);
-    layout->addWidget(noButton);
-    setLayout(layout);
+    // Proper styling
+    messageLabel.setColour(juce::Label::ColourIds::textColourId, juce::Colours::black);
+    yesBtn.setColour(juce::TextButton::ColourIds::buttonColourId, juce::Colours::lightblue);
+    noBtn.setColour(juce::TextButton::ColourIds::buttonColourId, juce::Colours::red);
+    rememberBtn.setColour(juce::ToggleButton::ColourIds::tickColourId, juce::Colours::green);
 }
 
-void TrimDialog::paintEvent(QPaintEvent *event) {
-    QPainter painter(this);
-    // Custom painting code
+void TrimDialog::paint(Graphics& g)
+{
+    g.fillAll(juce::Colour(50, 50, 50)); // dark grey background
 }
 
-void TrimDialog::resizeEvent(QResizeEvent *event) {
-    QDialog::resizeEvent(event);
-    // Handle resize
+void TrimDialog::resized() 
+{
+    auto area = getLocalBounds();
+    messageLabel.setBounds(area.removeFromTop(50));
+    yesBtn.setBounds(area.removeFromTop(30));
+    noBtn.setBounds(area.removeFromTop(30));
+    rememberBtn.setBounds(area.removeFromTop(30));
 }
 
-void TrimDialog::onYesClicked() {
-    // Yes clicked logic
+void TrimDialog::onYesClicked() 
+{
+    // Call the callback and exit modal state
+    callback();
+    exitModalState(0);
 }
 
-void TrimDialog::onNoClicked() {
-    // No clicked logic
+void TrimDialog::onNoClicked() 
+{
+    // Call the callback and exit modal state
+    callback();
+    exitModalState(0);
 }
 
-void TrimDialog::show() {
-    QDialog::show();
-    // Additional show logic if needed
+void TrimDialog::show() 
+{
+    TrimDialog dialog;
+    dialog.runModal();
 }
