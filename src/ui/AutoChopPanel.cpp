@@ -9,6 +9,7 @@ AutoChopPanel::AutoChopPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
     addAndMakeVisible (sensitivitySlider);
+    addAndMakeVisible (modeCombo);
     addAndMakeVisible (divisionsEditor);
     addAndMakeVisible (splitEqualBtn);
     addAndMakeVisible (detectBtn);
@@ -26,6 +27,16 @@ AutoChopPanel::AutoChopPanel (DysektProcessor& p, WaveformView& wv)
     sensitivitySlider.setColour (juce::Slider::textBoxOutlineColourId, getTheme().separator);
 
     sensitivitySlider.onValueChange = [this] { updatePreview(); };
+
+    modeCombo.addItem ("Conservative", 1);
+    modeCombo.addItem ("Normal",       2);
+    modeCombo.addItem ("Aggressive",   3);
+    modeCombo.setSelectedId (2, juce::dontSendNotification);
+    modeCombo.setColour (juce::ComboBox::backgroundColourId, getTheme().darkBar.brighter (0.15f));
+    modeCombo.setColour (juce::ComboBox::textColourId,       getTheme().foreground);
+    modeCombo.setColour (juce::ComboBox::outlineColourId,    getTheme().separator);
+    modeCombo.setColour (juce::ComboBox::arrowColourId,      getTheme().foreground.withAlpha (0.6f));
+    modeCombo.onChange = [this] { updatePreview(); };
 
     divisionsEditor.setText ("16");
     divisionsEditor.setColour (juce::TextEditor::backgroundColourId, getTheme().darkBar.brighter (0.15f));
@@ -102,6 +113,7 @@ void AutoChopPanel::paint (juce::Graphics& g)
     g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.setColour (getTheme().foreground.withAlpha (0.6f));
     g.drawText ("SENS", 4, 0, 30, getHeight(), juce::Justification::centredLeft);
+    g.drawText ("MODE", modeCombo.getX() - 38, 0, 36, getHeight(), juce::Justification::centredLeft);
     g.drawText ("DIV", divisionsEditor.getX() - 26, 0, 24, getHeight(), juce::Justification::centredLeft);
 }
 
@@ -125,9 +137,17 @@ void AutoChopPanel::resized()
     x += 34;
 
     // Sensitivity slider
-    int sliderW = 200;
+    int sliderW = 160;
     sensitivitySlider.setBounds (x, pad, sliderW, btnH);
     x += sliderW + gap;
+
+    // MODE label (drawn in paint, 38px)
+    x += 38;
+
+    // Mode combo
+    int modeComboW = 110;
+    modeCombo.setBounds (x, pad, modeComboW, btnH);
+    x += modeComboW + gap;
 
     // SPLIT TRANSIENTS button
     int transBtnW = 148;
@@ -164,9 +184,11 @@ void AutoChopPanel::updatePreview()
 
     const auto& s = ui.slices[(size_t) sel];
     float sens = (float) sensitivitySlider.getValue() / 100.0f;
+    int modeId = juce::jlimit (1, 3, modeCombo.getSelectedId());
+    auto mode  = static_cast<AudioAnalysis::SensitivityMode> (modeId - 1);
 
-    auto positions = AudioAnalysis::detectTransients (
-        sampleSnap->buffer, s.startSample, s.endSample, sens, processor.getSampleRate());
+    auto positions = AudioAnalysis::detectTransientsHybrid (
+        sampleSnap->buffer, s.startSample, s.endSample, mode, sens, processor.getSampleRate());
 
     if (processor.snapToZeroCrossing.load())
     {

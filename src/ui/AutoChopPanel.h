@@ -20,6 +20,7 @@ private:
     WaveformView& waveformView;
 
     juce::Slider sensitivitySlider;
+    juce::ComboBox modeCombo;
     juce::TextEditor divisionsEditor;
     juce::TextButton splitEqualBtn { "SPLIT EQUAL" };
     juce::TextButton detectBtn     { "SPLIT TRANSIENTS" };
