@@ -19,7 +19,7 @@ constexpr float kKnobEnd   = juce::MathConstants<float>::pi * 2.75f;
 // With kKnobR=9: 18 + 7 = 25 prefix; we want at least 36px text area → min 61px
 // "MIDI NOTE" at 10pt ≈ 56px text, so we need at least 25+57 = 82px cell width.
 // We compute cellW dynamically in drawKnobCell based on label text.
-constexpr int kKnobCellPadRight = 6;  // extra padding to the right of label text
+constexpr int kKnobCellPadRight = 14;  // generous pad — prevents font-metric vs render discrepancies clipping labels
 }
 
 SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p) {}
@@ -132,7 +132,8 @@ float SliceControlBar::toNorm (int fieldId, float v) const
         case F::FieldPan:          return juce::jlimit (0.f, 1.f, (v + 1.f) / 2.f);
         case F::FieldFilterCutoff: return juce::jlimit (0.f, 1.f,
                                        (std::log (juce::jlimit (20.f, 20000.f, v)) - std::log (20.f))
-                                       / (std::log (20000.f) - std::log (20.f)));        case F::FieldFilterRes:    return juce::jlimit (0.f, 1.f, v);
+                                       / (std::log (20000.f) - std::log (20.f)));
+        case F::FieldFilterRes:    return juce::jlimit (0.f, 1.f, v);
         default:                   return 0.5f;
     }
 }
@@ -449,13 +450,13 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 6;
     }
 
-    // LINK button — smaller, sits on the row separator line
+    // LINK button — centred on the same vertical midpoint as the knobs in row 1
     {
         const bool linked = processor.slicesLinked.load (std::memory_order_relaxed);
-        const int btnW = 30;   // smaller than before
-        const int btnH = 18;   // short — straddles the separator
-        // Centre it vertically on the separator line (y=34)
-        const int btnY = 34 - btnH / 2;
+        const int btnW = 40;
+        const int btnH = 18;
+        // Centre on row1y + cellH/2  (same centre as every other row-1 knob)
+        const int btnY = row1y + cellH / 2 - btnH / 2;
         linkBtnArea = { x, btnY, btnW, btnH };
 
         g.setColour (linked ? getTheme().accent.withAlpha (0.25f)
