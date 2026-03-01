@@ -5,6 +5,7 @@
 class DysektProcessor;
 class WaveformView;
 class AutoChopPanel;
+class TrimDialog;
 
 class ActionPanel : public juce::Component
 {
@@ -38,18 +39,21 @@ private:
     void updateToggleBtn (juce::TextButton& btn, bool active);
     void updateMidiButtonAppearance (bool active);
     void updateSnapButtonAppearance (bool active);
+    void toggleTrimMode();
 
-    juce::TextButton addSliceBtn   { "ADD" };
+    juce::TextButton addSliceBtn   { "ADD"  };
     juce::TextButton lazyChopBtn   { "LAZY" };
     juce::TextButton dupBtn        { "COPY" };
     juce::TextButton splitBtn      { "AUTO" };
-    juce::TextButton deleteBtn     { "DEL" };
+    juce::TextButton deleteBtn     { "DEL"  };
+    juce::TextButton trimBtn       { "TRIM" };
     juce::TextButton snapBtn       { "" };
     juce::TextButton midiSelectBtn { "" };
 
     juce::TextButton browserBtn    { "FILES" };
-    juce::TextButton waveBtn       { "WAVE" };
-    juce::TextButton chromaticBtn  { "CHRO" };
+    juce::TextButton waveBtn       { "WAVE"  };
+    juce::TextButton chromaticBtn  { "CHRO"  };
 
     std::unique_ptr<AutoChopPanel> autoChopPanel;
+    std::unique_ptr<TrimDialog>    trimDialog;
 };
