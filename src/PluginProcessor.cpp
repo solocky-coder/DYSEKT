@@ -1469,7 +1469,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (17);
+    stream.writeInt (18);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -1539,6 +1539,9 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // v17: MIDI Learn CC mappings
     midiLearn.writeState (stream);
+
+    // v18 fields
+    stream.writeBool (slicesLinked.load());
 }
 
 void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -1546,7 +1549,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version != 16 && version != 17)
+    if (version != 16 && version != 17 && version != 18)
         return;
 
     // APVTS state
@@ -1648,6 +1651,12 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     // v17: MIDI Learn CC mappings (optional — older presets simply leave all unassigned)
     if (! stream.isExhausted())
         midiLearn.readState (stream);
+
+    // v18 fields
+    if (version >= 18 && ! stream.isExhausted())
+        slicesLinked.store (stream.readBool());
+    else if (version < 18)
+        slicesLinked.store (false);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

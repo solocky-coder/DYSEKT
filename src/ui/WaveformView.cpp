@@ -780,14 +780,22 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     {
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
-        dragPreviewStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
+        int newStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
+        int delta = newStart - dragPreviewStart;
+        dragPreviewStart = newStart;
+        if (processor.slicesLinked.load())
+            dragPreviewEnd = juce::jlimit (newStart + 64, (int) sampleSnap->buffer.getNumSamples(), dragPreviewEnd + delta);
     }
     else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
     {
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
-        dragPreviewEnd = juce::jlimit (dragPreviewStart + 64,
-                                       sampleSnap->buffer.getNumSamples(), samplePos);
+        int newEnd = juce::jlimit (dragPreviewStart + 64,
+                                   (int) sampleSnap->buffer.getNumSamples(), samplePos);
+        int delta = newEnd - dragPreviewEnd;
+        dragPreviewEnd = newEnd;
+        if (processor.slicesLinked.load())
+            dragPreviewStart = juce::jlimit (0, dragPreviewEnd - 64, dragPreviewStart + delta);
     }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
     {
