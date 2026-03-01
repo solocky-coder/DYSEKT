@@ -1,61 +1,59 @@
-#include "TrimDialog.h"  
+#include "TrimDialog.h"
+#include "WaveformView.h"
+#include "../PluginProcessor.h"
 
-TrimDialog::TrimDialog() : DialogWindow("Trim Dialog", juce::Colours::white, true)
+TrimDialog::TrimDialog (DysektProcessor& p, WaveformView& wv)
+    : processor (p), waveformView (wv)
 {
-    setResizable(true, true);
-    setUsingNativeTitleBar(true);
+    applyBtn.setTooltip  ("Crop the sample to the trim markers");
+    cancelBtn.setTooltip ("Exit trim mode without changing the sample");
 
-    messageLabel.setText("Are you sure you want to trim?", juce::dontSendNotification);
-    addAndMakeVisible(messageLabel);
+    applyBtn.onClick = [this]
+    {
+        const int tIn  = waveformView.getTrimIn();
+        const int tOut = waveformView.getTrimOut();
+        if (tOut > tIn)
+        {
+            DysektProcessor::Command cmd;
+            cmd.type      = DysektProcessor::CmdApplyTrim;
+            cmd.intParam1 = tIn;
+            cmd.intParam2 = tOut;
+            processor.pushCommand (cmd);
+        }
+        waveformView.setTrimMode (false);
+        waveformView.resetTrim();
+        if (auto* parent = getParentComponent())
+            parent->removeChildComponent (this);
+    };
 
-    yesBtn.setButtonText("Yes");
-    yesBtn.onClick = [this]() { onYesClicked(); };
-    addAndMakeVisible(yesBtn);
+    cancelBtn.onClick = [this]
+    {
+        waveformView.setTrimMode (false);
+        waveformView.resetTrim();
+        if (auto* parent = getParentComponent())
+            parent->removeChildComponent (this);
+    };
 
-    noBtn.setButtonText("No");
-    noBtn.onClick = [this]() { onNoClicked(); };
-    addAndMakeVisible(noBtn);
-
-    rememberBtn.setButtonText("Remember this choice");
-    addAndMakeVisible(rememberBtn);
-
-    // Proper styling
-    messageLabel.setColour(juce::Label::ColourIds::textColourId, juce::Colours::black);
-    yesBtn.setColour(juce::TextButton::ColourIds::buttonColourId, juce::Colours::lightblue);
-    noBtn.setColour(juce::TextButton::ColourIds::buttonColourId, juce::Colours::red);
-    rememberBtn.setColour(juce::ToggleButton::ColourIds::tickColourId, juce::Colours::green);
+    addAndMakeVisible (applyBtn);
+    addAndMakeVisible (cancelBtn);
 }
 
-void TrimDialog::paint(Graphics& g)
+void TrimDialog::paint (juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(50, 50, 50)); // dark grey background
+    g.fillAll (getTheme().darkBar.brighter (0.04f));
+
+    // Separator line at top
+    g.setColour (getTheme().separator);
+    g.drawHorizontalLine (0, 0.0f, (float) getWidth());
 }
 
-void TrimDialog::resized() 
+void TrimDialog::resized()
 {
-    auto area = getLocalBounds();
-    messageLabel.setBounds(area.removeFromTop(50));
-    yesBtn.setBounds(area.removeFromTop(30));
-    noBtn.setBounds(area.removeFromTop(30));
-    rememberBtn.setBounds(area.removeFromTop(30));
-}
+    auto area = getLocalBounds().reduced (4, 3);
+    const int btnW = 90;
+    const int gap  = 6;
 
-void TrimDialog::onYesClicked() 
-{
-    // Call the callback and exit modal state
-    callback();
-    exitModalState(0);
-}
-
-void TrimDialog::onNoClicked() 
-{
-    // Call the callback and exit modal state
-    callback();
-    exitModalState(0);
-}
-
-void TrimDialog::show() 
-{
-    TrimDialog dialog;
-    dialog.runModal();
+    cancelBtn.setBounds (area.removeFromRight (btnW));
+    area.removeFromRight (gap);
+    applyBtn.setBounds  (area.removeFromRight (btnW));
 }

@@ -97,40 +97,76 @@ void SliceLane::paint (juce::Graphics& g)
         ++labelOrderCount;
     }
 
-    // Pass 2: Draw labels in left-to-right order
-    std::array<int, SliceManager::kMaxSlices> labelEnds {};
-    int labelEndCount = 0;
+    // ── Label position caching (Bug #3: prevents per-frame jitter) ──────────
+    // Build a cache key from the inputs that affect label layout. Only
+    // recompute label positions when something actually changed.
+    LabelCacheKey currentKey;
+    currentKey.numSlices     = num;
+    currentKey.selectedSlice = sel;
+    currentKey.visStart      = visStart;
+    currentKey.visLen        = visLen;
+    currentKey.width         = w;
 
-    for (int oi = 0; oi < labelOrderCount; ++oi)
+    if (labelCacheDirty || !(currentKey == prevLabelCacheKey))
     {
-        const auto& si = visibleSlices[(size_t) labelOrder[(size_t) oi]];
-        int sw = si.x2 - si.x1;
+        // Recompute stable label x-positions from scratch.
+        cachedLabelCount = 0;
+        std::array<int, SliceManager::kMaxSlices> labelEndsCache {};
+        int labelEndCount = 0;
 
-        // Slice number label — left-aligned, with overlap avoidance
-        if (sw > 14)
+        g.setFont (DysektLookAndFeel::makeFont (12.0f, true));
+
+        for (int oi = 0; oi < labelOrderCount; ++oi)
         {
+            const auto& si = visibleSlices[(size_t) labelOrder[(size_t) oi]];
+            int sw = si.x2 - si.x1;
+            if (sw <= 14) continue;
+
             juce::String label = juce::String (si.idx + 1);
-            g.setFont (DysektLookAndFeel::makeFont (12.0f, true));
             int labelW = g.getCurrentFont().getStringWidth (label) + 6;
             int labelX = si.x1 + 3;
 
-            // Push right until it clears all previously drawn labels
             for (int li = 0; li < labelEndCount; ++li)
             {
-                int end = labelEnds[(size_t) li];
-                if (labelX < end)
-                    labelX = end + 1;
+                if (labelX < labelEndsCache[(size_t) li])
+                    labelX = labelEndsCache[(size_t) li] + 1;
             }
 
-            // Only draw if the label fits within the visible area
-            if (labelX + labelW < w)
+            if (labelX + labelW < w && cachedLabelCount < SliceManager::kMaxSlices)
             {
-                g.setColour (si.selected ? getTheme().foreground.withAlpha (0.9f) : si.col.withAlpha (0.7f));
-                g.drawText (label, labelX, 0, labelW, h, juce::Justification::centredLeft);
+                cachedLabels[(size_t) cachedLabelCount++] = { si.idx, labelX };
                 if (labelEndCount < SliceManager::kMaxSlices)
-                    labelEnds[(size_t) labelEndCount++] = labelX + labelW;
+                    labelEndsCache[(size_t) labelEndCount++] = labelX + labelW;
             }
         }
+
+        prevLabelCacheKey = currentKey;
+        labelCacheDirty   = false;
+    }
+
+    // Draw labels using the stable cached positions.
+    g.setFont (DysektLookAndFeel::makeFont (12.0f, true));
+    for (int ci = 0; ci < cachedLabelCount; ++ci)
+    {
+        const auto& cl = cachedLabels[(size_t) ci];
+        juce::String label = juce::String (cl.sliceIdx + 1);
+        int labelW = g.getCurrentFont().getStringWidth (label) + 6;
+        bool isSelected = (cl.sliceIdx == sel);
+
+        // Find the slice colour for this label
+        juce::Colour col { 0xFF4D8C99 };
+        for (int i = 0; i < visibleCount; ++i)
+        {
+            if (visibleSlices[(size_t) i].idx == cl.sliceIdx)
+            {
+                col = visibleSlices[(size_t) i].col;
+                break;
+            }
+        }
+
+        g.setColour (isSelected ? getTheme().foreground.withAlpha (0.9f)
+                                : col.withAlpha (0.7f));
+        g.drawText (label, cl.x, 0, labelW, h, juce::Justification::centredLeft);
     }
 
     // Bottom separator line

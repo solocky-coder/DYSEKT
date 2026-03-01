@@ -7,6 +7,46 @@ SliceManager::SliceManager()
     midiMap.fill (-1);
 }
 
+SliceManager::OverlapResult SliceManager::validateNoOverlap (int sliceIdx, int start, int end) const
+{
+    OverlapResult result;
+    result.adjustedStart = start;
+    result.adjustedEnd   = end;
+
+    // Snap boundaries to any existing slice edge within kSnapTolerance samples.
+    for (int i = 0; i < numSlices; ++i)
+    {
+        if (i == sliceIdx) continue;
+        const auto& s = slices[(size_t) i];
+        if (! s.active) continue;
+
+        // Snap start toward this slice's end boundary
+        if (std::abs (result.adjustedStart - s.endSample) <= kSnapTolerance)
+            result.adjustedStart = s.endSample;
+
+        // Snap end toward this slice's start boundary
+        if (std::abs (result.adjustedEnd - s.startSample) <= kSnapTolerance)
+            result.adjustedEnd = s.startSample;
+    }
+
+    // Detect overlap: [adjustedStart, adjustedEnd) intersects [s.start, s.end)?
+    for (int i = 0; i < numSlices; ++i)
+    {
+        if (i == sliceIdx) continue;
+        const auto& s = slices[(size_t) i];
+        if (! s.active) continue;
+
+        if (result.adjustedStart < s.endSample && result.adjustedEnd > s.startSample)
+        {
+            result.overlaps      = true;
+            result.conflictSlice = i;
+            break;
+        }
+    }
+
+    return result;
+}
+
 int SliceManager::createSlice (int start, int end)
 {
     if (numSlices >= kMaxSlices)
@@ -19,6 +59,15 @@ int SliceManager::createSlice (int start, int end)
     // Ensure start < end
     if (start > end)
         std::swap (start, end);
+
+    // Snap to adjacent slice boundaries within kSnapTolerance samples.
+    // This silently closes any tiny gap caused by imprecise mouse placement.
+    auto snap = validateNoOverlap (-1, start, end);
+    if (! snap.overlaps)
+    {
+        start = snap.adjustedStart;
+        end   = snap.adjustedEnd;
+    }
 
     int idx = numSlices;
     auto& s = slices[idx];
