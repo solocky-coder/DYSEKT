@@ -181,6 +181,8 @@ public:
     // Trim preference — in/out markers set by the user (0 = no trim, updated after apply)
     std::atomic<int> trimInSample  { 0 };
     std::atomic<int> trimOutSample { 0 };
+    // Trim dialog preference: 0 = ask every time, 1 = always trim, 2 = never trim
+    std::atomic<int> trimPreference { 0 };
 
     // Undo/redo
     UndoManager undoMgr;

@@ -16,6 +16,7 @@ public:
     void paint (juce::Graphics& g) override;
     void toggleAutoChop();
     bool isAutoChopOpen() const { return autoChopPanel != nullptr; }
+    void activateTrimMode();   ///< Programmatically enter trim mode (e.g., from file-load)
     void paintOverChildren (juce::Graphics& g) override;
 
     // Callbacks wired up by DysektEditor

@@ -1,5 +1,8 @@
 #include "PluginEditor.h"
+#include "TrimSession.h"
 #include <algorithm>
+
+static constexpr double kTrimDialogMinDurationSecs = 5.0;  ///< show trim dialog for samples ≥ this
 
 static constexpr int kBaseW      = 900;
 static constexpr int kLogoH      = 44;
@@ -234,7 +237,17 @@ void DysektEditor::timerCallback()
     const bool rulerDragging      = scrollZoomBar.isDraggingNow();
 
     const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
-    if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
+    if (snapshotVersion != lastUiSnapshotVersion)
+    {
+        lastUiSnapshotVersion = snapshotVersion;
+        uiChanged = true;
+
+        // Detect when a new sample finishes loading — offer trim dialog if ≥ 5 s
+        const bool nowLoaded = processor.getUiSliceSnapshot().sampleLoaded;
+        if (nowLoaded && ! lastSampleLoaded)
+            showTrimDialog();
+        lastSampleLoaded = nowLoaded;
+    }
 
     const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
     if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
@@ -372,7 +385,68 @@ void DysektEditor::loadUserSettings()
 }
 
 // =============================================================================
-//  FileDragAndDropTarget  — catches file drops anywhere on the editor window
+//  Trim dialog helpers
+// =============================================================================
+void DysektEditor::showTrimMode()
+{
+    actionPanel.activateTrimMode();
+}
+
+void DysektEditor::showTrimDialog()
+{
+    auto sampleSnap = processor.sampleData.getSnapshot();
+    if (sampleSnap == nullptr)
+        return;
+
+    const int    numFrames  = sampleSnap->buffer.getNumSamples();
+    const double sampleRate = processor.getSampleRate();
+    if (sampleRate <= 0.0 || (double) numFrames / sampleRate < kTrimDialogMinDurationSecs)
+        return;   // sample shorter than threshold — no dialog needed
+
+    const int pref = processor.trimPreference.load();
+    if (pref == 2) return;                       // "never trim" — skip silently
+    if (pref == 1) { showTrimMode(); return; }   // "always trim" — go straight to trim mode
+
+    // pref == 0 → ask the user
+    auto* dialog = new juce::AlertWindow ("Trim Sample?",
+        "This sample is longer than 5 seconds.\n"
+        "Would you like to enter trim mode to crop it?",
+        juce::MessageBoxIconType::QuestionIcon);
+
+    dialog->addButton ("Yes", 1);
+    dialog->addButton ("No",  2);
+    dialog->addComboBox ("remember",
+                         juce::StringArray { "Ask every time", "Always trim", "Never trim" },
+                         "Remember my choice:");
+
+    struct TrimDialogCallback : public juce::ModalComponentManager::Callback
+    {
+        DysektEditor& editor;
+        juce::AlertWindow* alertWindow;
+        TrimDialogCallback (DysektEditor& e, juce::AlertWindow* aw)
+            : editor (e), alertWindow (aw) {}
+
+        void modalStateFinished (int result) override
+        {
+            // Read and persist "Remember my choice" combo selection
+            if (alertWindow != nullptr)
+            {
+                if (auto* combo = alertWindow->getComboBoxComponent ("remember"))
+                {
+                    int idx = combo->getSelectedItemIndex();  // 0=ask, 1=always, 2=never
+                    if (idx > 0)
+                        editor.processor.trimPreference.store (idx);
+                }
+            }
+            if (result == 1)
+                editor.showTrimMode();
+        }
+    };
+
+    // Note: enterModalState takes ownership of the callback and deletes it when done.
+    dialog->enterModalState (true, new TrimDialogCallback (*this, dialog), true);
+}
+
 //  This is the critical top-level handler; WaveformView's handler only fires
 //  when the cursor is precisely over that child component.
 // =============================================================================

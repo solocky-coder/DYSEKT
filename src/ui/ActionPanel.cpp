@@ -140,6 +140,14 @@ void ActionPanel::toggleTrimMode()
     repaint();
 }
 
+void ActionPanel::activateTrimMode()
+{
+    // Only activate if not already in trim mode
+    if (trimDialog != nullptr)
+        return;
+    toggleTrimMode();
+}
+
 void ActionPanel::resized()
 {
     const int gap   = 5;

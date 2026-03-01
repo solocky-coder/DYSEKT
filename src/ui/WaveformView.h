@@ -74,6 +74,12 @@ private:
     void paintLazyChopOverlay (juce::Graphics& g);
     void paintTransientMarkers (juce::Graphics& g);
     void paintTrimMarkers (juce::Graphics& g);
+    void paintAddMarkers (juce::Graphics& g);
+
+    // ADD mode v2 helpers
+    std::vector<int> collectBoundaries() const;
+    int  findNearestBoundaryPixel (int px) const;
+    void deleteSlicesAtBoundary (int samplePos);
 
     // Aggregates all cache-invalidation inputs; rebuild is skipped when unchanged.
     struct CacheKey
@@ -116,4 +122,9 @@ private:
     float midDragAnchorPixelFrac = 0.0f;
     int   midDragStartX = 0;
     int   midDragStartY = 0;
+
+    // ADD mode v2: marker hover and flash feedback
+    int     hoveredBoundaryPos   = -1;   ///< sample pos of hovered boundary, -1 = none
+    int     addModeFlashBoundary = -1;   ///< sample pos to flash orange, -1 = none
+    int64_t addModeFlashEndMs    = 0;    ///< juce::Time::currentTimeMillis() end of flash
 };

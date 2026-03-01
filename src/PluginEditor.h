@@ -32,10 +32,14 @@ public:
     juce::StringArray getAvailableThemes();
     void applyTheme (const juce::String& themeName);
 
-
     void toggleBrowserPanel();
     void toggleSoftWave();
     void toggleChromatic();
+
+    /// Shows the post-load trim dialog for samples ≥ 5 s (respects trimPreference).
+    void showTrimDialog();
+    /// Directly activates trim mode via the action panel.
+    void showTrimMode();
 
 private:
     void timerCallback() override;
@@ -54,6 +58,7 @@ private:
     bool lastPreviewActive = false;
     float savedScale = -1.0f;
     uint32_t lastUiSnapshotVersion = 0;
+    bool lastSampleLoaded = false;   ///< tracks whether a sample was loaded on last timer tick
 
     bool browserOpen = false;
     bool softWave    = false;

@@ -4,15 +4,23 @@
 #include "../PluginProcessor.h"
 #include "../audio/AudioAnalysis.h"
 
-static constexpr int kMinTrimRangeSamples = 64; ///< minimum trim/slice range in samples
+static constexpr int    kMinTrimRangeSamples  = 64;   ///< minimum trim/slice range in samples
+static constexpr int    kBoundaryHotzonePx    = 6;    ///< pixel radius for boundary hit detection
+static constexpr int64_t kFlashDurationMs     = 500;  ///< duration of flash feedback in ms
+static constexpr double  kMinTrimSampleSecs   = 5.0;  ///< threshold to prompt trim dialog (seconds)
 
 WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
 
 void WaveformView::setSliceDrawMode (bool active)
 {
     sliceDrawMode = active;
-    if (! active) addClickStart = -1;
-    setMouseCursor (active ? juce::MouseCursor::IBeamCursor : juce::MouseCursor::NormalCursor);
+    if (! active)
+    {
+        addClickStart        = -1;
+        hoveredBoundaryPos   = -1;
+        addModeFlashBoundary = -1;
+    }
+    setMouseCursor (active ? juce::MouseCursor::CrosshairCursor : juce::MouseCursor::NormalCursor);
 }
 
 void WaveformView::setTrimMode (bool active)
@@ -154,6 +162,7 @@ void WaveformView::paint (juce::Graphics& g)
         rebuildCacheIfNeeded();
         drawWaveform (g);
         drawSlices (g);
+        paintAddMarkers (g);
         paintDrawSlicePreview (g);
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
@@ -302,6 +311,109 @@ void WaveformView::paintTrimMarkers (juce::Graphics& g)
     g.drawVerticalLine (xOut, 0.0f, (float) h);
     g.drawText ("OUT", xOut - 28, 3, 28, 13, juce::Justification::centredRight);
 }
+
+// ── ADD mode v2 helpers ───────────────────────────────────────────────────────
+
+std::vector<int> WaveformView::collectBoundaries() const
+{
+    const auto& ui = processor.getUiSliceSnapshot();
+    std::vector<int> b;
+    b.reserve ((size_t) ui.numSlices * 2);
+    for (int i = 0; i < ui.numSlices; ++i)
+    {
+        const auto& s = ui.slices[(size_t) i];
+        if (s.active)
+        {
+            b.push_back (s.startSample);
+            b.push_back (s.endSample);
+        }
+    }
+    std::sort (b.begin(), b.end());
+    b.erase (std::unique (b.begin(), b.end()), b.end());
+    return b;
+}
+
+int WaveformView::findNearestBoundaryPixel (int px) const
+{
+    auto bounds = collectBoundaries();
+    int best = -1, bestDist = kBoundaryHotzonePx + 1;   // threshold +1
+    for (int b : bounds)
+    {
+        int bx = sampleToPixel (b);
+        int d  = std::abs (bx - px);
+        if (d < bestDist) { bestDist = d; best = b; }
+    }
+    return best;
+}
+
+void WaveformView::deleteSlicesAtBoundary (int samplePos)
+{
+    const auto& ui = processor.getUiSliceSnapshot();
+    std::vector<int> toDelete;
+    for (int i = 0; i < ui.numSlices; ++i)
+    {
+        const auto& s = ui.slices[(size_t) i];
+        if (s.active && (s.startSample == samplePos || s.endSample == samplePos))
+            toDelete.push_back (i);
+    }
+    // Reverse order to avoid index invalidation
+    for (int i = (int) toDelete.size() - 1; i >= 0; --i)
+    {
+        DysektProcessor::Command cmd;
+        cmd.type = DysektProcessor::CmdDeleteSlice;
+        cmd.intParam1 = toDelete[(size_t) i];
+        processor.pushCommand (cmd);
+    }
+}
+
+void WaveformView::paintAddMarkers (juce::Graphics& g)
+{
+    if (! sliceDrawMode)
+        return;
+
+    const auto bounds = collectBoundaries();
+    if (bounds.empty())
+        return;
+
+    const int64_t nowMs   = juce::Time::currentTimeMillis();
+    const bool    flashing = (addModeFlashBoundary >= 0 && nowMs < addModeFlashEndMs);
+
+    const float cy = (float) getHeight() * 0.12f;   // draw diamonds near the top
+    const float r  = 5.0f;
+
+    for (int bSample : bounds)
+    {
+        int bx = sampleToPixel (bSample);
+        if (bx < -8 || bx > getWidth() + 8)
+            continue;
+
+        bool isFlashing = flashing && (bSample == addModeFlashBoundary);
+        bool isHovered  = (bSample == hoveredBoundaryPos);
+
+        juce::Colour col = isFlashing ? juce::Colours::orange
+                         : isHovered  ? getTheme().accent
+                                      : getTheme().foreground.withAlpha (0.55f);
+
+        float rr = isHovered ? r + 1.5f : r;
+        // Diamond (rotated square)
+        juce::Path diamond;
+        diamond.startNewSubPath ((float) bx,        cy - rr);
+        diamond.lineTo          ((float) bx + rr,   cy      );
+        diamond.lineTo          ((float) bx,        cy + rr );
+        diamond.lineTo          ((float) bx - rr,   cy      );
+        diamond.closeSubPath();
+
+        g.setColour (col.withAlpha (0.18f));
+        g.fillPath  (diamond);
+        g.setColour (col);
+        g.strokePath (diamond, juce::PathStrokeType (1.5f));
+    }
+
+    // Keep repainting while flash is active
+    if (flashing)
+        repaint();
+}
+
 void WaveformView::drawWaveform (juce::Graphics& g)
 {
     const int   cy    = getHeight() / 2;
@@ -661,7 +773,13 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
     if (altModeActive)
         setMouseCursor (juce::MouseCursor::IBeamCursor);
     else if (sliceDrawMode)
-        setMouseCursor (juce::MouseCursor::IBeamCursor);
+    {
+        // ADD mode v2: show pointer cursor near boundary diamonds, crosshair elsewhere
+        int nb = findNearestBoundaryPixel (e.x);
+        if (nb != hoveredBoundaryPos) { hoveredBoundaryPos = nb; repaint(); }
+        setMouseCursor (nb >= 0 ? juce::MouseCursor::PointingHandCursor
+                                : juce::MouseCursor::CrosshairCursor);
+    }
     else if (trimMode)
     {
         // Show resize cursor near trim markers
@@ -694,6 +812,7 @@ void WaveformView::mouseEnter (const juce::MouseEvent& e) { mouseMove (e); }
 void WaveformView::mouseExit (const juce::MouseEvent&)
 {
     if (hoveredEdge != HoveredEdge::None) { hoveredEdge = HoveredEdge::None; repaint(); }
+    if (hoveredBoundaryPos >= 0) { hoveredBoundaryPos = -1; repaint(); }
 }
 
 void WaveformView::modifierKeysChanged (const juce::ModifierKeys& mods)
@@ -774,33 +893,58 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     {
         if (sliceDrawMode)
         {
-            // Two-click ADD mode: first click sets START, second click sets END
-            if (addClickStart >= 0)
+            // ADD mode v2: right-click places a marker (fills the gap between adjacent boundaries)
+            if (e.mods.isRightButtonDown())
             {
-                // Second click: commit the slice
-                int endPos = samplePos;
-                if (sampleSnap != nullptr && processor.snapToZeroCrossing.load())
+                int pos = samplePos;
+                if (processor.snapToZeroCrossing.load())
+                    pos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, pos);
+
+                const int numFrames = sampleSnap->buffer.getNumSamples();
+                auto bounds = collectBoundaries();
+
+                // Find adjacent boundaries: largest ≤ pos (left) and smallest ≥ pos (right)
+                int leftB  = 0;
+                int rightB = numFrames;
+                for (int b : bounds)
                 {
-                    addClickStart = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, addClickStart);
-                    endPos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, endPos);
+                    if (b <= pos)               leftB  = b;
+                    if (b >= pos && b < rightB) rightB = b;
                 }
-                if (std::abs (endPos - addClickStart) >= 64)
+
+                if (rightB - leftB < kMinTrimRangeSamples)
                 {
-                    DysektProcessor::Command cmd;
-                    cmd.type      = DysektProcessor::CmdCreateSlice;
-                    cmd.intParam1 = std::min (addClickStart, endPos);
-                    cmd.intParam2 = std::max (addClickStart, endPos);
-                    processor.pushCommand (cmd);
+                    // Too small: flash nearest existing boundary
+                    int nearestB = -1, minDist = INT_MAX;
+                    for (int b : bounds)
+                    { int d = std::abs (b - pos); if (d < minDist) { minDist = d; nearestB = b; } }
+                    if (nearestB >= 0)
+                    {
+                        addModeFlashBoundary = nearestB;
+                        addModeFlashEndMs    = juce::Time::currentTimeMillis() + kFlashDurationMs;
+                        repaint();
+                    }
+                    return;
                 }
-                addClickStart = -1;
-                sliceDrawMode = false;
-                setMouseCursor (juce::MouseCursor::NormalCursor);
+
+                DysektProcessor::Command cmd;
+                cmd.type      = DysektProcessor::CmdCreateSlice;
+                cmd.intParam1 = leftB;
+                cmd.intParam2 = rightB;
+                processor.pushCommand (cmd);
                 return;
             }
-            // First click: record start position, wait for second click
-            addClickStart = samplePos;
-            drawStart = samplePos;
-            drawEnd   = samplePos;
+
+            // ADD mode v2: left-click near an existing boundary → delete it
+            int nearBound = findNearestBoundaryPixel (e.x);
+            if (nearBound >= 0)
+            {
+                deleteSlicesAtBoundary (nearBound);
+                hoveredBoundaryPos = -1;
+                return;
+            }
+
+            // Left-click on empty space in ADD mode: no-op (right-click is used for placement)
             return;
         }
         // altModeActive: original drag-to-draw behaviour
@@ -966,16 +1110,37 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     {
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
-        int newStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
-        dragPreviewStart = newStart;
+        const int numFrames = sampleSnap->buffer.getNumSamples();
+        if (processor.slicesLinked.load (std::memory_order_relaxed))
+        {
+            // LINK: preserve slice length — move both edges by the same delta
+            const int origLen = dragOrigEnd - dragOrigStart;
+            const int newStart = juce::jlimit (0, numFrames - origLen, samplePos);
+            dragPreviewStart = newStart;
+            dragPreviewEnd   = newStart + origLen;
+        }
+        else
+        {
+            dragPreviewStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
+        }
     }
     else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
     {
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
-        int newEnd = juce::jlimit (dragPreviewStart + 64,
-                                   (int) sampleSnap->buffer.getNumSamples(), samplePos);
-        dragPreviewEnd = newEnd;
+        const int numFrames = sampleSnap->buffer.getNumSamples();
+        if (processor.slicesLinked.load (std::memory_order_relaxed))
+        {
+            // LINK: preserve slice length — move both edges by the same delta
+            const int origLen = dragOrigEnd - dragOrigStart;
+            const int newEnd = juce::jlimit (origLen, numFrames, samplePos);
+            dragPreviewEnd   = newEnd;
+            dragPreviewStart = newEnd - origLen;
+        }
+        else
+        {
+            dragPreviewEnd = juce::jlimit (dragPreviewStart + 64, numFrames, samplePos);
+        }
     }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
     {
