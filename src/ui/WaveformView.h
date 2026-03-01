@@ -41,6 +41,9 @@ public:
     void setSoftWaveform (bool soft) { softWaveform = soft; repaint(); }
     bool isSoftWaveform() const noexcept { return softWaveform; }
 
+    // Optional override: if set, called instead of processor.loadFileAsync on file drop
+    std::function<void(const juce::File&)> onFileDropped;
+
     bool altModeActive = false;
     bool shiftPreviewActive = false;
     std::vector<int> transientPreviewPositions;

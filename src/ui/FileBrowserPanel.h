@@ -74,6 +74,10 @@ public:
     // Called after double-click load so editor can close the panel
     std::function<void()> onFileLoaded;
 
+    // Optional override: if set, the editor handles loading (e.g. for trim dialog routing).
+    // When set, the default processor.loadFileAsync() call is skipped.
+    std::function<void(const juce::File&)> onFileSelected;
+
 private:
     // FileBrowserListener
     void selectionChanged() override {}

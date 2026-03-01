@@ -9,6 +9,7 @@
 #include "ui/WaveformView.h"
 #include "ui/ScrollZoomBar.h"
 #include "ui/ActionPanel.h"
+#include "ui/TrimDialog.h"
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
@@ -44,6 +45,10 @@ private:
     void loadUserSettings();
     int  computeTotalHeight() const;
 
+    void showTrimDialog (const juce::File& file, double durationSeconds);
+    void showTrimMode();
+    void onTrimConfirmed (bool userClickedYes, bool rememberChoice);
+
     DysektProcessor& processor;
     float lastScale = 1.0f;
     bool scaleDirty = true;
@@ -57,6 +62,7 @@ private:
 
     bool browserOpen = false;
     bool softWave    = false;
+    bool pendingTrimMode = false;
 
     DysektLookAndFeel lnf;
     LogoBar         logoBar;

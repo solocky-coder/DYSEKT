@@ -1183,6 +1183,8 @@ void WaveformView::filesDropped (const juce::StringArray& files, int, int)
 
     if (ext == ".sf2" || ext == ".sfz")
         processor.loadSoundFontAsync (f);
+    else if (onFileDropped)
+        onFileDropped (f);
     else
         processor.loadFileAsync (f);
 }

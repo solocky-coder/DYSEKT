@@ -1611,6 +1611,9 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     // v19 fields
     stream.writeInt (trimInSample.load());
     stream.writeInt (trimOutSample.load());
+    stream.writeInt (trimPreference.load());
+    stream.writeInt (trimRegionStart.load());
+    stream.writeInt (trimRegionEnd.load());
 }
 
 void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -1730,13 +1733,22 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     // v19 fields
     if (version >= 19 && ! stream.isExhausted())
     {
-        trimInSample.store  (juce::jmax (0, stream.readInt()));
-        trimOutSample.store (juce::jmax (0, stream.readInt()));
+        trimInSample.store    (juce::jmax (0, stream.readInt()));
+        trimOutSample.store   (juce::jmax (0, stream.readInt()));
+        if (! stream.isExhausted())
+            trimPreference.store  (juce::jlimit (0, 2, stream.readInt()));
+        if (! stream.isExhausted())
+            trimRegionStart.store (juce::jmax (0, stream.readInt()));
+        if (! stream.isExhausted())
+            trimRegionEnd.store   (juce::jmax (0, stream.readInt()));
     }
     else
     {
-        trimInSample.store  (0);
-        trimOutSample.store (0);
+        trimInSample.store    (0);
+        trimOutSample.store   (0);
+        trimPreference.store  (0);
+        trimRegionStart.store (0);
+        trimRegionEnd.store   (0);
     }
 }
 

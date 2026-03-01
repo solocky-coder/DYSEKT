@@ -62,10 +62,55 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     // Auto-close browser when a file is loaded via double-click
     browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
 
+    // Route file double-clicks through trim dialog
+    browserPanel.onFileSelected = [this] (const juce::File& f)
+    {
+        juce::AudioFormatManager fmtMgr;
+        fmtMgr.registerBasicFormats();
+        double dur = 0.0;
+        if (auto* reader = fmtMgr.createReaderFor (f))
+        {
+            const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
+            dur = (double) reader->lengthInSamples / sr;
+            delete reader;
+        }
+        processor.zoom.store (1.0f);
+        processor.scroll.store (0.0f);
+        showTrimDialog (f, dur);
+    };
+
     // FIL / WA / CH now live in headerBar — wire their callbacks there
     headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
     headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
     headerBar.onChromaticToggle = [this] { toggleChromatic(); };
+    headerBar.onFileOpen        = [this] (const juce::File& f)
+    {
+        juce::AudioFormatManager fmtMgr;
+        fmtMgr.registerBasicFormats();
+        double dur = 0.0;
+        if (auto* reader = fmtMgr.createReaderFor (f))
+        {
+            const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
+            dur = (double) reader->lengthInSamples / sr;
+            delete reader;
+        }
+        showTrimDialog (f, dur);
+    };
+
+    // Route waveform file drops through trim dialog
+    waveformView.onFileDropped = [this] (const juce::File& f)
+    {
+        juce::AudioFormatManager fmtMgr;
+        fmtMgr.registerBasicFormats();
+        double dur = 0.0;
+        if (auto* reader = fmtMgr.createReaderFor (f))
+        {
+            const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
+            dur = (double) reader->lengthInSamples / sr;
+            delete reader;
+        }
+        showTrimDialog (f, dur);
+    };
 
     // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
     actionPanel.onBrowserToggle    = nullptr;
@@ -234,7 +279,18 @@ void DysektEditor::timerCallback()
     const bool rulerDragging      = scrollZoomBar.isDraggingNow();
 
     const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
-    if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
+    if (snapshotVersion != lastUiSnapshotVersion)
+    {
+        lastUiSnapshotVersion = snapshotVersion;
+        uiChanged = true;
+
+        // Activate trim mode once the new sample is available
+        if (pendingTrimMode && processor.sampleData.getSnapshot() != nullptr)
+        {
+            pendingTrimMode = false;
+            waveformView.setTrimMode (true);
+        }
+    }
 
     const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
     if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
@@ -402,5 +458,74 @@ void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
     if (ext == ".sf2" || ext == ".sfz")
         processor.loadSoundFontAsync (f);
     else
-        processor.loadFileAsync (f);
+    {
+        // Quick metadata-only read to get duration
+        juce::AudioFormatManager fmtMgr;
+        fmtMgr.registerBasicFormats();
+        double dur = 0.0;
+        if (auto* reader = fmtMgr.createReaderFor (f))
+        {
+            const double sr = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
+            dur = (double) reader->lengthInSamples / sr;
+            delete reader;
+        }
+        showTrimDialog (f, dur);
+    }
+}
+
+// ── Trim dialog helpers ────────────────────────────────────────────────────────
+void DysektEditor::showTrimDialog (const juce::File& file, double durationSeconds)
+{
+    const auto ext = file.getFileExtension().toLowerCase();
+    if (ext == ".sf2" || ext == ".sfz")
+    {
+        processor.loadSoundFontAsync (file);
+        return;
+    }
+
+    const int pref = processor.trimPreference.load();
+    if (pref == 2 || durationSeconds < 5.0)
+    {
+        // "never" preference or short file — load immediately
+        processor.loadFileAsync (file);
+        return;
+    }
+    if (pref == 1)
+    {
+        // "always trim" preference — load then activate trim mode
+        processor.loadFileAsync (file);
+        showTrimMode();
+        return;
+    }
+
+    // Ask the user
+    TrimDialog::show (this, file, durationSeconds,
+        [this, file] (const TrimDialog::Result& r)
+        {
+            if (r.rememberChoice)
+                processor.trimPreference.store (r.userClickedYes ? 1 : 2);
+
+            processor.loadFileAsync (file);
+            if (r.userClickedYes)
+                showTrimMode();
+        });
+}
+
+void DysektEditor::showTrimMode()
+{
+    pendingTrimMode = true;
+}
+
+void DysektEditor::onTrimConfirmed (bool userClickedYes, bool rememberChoice)
+{
+    if (rememberChoice)
+        processor.trimPreference.store (userClickedYes ? 1 : 2);
+
+    if (userClickedYes)
+    {
+        processor.trimRegionStart.store (waveformView.getTrimIn());
+        processor.trimRegionEnd.store   (waveformView.getTrimOut());
+    }
+
+    showTrimMode();
 }

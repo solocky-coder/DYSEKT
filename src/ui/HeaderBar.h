@@ -19,6 +19,10 @@ public:
     std::function<void()> onWaveToggle;
     std::function<void()> onChromaticToggle;
 
+    // Optional override: if set, called instead of the default processor.loadFileAsync()
+    // Allows the Editor to route through trim dialog.
+    std::function<void(const juce::File&)> onFileOpen;
+
     // State sync — called by PluginEditor so buttons stay in sync
     void setBrowserActive   (bool v);
     void setWaveActive      (bool v);
