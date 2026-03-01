@@ -1,27 +1,36 @@
 #pragma once
+
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <functional>
 
-class DysektProcessor;
-class WaveformView;
-
-/** Floating panel that appears over the waveform when trim mode is active.
-    Shows APPLY TRIM / RESET TRIM / CANCEL controls and the current trim range. */
-class TrimDialog : public juce::Component
+class TrimDialog : public juce::DialogWindow
 {
 public:
-    TrimDialog (DysektProcessor& p, WaveformView& wv);
+    struct Result
+    {
+        bool userClickedYes = false;
+        bool rememberChoice = false;
+    };
+
+    explicit TrimDialog(const juce::File& file, double durationSeconds);
     ~TrimDialog() override;
 
-    void paint   (juce::Graphics& g) override;
-    void resized () override;
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+
+    static void show(juce::Component* parent, const juce::File& file, double durationSeconds,
+                     std::function<void(const Result&)> onComplete);
 
 private:
-    DysektProcessor& processor;
-    WaveformView&    waveformView;
+    void onYesClicked();
+    void onNoClicked();
 
-    juce::TextButton applyBtn  { "APPLY TRIM"  };
-    juce::TextButton resetBtn  { "RESET TRIM"  };
-    juce::TextButton cancelBtn { "CANCEL"      };
+    juce::File audioFile;
+    double duration = 0.0;
+    std::unique_ptr<juce::TextButton> yesBtn, noBtn;
+    std::unique_ptr<juce::ToggleButton> rememberBtn;
+    std::unique_ptr<juce::Label> messageLabel;
+    std::function<void(const Result&)> callback;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrimDialog)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TrimDialog)
 };
