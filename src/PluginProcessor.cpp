@@ -1455,6 +1455,21 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
+    // Capture main bus output into oscilloscope ring buffer
+    if (busL[0] != nullptr)
+    {
+        int wh = oscRingWriteHead.load (std::memory_order_relaxed);
+        const int numSamples = buffer.getNumSamples();
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float s = busL[0][i];
+            if (busR[0] != nullptr) s = (s + busR[0][i]) * 0.5f;
+            oscRingBuffer[(size_t) wh] = s;
+            wh = (wh + 1) & (kOscRingBufferSize - 1);
+        }
+        oscRingWriteHead.store (wh, std::memory_order_release);
+    }
+
     // Pass through MIDI
     // (already in the buffer, no action needed)
 }
