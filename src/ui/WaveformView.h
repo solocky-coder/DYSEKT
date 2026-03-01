@@ -35,6 +35,11 @@ public:
     void setSoftWaveform (bool soft) { softWaveform = soft; repaint(); }
     bool isSoftWaveform() const noexcept { return softWaveform; }
 
+    void enterTrimMode (int start, int end);
+    void exitTrimMode();
+    void getTrimBounds (int& outStart, int& outEnd) const;
+    bool isInTrimMode() const { return trimMode; }
+
     bool altModeActive = false;
     bool shiftPreviewActive = false;
     std::vector<int> transientPreviewPositions;
@@ -66,6 +71,8 @@ private:
     void paintDrawSlicePreview (juce::Graphics& g);
     void paintLazyChopOverlay (juce::Graphics& g);
     void paintTransientMarkers (juce::Graphics& g);
+    void drawTrimMode (juce::Graphics& g, const SampleData::SnapshotPtr& sampleSnap);
+    void handleTrimButton (const juce::String& buttonName);
 
     // Aggregates all cache-invalidation inputs; rebuild is skipped when unchanged.
     struct CacheKey
@@ -82,6 +89,13 @@ private:
     bool softWaveform  = false;   // TAL-style gradient+outline rendering
     mutable ViewState cachedPaintViewState;   // valid only between paint() start and end
     mutable bool paintViewStateActive = false; // true only during paint(); guards cachedPaintViewState
+
+    // Trim mode state
+    bool trimMode = false;
+    int trimStart = 0;
+    int trimEnd = 0;
+    int trimStartMarkerDragStart = -1;
+    int trimEndMarkerDragStart = -1;
 
     DragMode dragMode = None;
     int dragSliceIdx = -1;

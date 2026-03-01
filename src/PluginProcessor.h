@@ -177,6 +177,11 @@ public:
     // Link mode — moving a slice end automatically moves the next slice's start
     std::atomic<bool> slicesLinked { false };
 
+    // Trim preference: 0=ask every time, 1=always trim, 2=never trim
+    std::atomic<int> trimPreference { 0 };
+    std::atomic<int> trimRegionStart { 0 };
+    std::atomic<int> trimRegionEnd { 0 };
+
     // Undo/redo
     UndoManager undoMgr;
 

@@ -1,6 +1,7 @@
 #include "FileBrowserPanel.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include "../PluginEditor.h"
 
 FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     : processor (p),
@@ -157,7 +158,13 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
         return;
     }
 
-    processor.loadFileAsync (f);
+    if (auto* editor = dynamic_cast<DysektEditor*> (getParentComponent() != nullptr
+                                                     ? getParentComponent()->getParentComponent()
+                                                     : nullptr))
+        editor->showTrimDialog (f);
+    else
+        processor.loadFileAsync (f);
+
     if (onFileLoaded) onFileLoaded();
 }
 

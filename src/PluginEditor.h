@@ -9,6 +9,7 @@
 #include "ui/WaveformView.h"
 #include "ui/ScrollZoomBar.h"
 #include "ui/ActionPanel.h"
+#include "ui/TrimDialog.h"
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
@@ -37,6 +38,10 @@ public:
     void toggleSoftWave();
     void toggleChromatic();
 
+    void showTrimDialog(const juce::File& file);
+    void showTrimMode(const juce::File& file);
+    double getFileDurationSeconds(const juce::File& file);
+
 private:
     void timerCallback() override;
     void ensureDefaultThemes();
@@ -57,6 +62,7 @@ private:
 
     bool browserOpen = false;
     bool softWave    = false;
+    bool pendingTrimMode = false;
 
     DysektLookAndFeel lnf;
     LogoBar         logoBar;

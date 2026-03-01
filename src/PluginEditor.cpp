@@ -234,7 +234,18 @@ void DysektEditor::timerCallback()
     const bool rulerDragging      = scrollZoomBar.isDraggingNow();
 
     const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
-    if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
+    if (snapshotVersion != lastUiSnapshotVersion)
+    {
+        lastUiSnapshotVersion = snapshotVersion;
+        uiChanged = true;
+
+        // If a trim mode entry is pending, enter it now that the sample has loaded
+        if (pendingTrimMode)
+        {
+            pendingTrimMode = false;
+            waveformView.enterTrimMode (0, processor.sampleData.getNumFrames());
+        }
+    }
 
     const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
     if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
@@ -402,5 +413,74 @@ void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
     if (ext == ".sf2" || ext == ".sfz")
         processor.loadSoundFontAsync (f);
     else
-        processor.loadFileAsync (f);
+        showTrimDialog (f);
+}
+
+void DysektEditor::showTrimDialog (const juce::File& file)
+{
+    auto ext = file.getFileExtension().toLowerCase();
+
+    if (ext == ".sf2" || ext == ".sfz")
+    {
+        processor.loadFileAsync (file);
+        return;
+    }
+
+    if (processor.trimPreference.load (std::memory_order_relaxed) == 2)
+    {
+        processor.loadFileAsync (file);
+        return;
+    }
+
+    double duration = getFileDurationSeconds (file);
+
+    // Skip trim dialog for short samples — trimming is less useful below this threshold
+    static constexpr double kTrimDialogDurationThresholdSec = 5.0;
+    if (duration < kTrimDialogDurationThresholdSec)
+    {
+        processor.loadFileAsync (file);
+        return;
+    }
+
+    if (processor.trimPreference.load (std::memory_order_relaxed) == 1)
+    {
+        showTrimMode (file);
+        return;
+    }
+
+    TrimDialog::show (this, file, duration,
+        [this, file] (const TrimDialog::Result& result)
+        {
+            if (result.rememberChoice)
+            {
+                processor.trimPreference.store (
+                    result.userClickedYes ? 1 : 2,
+                    std::memory_order_relaxed);
+            }
+
+            if (result.userClickedYes)
+                showTrimMode (file);
+            else
+                processor.loadFileAsync (file);
+        });
+}
+
+void DysektEditor::showTrimMode (const juce::File& file)
+{
+    pendingTrimMode = true;
+    processor.loadFileAsync (file);
+}
+
+double DysektEditor::getFileDurationSeconds (const juce::File& file)
+{
+    juce::AudioFormatManager formatManager;
+    formatManager.registerBasicFormats();
+
+    if (auto* reader = formatManager.createReaderFor (file))
+    {
+        double duration = (double) reader->lengthInSamples / reader->sampleRate;
+        delete reader;
+        return duration;
+    }
+    return 0.0;
 }

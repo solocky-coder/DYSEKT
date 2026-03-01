@@ -1501,7 +1501,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (18);
+    stream.writeInt (19);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -1574,6 +1574,9 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // v18 fields
     stream.writeBool (slicesLinked.load());
+
+    // v19: trim preference
+    stream.writeInt (trimPreference.load (std::memory_order_relaxed));
 }
 
 void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -1581,7 +1584,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version != 16 && version != 17 && version != 18)
+    if (version < 16 || version > 19)
         return;
 
     // APVTS state
@@ -1689,6 +1692,12 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         slicesLinked.store (stream.readBool());
     else if (version < 18)
         slicesLinked.store (false);
+
+    // v19: trim preference
+    if (version >= 19 && ! stream.isExhausted())
+        trimPreference.store (stream.readInt(), std::memory_order_relaxed);
+    else
+        trimPreference.store (0, std::memory_order_relaxed);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

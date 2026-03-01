@@ -132,6 +132,8 @@ void WaveformView::paint (juce::Graphics& g)
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
         drawPlaybackCursors (g);
+        if (trimMode)
+            drawTrimMode (g, sampleSnap);
         paintViewStateActive = false;
     }
     else
@@ -641,6 +643,44 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     if (sampleSnap == nullptr)
         return;
 
+    // Trim mode: handle marker dragging and button clicks
+    if (trimMode)
+    {
+        const int trimMarkerTolerance = 20;
+
+        if (std::abs (sampleToPixel (trimStart) - e.x) < trimMarkerTolerance)
+        {
+            trimStartMarkerDragStart = trimStart;
+            return;
+        }
+
+        if (std::abs (sampleToPixel (trimEnd) - e.x) < trimMarkerTolerance)
+        {
+            trimEndMarkerDragStart = trimEnd;
+            return;
+        }
+
+        // Check button clicks
+        auto bounds     = getLocalBounds();
+        auto buttonArea = bounds.removeFromBottom (40).reduced (10);
+        const int btnWidth = 100;
+
+        auto applyArea  = buttonArea.removeFromLeft (btnWidth);
+        buttonArea.removeFromLeft (10);
+        auto resetArea  = buttonArea.removeFromLeft (btnWidth);
+        buttonArea.removeFromLeft (10);
+        auto cancelArea = buttonArea.removeFromLeft (btnWidth);
+
+        if (applyArea.contains (e.x, e.y))
+            handleTrimButton ("APPLY");
+        else if (resetArea.contains (e.x, e.y))
+            handleTrimButton ("RESET");
+        else if (cancelArea.contains (e.x, e.y))
+            handleTrimButton ("CANCEL");
+
+        return;
+    }
+
     // Middle-mouse drag: scroll+zoom (like ScrollZoomBar)
     if (e.mods.isMiddleButtonDown())
     {
@@ -804,6 +844,25 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     if (sampleSnap == nullptr)
         return;
 
+    // Trim marker dragging
+    if (trimMode && trimStartMarkerDragStart >= 0)
+    {
+        static constexpr int kMinTrimRegionSamples = 64;
+        int samplePos = pixelToSample (e.x);
+        trimStart = juce::jlimit (0, trimEnd - kMinTrimRegionSamples, samplePos);
+        repaint();
+        return;
+    }
+
+    if (trimMode && trimEndMarkerDragStart >= 0)
+    {
+        static constexpr int kMinTrimRegionSamples = 64;
+        int samplePos = pixelToSample (e.x);
+        trimEnd = juce::jlimit (trimStart + kMinTrimRegionSamples, (int) sampleSnap->buffer.getNumSamples(), samplePos);
+        repaint();
+        return;
+    }
+
     // Middle-mouse drag: scroll+zoom
     if (midDragging)
     {
@@ -891,6 +950,10 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
 void WaveformView::mouseUp (const juce::MouseEvent& e)
 {
     syncAltStateFromMods (e.mods);
+
+    // Clear trim marker drag state
+    trimStartMarkerDragStart = -1;
+    trimEndMarkerDragStart   = -1;
 
     auto sampleSnap = processor.sampleData.getSnapshot();
 
@@ -1058,4 +1121,111 @@ void WaveformView::filesDropped (const juce::StringArray& files, int, int)
         processor.loadSoundFontAsync (f);
     else
         processor.loadFileAsync (f);
+}
+
+void WaveformView::enterTrimMode (int start, int end)
+{
+    static constexpr int kMinTrimRegionSamples = 64;
+    trimMode = true;
+    trimStart = juce::jlimit (0, (int) processor.sampleData.getNumFrames(), start);
+    trimEnd   = juce::jlimit (trimStart + kMinTrimRegionSamples, (int) processor.sampleData.getNumFrames(), end);
+    repaint();
+}
+
+void WaveformView::exitTrimMode()
+{
+    trimMode = false;
+    trimStartMarkerDragStart = -1;
+    trimEndMarkerDragStart   = -1;
+    repaint();
+}
+
+void WaveformView::getTrimBounds (int& outStart, int& outEnd) const
+{
+    outStart = trimStart;
+    outEnd   = trimEnd;
+}
+
+void WaveformView::drawTrimMode (juce::Graphics& g, const SampleData::SnapshotPtr& sampleSnap)
+{
+    auto bounds    = getLocalBounds();
+    int  width     = bounds.getWidth();
+    int  height    = bounds.getHeight();
+    int  numFrames = sampleSnap->buffer.getNumSamples();
+
+    if (numFrames == 0) return;
+
+    float trimStartX = (float) sampleToPixel (trimStart);
+    float trimEndX   = (float) sampleToPixel (trimEnd);
+
+    // Gray out regions outside trim bounds
+    g.setColour (juce::Colour (0xFF000000).withAlpha (0.5f));
+    g.fillRect (0.0f, 0.0f, trimStartX, (float) height);
+    g.fillRect (trimEndX, 0.0f, (float) width - trimEndX, (float) height);
+
+    // Highlight trim region
+    g.setColour (juce::Colour (0xFF888888).withAlpha (0.3f));
+    g.fillRect (trimStartX, 0.0f, trimEndX - trimStartX, (float) height);
+
+    // Draw trim markers
+    g.setColour (juce::Colours::yellow);
+    g.drawVerticalLine ((int) trimStartX, 0.0f, (float) height);
+    g.drawVerticalLine ((int) trimEndX,   0.0f, (float) height);
+
+    // Info text
+    double sr         = processor.getSampleRate();
+    double startSec   = (sr > 0.0) ? trimStart / sr : 0.0;
+    double endSec     = (sr > 0.0) ? trimEnd   / sr : 0.0;
+    double trimSec    = endSec - startSec;
+    juce::String infoText = juce::String::formatted ("Trim: %.1fs - %.1fs (%.1fs kept)",
+                                                      startSec, endSec, trimSec);
+    g.setColour (juce::Colours::white);
+    g.setFont (12.0f);
+    g.drawText (infoText, bounds.reduced (10).removeFromTop (20),
+                juce::Justification::topLeft, true);
+
+    // Button areas
+    auto buttonArea = bounds.removeFromBottom (40).reduced (10);
+    const int btnWidth = 100;
+
+    auto applyArea  = buttonArea.removeFromLeft (btnWidth);
+    buttonArea.removeFromLeft (10);
+    auto resetArea  = buttonArea.removeFromLeft (btnWidth);
+    buttonArea.removeFromLeft (10);
+    auto cancelArea = buttonArea.removeFromLeft (btnWidth);
+
+    g.setColour (juce::Colours::green.withAlpha (0.7f));
+    g.fillRect (applyArea);
+    g.setColour (juce::Colours::white);
+    g.drawText ("APPLY", applyArea, juce::Justification::centred);
+
+    g.setColour (juce::Colours::orange.withAlpha (0.7f));
+    g.fillRect (resetArea);
+    g.setColour (juce::Colours::white);
+    g.drawText ("RESET", resetArea, juce::Justification::centred);
+
+    g.setColour (juce::Colours::red.withAlpha (0.7f));
+    g.fillRect (cancelArea);
+    g.setColour (juce::Colours::white);
+    g.drawText ("CANCEL", cancelArea, juce::Justification::centred);
+}
+
+void WaveformView::handleTrimButton (const juce::String& buttonName)
+{
+    if (buttonName == "APPLY")
+    {
+        processor.trimRegionStart.store (trimStart, std::memory_order_release);
+        processor.trimRegionEnd.store   (trimEnd,   std::memory_order_release);
+        exitTrimMode();
+    }
+    else if (buttonName == "RESET")
+    {
+        trimStart = 0;
+        trimEnd   = (int) processor.sampleData.getNumFrames();
+        repaint();
+    }
+    else if (buttonName == "CANCEL")
+    {
+        exitTrimMode();
+    }
 }
