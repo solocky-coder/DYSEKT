@@ -28,7 +28,7 @@ HeaderBar::HeaderBar (DysektProcessor& p) : processor (p)
     for (auto* btn : { &filBtn, &waBtn, &chBtn })
     {
         btn->setAlwaysOnTop (true);
-        btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
+        btn->setColour (juce::TextButton::buttonColourId,  juce::Colours::transparentWhite);
         btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);
         btn->setColour (juce::TextButton::textColourOffId, getTheme().accent);
     }
@@ -60,21 +60,21 @@ HeaderBar::HeaderBar (DysektProcessor& p) : processor (p)
     filBtn.setTooltip ("Toggle File Browser");
     filBtn.onClick = [this] {
         browserActive = ! browserActive;
-        updateAccentBtn (filBtn, browserActive);
+        updateAccentBtn (filBtn);
         if (onBrowserToggle) onBrowserToggle();
     };
 
     waBtn.setTooltip ("Toggle Soft Waveform");
     waBtn.onClick = [this] {
         waveActive = ! waveActive;
-        updateAccentBtn (waBtn, waveActive);
+        updateAccentBtn (waBtn);
         if (onWaveToggle) onWaveToggle();
     };
 
     chBtn.setTooltip ("Chromatic Mode — play selected slice across full keyboard");
     chBtn.onClick = [this] {
         chromaticActive = ! chromaticActive;
-        updateAccentBtn (chBtn, chromaticActive);
+        updateAccentBtn (chBtn);
         if (onChromaticToggle) onChromaticToggle();
     };
 }
@@ -117,25 +117,17 @@ void HeaderBar::resized()
     // right boundary for text content is now filBtn.getX()
 }
 
-void HeaderBar::updateAccentBtn (juce::TextButton& btn, bool active)
+void HeaderBar::updateAccentBtn (juce::TextButton& btn)
 {
-    if (active)
-    {
-        btn.setColour (juce::TextButton::buttonColourId,  getTheme().accent.withAlpha (0.2f));
-        btn.setColour (juce::TextButton::textColourOnId,  getTheme().accent);
-        btn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
-    }
-    else
-    {
-        btn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
-        btn.setColour (juce::TextButton::textColourOnId,  getTheme().accent);
-        btn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
-    }
+    // Button background is transparent; active state is drawn in drawIcon
+    btn.setColour (juce::TextButton::buttonColourId,  juce::Colours::transparentWhite);
+    btn.setColour (juce::TextButton::textColourOnId,  getTheme().accent);
+    btn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
 }
 
-void HeaderBar::setBrowserActive   (bool v) { browserActive    = v; updateAccentBtn (filBtn, v); }
-void HeaderBar::setWaveActive      (bool v) { waveActive       = v; updateAccentBtn (waBtn,  v); }
-void HeaderBar::setChromaticActive (bool v) { chromaticActive  = v; updateAccentBtn (chBtn,  v); }
+void HeaderBar::setBrowserActive   (bool v) { browserActive    = v; updateAccentBtn (filBtn); }
+void HeaderBar::setWaveActive      (bool v) { waveActive       = v; updateAccentBtn (waBtn);  }
+void HeaderBar::setChromaticActive (bool v) { chromaticActive  = v; updateAccentBtn (chBtn);  }
 
 void HeaderBar::adjustScale (float delta)
 {
@@ -157,9 +149,9 @@ void HeaderBar::paint (juce::Graphics& g)
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
     // Refresh icon button states (drawn as custom icons, but still use button background)
-    updateAccentBtn (filBtn, browserActive);
-    updateAccentBtn (waBtn,  waveActive);
-    updateAccentBtn (chBtn,  chromaticActive);
+    updateAccentBtn (filBtn);
+    updateAccentBtn (waBtn);
+    updateAccentBtn (chBtn);
     // Hide text labels — icons drawn manually below
     for (auto* btn : { &filBtn, &waBtn, &chBtn })
         btn->setButtonText ("");
@@ -175,9 +167,19 @@ void HeaderBar::paint (juce::Graphics& g)
     // ── Draw icon buttons ─────────────────────────────────────────────────
     auto drawIcon = [&] (juce::Component& btn, bool active, int type)
     {
-        auto b = btn.getBounds();
+        auto b = btn.getBounds().toFloat();
         float cx = b.getCentreX(), bcy = b.getCentreY();
-        auto col = active ? accent : fg.withAlpha (0.45f);
+
+        // Draw active-state background and border frame
+        if (active)
+        {
+            g.setColour (accent.withAlpha (0.20f));
+            g.fillRoundedRectangle (b.reduced (2.0f), 4.0f);
+            g.setColour (accent);
+            g.drawRoundedRectangle (b.reduced (1.5f), 4.0f, 1.5f);
+        }
+
+        auto col = active ? accent : fg.withAlpha (0.65f);
         g.setColour (col);
         if (type == 0) // Folder icon (FIL)
         {
