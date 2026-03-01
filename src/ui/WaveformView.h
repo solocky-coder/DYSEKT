@@ -74,6 +74,13 @@ private:
     void paintLazyChopOverlay (juce::Graphics& g);
     void paintTransientMarkers (juce::Graphics& g);
     void paintTrimMarkers (juce::Graphics& g);
+    void paintAddModeMarkers (juce::Graphics& g);
+
+    // ADD mode v2 helpers
+    std::vector<int> collectBoundaries() const;
+    int  findNearestBoundary (int x) const;   ///< pixel x; returns sample pos or -1
+    void deleteSlicesAtBoundary (int samplePos);
+    void flashNearestMarker (int x);          ///< trigger orange flash at pixel x
 
     // Aggregates all cache-invalidation inputs; rebuild is skipped when unchanged.
     struct CacheKey
@@ -108,6 +115,12 @@ private:
     int dragOrigEnd = 0;      // slice end at the moment drag began (for overlap clamping)
     int ghostStart = 0;    // for DuplicateSlice: ghost overlay start sample
     int ghostEnd   = 0;    // for DuplicateSlice: ghost overlay end sample
+
+    // ADD mode v2 state
+    int draggedMarkerIndex = -1;    ///< index into collectBoundaries() while dragging (unused — ADD mode doesn't drag)
+    int flashBoundaryPos   = -1;    ///< sample pos of boundary to flash orange (-1 = none)
+    juce::Time flashStartTime;      ///< when the flash began (for 300 ms timer)
+    int lastMouseX         = -1;    ///< most recent mouse x position for hover highlighting
 
     // Middle-mouse drag (scroll+zoom like ScrollZoomBar)
     bool midDragging = false;

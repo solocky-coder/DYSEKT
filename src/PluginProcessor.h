@@ -179,8 +179,14 @@ public:
     std::atomic<bool> slicesLinked { false };
 
     // Trim preference — in/out markers set by the user (0 = no trim, updated after apply)
-    std::atomic<int> trimInSample  { 0 };
-    std::atomic<int> trimOutSample { 0 };
+    std::atomic<int> trimInSample   { 0 };
+    std::atomic<int> trimOutSample  { 0 };
+
+    // Trim dialog preference: 0 = ask every time, 1 = always trim, 2 = never trim
+    std::atomic<int> trimPreference { 0 };
+
+    int getTrimRegionStart() const noexcept { return trimInSample.load (std::memory_order_relaxed); }
+    int getTrimRegionEnd()   const noexcept { return trimOutSample.load (std::memory_order_relaxed); }
 
     // Undo/redo
     UndoManager undoMgr;

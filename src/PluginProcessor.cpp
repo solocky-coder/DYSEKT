@@ -767,7 +767,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 end = juce::jlimit (start + 1, juce::jmax (start + 1, maxLen), end);
                 if (end - start < 64)
                     end = juce::jmin (maxLen, start + 64);
-                int oldEnd = s.endSample;  // save before updating
+                int oldStart = s.startSample; // save before updating
+                int oldEnd = s.endSample;     // save before updating
                 s.startSample = start;
                 s.endSample = end;
 
@@ -791,6 +792,29 @@ void DysektProcessor::handleCommand (const Command& cmd)
                         // Only push if the neighbour would remain >= 64 samples wide
                         if (ns.endSample - end >= 64)
                             ns.startSample = end;
+                    }
+                }
+
+                // Link mode: if start moved, push the adjacent slice's end
+                if (slicesLinked.load (std::memory_order_relaxed) && start != oldStart)
+                {
+                    // Find the slice whose endSample was closest to oldStart
+                    int bestNi = -1, bestDist = 256;
+                    const int numSl = sliceManager.getNumSlices();
+                    for (int ni = 0; ni < numSl; ++ni)
+                    {
+                        if (ni == idx) continue;
+                        auto& ns = sliceManager.getSlice (ni);
+                        if (! ns.active) continue;
+                        int dist = std::abs (ns.endSample - oldStart);
+                        if (dist < bestDist) { bestDist = dist; bestNi = ni; }
+                    }
+                    if (bestNi >= 0)
+                    {
+                        auto& ns = sliceManager.getSlice (bestNi);
+                        // Only pull if the neighbour would remain >= 64 samples wide
+                        if (start - ns.startSample >= 64)
+                            ns.endSample = start;
                     }
                 }
 
@@ -1408,11 +1432,27 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
             if ((startChanged || endChanged) && newStart < newEnd)
             {
+                int linkedStart = newStart;
+                int linkedEnd   = newEnd;
+
+                // LINK mode: if only start changed, apply delta to end too (preserves slice length)
+                if (slicesLinked.load (std::memory_order_relaxed) && startChanged && ! endChanged)
+                {
+                    int delta = newStart - sl.startSample;
+                    linkedEnd = juce::jlimit (linkedStart + 64, total, sl.endSample + delta);
+                }
+                // LINK mode: if only end changed, apply delta to start too (preserves slice length)
+                else if (slicesLinked.load (std::memory_order_relaxed) && endChanged && ! startChanged)
+                {
+                    int delta = newEnd - sl.endSample;
+                    linkedStart = juce::jlimit (0, linkedEnd - 64, sl.startSample + delta);
+                }
+
                 Command cmd;
                 cmd.type         = CmdSetSliceBounds;
                 cmd.intParam1    = sel;
-                cmd.intParam2    = newStart;
-                cmd.positions[0] = newEnd;
+                cmd.intParam2    = linkedStart;
+                cmd.positions[0] = linkedEnd;
                 cmd.numPositions = 1;
                 pushCommand (cmd);
             }
@@ -1611,6 +1651,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     // v19 fields
     stream.writeInt (trimInSample.load());
     stream.writeInt (trimOutSample.load());
+    stream.writeInt (trimPreference.load());
 }
 
 void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -1732,11 +1773,13 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     {
         trimInSample.store  (juce::jmax (0, stream.readInt()));
         trimOutSample.store (juce::jmax (0, stream.readInt()));
+        trimPreference.store (stream.isExhausted() ? 0 : juce::jlimit (0, 2, stream.readInt()));
     }
     else
     {
         trimInSample.store  (0);
         trimOutSample.store (0);
+        trimPreference.store (0);
     }
 }
 

@@ -19,6 +19,9 @@ public:
     std::function<void()> onWaveToggle;
     std::function<void()> onChromaticToggle;
 
+    // Called when user selects a file via the open dialog; overrides direct loadFileAsync if set
+    std::function<void(const juce::File&)> onFileSelected;
+
     // State sync — called by PluginEditor so buttons stay in sync
     void setBrowserActive   (bool v);
     void setWaveActive      (bool v);

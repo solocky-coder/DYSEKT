@@ -9,6 +9,7 @@
 #include "ui/WaveformView.h"
 #include "ui/ScrollZoomBar.h"
 #include "ui/ActionPanel.h"
+#include "ui/TrimDialog.h"
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
@@ -37,12 +38,23 @@ public:
     void toggleSoftWave();
     void toggleChromatic();
 
+    /** Show the trim-confirmation dialog for a newly dropped/opened audio file.
+        Skips the dialog for soundfonts, very short samples, or when preference
+        is already set to "always" or "never". */
+    void showTrimDialog (const juce::File& file);
+
+    /** Called by TrimConfirmDialog when the user clicks YES or NO. */
+    void onTrimConfirmed (bool trimRequested, bool rememberChoice);
+
 private:
     void timerCallback() override;
     void ensureDefaultThemes();
     void saveUserSettings (float scale, const juce::String& themeName);
     void loadUserSettings();
     int  computeTotalHeight() const;
+
+    /** Actually load the file (called after trim dialog is resolved). */
+    void loadFile (const juce::File& file);
 
     DysektProcessor& processor;
     float lastScale = 1.0f;
@@ -58,6 +70,9 @@ private:
     bool browserOpen = false;
     bool softWave    = false;
 
+    /** File waiting for trim confirmation — cleared once decision is made. */
+    juce::File pendingTrimFile;
+
     DysektLookAndFeel lnf;
     LogoBar         logoBar;
     HeaderBar       headerBar;
@@ -69,6 +84,9 @@ private:
 
     FileBrowserPanel browserPanel;
     OscilloscopeView oscilloscopeView;
+
+    /** Trim confirmation overlay — shown on top of the waveform view. */
+    std::unique_ptr<TrimDialog> trimConfirmDialog;
 
     juce::TooltipWindow tooltipWindow { this, 500 };
 

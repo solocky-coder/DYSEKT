@@ -74,6 +74,9 @@ public:
     // Called after double-click load so editor can close the panel
     std::function<void()> onFileLoaded;
 
+    // Called when a file is selected (by double-click); overrides direct loadFileAsync if set
+    std::function<void(const juce::File&)> onFileSelected;
+
 private:
     // FileBrowserListener
     void selectionChanged() override {}

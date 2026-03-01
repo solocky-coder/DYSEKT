@@ -60,12 +60,19 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     sliceLane.setWaveformView (&waveformView);
 
     // Auto-close browser when a file is loaded via double-click
-    browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
+    browserPanel.onFileLoaded  = [this] { if (browserOpen) toggleBrowserPanel(); };
+    browserPanel.onFileSelected = [this] (const juce::File& f)
+    {
+        processor.zoom.store (1.0f);
+        processor.scroll.store (0.0f);
+        showTrimDialog (f);
+    };
 
     // FIL / WA / CH now live in headerBar — wire their callbacks there
     headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
     headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
     headerBar.onChromaticToggle = [this] { toggleChromatic(); };
+    headerBar.onFileSelected    = [this] (const juce::File& f) { showTrimDialog (f); };
 
     // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
     actionPanel.onBrowserToggle    = nullptr;
@@ -402,5 +409,77 @@ void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
     if (ext == ".sf2" || ext == ".sfz")
         processor.loadSoundFontAsync (f);
     else
-        processor.loadFileAsync (f);
+        showTrimDialog (f);
+}
+
+void DysektEditor::loadFile (const juce::File& file)
+{
+    processor.loadFileAsync (file);
+}
+
+void DysektEditor::showTrimDialog (const juce::File& file)
+{
+    // Skip soundfonts — they have their own loader
+    auto ext = file.getFileExtension().toLowerCase();
+    if (ext == ".sf2" || ext == ".sfz")
+    {
+        processor.loadSoundFontAsync (file);
+        return;
+    }
+
+    // Respect saved preference: 1 = always ask for trim mode, 2 = never, 0 = check duration
+    const int pref = processor.trimPreference.load();
+    if (pref == 2)
+    {
+        // "never trim" — load immediately
+        loadFile (file);
+        return;
+    }
+
+    // Skip the dialog for very short files (< 5 s at assumed 44100 Hz)
+    // We use a conservative estimate without actually decoding the whole file
+    const int64_t approxSamples = static_cast<int64_t> (file.getSize()) / 2; // rough lower bound
+    const bool likelyLong = (approxSamples > 44100 * 5);
+
+    if (pref == 0 && ! likelyLong)
+    {
+        // Short file — load immediately without dialog
+        loadFile (file);
+        return;
+    }
+
+    // Show the trim confirmation dialog
+    pendingTrimFile = file;
+
+    if (trimConfirmDialog != nullptr)
+    {
+        if (auto* parent = trimConfirmDialog->getParentComponent())
+            parent->removeChildComponent (trimConfirmDialog.get());
+        trimConfirmDialog.reset();
+    }
+
+    trimConfirmDialog = std::make_unique<TrimDialog> (processor, waveformView);
+    auto wfBounds = waveformView.getBoundsInParent();
+    trimConfirmDialog->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34,
+                                   wfBounds.getWidth(), 34);
+    addAndMakeVisible (*trimConfirmDialog);
+
+    // Load file in background while dialog is visible
+    loadFile (file);
+}
+
+void DysektEditor::onTrimConfirmed (bool trimRequested, bool rememberChoice)
+{
+    if (rememberChoice)
+        processor.trimPreference.store (trimRequested ? 1 : 2);
+
+    if (trimConfirmDialog != nullptr)
+    {
+        if (auto* parent = trimConfirmDialog->getParentComponent())
+            parent->removeChildComponent (trimConfirmDialog.get());
+        trimConfirmDialog.reset();
+    }
+
+    if (trimRequested)
+        waveformView.setTrimMode (true);
 }

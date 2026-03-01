@@ -157,6 +157,13 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
         return;
     }
 
+    if (onFileSelected)
+    {
+        onFileSelected (f);
+        if (onFileLoaded) onFileLoaded();
+        return;
+    }
+
     processor.loadFileAsync (f);
     if (onFileLoaded) onFileLoaded();
 }
