@@ -1,6 +1,5 @@
 #include "ActionPanel.h"
 #include "AutoChopPanel.h"
-#include "TrimDialog.h"
 #include "DysektLookAndFeel.h"
 #include "WaveformView.h"
 #include "../PluginProcessor.h"
@@ -113,14 +112,33 @@ void ActionPanel::toggleAutoChop()
 
 void ActionPanel::toggleTrimMode()
 {
-    // Close trim dialog if already open
-    if (trimDialog != nullptr)
+    if (waveformView.isTrimModeActive())
     {
-        if (auto* parent = trimDialog->getParentComponent())
-            parent->removeChildComponent (trimDialog.get());
-        trimDialog.reset();
-        waveformView.setTrimMode (false);
-        repaint();
+        auto* editor = waveformView.getParentComponent();
+        if (editor == nullptr)
+        {
+            waveformView.setTrimMode (false);
+            repaint();
+            return;
+        }
+        juce::AlertWindow::showOkCancelBox (
+            juce::AlertWindow::QuestionIcon,
+            "Apply Trim",
+            "Apply trim to the selected region?",
+            "Apply", "Cancel",
+            editor,
+            juce::ModalCallbackFunction::create ([this] (int result) {
+                if (result == 1)
+                {
+                    DysektProcessor::Command cmd;
+                    cmd.type      = DysektProcessor::CmdApplyTrim;
+                    cmd.intParam1 = waveformView.getTrimIn();
+                    cmd.intParam2 = waveformView.getTrimOut();
+                    processor.pushCommand (cmd);
+                }
+                waveformView.setTrimMode (false);
+                repaint();
+            }));
         return;
     }
 
@@ -128,15 +146,7 @@ void ActionPanel::toggleTrimMode()
     if (processor.sampleData.getSnapshot() == nullptr)
         return;
 
-    auto* editor = waveformView.getParentComponent();
-    if (editor == nullptr)
-        return;
-
     waveformView.setTrimMode (true);
-    trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
-    auto wfBounds = waveformView.getBoundsInParent();
-    trimDialog->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34, wfBounds.getWidth(), 34);
-    editor->addAndMakeVisible (*trimDialog);
     repaint();
 }
 

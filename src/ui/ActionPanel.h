@@ -5,7 +5,6 @@
 class DysektProcessor;
 class WaveformView;
 class AutoChopPanel;
-class TrimDialog;
 
 class ActionPanel : public juce::Component
 {
@@ -55,5 +54,4 @@ private:
     juce::TextButton chromaticBtn  { "CHRO"  };
 
     std::unique_ptr<AutoChopPanel> autoChopPanel;
-    std::unique_ptr<TrimDialog>    trimDialog;
 };
