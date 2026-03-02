@@ -9,7 +9,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 # --- sfizz (SF2 / SFZ soundfont engine) ---
 # Clone with: git submodule add https://github.com/sfztools/sfizz.git sfizz
 #             git submodule update --init --recursive sfizz
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sfizz/CMakeLists.txt")
+if(FALSE)
     set(SFIZZ_CLIENTS OFF CACHE BOOL "" FORCE)      # don't build stand-alone apps
     set(SFIZZ_SHARED  OFF CACHE BOOL "" FORCE)      # static lib only
     set(SFIZZ_JACK    OFF CACHE BOOL "" FORCE)
