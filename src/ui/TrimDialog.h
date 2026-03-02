@@ -27,4 +27,16 @@ private:
     void onCancel();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrimDialog)
+    void dismiss (bool trim);
+
+    juce::Label      titleLabel;
+    juce::Label      infoLabel;
+    juce::TextButton yesBtn { "YES" };
+    juce::TextButton noBtn  { "NO" };
+    juce::ToggleButton rememberChk;
+
+    std::function<void (Result)> callback;
+
+    static constexpr int kWidth  = 340;
+    static constexpr int kHeight = 140;
 };

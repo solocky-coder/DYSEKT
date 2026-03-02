@@ -32,11 +32,18 @@ public:
     void setSliceDrawMode (bool active);
     bool isSliceDrawModeActive() const noexcept { return sliceDrawMode; }
 
-    void setTrimMode (bool active);
+    // Trim mode — entered when the user asks to trim before loading
+    void enterTrimMode (int start, int end);
+    void exitTrimMode();
+    void getTrimBounds (int& outStart, int& outEnd) const;
     bool isTrimModeActive() const noexcept { return trimMode; }
-    void resetTrim();
-    int  getTrimIn()  const noexcept { return trimInPoint; }
-    int  getTrimOut() const noexcept { return trimOutPoint; }
+
+    // Callback invoked when user applies trim; parameters are sample-accurate bounds
+    std::function<void (int trimStart, int trimEnd)> onTrimApplied;
+    // Callback invoked when user cancels trim (CANCEL button)
+    std::function<void()> onTrimCancelled;
+    // Callback for file load requests (routed through trim dialog if set)
+    std::function<void (const juce::File&)> onLoadRequest;
 
     void setSoftWaveform (bool soft) { softWaveform = soft; repaint(); }
     bool isSoftWaveform() const noexcept { return softWaveform; }
@@ -57,6 +64,7 @@ private:
     };
 
     enum DragMode { None, DragEdgeLeft, DragEdgeRight, DrawSlice, MoveSlice, DuplicateSlice,
+                    TrimMarkerLeft, TrimMarkerRight };
                     DragTrimIn, DragTrimOut };
 
     enum class HoveredEdge { None, Left, Right };
@@ -73,6 +81,7 @@ private:
     void paintDrawSlicePreview (juce::Graphics& g);
     void paintLazyChopOverlay (juce::Graphics& g);
     void paintTransientMarkers (juce::Graphics& g);
+    void paintTrimOverlay (juce::Graphics& g);
     void paintTrimMarkers (juce::Graphics& g);
 
     // Aggregates all cache-invalidation inputs; rebuild is skipped when unchanged.
@@ -93,6 +102,19 @@ private:
     int  trimOutPoint  = 0;       // trim-out marker position in samples (0 = end of sample)
     mutable ViewState cachedPaintViewState;   // valid only between paint() start and end
     mutable bool paintViewStateActive = false; // true only during paint(); guards cachedPaintViewState
+
+    // Trim mode state
+    bool trimMode  = false;
+    int  trimStart = 0;
+    int  trimEnd   = 0;
+
+    // Hit areas for trim mode buttons (updated each paint)
+    juce::Rectangle<int> trimApplyBtnBounds;
+    juce::Rectangle<int> trimResetBtnBounds;
+    juce::Rectangle<int> trimCancelBtnBounds;
+
+    static constexpr int kTrimMarkerHitTolerance = 6;   // px within which clicks hit a trim marker
+    static constexpr int kMinTrimRegionSamples   = 64;  // minimum trim region in samples
 
     DragMode dragMode = None;
     int dragSliceIdx = -1;

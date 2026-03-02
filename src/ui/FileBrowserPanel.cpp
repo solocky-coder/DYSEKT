@@ -157,8 +157,17 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
         return;
     }
 
-    processor.loadFileAsync (f);
-    if (onFileLoaded) onFileLoaded();
+    // Route regular audio files through the trim dialog if wired up
+    if (onLoadRequest)
+    {
+        onLoadRequest (f);
+        if (onFileLoaded) onFileLoaded();
+    }
+    else
+    {
+        processor.loadFileAsync (f);
+        if (onFileLoaded) onFileLoaded();
+    }
 }
 
 // ── Preview engine ────────────────────────────────────────────────────────────

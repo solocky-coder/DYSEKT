@@ -13,6 +13,8 @@
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
+#include "ui/TrimDialog.h"
+#include "TrimSession.h"
 
 class DysektEditor : public juce::AudioProcessorEditor,
                              public juce::FileDragAndDropTarget,
@@ -38,6 +40,10 @@ public:
     void toggleSoftWave();
     void toggleChromatic();
 
+    // Trim workflow
+    void showTrimDialog (const juce::File& file, bool isRelink = false);
+    void showTrimMode   (const juce::File& file);
+
 private:
     void timerCallback() override;
     void ensureDefaultThemes();
@@ -58,6 +64,9 @@ private:
 
     bool browserOpen = false;
     bool softWave    = false;
+
+    // Trim session (non-null while waiting for trim-mode load to complete)
+    std::unique_ptr<TrimSession> trimSession;
 
     DysektLookAndFeel lnf;
     LogoBar         logoBar;

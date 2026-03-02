@@ -552,9 +552,12 @@ void HeaderBar::openFileBrowser()
             auto result = fc.getResult();
             if (result.existsAsFile())
             {
-                processor.loadFileAsync (result);
                 processor.zoom.store (1.0f);
                 processor.scroll.store (0.0f);
+                if (auto* editor = dynamic_cast<DysektEditor*> (getParentComponent()))
+                    editor->showTrimDialog (result);
+                else
+                    processor.loadFileAsync (result);
             }
         });
 }
