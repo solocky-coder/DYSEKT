@@ -130,6 +130,9 @@ private:
     int dragPreviewEnd = 0;   // for edge/move drags: preview end sample
     int dragOrigStart = 0;    // slice start at the moment drag began (for overlap clamping)
     int dragOrigEnd = 0;      // slice end at the moment drag began (for overlap clamping)
+    int linkedSliceIdx = -1;    // LINK edge drag: index of adjacent slice being adjusted
+    int linkedPreviewStart = 0; // LINK edge drag: preview start of adjacent slice
+    int linkedPreviewEnd = 0;   // LINK edge drag: preview end of adjacent slice
     int ghostStart = 0;    // for DuplicateSlice: ghost overlay start sample
     int ghostEnd   = 0;    // for DuplicateSlice: ghost overlay end sample
 

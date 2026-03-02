@@ -5,6 +5,7 @@
 #include "../audio/AudioAnalysis.h"
 
 static constexpr int kMinTrimRangeSamples = 64; ///< minimum trim/slice range in samples
+static constexpr int kLinkSearchToleranceSamples = 256; ///< search radius for adjacent slice in LINK mode
 
 WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
 
@@ -518,6 +519,11 @@ void WaveformView::drawSlices (juce::Graphics& g)
             drawStartSample = dragPreviewStart;
             drawEndSample = dragPreviewEnd;
         }
+        else if (linkedSliceIdx == i)
+        {
+            drawStartSample = linkedPreviewStart;
+            drawEndSample = linkedPreviewEnd;
+        }
         else if (dragMode == None)
         {
             // Live preview from SliceControlBar knob drag (processor atomics)
@@ -871,6 +877,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 dragPreviewEnd = s.endSample;
                 dragOrigStart = s.startSample;
                 dragOrigEnd   = s.endSample;
+                linkedSliceIdx = -1;
                 return;
             }
             if (std::abs (e.x - x2) < 6)
@@ -884,6 +891,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 dragPreviewEnd = s.endSample;
                 dragOrigStart = s.startSample;
                 dragOrigEnd   = s.endSample;
+                linkedSliceIdx = -1;
                 return;
             }
 
@@ -1016,15 +1024,36 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
         int newStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
-        // LINK mode: shift END by the same delta so slice length is preserved
+        // LINK mode: find the previous slice (end closest to original start) and adjust its end
         if (processor.slicesLinked.load (std::memory_order_relaxed))
         {
-            int delta  = newStart - dragPreviewStart;
-            int newEnd = juce::jlimit (newStart + 64,
-                                       (int) sampleSnap->buffer.getNumSamples(),
-                                       dragPreviewEnd + delta);
-            dragPreviewEnd = newEnd;
+            const auto& ui = processor.getUiSliceSnapshot();
+            int bestNi = -1, bestDist = kLinkSearchToleranceSamples;
+            for (int ni = 0; ni < ui.numSlices; ++ni)
+            {
+                if (ni == dragSliceIdx) continue;
+                const auto& ns = ui.slices[(size_t) ni];
+                if (! ns.active) continue;
+                int dist = std::abs (ns.endSample - dragOrigStart);
+                if (dist < bestDist) { bestDist = dist; bestNi = ni; }
+            }
+            if (bestNi >= 0)
+            {
+                const auto& ns = ui.slices[(size_t) bestNi];
+                if (newStart - ns.startSample >= 64)
+                {
+                    linkedSliceIdx = bestNi;
+                    linkedPreviewStart = ns.startSample;
+                    linkedPreviewEnd = newStart;
+                }
+                else
+                    linkedSliceIdx = -1;
+            }
+            else
+                linkedSliceIdx = -1;
         }
+        else
+            linkedSliceIdx = -1;
         dragPreviewStart = newStart;
     }
     else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
@@ -1033,13 +1062,36 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
         int newEnd = juce::jlimit (dragPreviewStart + 64,
                                    (int) sampleSnap->buffer.getNumSamples(), samplePos);
-        // LINK mode: shift START by the same delta so slice length is preserved
+        // LINK mode: find the next slice (start closest to original end) and adjust its start
         if (processor.slicesLinked.load (std::memory_order_relaxed))
         {
-            int delta    = newEnd - dragPreviewEnd;
-            int newStart = juce::jlimit (0, newEnd - 64, dragPreviewStart + delta);
-            dragPreviewStart = newStart;
+            const auto& ui = processor.getUiSliceSnapshot();
+            int bestNi = -1, bestDist = kLinkSearchToleranceSamples;
+            for (int ni = 0; ni < ui.numSlices; ++ni)
+            {
+                if (ni == dragSliceIdx) continue;
+                const auto& ns = ui.slices[(size_t) ni];
+                if (! ns.active) continue;
+                int dist = std::abs (ns.startSample - dragOrigEnd);
+                if (dist < bestDist) { bestDist = dist; bestNi = ni; }
+            }
+            if (bestNi >= 0)
+            {
+                const auto& ns = ui.slices[(size_t) bestNi];
+                if (ns.endSample - newEnd >= 64)
+                {
+                    linkedSliceIdx = bestNi;
+                    linkedPreviewStart = newEnd;
+                    linkedPreviewEnd = ns.endSample;
+                }
+                else
+                    linkedSliceIdx = -1;
+            }
+            else
+                linkedSliceIdx = -1;
         }
+        else
+            linkedSliceIdx = -1;
         dragPreviewEnd = newEnd;
     }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
@@ -1176,6 +1228,9 @@ void WaveformView::mouseUp (const juce::MouseEvent& e)
     dragSliceIdx = -1;
     dragPreviewStart = 0;
     dragPreviewEnd = 0;
+    linkedSliceIdx = -1;
+    linkedPreviewStart = 0;
+    linkedPreviewEnd = 0;
     drawStartedFromAlt = false;
 }
 
