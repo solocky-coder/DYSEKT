@@ -1,36 +1,42 @@
 #pragma once
-
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <functional>
 
-class TrimDialog : public juce::DialogWindow
+class DysektProcessor;
+class WaveformView;
+
+/// A toolbar component shown at the bottom of the waveform when trim mode is active.
+/// Provides Apply and Cancel buttons to confirm or discard a trim operation.
+class TrimDialog : public juce::Component
 {
 public:
-    struct Result
-    {
-        bool userClickedYes = false;
-        bool rememberChoice = false;
-    };
-
-    explicit TrimDialog(const juce::File& file, double durationSeconds);
+    TrimDialog (DysektProcessor& processor, WaveformView& waveformView);
     ~TrimDialog() override;
 
-    void paint(juce::Graphics& g) override;
+    void paint  (juce::Graphics& g) override;
     void resized() override;
 
-    static void show(juce::Component* parent, const juce::File& file, double durationSeconds,
-                     std::function<void(const Result&)> onComplete);
-
 private:
-    void onYesClicked();
-    void onNoClicked();
+    DysektProcessor& processor;
+    WaveformView&    waveformView;
 
-    juce::File audioFile;
-    double duration = 0.0;
-    std::unique_ptr<juce::TextButton> yesBtn, noBtn;
-    std::unique_ptr<juce::ToggleButton> rememberBtn;
-    std::unique_ptr<juce::Label> messageLabel;
-    std::function<void(const Result&)> callback;
+    juce::Label      infoLabel;
+    juce::TextButton applyBtn  { "APPLY TRIM" };
+    juce::TextButton cancelBtn { "CANCEL" };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TrimDialog)
+    void onApply();
+    void onCancel();
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrimDialog)
+    void dismiss (bool trim);
+
+    juce::Label      titleLabel;
+    juce::Label      infoLabel;
+    juce::TextButton yesBtn { "YES" };
+    juce::TextButton noBtn  { "NO" };
+    juce::ToggleButton rememberChk;
+
+    std::function<void (Result)> callback;
+
+    static constexpr int kWidth  = 340;
+    static constexpr int kHeight = 140;
 };

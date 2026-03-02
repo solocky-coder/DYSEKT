@@ -1,61 +1,67 @@
-#include "TrimDialog.h"  
+#include "TrimDialog.h"
+#include "DysektLookAndFeel.h"
+#include "WaveformView.h"
+#include "../PluginProcessor.h"
 
-TrimDialog::TrimDialog() : DialogWindow("Trim Dialog", juce::Colours::white, true)
+TrimDialog::TrimDialog (DysektProcessor& proc, WaveformView& wv)
+    : processor (proc), waveformView (wv)
 {
-    setResizable(true, true);
-    setUsingNativeTitleBar(true);
+    infoLabel.setText ("Trim mode: drag markers to set in/out points", juce::dontSendNotification);
+    infoLabel.setFont (DysektLookAndFeel::makeFont (11.0f));
+    infoLabel.setColour (juce::Label::textColourId, getTheme().foreground.withAlpha (0.8f));
+    infoLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (infoLabel);
 
-    messageLabel.setText("Are you sure you want to trim?", juce::dontSendNotification);
-    addAndMakeVisible(messageLabel);
+    applyBtn.setColour (juce::TextButton::buttonColourId,  getTheme().accent.withAlpha (0.8f));
+    applyBtn.setColour (juce::TextButton::textColourOffId, juce::Colours::black);
+    applyBtn.onClick = [this] { onApply(); };
+    addAndMakeVisible (applyBtn);
 
-    yesBtn.setButtonText("Yes");
-    yesBtn.onClick = [this]() { onYesClicked(); };
-    addAndMakeVisible(yesBtn);
-
-    noBtn.setButtonText("No");
-    noBtn.onClick = [this]() { onNoClicked(); };
-    addAndMakeVisible(noBtn);
-
-    rememberBtn.setButtonText("Remember this choice");
-    addAndMakeVisible(rememberBtn);
-
-    // Proper styling
-    messageLabel.setColour(juce::Label::ColourIds::textColourId, juce::Colours::black);
-    yesBtn.setColour(juce::TextButton::ColourIds::buttonColourId, juce::Colours::lightblue);
-    noBtn.setColour(juce::TextButton::ColourIds::buttonColourId, juce::Colours::red);
-    rememberBtn.setColour(juce::ToggleButton::ColourIds::tickColourId, juce::Colours::green);
+    cancelBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
+    cancelBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
+    cancelBtn.onClick = [this] { onCancel(); };
+    addAndMakeVisible (cancelBtn);
 }
 
-void TrimDialog::paint(Graphics& g)
+TrimDialog::~TrimDialog() = default;
+
+void TrimDialog::paint (juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(50, 50, 50)); // dark grey background
+    g.fillAll (getTheme().header);
+    g.setColour (getTheme().accent.withAlpha (0.3f));
+    g.drawLine (0.0f, 0.0f, (float) getWidth(), 0.0f, 1.0f);
 }
 
-void TrimDialog::resized() 
+void TrimDialog::resized()
 {
-    auto area = getLocalBounds();
-    messageLabel.setBounds(area.removeFromTop(50));
-    yesBtn.setBounds(area.removeFromTop(30));
-    noBtn.setBounds(area.removeFromTop(30));
-    rememberBtn.setBounds(area.removeFromTop(30));
+    auto bounds = getLocalBounds().reduced (6, 4);
+    const int btnW = 90;
+    const int gap  = 6;
+
+    cancelBtn.setBounds (bounds.removeFromRight (btnW));
+    bounds.removeFromRight (gap);
+    applyBtn.setBounds (bounds.removeFromRight (btnW));
+    bounds.removeFromRight (gap);
+    infoLabel.setBounds (bounds);
 }
 
-void TrimDialog::onYesClicked() 
+void TrimDialog::onApply()
 {
-    // Call the callback and exit modal state
-    callback();
-    exitModalState(0);
+    // Commit the current trim marker positions to the processor
+    processor.trimInSample.store  (waveformView.getTrimIn());
+    processor.trimOutSample.store (waveformView.getTrimOut());
+
+    waveformView.setTrimMode (false);
+
+    // Remove this dialog from its parent (ActionPanel will reset the unique_ptr)
+    if (auto* parent = getParentComponent())
+        parent->removeChildComponent (this);
 }
 
-void TrimDialog::onNoClicked() 
+void TrimDialog::onCancel()
 {
-    // Call the callback and exit modal state
-    callback();
-    exitModalState(0);
-}
+    waveformView.setTrimMode (false);
 
-void TrimDialog::show() 
-{
-    TrimDialog dialog;
-    dialog.runModal();
+    if (auto* parent = getParentComponent())
+        parent->removeChildComponent (this);
 }

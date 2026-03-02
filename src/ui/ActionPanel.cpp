@@ -10,7 +10,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
     for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn,
-                       &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn })
+                       &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -43,6 +43,9 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     trimBtn.onClick = [this] { toggleTrimMode(); };
 
+    shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
+    shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");
+
     snapBtn.onClick = [this] {
         bool ns = ! processor.snapToZeroCrossing.load();
         processor.snapToZeroCrossing.store (ns);
@@ -65,12 +68,12 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     dupBtn.setTooltip      ("Duplicate Slice (D)");
     splitBtn.setTooltip    ("Auto Chop (C)");
     deleteBtn.setTooltip   ("Delete Slice (Del)");
-    trimBtn.setTooltip     ("Trim — crop sample to a selected region");
+    trimBtn.setTooltip     ("Trim - crop sample to a selected region");
     snapBtn.setTooltip     ("Snap to Zero-Crossing (Z)");
 
     browserBtn.setTooltip  ("Toggle File Browser");
     waveBtn.setTooltip     ("Toggle Soft Waveform");
-    chromaticBtn.setTooltip ("Chromatic Mode — play selected slice across full keyboard");
+    chromaticBtn.setTooltip ("Chromatic Mode - play selected slice across full keyboard");
 
     updateMidiButtonAppearance (false);
     updateSnapButtonAppearance (false);
@@ -144,8 +147,8 @@ void ActionPanel::resized()
 {
     const int gap   = 5;
     const int h     = getHeight();
-    const int thinW = 30;   // ZX, MIDI icons
-    const int thinTotal = thinW * 2 + gap;
+    const int thinW = 30;   // snap, MIDI select, and shortcuts buttons
+    const int thinTotal = thinW * 3 + gap * 2;
     const int trimW = 40;   // TRIM button
     const int availW = getWidth() - thinTotal - trimW - gap * 2;
     const int numMain = 5;
@@ -160,7 +163,8 @@ void ActionPanel::resized()
 
     trimBtn.setBounds       (x, 0, trimW, h); x += trimW + gap;
     snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
-    midiSelectBtn.setBounds (x, 0, thinW, h);
+    midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
+    shortcutsBtn.setBounds  (x, 0, thinW, h);
 
     // browserBtn/waveBtn/chromaticBtn moved to HeaderBar — hide them
     browserBtn.setVisible (false);
@@ -220,27 +224,13 @@ void ActionPanel::updateSnapButtonAppearance (bool active)
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // Draw MIDI (musical note) icon for midiSelectBtn
+    // Draw MIDI text icon for midiSelectBtn
     {
         bool active = processor.midiSelectsSlice.load();
         auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
         g.setColour (col);
-
-        auto b   = midiSelectBtn.getBounds();
-        float cx = (float) b.getCentreX();
-        float cy = (float) b.getCentreY();
-
-        // Note head (filled ellipse)
-        juce::Path head;
-        head.addEllipse (cx - 5.0f, cy + 1.5f, 8.0f, 5.5f);
-        g.fillPath (head);
-
-        // Stem (vertical line from right of head upward)
-        g.drawLine (cx + 3.0f, cy + 4.0f, cx + 3.0f, cy - 7.0f, 1.5f);
-
-        // Flag (two lines forming a curl to the right)
-        g.drawLine (cx + 3.0f, cy - 7.0f, cx + 8.0f, cy - 3.0f, 1.5f);
-        g.drawLine (cx + 8.0f, cy - 3.0f, cx + 3.5f, cy - 1.0f, 1.5f);
+        g.setFont (DysektLookAndFeel::makeFont (9.0f, true));
+        g.drawText ("MIDI", midiSelectBtn.getBounds(), juce::Justification::centred);
     }
 
     // Draw zero-crossing icon for snapBtn

@@ -153,7 +153,10 @@ void WaveformView::paint (juce::Graphics& g)
         paintViewStateActive = cachedPaintViewState.valid;
         rebuildCacheIfNeeded();
         drawWaveform (g);
-        drawSlices (g);
+        if (trimMode)
+            paintTrimOverlay (g);
+        else
+            drawSlices (g);
         paintDrawSlicePreview (g);
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
@@ -709,6 +712,41 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     if (sampleSnap == nullptr)
         return;
 
+    // ── Trim mode mouse handling ──────────────────────────────────────────
+    if (trimMode)
+    {
+        auto pos = e.getPosition();
+
+        // Check button hits
+        if (trimApplyBtnBounds.contains (pos))
+        {
+            if (onTrimApplied)
+                onTrimApplied (trimStart, trimEnd);
+            exitTrimMode();
+            return;
+        }
+        if (trimResetBtnBounds.contains (pos))
+        {
+            const int totalFrames = sampleSnap->buffer.getNumSamples();
+            enterTrimMode (0, totalFrames);
+            return;
+        }
+        if (trimCancelBtnBounds.contains (pos))
+        {
+            exitTrimMode();
+            if (onTrimCancelled)
+                onTrimCancelled();
+            return;
+        }
+
+        // Check trim marker drag zones (±kTrimMarkerHitTolerance px)
+        const int xIn  = sampleToPixel (trimStart);
+        const int xOut = sampleToPixel (trimEnd);
+        if (std::abs (e.x - xIn)  <= kTrimMarkerHitTolerance) { dragMode = TrimMarkerLeft;  return; }
+        if (std::abs (e.x - xOut) <= kTrimMarkerHitTolerance) { dragMode = TrimMarkerRight; return; }
+        return;
+    }
+
     // Middle-mouse drag: scroll+zoom (like ScrollZoomBar)
     if (e.mods.isMiddleButtonDown())
     {
@@ -793,8 +831,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     processor.pushCommand (cmd);
                 }
                 addClickStart = -1;
-                sliceDrawMode = false;
-                setMouseCursor (juce::MouseCursor::NormalCursor);
                 return;
             }
             // First click: record start position, wait for second click
@@ -903,6 +939,19 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     if (sampleSnap == nullptr)
         return;
 
+    // ── Trim marker dragging ──────────────────────────────────────────────
+    if (trimMode && (dragMode == TrimMarkerLeft || dragMode == TrimMarkerRight))
+    {
+        const int totalFrames = sampleSnap->buffer.getNumSamples();
+        int sp = juce::jlimit (0, totalFrames, pixelToSample (e.x));
+        if (dragMode == TrimMarkerLeft)
+            trimStart = juce::jlimit (0, trimEnd - kMinTrimRegionSamples, sp);
+        else
+            trimEnd   = juce::jlimit (trimStart + kMinTrimRegionSamples, totalFrames, sp);
+        repaint();
+        return;
+    }
+
     // Middle-mouse drag: scroll+zoom
     if (midDragging)
     {
@@ -967,6 +1016,15 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
         int newStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
+        // LINK mode: shift END by the same delta so slice length is preserved
+        if (processor.slicesLinked.load (std::memory_order_relaxed))
+        {
+            int delta  = newStart - dragPreviewStart;
+            int newEnd = juce::jlimit (newStart + 64,
+                                       (int) sampleSnap->buffer.getNumSamples(),
+                                       dragPreviewEnd + delta);
+            dragPreviewEnd = newEnd;
+        }
         dragPreviewStart = newStart;
     }
     else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
@@ -975,6 +1033,13 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
         int newEnd = juce::jlimit (dragPreviewStart + 64,
                                    (int) sampleSnap->buffer.getNumSamples(), samplePos);
+        // LINK mode: shift START by the same delta so slice length is preserved
+        if (processor.slicesLinked.load (std::memory_order_relaxed))
+        {
+            int delta    = newEnd - dragPreviewEnd;
+            int newStart = juce::jlimit (0, newEnd - 64, dragPreviewStart + delta);
+            dragPreviewStart = newStart;
+        }
         dragPreviewEnd = newEnd;
     }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
@@ -1013,6 +1078,14 @@ void WaveformView::mouseUp (const juce::MouseEvent& e)
     syncAltStateFromMods (e.mods);
 
     auto sampleSnap = processor.sampleData.getSnapshot();
+
+    // ── Trim marker release ───────────────────────────────────────────────
+    if (trimMode && (dragMode == TrimMarkerLeft || dragMode == TrimMarkerRight))
+    {
+        dragMode = None;
+        repaint();
+        return;
+    }
 
     // Stop shift preview
     if (shiftPreviewActive)
@@ -1182,7 +1255,120 @@ void WaveformView::filesDropped (const juce::StringArray& files, int, int)
     prevCacheKey = {};
 
     if (ext == ".sf2" || ext == ".sfz")
+    {
         processor.loadSoundFontAsync (f);
+        return;
+    }
+
+    // Route through trim dialog if an onLoadRequest callback was wired up
+    if (onLoadRequest)
+        onLoadRequest (f);
     else
         processor.loadFileAsync (f);
+}
+
+// ── Trim mode ─────────────────────────────────────────────────────────────────
+
+void WaveformView::enterTrimMode (int start, int end)
+{
+    trimMode  = true;
+    trimStart = start;
+    trimEnd   = end;
+    repaint();
+}
+
+void WaveformView::exitTrimMode()
+{
+    trimMode = false;
+    repaint();
+}
+
+void WaveformView::getTrimBounds (int& outStart, int& outEnd) const
+{
+    outStart = trimStart;
+    outEnd   = trimEnd;
+}
+
+void WaveformView::paintTrimOverlay (juce::Graphics& g)
+{
+    const auto snap = processor.sampleData.getSnapshot();
+    if (snap == nullptr || ! cachedPaintViewState.valid)
+        return;
+
+    const int totalFrames = snap->buffer.getNumSamples();
+    if (totalFrames <= 0)
+        return;
+
+    const double sampleRate = processor.getSampleRate() > 0.0
+                              ? processor.getSampleRate() : 44100.0;
+
+    const int xIn  = sampleToPixel (trimStart);
+    const int xOut = sampleToPixel (trimEnd);
+    const int h    = getHeight();
+    const int w    = getWidth();
+
+    // Grey out regions outside the trim bounds
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
+    if (xIn > 0)
+        g.fillRect (0, 0, xIn, h);
+    if (xOut < w)
+        g.fillRect (xOut, 0, w - xOut, h);
+
+    // Highlight the trim region slightly
+    g.setColour (getTheme().accent.withAlpha (0.08f));
+    if (xOut > xIn)
+        g.fillRect (xIn, 0, xOut - xIn, h);
+
+    // IN marker line
+    g.setColour (getTheme().accent);
+    g.drawVerticalLine (xIn,  0.0f, (float) h);
+    g.drawVerticalLine (xOut, 0.0f, (float) h);
+
+    // Marker labels
+    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.drawText ("IN",  xIn  + 3, 2, 28, 12, juce::Justification::left);
+    g.drawText ("OUT", xOut - 31, 2, 28, 12, juce::Justification::right);
+
+    // Info box: "Trim: X.Xs – Y.Ys  (Z.Zs kept)"
+    const double tIn  = (double) trimStart / sampleRate;
+    const double tOut = (double) trimEnd   / sampleRate;
+    const double tLen = tOut - tIn;
+    juce::String info;
+    info << "Trim: " << juce::String (tIn,  1) << "s - "
+         << juce::String (tOut, 1) << "s  ("
+         << juce::String (tLen, 1) << "s kept)";
+
+    const int infoW = 260;
+    const int infoH = 18;
+    const int infoX = (w - infoW) / 2;
+    const int infoY = 4;
+    g.setColour (juce::Colours::black.withAlpha (0.6f));
+    g.fillRoundedRectangle ((float) infoX, (float) infoY, (float) infoW, (float) infoH, 3.0f);
+    g.setColour (juce::Colours::white);
+    g.drawText (info, infoX, infoY, infoW, infoH, juce::Justification::centred);
+
+    // Bottom buttons: [APPLY TRIM]  [RESET]  [CANCEL]
+    const int btnH  = 22;
+    const int btnY  = h - btnH - 4;
+    const int btnW  = 90;
+    const int gap   = 8;
+    const int totalBtnW = 3 * btnW + 2 * gap;
+    int bx = (w - totalBtnW) / 2;
+
+    auto drawBtn = [&] (const juce::String& label, juce::Colour bg, juce::Rectangle<int> r)
+    {
+        g.setColour (bg);
+        g.fillRoundedRectangle (r.toFloat(), 3.0f);
+        g.setColour (bg.contrasting (0.6f));
+        g.setFont (DysektLookAndFeel::makeFont (11.0f, true));
+        g.drawText (label, r, juce::Justification::centred);
+    };
+
+    trimApplyBtnBounds  = { bx, btnY, btnW, btnH };
+    trimResetBtnBounds  = { bx + btnW + gap, btnY, btnW, btnH };
+    trimCancelBtnBounds = { bx + 2 * (btnW + gap), btnY, btnW, btnH };
+
+    drawBtn ("APPLY TRIM", getTheme().accent.withAlpha (0.85f),  trimApplyBtnBounds);
+    drawBtn ("RESET",      getTheme().button,                    trimResetBtnBounds);
+    drawBtn ("CANCEL",     juce::Colour (0xFF883333),            trimCancelBtnBounds);
 }

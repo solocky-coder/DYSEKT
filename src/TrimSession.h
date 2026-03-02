@@ -1,32 +1,18 @@
-#ifndef TRIMSESSION_H
-#define TRIMSESSION_H
+#pragma once
+#include <juce_core/juce_core.h>
 
-#include <string>
+// Manages state during the trim workflow.
+// Created when the user selects YES in TrimDialog; destroyed after trim is
+// applied or cancelled.  Non-copyable, movable only.
+struct TrimSession
+{
+    juce::File file;          // the audio file being trimmed
+    bool       active = false; // true while waveform is displayed in trim mode
 
-struct TrimSession {
-    std::string file;
-    int trimStart;
-    int trimEnd;
-    int trimPreference;
+    TrimSession() = default;
+    TrimSession (TrimSession&&) noexcept = default;
+    TrimSession& operator= (TrimSession&&) noexcept = default;
 
-    TrimSession(std::string f, int start, int end, int preference) 
-        : file(std::move(f)), trimStart(start), trimEnd(end), trimPreference(preference) {}
-
-    TrimSession(TrimSession&& other) noexcept
-        : file(std::move(other.file)), trimStart(other.trimStart), trimEnd(other.trimEnd), trimPreference(other.trimPreference) {}
-
-    TrimSession(const TrimSession&) = delete; // Disable copy constructor
-    TrimSession& operator=(const TrimSession&) = delete; // Disable copy assignment
-    TrimSession& operator=(TrimSession&& other) noexcept {
-        // Implement move assignment operator
-        if (this != &other) {
-            file = std::move(other.file);
-            trimStart = other.trimStart;
-            trimEnd = other.trimEnd;
-            trimPreference = other.trimPreference;
-        }
-        return *this;
-    }
+    TrimSession (const TrimSession&) = delete;
+    TrimSession& operator= (const TrimSession&) = delete;
 };
-
-#endif // TRIMSESSION_H
