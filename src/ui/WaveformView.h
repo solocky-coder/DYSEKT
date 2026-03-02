@@ -64,8 +64,7 @@ private:
     };
 
     enum DragMode { None, DragEdgeLeft, DragEdgeRight, DrawSlice, MoveSlice, DuplicateSlice,
-                    TrimMarkerLeft, TrimMarkerRight };
-                    DragTrimIn, DragTrimOut };
+                    TrimMarkerLeft, TrimMarkerRight, DragTrimIn, DragTrimOut };
 
     enum class HoveredEdge { None, Left, Right };
     HoveredEdge hoveredEdge = HoveredEdge::None;
@@ -102,11 +101,6 @@ private:
     int  trimOutPoint  = 0;       // trim-out marker position in samples (0 = end of sample)
     mutable ViewState cachedPaintViewState;   // valid only between paint() start and end
     mutable bool paintViewStateActive = false; // true only during paint(); guards cachedPaintViewState
-
-    // Trim mode state
-    bool trimMode  = false;
-    int  trimStart = 0;
-    int  trimEnd   = 0;
 
     // Hit areas for trim mode buttons (updated each paint)
     juce::Rectangle<int> trimApplyBtnBounds;
