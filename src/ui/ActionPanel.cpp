@@ -1,5 +1,6 @@
 #include "ActionPanel.h"
 #include "AutoChopPanel.h"
+#include "TrimDialog.h"
 #include "DysektLookAndFeel.h"
 #include "WaveformView.h"
 #include "../PluginProcessor.h"
@@ -9,7 +10,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
     for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn,
-                       &deleteBtn, &snapBtn, &midiSelectBtn })
+                       &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -40,6 +41,8 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         { DysektProcessor::Command cmd; cmd.type = DysektProcessor::CmdDeleteSlice; cmd.intParam1 = ui.selectedSlice; processor.pushCommand (cmd); }
     };
 
+    trimBtn.onClick = [this] { toggleTrimMode(); };
+
     snapBtn.onClick = [this] {
         bool ns = ! processor.snapToZeroCrossing.load();
         processor.snapToZeroCrossing.store (ns);
@@ -62,6 +65,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     dupBtn.setTooltip      ("Duplicate Slice (D)");
     splitBtn.setTooltip    ("Auto Chop (C)");
     deleteBtn.setTooltip   ("Delete Slice (Del)");
+    trimBtn.setTooltip     ("Trim — crop sample to a selected region");
     snapBtn.setTooltip     ("Snap to Zero-Crossing (Z)");
 
     browserBtn.setTooltip  ("Toggle File Browser");
@@ -107,13 +111,43 @@ void ActionPanel::toggleAutoChop()
     }
 }
 
+void ActionPanel::toggleTrimMode()
+{
+    // Close trim dialog if already open
+    if (trimDialog != nullptr)
+    {
+        if (auto* parent = trimDialog->getParentComponent())
+            parent->removeChildComponent (trimDialog.get());
+        trimDialog.reset();
+        waveformView.setTrimMode (false);
+        repaint();
+        return;
+    }
+
+    // Check that a sample is loaded
+    if (processor.sampleData.getSnapshot() == nullptr)
+        return;
+
+    auto* editor = waveformView.getParentComponent();
+    if (editor == nullptr)
+        return;
+
+    waveformView.setTrimMode (true);
+    trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+    auto wfBounds = waveformView.getBoundsInParent();
+    trimDialog->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34, wfBounds.getWidth(), 34);
+    editor->addAndMakeVisible (*trimDialog);
+    repaint();
+}
+
 void ActionPanel::resized()
 {
     const int gap   = 5;
     const int h     = getHeight();
-    const int thinW = 30;   // ZX, FM
+    const int thinW = 30;   // ZX, MIDI icons
     const int thinTotal = thinW * 2 + gap;
-    const int availW = getWidth() - thinTotal - gap;
+    const int trimW = 40;   // TRIM button
+    const int availW = getWidth() - thinTotal - trimW - gap * 2;
     const int numMain = 5;
     const int btnW  = (availW - gap * (numMain - 1)) / numMain;
     int x = 0;
@@ -124,6 +158,7 @@ void ActionPanel::resized()
     dupBtn.setBounds      (x, 0, btnW, h); x += btnW + gap;
     deleteBtn.setBounds   (x, 0, btnW, h); x += btnW + gap;
 
+    trimBtn.setBounds       (x, 0, trimW, h); x += trimW + gap;
     snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
     midiSelectBtn.setBounds (x, 0, thinW, h);
 
@@ -152,6 +187,17 @@ void ActionPanel::paint (juce::Graphics& g)
     { lazyChopBtn.setButtonText ("STOP"); g.setColour (juce::Colours::red.withAlpha (0.25f)); g.fillRect (lazyChopBtn.getBounds()); }
     else
     { lazyChopBtn.setButtonText ("LAZY"); }
+
+    // TRIM button — highlight when trim mode is active
+    const bool trimActive = waveformView.isTrimModeActive();
+    trimBtn.setColour (juce::TextButton::buttonColourId,
+                       trimActive ? getTheme().accent.withAlpha (0.2f) : getTheme().button);
+    trimBtn.setColour (juce::TextButton::textColourOnId,
+                       trimActive ? getTheme().accent : getTheme().foreground);
+    trimBtn.setColour (juce::TextButton::textColourOffId,
+                       trimActive ? getTheme().accent : getTheme().foreground);
+    if (trimActive)
+    { g.setColour (getTheme().accent.withAlpha (0.15f)); g.fillRect (trimBtn.getBounds()); }
 }
 
 void ActionPanel::updateMidiButtonAppearance (bool active)

@@ -4,6 +4,8 @@
 #include "../PluginProcessor.h"
 #include "../audio/AudioAnalysis.h"
 
+static constexpr int kMinTrimRangeSamples = 64; ///< minimum trim/slice range in samples
+
 WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
 
 void WaveformView::setSliceDrawMode (bool active)
@@ -11,6 +13,30 @@ void WaveformView::setSliceDrawMode (bool active)
     sliceDrawMode = active;
     if (! active) addClickStart = -1;
     setMouseCursor (active ? juce::MouseCursor::IBeamCursor : juce::MouseCursor::NormalCursor);
+}
+
+void WaveformView::setTrimMode (bool active)
+{
+    trimMode = active;
+    if (active)
+    {
+        // Initialise trim markers from processor state (or full range)
+        auto sampleSnap = processor.sampleData.getSnapshot();
+        const int numFrames = sampleSnap ? sampleSnap->buffer.getNumSamples() : 0;
+        int savedIn  = processor.trimInSample.load();
+        int savedOut = processor.trimOutSample.load();
+        trimInPoint  = (savedIn  > 0 && savedIn  < numFrames) ? savedIn  : 0;
+        trimOutPoint = (savedOut > 0 && savedOut <= numFrames) ? savedOut : numFrames;
+    }
+    repaint();
+}
+
+void WaveformView::resetTrim()
+{
+    auto sampleSnap = processor.sampleData.getSnapshot();
+    trimInPoint  = 0;
+    trimOutPoint = sampleSnap ? sampleSnap->buffer.getNumSamples() : 0;
+    repaint();
 }
 
 bool WaveformView::hasActiveSlicePreview() const noexcept
@@ -134,6 +160,7 @@ void WaveformView::paint (juce::Graphics& g)
         paintDrawSlicePreview (g);
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
+        paintTrimMarkers (g);
         drawPlaybackCursors (g);
         paintViewStateActive = false;
     }
@@ -245,6 +272,39 @@ void WaveformView::paintTransientMarkers (juce::Graphics& g)
     }
 }
 
+void WaveformView::paintTrimMarkers (juce::Graphics& g)
+{
+    if (! trimMode)
+        return;
+
+    const int h = getHeight();
+    const auto trimCol = juce::Colours::orange;
+
+    // Shade the excluded (trimmed-out) regions
+    int xIn  = sampleToPixel (trimInPoint);
+    int xOut = sampleToPixel (trimOutPoint);
+
+    if (xIn > 0)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillRect (0, 0, xIn, h);
+    }
+    if (xOut < getWidth())
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillRect (xOut, 0, getWidth() - xOut, h);
+    }
+
+    // IN marker line + label
+    g.setColour (trimCol);
+    g.drawVerticalLine (xIn, 0.0f, (float) h);
+    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.drawText ("IN", xIn + 3, 3, 24, 13, juce::Justification::centredLeft);
+
+    // OUT marker line + label
+    g.drawVerticalLine (xOut, 0.0f, (float) h);
+    g.drawText ("OUT", xOut - 28, 3, 28, 13, juce::Justification::centredRight);
+}
 void WaveformView::drawWaveform (juce::Graphics& g)
 {
     const int   cy    = getHeight() / 2;
@@ -605,6 +665,14 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
         setMouseCursor (juce::MouseCursor::IBeamCursor);
     else if (sliceDrawMode)
         setMouseCursor (juce::MouseCursor::IBeamCursor);
+    else if (trimMode)
+    {
+        // Show resize cursor near trim markers
+        bool nearIn  = (std::abs (e.x - sampleToPixel (trimInPoint))  <= 6);
+        bool nearOut = (std::abs (e.x - sampleToPixel (trimOutPoint)) <= 6);
+        setMouseCursor ((nearIn || nearOut) ? juce::MouseCursor::LeftRightResizeCursor
+                                           : juce::MouseCursor::NormalCursor);
+    }
     else
         setMouseCursor (newEdge != HoveredEdge::None
             ? juce::MouseCursor::LeftRightResizeCursor
@@ -699,6 +767,37 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     }
 
     int samplePos = std::max (0, std::min (pixelToSample (e.x), sampleSnap->buffer.getNumSamples()));
+
+    // Trim mode: drag the IN or OUT marker
+    if (trimMode)
+    {
+        int xIn  = sampleToPixel (trimInPoint);
+        int xOut = sampleToPixel (trimOutPoint);
+        if (std::abs (e.x - xIn) <= 6)
+        {
+            dragMode = DragTrimIn;
+            return;
+        }
+        if (std::abs (e.x - xOut) <= 6)
+        {
+            dragMode = DragTrimOut;
+            return;
+        }
+        // Click inside trim zone — re-position the closer marker
+        if (std::abs (e.x - xIn) < std::abs (e.x - xOut))
+        {
+            trimInPoint = juce::jlimit (0, trimOutPoint - kMinTrimRangeSamples, samplePos);
+            processor.trimInSample.store (trimInPoint);
+        }
+        else
+        {
+            trimOutPoint = juce::jlimit (trimInPoint + kMinTrimRangeSamples,
+                                         sampleSnap->buffer.getNumSamples(), samplePos);
+            processor.trimOutSample.store (trimOutPoint);
+        }
+        repaint();
+        return;
+    }
 
     // Shift+click: preview audio from pointer position
     if (e.mods.isShiftDown() && ! sliceDrawMode && ! altModeActive
@@ -879,6 +978,27 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
 
     int samplePos = std::max (0, std::min (pixelToSample (e.x), sampleSnap->buffer.getNumSamples()));
 
+    // Trim marker drag
+    if (dragMode == DragTrimIn)
+    {
+        trimInPoint = juce::jlimit (0, trimOutPoint - kMinTrimRangeSamples, samplePos);
+        if (processor.snapToZeroCrossing.load())
+            trimInPoint = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, trimInPoint);
+        processor.trimInSample.store (trimInPoint);
+        repaint();
+        return;
+    }
+    if (dragMode == DragTrimOut)
+    {
+        trimOutPoint = juce::jlimit (trimInPoint + kMinTrimRangeSamples,
+                                     sampleSnap->buffer.getNumSamples(), samplePos);
+        if (processor.snapToZeroCrossing.load())
+            trimOutPoint = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, trimOutPoint);
+        processor.trimOutSample.store (trimOutPoint);
+        repaint();
+        return;
+    }
+
     if (dragMode == DrawSlice)
     {
         drawEnd = samplePos;
@@ -898,6 +1018,15 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
         int newStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
+        // LINK mode: shift END by the same delta so slice length is preserved
+        if (processor.slicesLinked.load (std::memory_order_relaxed))
+        {
+            int delta  = newStart - dragPreviewStart;
+            int newEnd = juce::jlimit (newStart + 64,
+                                       (int) sampleSnap->buffer.getNumSamples(),
+                                       dragPreviewEnd + delta);
+            dragPreviewEnd = newEnd;
+        }
         dragPreviewStart = newStart;
     }
     else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
@@ -906,6 +1035,13 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
         int newEnd = juce::jlimit (dragPreviewStart + 64,
                                    (int) sampleSnap->buffer.getNumSamples(), samplePos);
+        // LINK mode: shift START by the same delta so slice length is preserved
+        if (processor.slicesLinked.load (std::memory_order_relaxed))
+        {
+            int delta    = newEnd - dragPreviewEnd;
+            int newStart = juce::jlimit (0, newEnd - 64, dragPreviewStart + delta);
+            dragPreviewStart = newStart;
+        }
         dragPreviewEnd = newEnd;
     }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
@@ -964,6 +1100,13 @@ void WaveformView::mouseUp (const juce::MouseEvent& e)
     if (midDragging)
     {
         midDragging = false;
+        return;
+    }
+
+    // Trim drag ended — just clear mode
+    if (dragMode == DragTrimIn || dragMode == DragTrimOut)
+    {
+        dragMode = None;
         return;
     }
 

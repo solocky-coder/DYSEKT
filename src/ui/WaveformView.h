@@ -65,6 +65,7 @@ private:
 
     enum DragMode { None, DragEdgeLeft, DragEdgeRight, DrawSlice, MoveSlice, DuplicateSlice,
                     TrimMarkerLeft, TrimMarkerRight };
+                    DragTrimIn, DragTrimOut };
 
     enum class HoveredEdge { None, Left, Right };
     HoveredEdge hoveredEdge = HoveredEdge::None;
@@ -81,6 +82,7 @@ private:
     void paintLazyChopOverlay (juce::Graphics& g);
     void paintTransientMarkers (juce::Graphics& g);
     void paintTrimOverlay (juce::Graphics& g);
+    void paintTrimMarkers (juce::Graphics& g);
 
     // Aggregates all cache-invalidation inputs; rebuild is skipped when unchanged.
     struct CacheKey
@@ -95,6 +97,9 @@ private:
     CacheKey prevCacheKey;
     bool sliceDrawMode = false;
     bool softWaveform  = false;   // TAL-style gradient+outline rendering
+    bool trimMode      = false;   // trim in/out marker editing mode
+    int  trimInPoint   = 0;       // trim-in marker position in samples
+    int  trimOutPoint  = 0;       // trim-out marker position in samples (0 = end of sample)
     mutable ViewState cachedPaintViewState;   // valid only between paint() start and end
     mutable bool paintViewStateActive = false; // true only during paint(); guards cachedPaintViewState
 

@@ -987,6 +987,39 @@ void DysektProcessor::handleCommand (const Command& cmd)
                                          std::memory_order_relaxed);
             break;
 
+        case CmdApplyTrim:
+        {
+            auto srcSnap = sampleData.getSnapshot();
+            if (srcSnap == nullptr)
+                break;
+            int tIn  = cmd.intParam1;
+            int tOut = cmd.intParam2;
+            if (tOut <= tIn)
+                break;
+            auto trimmed = SampleData::createTrimmed (*srcSnap, tIn, tOut);
+            if (trimmed == nullptr)
+                break;
+            clearVoicesBeforeSampleSwap();
+            // Shift all slice bounds by -tIn
+            const int numSl = sliceManager.getNumSlices();
+            for (int i = 0; i < numSl; ++i)
+            {
+                auto& s = sliceManager.getSlice (i);
+                if (! s.active) continue;
+                s.startSample = juce::jmax (0, s.startSample - tIn);
+                s.endSample   = juce::jmax (s.startSample + 64, s.endSample - tIn);
+                s.endSample   = juce::jmin (s.endSample, tOut - tIn);
+            }
+            sliceManager.rebuildMidiMap();
+            sampleData.applyDecodedSample (std::move (trimmed));
+            // Reset trim markers: the new "full" range is the trimmed buffer
+            trimInSample.store  (0);
+            trimOutSample.store (0);
+            captureSnapshot();
+            publishUiSliceSnapshot();
+            break;
+        }
+
         case CmdNone:
             break;
     }
@@ -1595,6 +1628,8 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // v19 fields
     stream.writeInt (trimPreference.load (std::memory_order_relaxed));
+    stream.writeInt (trimInSample.load());
+    stream.writeInt (trimOutSample.load());
 }
 
 void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -1717,6 +1752,15 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
                               std::memory_order_relaxed);
     else
         trimPreference.store ((int) TrimPrefAsk, std::memory_order_relaxed);
+    {
+        trimInSample.store  (juce::jmax (0, stream.readInt()));
+        trimOutSample.store (juce::jmax (0, stream.readInt()));
+    }
+    else
+    {
+        trimInSample.store  (0);
+        trimOutSample.store (0);
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

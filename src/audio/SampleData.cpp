@@ -223,3 +223,26 @@ void SampleData::buildMipmaps()
 {
     buildMipmapsForBuffer (buffer, peakMipmaps);
 }
+
+std::unique_ptr<SampleData::DecodedSample> SampleData::createTrimmed (
+    const DecodedSample& src, int trimIn, int trimOut)
+{
+    const int numFrames = src.buffer.getNumSamples();
+    trimIn  = juce::jlimit (0, numFrames,     trimIn);
+    trimOut = juce::jlimit (trimIn + 1, numFrames, trimOut);
+    const int trimLen = trimOut - trimIn;
+    if (trimLen <= 0)
+        return nullptr;
+
+    auto result = std::make_unique<DecodedSample>();
+    result->fileName = src.fileName;
+    result->filePath = src.filePath;
+
+    const int numCh = src.buffer.getNumChannels();
+    result->buffer.setSize (numCh, trimLen);
+    for (int ch = 0; ch < numCh; ++ch)
+        result->buffer.copyFrom (ch, 0, src.buffer, ch, trimIn, trimLen);
+
+    buildMipmapsForBuffer (result->buffer, result->peakMipmaps);
+    return result;
+}
