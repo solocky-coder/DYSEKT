@@ -69,3 +69,12 @@ void TrimDialog::onCancel()
     if (auto* parent = getParentComponent())
         parent->removeChildComponent (this);
 }
+
+// Minimal stub: resolves the linker error; expand later to show an interactive dialog.
+void TrimDialog::show (const juce::String& /*fileName*/, double /*durationSecs*/,
+                       juce::Component* /*parent*/,
+                       std::function<void (Result)> callback)
+{
+    if (callback)
+        callback (Result{});
+}
