@@ -1,36 +1,34 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <functional>
+#include "DysektLookAndFeel.h"
 
-class TrimDialog : public juce::DialogWindow
+class DysektProcessor;
+class WaveformView;
+
+/**
+ *  TrimDialog — small inline overlay component shown at the bottom of the
+ *  WaveformView when the user activates Trim mode.
+ *
+ *  Provides "Apply Trim" and "Cancel" buttons.  Apply commits the current
+ *  trimIn/trimOut markers to the sample buffer via CmdApplyTrim; Cancel
+ *  simply exits trim mode without modifying any data.
+ */
+class TrimDialog : public juce::Component
 {
 public:
-    struct Result
-    {
-        bool userClickedYes = false;
-        bool rememberChoice = false;
-    };
+    TrimDialog (DysektProcessor& processor, WaveformView& waveformView);
+    ~TrimDialog() override = default;
 
-    explicit TrimDialog(const juce::File& file, double durationSeconds);
-    ~TrimDialog() override;
-
-    void paint(juce::Graphics& g) override;
+    void paint  (juce::Graphics& g) override;
     void resized() override;
 
-    static void show(juce::Component* parent, const juce::File& file, double durationSeconds,
-                     std::function<void(const Result&)> onComplete);
-
 private:
-    void onYesClicked();
-    void onNoClicked();
+    DysektProcessor& processor;
+    WaveformView&    waveformView;
 
-    juce::File audioFile;
-    double duration = 0.0;
-    std::unique_ptr<juce::TextButton> yesBtn, noBtn;
-    std::unique_ptr<juce::ToggleButton> rememberBtn;
-    std::unique_ptr<juce::Label> messageLabel;
-    std::function<void(const Result&)> callback;
+    juce::TextButton applyBtn { "Apply Trim" };
+    juce::TextButton cancelBtn { "Cancel" };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TrimDialog)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrimDialog)
 };
