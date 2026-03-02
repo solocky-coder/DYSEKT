@@ -1753,16 +1753,15 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     // v19 fields
     if (version >= 19 && ! stream.isExhausted())
+    {
         trimPreference.store (juce::jlimit ((int) TrimPrefAsk, (int) TrimPrefNever, stream.readInt()),
                               std::memory_order_relaxed);
-    else
-        trimPreference.store ((int) TrimPrefAsk, std::memory_order_relaxed);
-    {
         trimInSample.store  (juce::jmax (0, stream.readInt()));
         trimOutSample.store (juce::jmax (0, stream.readInt()));
     }
     else
     {
+        trimPreference.store ((int) TrimPrefAsk, std::memory_order_relaxed);
         trimInSample.store  (0);
         trimOutSample.store (0);
     }

@@ -88,6 +88,9 @@ public:
     // ── Load kind ────────────────────────────────────────────────────────────
     enum LoadKind { LoadKindReplace = 0, LoadKindRelink = 1 };
 
+    // ── Trim preference ───────────────────────────────────────────────────────
+    enum TrimPreference { TrimPrefAsk = 0, TrimPrefAlways = 1, TrimPrefNever = 2 };
+
     // ── Sample availability state ────────────────────────────────────────────
     enum SampleAvailabilityState
     {
@@ -167,6 +170,7 @@ public:
     void loadFileAsync      (const juce::File& file);
     void loadSoundFontAsync (const juce::File& file);
     void relinkFileAsync    (const juce::File& file);
+    void applyTrimToCurrentSample (int trimStart, int trimEnd);
 
     /** Read-only access to the latest published UI snapshot (UI thread only). */
     const UiSliceSnapshot& getUiSliceSnapshot() const noexcept
@@ -217,6 +221,9 @@ public:
     std::atomic<int> trimInSample    { 0 };
     std::atomic<int> trimOutSample   { 0 };
 
+    // Trim dialog preference (persisted)
+    std::atomic<int> trimPreference  { (int) TrimPrefAsk };
+
     // Oscilloscope ring buffer (audio thread writes, UI reads)
     std::array<float, kOscRingBufferSize> oscRingBuffer {};
     std::atomic<int> oscRingWriteHead { 0 };
@@ -240,8 +247,6 @@ private:
         LoadKind   kind  { LoadKindReplace };
         juce::File file;
     };
-
-    enum TrimPreference { TrimPrefAsk = 0, TrimPrefAlways = 1, TrimPrefNever = 2 };
 
     // =========================================================================
     // Private helpers
@@ -319,9 +324,6 @@ private:
     std::atomic<SampleData::DecodedSample*> completedLoadData   { nullptr };
     std::atomic<FailedLoadResult*>          completedLoadFailure { nullptr };
     std::atomic<SfzSlicePayload*>           pendingSfzSlices     { nullptr };
-
-    // Trim preference
-    std::atomic<int> trimPreference { (int) TrimPrefAsk };
 
     // =========================================================================
     // APVTS parameter pointers (assigned in constructor, constant thereafter)

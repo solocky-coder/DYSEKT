@@ -38,6 +38,12 @@ public:
     void getTrimBounds (int& outStart, int& outEnd) const;
     bool isTrimModeActive() const noexcept { return trimMode; }
 
+    // Trim mode API used by TrimDialog and ActionPanel
+    void setTrimMode (bool active);
+    void resetTrim();
+    int  getTrimIn()  const noexcept { return trimInPoint; }
+    int  getTrimOut() const noexcept { return trimOutPoint; }
+
     // Callback invoked when user applies trim; parameters are sample-accurate bounds
     std::function<void (int trimStart, int trimEnd)> onTrimApplied;
     // Callback invoked when user cancels trim (CANCEL button)
@@ -97,8 +103,10 @@ private:
     bool sliceDrawMode = false;
     bool softWaveform  = false;   // TAL-style gradient+outline rendering
     bool trimMode      = false;   // trim in/out marker editing mode
-    int  trimInPoint   = 0;       // trim-in marker position in samples
-    int  trimOutPoint  = 0;       // trim-out marker position in samples (0 = end of sample)
+    int  trimInPoint   = 0;       // trim-in marker position in samples (DragTrimIn path)
+    int  trimOutPoint  = 0;       // trim-out marker position in samples (DragTrimOut path)
+    int  trimStart     = 0;       // trim-in marker position in samples (enterTrimMode path)
+    int  trimEnd       = 0;       // trim-out marker position in samples (enterTrimMode path)
     mutable ViewState cachedPaintViewState;   // valid only between paint() start and end
     mutable bool paintViewStateActive = false; // true only during paint(); guards cachedPaintViewState
 
