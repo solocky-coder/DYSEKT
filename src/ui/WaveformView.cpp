@@ -894,31 +894,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 linkedSliceIdx = -1;
                 return;
             }
-
-            if (e.x > x1 && e.x < x2)
-            {
-                DysektProcessor::Command gestureCmd;
-                gestureCmd.type = DysektProcessor::CmdBeginGesture;
-                processor.pushCommand (gestureCmd);
-
-                dragSliceIdx = sel;
-                dragOffset   = samplePos - s.startSample;
-                dragSliceLen = s.endSample - s.startSample;
-
-                if (e.mods.isCtrlDown())
-                {
-                    dragMode   = DuplicateSlice;
-                    ghostStart = s.startSample;
-                    ghostEnd   = s.endSample;
-                }
-                else
-                {
-                    dragMode = MoveSlice;
-                    dragPreviewStart = s.startSample;
-                    dragPreviewEnd = s.endSample;
-                }
-                return;
-            }
         }
     }
 
