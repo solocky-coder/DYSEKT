@@ -9,6 +9,7 @@
 #include "ui/WaveformView.h"
 #include "ui/ScrollZoomBar.h"
 #include "ui/ActionPanel.h"
+#include "ui/ShortcutsPanel.h"
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
@@ -79,7 +80,11 @@ private:
     FileBrowserPanel browserPanel;
     OscilloscopeView oscilloscopeView;
 
+    ShortcutsPanel   shortcutsPanel;
+
     juce::TooltipWindow tooltipWindow { this, 500 };
+
+    void toggleShortcutsPanel();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektEditor)
 };

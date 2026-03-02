@@ -57,6 +57,10 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     browserPanel.setVisible (false);
     addChildComponent (browserPanel);
 
+    shortcutsPanel.setVisible (false);
+    addChildComponent (shortcutsPanel);
+    shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
+
     sliceLane.setWaveformView (&waveformView);
 
     // Auto-close browser when a file is loaded via double-click
@@ -90,6 +94,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     actionPanel.onBrowserToggle    = nullptr;
     actionPanel.onWaveToggle       = nullptr;
     actionPanel.onChromaticToggle  = nullptr;
+    actionPanel.onShortcutsToggle  = [this] { toggleShortcutsPanel(); };
 
     ensureDefaultThemes();
     loadUserSettings();
@@ -234,6 +239,18 @@ void DysektEditor::toggleChromatic()
     headerBar.setChromaticActive (newVal);
 }
 
+void DysektEditor::toggleShortcutsPanel()
+{
+    const bool show = ! shortcutsPanel.isVisible();
+    shortcutsPanel.setVisible (show);
+    if (show)
+    {
+        shortcutsPanel.setBounds (getLocalBounds());
+        shortcutsPanel.toFront (true);
+        shortcutsPanel.grabKeyboardFocus();
+    }
+}
+
 void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
@@ -272,6 +289,10 @@ void DysektEditor::resized()
 
     // 10. Waveform — remaining
     waveformView.setBounds (area.reduced (kMargin, 0));
+
+    // ShortcutsPanel covers the whole editor as an overlay
+    if (shortcutsPanel.isVisible())
+        shortcutsPanel.setBounds (getLocalBounds());
 }
 
 // ── Key shortcuts ─────────────────────────────────────────────────────────────
@@ -285,7 +306,15 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
     if (code == 'Z' && mods.isCommandDown())
     { DysektProcessor::Command c; c.type = DysektProcessor::CmdUndo; processor.pushCommand (c); return true; }
 
+    // ⌘? — toggle keyboard shortcuts panel
+    if ((code == '?' || code == '/') && mods.isCommandDown())
+    { toggleShortcutsPanel(); return true; }
+
     if (mods.isCommandDown() || mods.isAltDown()) return false;
+
+    // Esc closes shortcuts panel if open
+    if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
+    { toggleShortcutsPanel(); return true; }
 
     if (code == juce::KeyPress::escapeKey && actionPanel.isAutoChopOpen())
     { actionPanel.toggleAutoChop(); return true; }

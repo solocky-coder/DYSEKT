@@ -1,19 +1,46 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
-#include <atomic>
 #include <array>
+#include <vector>
+#include "audio/SampleData.h"
 #include "audio/SliceManager.h"
 #include "audio/VoicePool.h"
 #include "audio/LazyChopEngine.h"
-#include "audio/SoundFontLoader.h"
-#include "MidiLearnManager.h"
 #include "UndoManager.h"
 #include "params/ParamIds.h"
 #include "params/ParamLayout.h"
+#include "MidiLearnManager.h"
+#include "audio/SoundFontLoader.h"
 
 class DysektProcessor : public juce::AudioProcessor
 {
 public:
+    DysektProcessor();
+    ~DysektProcessor() override;
+
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+    const juce::String getName() const override { return "DYSEKT"; }
+    bool acceptsMidi() const override { return true; }
+    bool producesMidi() const override { return true; }
+    double getTailLengthSeconds() const override { return 5.0; }  // max ADSR release is 5000 ms
+
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+
+    void getStateInformation (juce::MemoryBlock& destData) override;
+    void setStateInformation (const void* data, int sizeInBytes) override;
+
+    // Command FIFO for thread-safe communication from UI
     // ── Load kind ────────────────────────────────────────────────────────────
     enum LoadKind { LoadKindReplace, LoadKindRelink };
 
@@ -55,6 +82,8 @@ public:
         CmdLoadFile,
         CmdCreateSlice,
         CmdDeleteSlice,
+        CmdLazyChopStart,
+        CmdLazyChopStop,
         CmdStretch,
         CmdToggleLock,
         CmdSetSliceParam,
@@ -63,6 +92,7 @@ public:
         CmdSplitSlice,
         CmdTransientChop,
         CmdRelinkFile,
+        CmdFileLoadCompleted,
         CmdFileLoadFailed,
         CmdUndo,
         CmdRedo,
@@ -70,6 +100,15 @@ public:
         CmdPanic,
         CmdSelectSlice,
         CmdSetRootNote,
+    };
+
+    enum LoadKind
+    {
+        LoadKindReplace = 0,
+        LoadKindRelink = 1,
+    };
+
+    enum SampleAvailabilityState
         CmdLazyChopStart,
         CmdLazyChopStop,
         CmdApplyTrim,
@@ -144,6 +183,19 @@ public:
     void loadFileAsync (const juce::File& file);
     void relinkFileAsync (const juce::File& file);
     void loadSoundFontAsync (const juce::File& file);  // SF2 / SFZ loader
+
+    struct UiSliceSnapshot
+    {
+        int numSlices = 0;
+        int selectedSlice = -1;
+        int rootNote = 36;
+        bool sampleLoaded = false;
+        bool sampleMissing = false;
+        int sampleNumFrames = 0;
+        juce::String sampleFileName;
+        std::array<Slice, SliceManager::kMaxSlices> slices {};
+    };
+
     void applyTrimToCurrentSample (int trimStart, int trimEnd);
 
     // ── UI snapshot (double-buffered, written on audio thread) ───────────────
@@ -211,6 +263,59 @@ public:
 
     uint32_t getUiSliceSnapshotVersion() const noexcept
     {
+        return uiSnapshotVersion.load (std::memory_order_acquire);
+    }
+
+    // Public data (accessed from UI thread)
+    SampleData   sampleData;
+    SliceManager sliceManager;
+    VoicePool    voicePool;
+    LazyChopEngine lazyChop;
+
+    juce::AudioProcessorValueTreeState apvts;
+
+    std::atomic<float> zoom   { 1.0f };
+    std::atomic<float> scroll { 0.0f };
+
+    // DAW BPM (read from playhead)
+    std::atomic<float> dawBpm { 120.0f };
+
+    // MIDI-selects-slice toggle
+    std::atomic<bool> midiSelectsSlice { false };
+
+    // Chromatic mode — any MIDI note plays the selected slice pitched relative to rootNote
+    std::atomic<bool> chromaticMode { false };
+
+    // Snap-to-zero-crossing toggle
+    std::atomic<bool> snapToZeroCrossing { false };
+
+    // Link mode — moving a slice end automatically moves the next slice's start
+    std::atomic<bool> slicesLinked { false };
+
+    // Trim markers stored in samples (updated by WaveformView during trim mode)
+    std::atomic<int> trimInSample  { 0 };
+    std::atomic<int> trimOutSample { 0 };
+
+    // Undo/redo
+    UndoManager undoMgr;
+
+    // MIDI Learn — maps CC numbers to SliceParamField ids
+    MidiLearnManager midiLearn;
+
+    // Shift preview request: -2=no-op, -1=stop, >=0=start at this sample position
+    std::atomic<int> shiftPreviewRequest { -2 };
+
+    // Live slice bounds during edge/move drag — updated every mouseDrag, no undo.
+    // Audio thread applies these each block so note-ons during drag use current bounds.
+    // Set liveDragSliceIdx to -1 to deactivate.
+    std::atomic<int> liveDragSliceIdx   { -1 };
+    std::atomic<int> liveDragBoundsStart {  0 };
+    std::atomic<int> liveDragBoundsEnd   {  0 };
+
+    // Ring buffer for oscilloscope display (written on audio thread, read on UI thread)
+    static constexpr int kOscRingBufferSize = 1024; // must be power of 2
+    std::array<float, kOscRingBufferSize> oscRingBuffer {};
+    std::atomic<int> oscRingWriteHead { 0 };
         return (uint32_t) uiSnapshotVersion.load (std::memory_order_acquire);
     }
 
@@ -321,6 +426,103 @@ private:
     std::atomic<bool> sampleMissing { false };
     juce::String missingFilePath;
     std::atomic<int> sampleAvailability { (int) SampleStateEmpty };
+
+    SampleAvailabilityState getSampleAvailabilityState() const
+    {
+        return (SampleAvailabilityState) sampleAvailability.load (std::memory_order_relaxed);
+    }
+
+private:
+    friend class SoundFontLoader;
+#if DYSEKT_HAS_SFIZZ
+    friend class SoundFontLoader::LoadJob;
+#endif
+
+    struct FailedLoadResult
+    {
+        int token = 0;
+        LoadKind kind = LoadKindReplace;
+        juce::File file;
+    };
+
+    void drainCommands();
+    void handleCommand (const Command& cmd);
+    void processMidi (const juce::MidiBuffer& midi);
+    void requestSampleLoad (const juce::File& file, LoadKind kind);
+    void clearVoicesBeforeSampleSwap();
+    void clampSlicesToSampleBounds();
+    void publishUiSliceSnapshot();
+    UndoManager::Snapshot makeSnapshot();
+    void captureSnapshot();
+    void restoreSnapshot (const UndoManager::Snapshot& snap);
+    bool enqueueOverflowCommand (Command cmd);
+    void drainOverflowCommands (bool& handledAny);
+    bool enqueueCoalescedCommand (const Command& cmd);
+    void drainCoalescedCommands (bool& handledAny);
+
+    // Command FIFO
+    static constexpr int kFifoSize = 256;
+    std::array<Command, kFifoSize> commandBuffer;
+    juce::AbstractFifo commandFifo { kFifoSize };
+    std::atomic<uint32_t> droppedCommandCount { 0 };
+    std::atomic<uint32_t> droppedCommandTotal { 0 };
+    std::atomic<uint32_t> droppedCriticalCommandTotal { 0 };
+    static constexpr int kOverflowFifoSize = 32;
+    std::array<Command, kOverflowFifoSize> overflowCommandBuffer {};
+    std::atomic<int> overflowReadIndex { 0 };
+    std::atomic<int> overflowWriteIndex { 0 };
+    std::atomic<bool> pendingSetSliceParam { false };
+    std::atomic<int> pendingSetSliceParamField { 0 };
+    std::atomic<float> pendingSetSliceParamValue { 0.0f };
+    std::atomic<bool> pendingSetSliceBounds { false };
+    std::atomic<int> pendingSetSliceBoundsIdx { -1 };
+    std::atomic<int> pendingSetSliceBoundsStart { 0 };
+    std::atomic<int> pendingSetSliceBoundsEnd { 0 };
+
+    double currentSampleRate = 44100.0;
+    bool gestureSnapshotCaptured = false;
+    int blocksSinceGestureActivity = 0;
+
+    juce::ThreadPool fileLoadPool { 1 };
+    std::atomic<int> nextLoadToken { 0 };
+    std::atomic<int> latestLoadToken { 0 };
+    std::atomic<int> latestLoadKind { (int) LoadKindReplace };
+    std::atomic<SampleData::DecodedSample*> completedLoadData { nullptr };
+    std::atomic<FailedLoadResult*> completedLoadFailure { nullptr };
+    std::atomic<SfzSlicePayload*>  pendingSfzSlices     { nullptr };
+    std::array<UiSliceSnapshot, 2> uiSliceSnapshots {};
+    std::atomic<int> uiSliceSnapshotIndex { 0 };
+    std::atomic<bool> uiSnapshotDirty { true };
+    std::atomic<uint32_t> uiSnapshotVersion { 0 };
+
+    bool heldNotes[128] = {};
+
+    // Cached parameter pointers
+    std::atomic<float>* masterVolParam   = nullptr;
+    std::atomic<float>* bpmParam         = nullptr;
+    std::atomic<float>* pitchParam       = nullptr;
+    std::atomic<float>* algoParam        = nullptr;
+    std::atomic<float>* attackParam      = nullptr;
+    std::atomic<float>* decayParam       = nullptr;
+    std::atomic<float>* sustainParam     = nullptr;
+    std::atomic<float>* releaseParam     = nullptr;
+    std::atomic<float>* muteGroupParam   = nullptr;
+    std::atomic<float>* stretchParam     = nullptr;
+    std::atomic<float>* tonalityParam    = nullptr;
+    std::atomic<float>* formantParam     = nullptr;
+    std::atomic<float>* formantCompParam = nullptr;
+    std::atomic<float>* grainModeParam   = nullptr;
+    std::atomic<float>* releaseTailParam = nullptr;
+    std::atomic<float>* reverseParam     = nullptr;
+    std::atomic<float>* loopParam        = nullptr;
+    std::atomic<float>* oneShotParam     = nullptr;
+    std::atomic<float>* maxVoicesParam   = nullptr;
+    std::atomic<float>* centsDetuneParam = nullptr;
+    std::atomic<float>* panParam         = nullptr;
+    std::atomic<float>* filterCutoffParam = nullptr;
+    std::atomic<float>* filterResParam   = nullptr;
+    std::atomic<float>* sliceStartParam  = nullptr;   // normalised 0-1, selected slice start
+    std::atomic<float>* sliceEndParam    = nullptr;   // normalised 0-1, selected slice end
     // Coalesced single-write slots for high-frequency commands
     std::atomic<bool>  pendingSetSliceBounds   { false };
     std::atomic<int>   pendingSetSliceBoundsIdx   { -1 };
