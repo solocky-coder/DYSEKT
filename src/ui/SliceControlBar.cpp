@@ -346,7 +346,7 @@ void SliceControlBar::paint (juce::Graphics& g)
         g.setFont (DysektLookAndFeel::makeFont (14.0f));
         g.setColour (getTheme().foreground.withAlpha (0.5f));
         // Sample range only — no time display per request
-        g.drawText (juce::String (s.startSample) + " — " + juce::String (s.endSample),
+        g.drawText (juce::String (s.startSample) + " - " + juce::String (s.endSample),
                     8, row1y + 15, rightEdge - 8, 14, juce::Justification::right);
     }
 

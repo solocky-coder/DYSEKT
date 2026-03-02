@@ -71,7 +71,7 @@ HeaderBar::HeaderBar (DysektProcessor& p) : processor (p)
         if (onWaveToggle) onWaveToggle();
     };
 
-    chBtn.setTooltip ("Chromatic Mode — play selected slice across full keyboard");
+    chBtn.setTooltip ("Chromatic Mode - play selected slice across full keyboard");
     chBtn.onClick = [this] {
         chromaticActive = ! chromaticActive;
         updateAccentBtn (chBtn);
@@ -402,13 +402,11 @@ void HeaderBar::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // Click on sample info area — open file browser or relink
+    // Click on sample info area — only relink if missing
     if (sampleInfoBounds.contains (pos))
     {
         if (ui.sampleMissing)
             openRelinkBrowser();
-        else
-            openFileBrowser();
         return;
     }
 
