@@ -73,6 +73,8 @@ public:
 
     // Called after double-click load so editor can close the panel
     std::function<void()> onFileLoaded;
+    // Called when user double-clicks an audio file (not SF2/SFZ); editor wires this to showTrimDialog
+    std::function<void (const juce::File&)> onLoadRequest;
 
 private:
     // FileBrowserListener

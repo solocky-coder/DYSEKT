@@ -9,6 +9,7 @@ static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
 static constexpr int kOscilloscopeH = 120;
+static constexpr int kMixerPanelH   = 210;
 
 static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
@@ -38,7 +39,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       actionPanel    (p, waveformView),
 
       browserPanel   (p),
-      oscilloscopeView (p)
+      oscilloscopeView (p),
+      mixerPanel     (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     setLookAndFeel (&lnf);
@@ -57,10 +59,35 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     browserPanel.setVisible (false);
     addChildComponent (browserPanel);
 
+    mixerPanel.setVisible (false);
+    addChildComponent (mixerPanel);
+    shortcutsPanel.setVisible (false);
+    addChildComponent (shortcutsPanel);
+    shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
+
     sliceLane.setWaveformView (&waveformView);
 
     // Auto-close browser when a file is loaded via double-click
     browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
+
+    // Route file loads from the browser panel through the trim dialog
+    browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
+
+    // Route file drops on the waveform through the trim dialog
+    waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
+
+    // Handle trim apply / cancel callbacks from WaveformView
+    waveformView.onTrimApplied = [this] (int s, int e)
+    {
+        processor.applyTrimToCurrentSample (s, e);
+        trimSession.reset();
+    };
+    waveformView.onTrimCancelled = [this]
+    {
+        trimSession.reset();
+        // The original (non-trimmed) snapshot is already in sampleData since
+        // we loaded the full file before entering trim mode.
+    };
 
     // FIL / WA / CH now live in headerBar — wire their callbacks there
     headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
@@ -71,6 +98,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     actionPanel.onBrowserToggle    = nullptr;
     actionPanel.onWaveToggle       = nullptr;
     actionPanel.onChromaticToggle  = nullptr;
+    actionPanel.onShortcutsToggle  = [this] { toggleShortcutsPanel(); };
 
     ensureDefaultThemes();
     loadUserSettings();
@@ -100,6 +128,7 @@ int DysektEditor::computeTotalHeight() const
 {
     int h = kBaseHCore;
     if (browserOpen) h += kBrowserH;
+    if (mixerOpen)   h += kMixerPanelH;
 
     return h;
 }
@@ -112,6 +141,87 @@ void DysektEditor::toggleBrowserPanel()
     headerBar.setBrowserActive (browserOpen);
     setSize (getWidth(), computeTotalHeight());
     resized();
+}
+
+// ── Trim workflow ─────────────────────────────────────────────────────────────
+
+void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
+{
+    // Skip trim for relinks and soundfonts
+    if (isRelink)
+    {
+        processor.loadFileAsync (file);
+        return;
+    }
+
+    auto ext = file.getFileExtension().toLowerCase();
+    if (ext == ".sf2" || ext == ".sfz")
+    {
+        processor.loadSoundFontAsync (file);
+        return;
+    }
+
+    // Check user's stored preference
+    int pref = processor.trimPreference.load (std::memory_order_relaxed);
+    if (pref == DysektProcessor::TrimPrefNever)
+    {
+        processor.loadFileAsync (file);
+        processor.zoom.store (1.0f);
+        processor.scroll.store (0.0f);
+        return;
+    }
+    if (pref == DysektProcessor::TrimPrefAlways)
+    {
+        showTrimMode (file);
+        return;
+    }
+
+    // Estimate duration from file metadata (without full decode)
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
+    double duration = 0.0;
+    if (reader != nullptr && reader->sampleRate > 0.0)
+        duration = (double) reader->lengthInSamples / reader->sampleRate;
+
+    // Short files skip the dialog
+    if (duration < 5.0 || duration <= 0.0)
+    {
+        processor.loadFileAsync (file);
+        processor.zoom.store (1.0f);
+        processor.scroll.store (0.0f);
+        return;
+    }
+
+    // Show trim dialog
+    TrimDialog::show (file.getFileName(), duration, this,
+        [this, file] (TrimDialog::Result result)
+        {
+            if (result.remember)
+                processor.trimPreference.store (result.trim ? DysektProcessor::TrimPrefAlways
+                                                            : DysektProcessor::TrimPrefNever,
+                                                std::memory_order_relaxed);
+            if (result.trim)
+                showTrimMode (file);
+            else
+            {
+                processor.loadFileAsync (file);
+                processor.zoom.store (1.0f);
+                processor.scroll.store (0.0f);
+            }
+        });
+}
+
+void DysektEditor::showTrimMode (const juce::File& file)
+{
+    // Store session so the timer callback knows to enter trim mode on load
+    trimSession = std::make_unique<TrimSession>();
+    trimSession->file   = file;
+    trimSession->active = false;
+
+    processor.loadFileAsync (file);
+    processor.zoom.store (1.0f);
+    processor.scroll.store (0.0f);
 }
 
 void DysektEditor::toggleSoftWave()
@@ -132,6 +242,24 @@ void DysektEditor::toggleChromatic()
     processor.chromaticMode.store (newVal);
     actionPanel.setChromaticActive (newVal);
     headerBar.setChromaticActive (newVal);
+}
+
+void DysektEditor::toggleMixerPanel()
+{
+    mixerOpen = ! mixerOpen;
+    mixerPanel.setVisible (mixerOpen);
+    setSize (getWidth(), computeTotalHeight());
+    resized();
+void DysektEditor::toggleShortcutsPanel()
+{
+    const bool show = ! shortcutsPanel.isVisible();
+    shortcutsPanel.setVisible (show);
+    if (show)
+    {
+        shortcutsPanel.setBounds (getLocalBounds());
+        shortcutsPanel.toFront (true);
+        shortcutsPanel.grabKeyboardFocus();
+    }
 }
 
 void DysektEditor::paint (juce::Graphics& g)
@@ -159,6 +287,10 @@ void DysektEditor::resized()
     if (browserOpen)
         browserPanel.setBounds (area.removeFromBottom (kBrowserH));
 
+    // 6. Mixer panel — above browser (if open)
+    if (mixerOpen)
+        mixerPanel.setBounds (area.removeFromBottom (kMixerPanelH).reduced (kMargin, 0));
+
     // 7. Action panel
     actionPanel.setBounds (area.removeFromBottom (kActionH).reduced (kMargin, 0));
 
@@ -172,6 +304,10 @@ void DysektEditor::resized()
 
     // 10. Waveform — remaining
     waveformView.setBounds (area.reduced (kMargin, 0));
+
+    // ShortcutsPanel covers the whole editor as an overlay
+    if (shortcutsPanel.isVisible())
+        shortcutsPanel.setBounds (getLocalBounds());
 }
 
 // ── Key shortcuts ─────────────────────────────────────────────────────────────
@@ -185,7 +321,15 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
     if (code == 'Z' && mods.isCommandDown())
     { DysektProcessor::Command c; c.type = DysektProcessor::CmdUndo; processor.pushCommand (c); return true; }
 
+    // ⌘? — toggle keyboard shortcuts panel
+    if ((code == '?' || code == '/') && mods.isCommandDown())
+    { toggleShortcutsPanel(); return true; }
+
     if (mods.isCommandDown() || mods.isAltDown()) return false;
+
+    // Esc closes shortcuts panel if open
+    if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
+    { toggleShortcutsPanel(); return true; }
 
     if (code == juce::KeyPress::escapeKey && actionPanel.isAutoChopOpen())
     { actionPanel.toggleAutoChop(); return true; }
@@ -263,6 +407,18 @@ void DysektEditor::timerCallback()
     lastWaveformAnimating = waveformAnimating;
     lastPreviewActive     = previewActive;
 
+    // ── Trim session: enter trim mode once the async load completes ───────────
+    if (trimSession != nullptr && ! trimSession->active)
+    {
+        auto snap = processor.sampleData.getSnapshot();
+        if (snap != nullptr && snap->filePath == trimSession->file.getFullPathName())
+        {
+            trimSession->active = true;
+            const int totalFrames = snap->buffer.getNumSamples();
+            waveformView.enterTrimMode (0, totalFrames);
+        }
+    }
+
     const int targetHz = waveformAnimating ? 60 : 30;
     if (targetHz != timerHz) { startTimerHz (targetHz); timerHz = targetHz; }
 
@@ -271,6 +427,8 @@ void DysektEditor::timerCallback()
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
 
     oscilloscopeView.repaint();
+
+    if (mixerOpen) mixerPanel.updateFromSnapshot();
 
     headerBar.repaint();
     sliceControlBar.repaint();
@@ -394,13 +552,7 @@ void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
     if (files.isEmpty()) return;
 
     juce::File f (files[0]);
-    auto ext = f.getFileExtension().toLowerCase();
-
     processor.zoom.store (1.0f);
     processor.scroll.store (0.0f);
-
-    if (ext == ".sf2" || ext == ".sfz")
-        processor.loadSoundFontAsync (f);
-    else
-        processor.loadFileAsync (f);
+    showTrimDialog (f);
 }

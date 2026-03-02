@@ -18,6 +18,9 @@ public:
     bool isAutoChopOpen() const { return autoChopPanel != nullptr; }
     void paintOverChildren (juce::Graphics& g) override;
 
+    /// Invoked when the user clicks the "?" button to open the shortcuts panel.
+    std::function<void()> onShortcutsToggle;
+
     // Callbacks wired up by DysektEditor
 
     std::function<void()> onBrowserToggle;
@@ -41,14 +44,15 @@ private:
     void updateSnapButtonAppearance (bool active);
     void toggleTrimMode();
 
-    juce::TextButton addSliceBtn   { "ADD"  };
-    juce::TextButton lazyChopBtn   { "LAZY" };
-    juce::TextButton dupBtn        { "COPY" };
-    juce::TextButton splitBtn      { "AUTO" };
-    juce::TextButton deleteBtn     { "DEL"  };
-    juce::TextButton trimBtn       { "TRIM" };
-    juce::TextButton snapBtn       { "" };
-    juce::TextButton midiSelectBtn { "" };
+    juce::TextButton addSliceBtn    { "ADD"  };
+    juce::TextButton lazyChopBtn    { "LAZY" };
+    juce::TextButton dupBtn         { "COPY" };
+    juce::TextButton splitBtn       { "AUTO" };
+    juce::TextButton deleteBtn      { "DEL"  };
+    juce::TextButton trimBtn        { "TRIM" };
+    juce::TextButton snapBtn        { "" };
+    juce::TextButton midiSelectBtn  { "" };
+    juce::TextButton shortcutsBtn   { "?" };
 
     juce::TextButton browserBtn    { "FILES" };
     juce::TextButton waveBtn       { "WAVE"  };

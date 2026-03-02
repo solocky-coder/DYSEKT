@@ -291,6 +291,24 @@ void DysektProcessor::relinkFileAsync (const juce::File& file)
     requestSampleLoad (file, LoadKindRelink);
 }
 
+void DysektProcessor::applyTrimToCurrentSample (int trimStart, int trimEnd)
+{
+    auto snap = sampleData.getSnapshot();
+    if (snap == nullptr)
+        return;
+
+    auto trimmed = SampleData::applyTrim (snap.get(), trimStart, trimEnd);
+    if (trimmed == nullptr)
+        return;
+
+    clearVoicesBeforeSampleSwap();
+    trimRegionStart.store (trimStart, std::memory_order_relaxed);
+    trimRegionEnd.store   (trimEnd,   std::memory_order_relaxed);
+    sampleData.applyDecodedSample (std::move (trimmed));
+    clampSlicesToSampleBounds();
+    publishUiSliceSnapshot();
+}
+
 void DysektProcessor::clearVoicesBeforeSampleSwap()
 {
     // Stop lazy chop before killing voices; its preview voice and buffer pointer
@@ -1510,14 +1528,19 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     {
         int wh = oscRingWriteHead.load (std::memory_order_relaxed);
         const int numSamples = buffer.getNumSamples();
+        float peakL = 0.0f, peakR = 0.0f;
         for (int i = 0; i < numSamples; ++i)
         {
-            float s = busL[0][i];
-            if (busR[0] != nullptr) s = (s + busR[0][i]) * 0.5f;
-            oscRingBuffer[(size_t) wh] = s;
+            const float sL = busL[0][i];
+            const float sR = (busR[0] != nullptr) ? busR[0][i] : sL;
+            peakL = std::max (peakL, std::abs (sL));
+            peakR = std::max (peakR, std::abs (sR));
+            oscRingBuffer[(size_t) wh] = (sL + sR) * 0.5f;
             wh = (wh + 1) & (kOscRingBufferSize - 1);
         }
         oscRingWriteHead.store (wh, std::memory_order_release);
+        masterPeakL.store (peakL, std::memory_order_relaxed);
+        masterPeakR.store (peakR, std::memory_order_relaxed);
     }
 
     // Pass through MIDI
@@ -1609,6 +1632,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     stream.writeBool (slicesLinked.load());
 
     // v19 fields
+    stream.writeInt (trimPreference.load (std::memory_order_relaxed));
     stream.writeInt (trimInSample.load());
     stream.writeInt (trimOutSample.load());
 }
@@ -1729,6 +1753,10 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     // v19 fields
     if (version >= 19 && ! stream.isExhausted())
+        trimPreference.store (juce::jlimit ((int) TrimPrefAsk, (int) TrimPrefNever, stream.readInt()),
+                              std::memory_order_relaxed);
+    else
+        trimPreference.store ((int) TrimPrefAsk, std::memory_order_relaxed);
     {
         trimInSample.store  (juce::jmax (0, stream.readInt()));
         trimOutSample.store (juce::jmax (0, stream.readInt()));

@@ -9,9 +9,13 @@
 #include "ui/WaveformView.h"
 #include "ui/ScrollZoomBar.h"
 #include "ui/ActionPanel.h"
+#include "ui/ShortcutsPanel.h"
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
+#include "ui/MixerPanel.h"
+#include "ui/TrimDialog.h"
+#include "TrimSession.h"
 
 class DysektEditor : public juce::AudioProcessorEditor,
                              public juce::FileDragAndDropTarget,
@@ -36,6 +40,11 @@ public:
     void toggleBrowserPanel();
     void toggleSoftWave();
     void toggleChromatic();
+    void toggleMixerPanel();
+
+    // Trim workflow
+    void showTrimDialog (const juce::File& file, bool isRelink = false);
+    void showTrimMode   (const juce::File& file);
 
 private:
     void timerCallback() override;
@@ -57,6 +66,10 @@ private:
 
     bool browserOpen = false;
     bool softWave    = false;
+    bool mixerOpen   = false;
+
+    // Trim session (non-null while waiting for trim-mode load to complete)
+    std::unique_ptr<TrimSession> trimSession;
 
     DysektLookAndFeel lnf;
     LogoBar         logoBar;
@@ -69,8 +82,13 @@ private:
 
     FileBrowserPanel browserPanel;
     OscilloscopeView oscilloscopeView;
+    MixerPanel       mixerPanel;
+
+    ShortcutsPanel   shortcutsPanel;
 
     juce::TooltipWindow tooltipWindow { this, 500 };
+
+    void toggleShortcutsPanel();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektEditor)
 };
