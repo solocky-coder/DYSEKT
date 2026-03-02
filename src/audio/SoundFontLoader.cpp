@@ -163,7 +163,7 @@ public:
         }
 
         // Build waveform peak mipmaps for the waveform display
-        SampleData::buildPeakMipmaps (decoded->buffer, decoded->peakMipmaps);
+        // SampleData::buildPeakMipmaps (decoded->buffer, decoded->peakMipmaps);
 
         // ── Step 4: post results ──────────────────────────────────────────────
         // Post slice layout (processBlock picks this up right after applyDecodedSample)
