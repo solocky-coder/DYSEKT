@@ -110,6 +110,9 @@ target_sources(Dysekt PRIVATE
     src/ui/FileBrowserPanel.cpp
     src/ui/OscilloscopeView.cpp
     src/ui/TrimDialog.cpp
+    src/ui/MixerStrip.cpp
+    src/ui/MasterMixerStrip.cpp
+    src/ui/MixerPanel.cpp
     src/ui/ShortcutsPanel.cpp
 )
 

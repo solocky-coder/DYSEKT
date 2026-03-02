@@ -13,6 +13,7 @@
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
+#include "ui/MixerPanel.h"
 #include "ui/TrimDialog.h"
 #include "TrimSession.h"
 
@@ -39,6 +40,7 @@ public:
     void toggleBrowserPanel();
     void toggleSoftWave();
     void toggleChromatic();
+    void toggleMixerPanel();
 
     // Trim workflow
     void showTrimDialog (const juce::File& file, bool isRelink = false);
@@ -64,6 +66,7 @@ private:
 
     bool browserOpen = false;
     bool softWave    = false;
+    bool mixerOpen   = false;
 
     // Trim session (non-null while waiting for trim-mode load to complete)
     std::unique_ptr<TrimSession> trimSession;
@@ -79,6 +82,7 @@ private:
 
     FileBrowserPanel browserPanel;
     OscilloscopeView oscilloscopeView;
+    MixerPanel       mixerPanel;
 
     ShortcutsPanel   shortcutsPanel;
 

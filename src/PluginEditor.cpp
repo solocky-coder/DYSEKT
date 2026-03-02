@@ -9,6 +9,7 @@ static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
 static constexpr int kOscilloscopeH = 120;
+static constexpr int kMixerPanelH   = 210;
 
 static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
@@ -38,7 +39,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       actionPanel    (p, waveformView),
 
       browserPanel   (p),
-      oscilloscopeView (p)
+      oscilloscopeView (p),
+      mixerPanel     (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     setLookAndFeel (&lnf);
@@ -57,6 +59,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     browserPanel.setVisible (false);
     addChildComponent (browserPanel);
 
+    mixerPanel.setVisible (false);
+    addChildComponent (mixerPanel);
     shortcutsPanel.setVisible (false);
     addChildComponent (shortcutsPanel);
     shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
@@ -124,6 +128,7 @@ int DysektEditor::computeTotalHeight() const
 {
     int h = kBaseHCore;
     if (browserOpen) h += kBrowserH;
+    if (mixerOpen)   h += kMixerPanelH;
 
     return h;
 }
@@ -239,6 +244,12 @@ void DysektEditor::toggleChromatic()
     headerBar.setChromaticActive (newVal);
 }
 
+void DysektEditor::toggleMixerPanel()
+{
+    mixerOpen = ! mixerOpen;
+    mixerPanel.setVisible (mixerOpen);
+    setSize (getWidth(), computeTotalHeight());
+    resized();
 void DysektEditor::toggleShortcutsPanel()
 {
     const bool show = ! shortcutsPanel.isVisible();
@@ -275,6 +286,10 @@ void DysektEditor::resized()
     // 5. Browser panel — above slice ctrl (if open)
     if (browserOpen)
         browserPanel.setBounds (area.removeFromBottom (kBrowserH));
+
+    // 6. Mixer panel — above browser (if open)
+    if (mixerOpen)
+        mixerPanel.setBounds (area.removeFromBottom (kMixerPanelH).reduced (kMargin, 0));
 
     // 7. Action panel
     actionPanel.setBounds (area.removeFromBottom (kActionH).reduced (kMargin, 0));
@@ -412,6 +427,8 @@ void DysektEditor::timerCallback()
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
 
     oscilloscopeView.repaint();
+
+    if (mixerOpen) mixerPanel.updateFromSnapshot();
 
     headerBar.repaint();
     sliceControlBar.repaint();
