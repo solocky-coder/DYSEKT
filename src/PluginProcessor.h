@@ -97,6 +97,55 @@ public:
         SampleStateMissingAwaitingRelink,
     };
 
+    // Param field identifiers for CmdSetSliceParam
+    enum SliceParamField
+    {
+        FieldBpm = 0,
+        FieldPitch,
+        FieldAlgorithm,
+        FieldAttack,
+        FieldDecay,
+        FieldSustain,
+        FieldRelease,
+        FieldMuteGroup,
+        FieldMidiNote,
+        FieldStretchEnabled,
+        FieldTonality,
+        FieldFormant,
+        FieldFormantComp,
+        FieldGrainMode,
+        FieldVolume,
+        FieldReleaseTail,
+        FieldReverse,
+        FieldOutputBus,
+        FieldLoop,
+        FieldOneShot,
+        FieldCentsDetune,
+        FieldSliceStart,   // 21 — normalised 0-1 → startSample via MIDI CC
+        FieldSliceEnd,     // 22 — normalised 0-1 → endSample via MIDI CC
+        FieldPan,          // 23 — per-slice pan -1..+1
+        FieldFilterCutoff, // 24 — per-slice LP filter cutoff Hz
+        FieldFilterRes,    // 25 — per-slice LP filter resonance 0..1
+    };
+
+    struct Command
+    {
+        CommandType type = CmdNone;
+        int intParam1 = 0;
+        int intParam2 = 0;
+        float floatParam1 = 0.0f;
+        juce::File fileParam;
+        // Fixed-size array avoids heap allocation/deallocation on the audio thread.
+        std::array<int, 128> positions {};
+        int numPositions = 0;
+    };
+
+    void pushCommand (Command cmd);
+    void loadFileAsync (const juce::File& file);
+    void relinkFileAsync (const juce::File& file);
+    void loadSoundFontAsync (const juce::File& file);  // SF2 / SFZ loader
+    void applyTrimToCurrentSample (int trimStart, int trimEnd);
+
     // ── UI snapshot (double-buffered, written on audio thread) ───────────────
     struct UiSliceSnapshot
     {
@@ -260,6 +309,18 @@ private:
     std::atomic<int> overflowWriteIndex { 0 };
     std::atomic<int> overflowReadIndex  { 0 };
 
+    // Trim preference (0 = ask every time, 1 = always trim, 2 = never trim)
+    enum TrimPreference { TrimPrefAsk = 0, TrimPrefAlways = 1, TrimPrefNever = 2 };
+    std::atomic<int> trimPreference { (int) TrimPrefAsk };
+
+    // Trim region stored in samples (set when user applies trim)
+    std::atomic<int> trimRegionStart { 0 };
+    std::atomic<int> trimRegionEnd   { 0 };
+
+    // Missing sample state (for relink UI)
+    std::atomic<bool> sampleMissing { false };
+    juce::String missingFilePath;
+    std::atomic<int> sampleAvailability { (int) SampleStateEmpty };
     // Coalesced single-write slots for high-frequency commands
     std::atomic<bool>  pendingSetSliceBounds   { false };
     std::atomic<int>   pendingSetSliceBoundsIdx   { -1 };

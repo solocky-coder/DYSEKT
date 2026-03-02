@@ -38,6 +38,8 @@ public:
 
     static std::unique_ptr<DecodedSample> decodeFromFile (const juce::File& file,
                                                            double projectSampleRate);
+    static std::unique_ptr<DecodedSample> applyTrim (const DecodedSample* original,
+                                                      int trimStart, int trimEnd);
     void applyDecodedSample (std::unique_ptr<DecodedSample> decoded);
     bool loadFromFile (const juce::File& file, double projectSampleRate);
     void clear();
