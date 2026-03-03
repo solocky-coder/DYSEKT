@@ -281,11 +281,11 @@ void DysektEditor::resized()
     // 1. Logo bar
     logoBar.setBounds (area.removeFromTop (kLogoH));
 
-    // 2. Header row — LCD on the left, header controls on the right
+    // 2. Header row — header controls on the left, LCD on the right
     {
         auto headerRow = area.removeFromTop (kHeaderRowH);
-        sliceLcdDisplay.setBounds (headerRow.removeFromLeft (kLcdW).reduced (kMargin, kMargin));
-        headerBar.setBounds (headerRow);
+        headerBar.setBounds (headerRow.removeFromRight (getWidth() - kLcdW));
+        sliceLcdDisplay.setBounds (headerRow.reduced (kMargin, kMargin));
     }
 
     // 3. Slice lane
