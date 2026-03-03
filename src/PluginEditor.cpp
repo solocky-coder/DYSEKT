@@ -5,6 +5,7 @@ static constexpr int kBaseW      = 900;
 static constexpr int kLogoH      = 44;
 static constexpr int kHeaderH    = 60;
 static constexpr int kSliceLaneH = 30;
+static constexpr int kLcdH       = SliceLcdDisplay::kPreferredHeight;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
@@ -14,6 +15,7 @@ static constexpr int kMixerPanelH   = 210;
 static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
 static constexpr int kBaseHCore  = kLogoH + kHeaderH + kSliceLaneH
+                                 + kLcdH
                                  + kScrollbarH + kSliceCtrlH + kActionH
                                  + kOscilloscopeH
                                  + 120; // minimum waveform height
@@ -40,6 +42,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
       browserPanel   (p),
       oscilloscopeView (p),
+      sliceLcdDisplay  (p),
       mixerPanel     (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
@@ -54,6 +57,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (actionPanel);
 
     addAndMakeVisible (oscilloscopeView);
+    addAndMakeVisible (sliceLcdDisplay);
 
     // Panels start hidden
     browserPanel.setVisible (false);
@@ -282,6 +286,9 @@ void DysektEditor::resized()
     // 3. Slice lane
     sliceLane.setBounds (area.removeFromTop (kSliceLaneH).reduced (kMargin, 0));
 
+    // 3b. LCD display — in the empty bar below the slice lane
+    sliceLcdDisplay.setBounds (area.removeFromTop (kLcdH).reduced (kMargin, 0));
+
     // 4. Slice control bar — bottom
     sliceControlBar.setBounds (area.removeFromBottom (kSliceCtrlH));
 
@@ -429,6 +436,7 @@ void DysektEditor::timerCallback()
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
 
     oscilloscopeView.repaint();
+    sliceLcdDisplay.repaintLcd();
 
     if (mixerOpen) mixerPanel.updateFromSnapshot();
 
