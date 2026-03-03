@@ -13,7 +13,6 @@
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
-#include "ui/SliceLcdDisplay.h"
 #include "ui/MixerPanel.h"
 #include "ui/TrimDialog.h"
 #include "TrimSession.h"
@@ -83,7 +82,6 @@ private:
 
     FileBrowserPanel browserPanel;
     OscilloscopeView oscilloscopeView;
-    SliceLcdDisplay  sliceLcdDisplay;
     MixerPanel       mixerPanel;
 
     ShortcutsPanel   shortcutsPanel;
