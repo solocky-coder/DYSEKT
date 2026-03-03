@@ -1,17 +1,48 @@
-// Layout Constants
-const int kHeaderRowH = 0; // Removed concept of separate header row
-const int kLcdW = 0; // Full width, previously 320
-const int kLcdH = 240; // Added expanded LCD height
+// PluginEditor.cpp
 
-// Resized function
-void resized() {
-    // Logo bar
-    auto logoBar = area.removeFromTop (logoBarHeight);
+#include "PluginEditor.h"
 
-    // Set the full width for the LCD
-    sliceLcdDisplay.setBounds (area.removeFromTop (kLcdH).reduced (kMargin, kMargin));
+// Layout constants
+constexpr int kMargin = 10;
+constexpr int logoBarHeight = 50;
+constexpr int sliceLaneHeight = 40;
+constexpr int kLcdH = 240;
 
-    // Configure Slice lane and the rest as needed
-    sliceLane.setBounds (area.removeFromTop (sliceLaneHeight).reduced (kMargin, kMargin));
-    rest.setBounds (area);
+DysektEditor::DysektEditor(DysektProcessor& p)
+    : AudioProcessorEditor(p), processor(p)
+{
+    // Add components to visible hierarchy
+    addAndMakeVisible(logoBar);
+    addAndMakeVisible(sliceLcdDisplay);
+    addAndMakeVisible(sliceLane);
+
+    setSize(800, 600); // or whatever default size you prefer
 }
+
+DysektEditor::~DysektEditor() {}
+
+void DysektEditor::paint(juce::Graphics& g)
+{
+    // Fill background
+    g.fillAll(juce::Colours::darkgrey);
+
+    // Custom paint code (optional)
+}
+
+void DysektEditor::resized()
+{
+    juce::Rectangle<int> area = getLocalBounds();
+
+    // Logo bar
+    logoBar.setBounds(area.removeFromTop(logoBarHeight));
+
+    // LCD display
+    sliceLcdDisplay.setBounds(area.removeFromTop(kLcdH).reduced(kMargin, kMargin));
+
+    // Slice lane
+    sliceLane.setBounds(area.removeFromTop(sliceLaneHeight).reduced(kMargin, kMargin));
+
+    // Add layout for other UI elements below, if needed
+}
+
+// If you have other methods (keyboard, timers, etc) you can add them here.
