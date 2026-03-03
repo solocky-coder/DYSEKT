@@ -1,93 +1,70 @@
 #include "OscilloscopeView.h"
 #include "../PluginProcessor.h"
 #include "DysektLookAndFeel.h"
-#include <array>
-#include <cmath>
 
-static constexpr int kDisplaySamples = 256;
-static constexpr int kStatsBoxW      = 68;
-static constexpr int kGridSpacing    = 20; // samples between vertical grid lines
-
-OscilloscopeView::OscilloscopeView (DysektProcessor& p) : processor (p) {}
+OscilloscopeView::OscilloscopeView (DysektProcessor& p)
+    : processor (p)
+{
+    setOpaque (true);
+}
 
 void OscilloscopeView::paint (juce::Graphics& g)
 {
-    const auto& theme = getTheme();
-    auto bounds = getLocalBounds();
+    const auto bounds = getLocalBounds();
+    const int  W      = bounds.getWidth();
+    const int  H      = bounds.getHeight();
 
-    // Background
-    g.fillAll (theme.waveformBg);
+    // ── Background ────────────────────────────────────────────────────────────
+    g.fillAll (getTheme().background.darker (0.15f));
 
-    // Border
-    g.setColour (theme.separator);
-    g.drawRect (bounds, 1);
+    // ── Centre-line ───────────────────────────────────────────────────────────
+    const float cy = H * 0.5f;
+    g.setColour (juce::Colours::white.withAlpha (0.05f));
+    g.drawHorizontalLine (juce::roundToInt (cy), 0.0f, (float) W);
 
-    // Split waveform area and stats box
-    auto waveArea  = bounds.reduced (1, 1);
-    auto statsArea = waveArea.removeFromRight (kStatsBoxW);
+    // ── Read ring buffer ──────────────────────────────────────────────────────
+    const int   ringSize  = DysektProcessor::kOscRingBufferSize;   // 4096
+    const int   writeHead = processor.oscRingWriteHead.load (std::memory_order_acquire);
 
-    // ── Vertical grid lines every kGridSpacing samples ───────────────────────
-    const float pxPerSample = (float) waveArea.getWidth() / (float) kDisplaySamples;
-    g.setColour (theme.gridLine);
-    for (int s = kGridSpacing; s < kDisplaySamples; s += kGridSpacing)
-    {
-        const float x = (float) waveArea.getX() + (float) s * pxPerSample;
-        g.drawVerticalLine ((int) x, (float) waveArea.getY(), (float) waveArea.getBottom());
-    }
+    // How many samples we want to display — use the full width in pixels,
+    // clamped to the ring buffer size.
+    const int   numSamples = juce::jmin (W, ringSize);
+    const float xScale     = (float) W / (float) numSamples;
+    const float yScale     = cy * 0.85f;
 
-    // ── Centre horizontal line ────────────────────────────────────────────────
-    const int cy = waveArea.getCentreY();
-    g.drawHorizontalLine (cy, (float) waveArea.getX(), (float) waveArea.getRight());
-
-    // ── Read last kDisplaySamples from ring buffer ────────────────────────────
-    const int ringSize  = DysektProcessor::kOscRingBufferSize;
-    const int writeHead = processor.oscRingWriteHead.load (std::memory_order_acquire);
-
-    std::array<float, kDisplaySamples> samples;
-    float peakLevel = 0.0f;
-    for (int i = 0; i < kDisplaySamples; ++i)
-    {
-        const int idx = (writeHead - kDisplaySamples + i + ringSize) & (ringSize - 1);
-        const float s = processor.oscRingBuffer[(size_t) idx];
-        samples[(size_t) i] = s;
-        const float a = s < 0.0f ? -s : s;
-        if (a > peakLevel) peakLevel = a;
-    }
-
-    // ── Draw waveform path ────────────────────────────────────────────────────
-    const float cy_f   = (float) cy;
-    const float halfH  = (float) (waveArea.getHeight() / 2 - 2);
-    const float originX = (float) waveArea.getX();
-
+    // ── Build path ─────────────────────────────────────────────────────────────
     juce::Path path;
-    for (int i = 0; i < kDisplaySamples; ++i)
+    bool first = true;
+
+    for (int i = 0; i < numSamples; i++)
     {
-        const float x = originX + (float) i * pxPerSample;
-        const float y = cy_f - samples[(size_t) i] * halfH;
-        if (i == 0)
-            path.startNewSubPath (x, y);
-        else
-            path.lineTo (x, y);
+        // Walk backwards from the write head so the newest sample is on the right
+        const int   ringIdx = (writeHead - numSamples + i + ringSize) & (ringSize - 1);
+        const float sample  = processor.oscRingBuffer[(size_t) ringIdx];
+        const float x       = (float) i * xScale;
+        const float y       = cy - sample * yScale;
+
+        if (first) { path.startNewSubPath (x, y); first = false; }
+        else        path.lineTo (x, y);
     }
 
-    g.setColour (theme.accent);
-    g.strokePath (path, juce::PathStrokeType (1.5f));
+    // ── Draw waveform with glow ───────────────────────────────────────────────
+    const auto waveColour = getTheme().waveformColour;
 
-    // ── Stats box ─────────────────────────────────────────────────────────────
-    g.setColour (theme.gridLine);
-    g.drawVerticalLine (statsArea.getX(), (float) statsArea.getY(), (float) statsArea.getBottom());
+    // Soft glow pass (wider, more transparent)
+    g.setColour (waveColour.withAlpha (0.18f));
+    g.strokePath (path, juce::PathStrokeType (3.0f,
+                                              juce::PathStrokeType::curved,
+                                              juce::PathStrokeType::rounded));
 
-    const float peakDb  = peakLevel > 1e-4f ? 20.0f * std::log10 (peakLevel) : -100.0f;
-    const juce::String peakStr = peakDb > -99.0f
-                                    ? (juce::String (peakDb, 1) + " dB")
-                                    : "-inf";
+    // Main line
+    g.setColour (waveColour.withAlpha (0.75f));
+    g.strokePath (path, juce::PathStrokeType (1.2f,
+                                              juce::PathStrokeType::curved,
+                                              juce::PathStrokeType::rounded));
 
-    const auto statsInner = statsArea.reduced (4, 4);
-    g.setColour (theme.foreground.withAlpha (0.6f));
-    g.setFont (DysektLookAndFeel::makeFont (8.5f));
-    g.drawText ("PEAK", statsInner.withHeight (12), juce::Justification::centredTop);
-
-    g.setColour (theme.accent.withAlpha (0.9f));
-    g.setFont (DysektLookAndFeel::makeFont (9.5f, true));
-    g.drawText (peakStr, statsInner, juce::Justification::centred);
+    // ── Top / bottom border ───────────────────────────────────────────────────
+    g.setColour (getTheme().darkBar);
+    g.drawHorizontalLine (0,        0.0f, (float) W);
+    g.drawHorizontalLine (H - 1,    0.0f, (float) W);
 }

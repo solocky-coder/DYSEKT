@@ -8,7 +8,7 @@ static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
-static constexpr int kOscilloscopeH = 120;
+static constexpr int kOscilloscopeH = OscilloscopeView::kPreferredHeight;
 static constexpr int kMixerPanelH   = 210;
 
 static constexpr int kBrowserH   = 170;
@@ -250,8 +250,6 @@ void DysektEditor::toggleMixerPanel()
     mixerPanel.setVisible (mixerOpen);
     setSize (getWidth(), computeTotalHeight());
     resized();
-}
-
 void DysektEditor::toggleShortcutsPanel()
 {
     const bool show = ! shortcutsPanel.isVisible();
