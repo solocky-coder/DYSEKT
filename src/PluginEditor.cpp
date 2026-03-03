@@ -250,6 +250,8 @@ void DysektEditor::toggleMixerPanel()
     mixerPanel.setVisible (mixerOpen);
     setSize (getWidth(), computeTotalHeight());
     resized();
+}
+
 void DysektEditor::toggleShortcutsPanel()
 {
     const bool show = ! shortcutsPanel.isVisible();

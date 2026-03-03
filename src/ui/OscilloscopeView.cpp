@@ -15,11 +15,11 @@ void OscilloscopeView::paint (juce::Graphics& g)
     const int  H      = bounds.getHeight();
 
     // ── Background ────────────────────────────────────────────────────────────
-    g.fillAll (getTheme().background.darker (0.15f));
+    g.fillAll (getTheme().waveformBg);
 
     // ── Centre-line ───────────────────────────────────────────────────────────
     const float cy = H * 0.5f;
-    g.setColour (juce::Colours::white.withAlpha (0.05f));
+    g.setColour (getTheme().gridLine.withAlpha (0.3f));
     g.drawHorizontalLine (juce::roundToInt (cy), 0.0f, (float) W);
 
     // ── Read ring buffer ──────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ void OscilloscopeView::paint (juce::Graphics& g)
     }
 
     // ── Draw waveform with glow ───────────────────────────────────────────────
-    const auto waveColour = getTheme().waveformColour;
+    const auto waveColour = getTheme().waveform;
 
     // Soft glow pass (wider, more transparent)
     g.setColour (waveColour.withAlpha (0.18f));
@@ -64,7 +64,7 @@ void OscilloscopeView::paint (juce::Graphics& g)
                                               juce::PathStrokeType::rounded));
 
     // ── Top / bottom border ───────────────────────────────────────────────────
-    g.setColour (getTheme().darkBar);
-    g.drawHorizontalLine (0,        0.0f, (float) W);
-    g.drawHorizontalLine (H - 1,    0.0f, (float) W);
+    g.setColour (getTheme().gridLine.withAlpha (0.4f));
+    g.drawHorizontalLine (0,     0.0f, (float) W);
+    g.drawHorizontalLine (H - 1, 0.0f, (float) W);
 }

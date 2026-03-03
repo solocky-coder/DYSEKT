@@ -133,6 +133,11 @@ private:
     int ghostStart = 0;    // for DuplicateSlice: ghost overlay start sample
     int ghostEnd   = 0;    // for DuplicateSlice: ghost overlay end sample
 
+    // LINK mode: tracks the adjacent slice being dragged in tandem
+    int linkedSliceIdx     = -1;  // index of the linked adjacent slice (-1 = none)
+    int linkedPreviewStart =  0;  // linked slice's preview start sample
+    int linkedPreviewEnd   =  0;  // linked slice's preview end sample
+
     // Middle-mouse drag (scroll+zoom like ScrollZoomBar)
     bool midDragging = false;
     float midDragStartZoom = 1.0f;
