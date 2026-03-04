@@ -148,7 +148,7 @@ void WaveformView::rebuildCacheIfNeeded()
     CacheKey key { vs.visibleStart, vs.visibleLen, vs.width, vs.numFrames, snap.get() };
     if (key == prevCacheKey) return;
     prevCacheKey = key;
-    cache.rebuild (snap->buffer, vs.visibleStart, vs.visibleLen, vs.width);
+    cache.rebuild (snap->buffer, snap->mipmaps, vs.numFrames, processor.zoom.load(), processor.scroll.load(), vs.width);
 }
 
 // ─── Paint ────────────────────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
     const int mid = h / 2;
     const int w = getWidth();
 
-    if (cache.isEmpty()) return;
+    if (cache.getPeaks().empty()) return;
 
     if (softWaveform)
     {
@@ -209,12 +209,12 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         wavePath.startNewSubPath (0, (float)mid);
         for (int x = 0; x < w; ++x)
         {
-            float peak = cache.getPeak (x);
+            float peak = cache.getPeaks()[x].maxVal;
             wavePath.lineTo ((float)x, mid - peak * mid);
         }
         for (int x = w - 1; x >= 0; --x)
         {
-            float peak = cache.getPeak (x);
+            float peak = cache.getPeaks()[x].maxVal;
             wavePath.lineTo ((float)x, mid + peak * mid);
         }
         wavePath.closeSubPath();
@@ -225,12 +225,12 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         juce::Path outline;
         outline.startNewSubPath (0, (float)mid);
         for (int x = 0; x < w; ++x)
-            outline.lineTo ((float)x, mid - cache.getPeak (x) * mid);
+            outline.lineTo ((float)x, mid - cache.getPeaks()[x].maxVal * mid);
         g.strokePath (outline, juce::PathStrokeType (1.5f));
         juce::Path outlineBot;
         outlineBot.startNewSubPath (0, (float)mid);
         for (int x = 0; x < w; ++x)
-            outlineBot.lineTo ((float)x, mid + cache.getPeak (x) * mid);
+            outlineBot.lineTo ((float)x, mid + cache.getPeaks()[x].maxVal * mid);
         g.strokePath (outlineBot, juce::PathStrokeType (1.5f));
     }
     else
@@ -239,7 +239,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         g.setColour (theme.waveformColour.withAlpha (0.85f));
         for (int x = 0; x < w; ++x)
         {
-            float peak = cache.getPeak (x);
+            float peak = cache.getPeaks()[x].maxVal;
             int top = mid - (int)(peak * mid);
             int bot = mid + (int)(peak * mid);
             g.drawVerticalLine (x, (float)top, (float)bot);
@@ -691,9 +691,10 @@ void WaveformView::mouseUp (const juce::MouseEvent& e)
         if (drawEnd > drawStart)
         {
             DysektProcessor::Command c;
-            c.type       = DysektProcessor::CmdAddSlice;
-            c.intParam1  = drawStart;
-            c.intParam2  = drawEnd;
+            c.type          = DysektProcessor::CmdCreateSlice;
+            c.positions[0]  = drawStart;
+            c.positions[1]  = drawEnd;
+            c.numPositions  = 2;
             processor.pushCommand (c);
         }
         drawStart = drawEnd = 0;
@@ -705,29 +706,32 @@ void WaveformView::mouseUp (const juce::MouseEvent& e)
     if ((dragMode == DragEdgeLeft || dragMode == DragEdgeRight) && dragSliceIdx >= 0 && snap)
     {
         DysektProcessor::Command c;
-        c.type      = DysektProcessor::CmdMoveSliceEdge;
-        c.intParam1 = dragSliceIdx;
-        c.intParam2 = dragPreviewStart;
-        c.intParam3 = dragPreviewEnd;
+        c.type          = DysektProcessor::CmdSetSliceBounds;
+        c.intParam1     = dragSliceIdx;
+        c.positions[0]  = dragPreviewStart;
+        c.positions[1]  = dragPreviewEnd;
+        c.numPositions  = 2;
         processor.pushCommand (c);
     }
 
     if (dragMode == MoveSlice && dragSliceIdx >= 0 && snap)
     {
         DysektProcessor::Command c;
-        c.type      = DysektProcessor::CmdMoveSlice;
-        c.intParam1 = dragSliceIdx;
-        c.intParam2 = dragPreviewStart;
-        c.intParam3 = dragPreviewEnd;
+        c.type          = DysektProcessor::CmdSetSliceBounds;
+        c.intParam1     = dragSliceIdx;
+        c.positions[0]  = dragPreviewStart;
+        c.positions[1]  = dragPreviewEnd;
+        c.numPositions  = 2;
         processor.pushCommand (c);
     }
 
     if (dragMode == DuplicateSlice && dragSliceIdx >= 0 && snap)
     {
         DysektProcessor::Command c;
-        c.type      = DysektProcessor::CmdAddSlice;
-        c.intParam1 = ghostStart;
-        c.intParam2 = ghostEnd;
+        c.type          = DysektProcessor::CmdCreateSlice;
+        c.positions[0]  = ghostStart;
+        c.positions[1]  = ghostEnd;
+        c.numPositions  = 2;
         processor.pushCommand (c);
     }
 
