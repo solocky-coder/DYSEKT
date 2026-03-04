@@ -84,7 +84,7 @@ juce_add_binary_data(DysektFonts SOURCES
     src/ui/fonts/IBMPlexSans-Regular.ttf
     src/ui/fonts/IBMPlexSans-Bold.ttf
     src/ui/assets/dysekt_logo.svg
-    resources/Empty.wav
+    src/ui/assets/Empty.wav
 )
 
 target_sources(Dysekt PRIVATE
