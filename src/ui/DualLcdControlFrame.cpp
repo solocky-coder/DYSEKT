@@ -27,7 +27,7 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
 
     float cx  = b.getCentreX();
     float cy2 = b.getCentreY();
-    auto  col = active ? accent : fg.withAlpha (0.55f);
+    auto  col = active ? accent : fg.withAlpha (0.75f);
     g.setColour (col);
 
     if (type == 0) // Folder / Browser

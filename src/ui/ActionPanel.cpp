@@ -64,7 +64,10 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     chromaticBtn.onClick  = [this] { chromaticActive  = ! chromaticActive;  if (onChromaticToggle)  onChromaticToggle();  updateToggleBtn (chromaticBtn,  chromaticActive); };
 
     addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
-    lazyChopBtn.setTooltip ("Lazy Chop (L)");
+    lazyChopBtn.setTooltip ("MIDI Slice — chop by incoming MIDI notes (L)");
+
+    addSliceBtn.setButtonText ("ADD SLICE");
+    lazyChopBtn.setButtonText ("MIDI SLICE");
     dupBtn.setTooltip      ("Duplicate Slice (D)");
     splitBtn.setTooltip    ("Auto Chop (C)");
     deleteBtn.setTooltip   ("Delete Slice (Del)");
@@ -190,7 +193,7 @@ void ActionPanel::paint (juce::Graphics& g)
     if (processor.lazyChop.isActive())
     { lazyChopBtn.setButtonText ("STOP"); g.setColour (juce::Colours::red.withAlpha (0.25f)); g.fillRect (lazyChopBtn.getBounds()); }
     else
-    { lazyChopBtn.setButtonText ("LAZY"); }
+    { lazyChopBtn.setButtonText ("MIDI SLICE"); }
 
     // TRIM button — highlight when trim mode is active
     const bool trimActive = waveformView.isTrimModeActive();
@@ -224,13 +227,41 @@ void ActionPanel::updateSnapButtonAppearance (bool active)
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // Draw MIDI text icon for midiSelectBtn
+    // Draw 5-pin DIN MIDI connector icon for midiSelectBtn (Halion-style)
     {
         bool active = processor.midiSelectsSlice.load();
         auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
         g.setColour (col);
-        g.setFont (DysektLookAndFeel::makeFont (9.0f, true));
-        g.drawText ("MIDI", midiSelectBtn.getBounds(), juce::Justification::centred);
+
+        auto b   = midiSelectBtn.getBounds().toFloat();
+        float cx = b.getCentreX();
+        float cy = b.getCentreY() + 1.0f;
+
+        // Outer circle (connector body)
+        const float outerR = 8.5f;
+        g.drawEllipse (cx - outerR, cy - outerR, outerR * 2, outerR * 2, 1.2f);
+
+        // Flat edge on bottom (D-shell cutoff)
+        g.setColour (active ? getTheme().accent.withAlpha(0.0f) : getTheme().button);
+        g.fillRect  (cx - outerR - 1, cy + 4.5f, outerR * 2 + 2, outerR);
+        g.setColour (col);
+        g.drawLine  (cx - outerR, cy + 4.5f, cx + outerR, cy + 4.5f, 1.2f);
+
+        // 5 pins arranged in a semicircle (top arc)
+        // Pin layout: 2 top row, 3 bottom row (standard DIN-5 arrangement)
+        struct Pin { float x, y; };
+        const float pinR = 1.4f;
+        const float arcR = 5.0f;
+        // Standard MIDI DIN-5: 3 pins on top arc, 2 on lower arc
+        Pin pins[] = {
+            { cx - arcR * 0.95f, cy - arcR * 0.31f },   // pin 1 (left)
+            { cx + arcR * 0.95f, cy - arcR * 0.31f },   // pin 2 (right)
+            { cx,                cy - arcR          },   // pin 3 (top centre)
+            { cx - arcR * 0.59f, cy + arcR * 0.81f },   // pin 4 (bottom left)
+            { cx + arcR * 0.59f, cy + arcR * 0.81f },   // pin 5 (bottom right)
+        };
+        for (auto& pin : pins)
+            g.fillEllipse (pin.x - pinR, pin.y - pinR, pinR * 2, pinR * 2);
     }
 
     // Draw zero-crossing icon for snapBtn
