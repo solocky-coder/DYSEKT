@@ -88,7 +88,7 @@ void SliceWaveformLcd::buildDisplayData()
     // at a nominal width of 256 so we can scale later).
     const int kPeaks = 256;
     data.peaks.clearQuick();
-    data.peaks.resize (kPeaks, 0.0f);
+    data.peaks.insertMultiple (-1, 0.0f, kPeaks);
 
     const int sliceLen = data.endSample - data.startSample;
     if (sliceLen <= 0) return;

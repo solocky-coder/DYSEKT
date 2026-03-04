@@ -49,7 +49,7 @@ void OscilloscopeView::paint (juce::Graphics& g)
     }
 
     // ── Draw waveform with glow ───────────────────────────────────────────────
-    const auto waveColour = getTheme().waveformColour;
+    const auto waveColour = getTheme().accent;
 
     // Soft glow pass (wider, more transparent)
     g.setColour (waveColour.withAlpha (0.18f));
