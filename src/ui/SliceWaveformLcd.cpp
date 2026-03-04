@@ -236,7 +236,7 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
         g.setColour (kBright.withAlpha (0.92f));
         g.drawText (midiNoteName (data.midiNote),
                     juce::Rectangle<float> (area.getX() + kLeftPad,
-                                            area.getBottom() - 32,
+                                            area.getBottom() - 46,
                                             60.0f, 28.0f),
                     juce::Justification::centredLeft, false);
     }
@@ -266,9 +266,9 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
     {
         const float valW = 36.0f;
         const float lblW = 22.0f;
-        const float colH = 22.0f;
-        const float cx2  = sx - valW;
-        const float ty   = area.getBottom() - colH;
+        const float ty   = area.getBottom() - 22.0f;
+
+        float cx2 = sx - valW;
 
         g.setColour (kLabel.withAlpha (0.8f));
         g.drawText (stats[i].label,
@@ -277,7 +277,7 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
 
         g.setColour (kPhosphor.withAlpha (0.75f));
         g.drawText (stats[i].value,
-                    juce::Rectangle<float> (cx2, ty + 10, valW, 14.0f),
+                    juce::Rectangle<float> (cx2, ty + 10, valW, 12.0f),
                     juce::Justification::centredLeft, false);
 
         sx -= (valW + lblW + 4.0f);
