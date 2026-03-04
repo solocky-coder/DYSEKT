@@ -271,25 +271,26 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
     float sx = area.getRight() - kLeftPad;
     g.setFont (smallFont);
 
-    for (int i = (int) std::size (stats) - 1; i >= 0; i--)
+    // Lay out stats evenly across the full width
+    const int nStats = (int) std::size (stats);
+    const float statW = area.getWidth() / (float) nStats;
+
+    for (int i = 0; i < nStats; ++i)
     {
-        const float valW = 36.0f;
-        const float lblW = 22.0f;
+        const float colX = area.getX() + i * statW;
         const float ty   = area.getBottom() - 22.0f;
-        float cx2 = sx - valW;
 
         g.setColour (lcd2Label().withAlpha (0.8f));
         g.drawText (stats[i].label,
-                    juce::Rectangle<float> (cx2 - lblW, ty, lblW, 12.0f),
-                    juce::Justification::centredRight, false);
+                    juce::Rectangle<float> (colX, ty, statW, 11.0f),
+                    juce::Justification::centred, false);
 
         g.setColour (lcd2Phosphor().withAlpha (0.75f));
         g.drawText (stats[i].value,
-                    juce::Rectangle<float> (cx2, ty + 10, valW, 12.0f),
-                    juce::Justification::centredLeft, false);
-
-        sx -= (valW + lblW + 4.0f);
+                    juce::Rectangle<float> (colX, ty + 11.0f, statW, 11.0f),
+                    juce::Justification::centred, false);
     }
+    (void) sx;
 }
 
 void SliceWaveformLcd::drawNoData (juce::Graphics& g)

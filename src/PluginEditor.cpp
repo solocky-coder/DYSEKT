@@ -106,12 +106,13 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
     headerBar.onChromaticToggle = [this] { toggleChromatic(); };
     headerBar.onBodeToggle      = [this] { toggleMixerPanel(); };
+    headerBar.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
 
     // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
     actionPanel.onBrowserToggle    = nullptr;
     actionPanel.onWaveToggle       = nullptr;
     actionPanel.onChromaticToggle  = nullptr;
-    actionPanel.onShortcutsToggle  = [this] { toggleShortcutsPanel(); };
+    actionPanel.onShortcutsToggle  = nullptr;
 
     ensureDefaultThemes();
     loadUserSettings();
@@ -315,6 +316,9 @@ void DysektEditor::resized()
         sliceWaveformLcd.setBounds (lcdRow);
     }
 
+    // 2b. Action panel — directly below LCDs
+    actionPanel.setBounds (area.removeFromTop (kActionH).reduced (kMargin, 0));
+
     // 3. Slice lane
     sliceLane.setBounds (area.removeFromTop (kSliceLaneH).reduced (kMargin, 0));
 
@@ -329,8 +333,7 @@ void DysektEditor::resized()
     if (mixerOpen)
         mixerPanel.setBounds (area.removeFromBottom (kMixerPanelH).reduced (kMargin, 0));
 
-    // 7. Action panel
-    actionPanel.setBounds (area.removeFromBottom (kActionH).reduced (kMargin, 0));
+    // 7. (Action panel now placed directly below LCDs — see above)
 
     area.removeFromBottom (4);  // gap
 

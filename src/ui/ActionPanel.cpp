@@ -169,6 +169,8 @@ void ActionPanel::resized()
     midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
     shortcutsBtn.setBounds  (x, 0, thinW, h);
 
+    shortcutsBtn.setVisible (false);
+
     // browserBtn/waveBtn/chromaticBtn moved to HeaderBar — hide them
     browserBtn.setVisible (false);
     waveBtn.setVisible    (false);

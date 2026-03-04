@@ -12,7 +12,7 @@ HeaderBar::HeaderBar (DysektProcessor& p)
       controlFrame (p)
 {
     // Standard buttons
-    for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn })
+    for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn, &shortcutsBtn })
     {
         btn->setAlwaysOnTop (true);
         btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
@@ -20,6 +20,9 @@ HeaderBar::HeaderBar (DysektProcessor& p)
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
         addAndMakeVisible (*btn);
     }
+
+    shortcutsBtn.setTooltip ("Keyboard Shortcuts");
+    shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
 
     panicBtn.setTooltip ("Panic: kill all sound");
     panicBtn.onClick = [this] {
@@ -71,7 +74,11 @@ void HeaderBar::resized()
     const int gap  = 4;
     int right = getWidth() - 8;
 
-    // Right to left: [UI] [PANIC] [REDO][UNDO]
+    // Right to left: [?] [UI] [PANIC] [REDO][UNDO]
+
+    // ? shortcuts button — rightmost
+    shortcutsBtn.setBounds (right - 22, btnY, 22, btnH);
+    right -= 26;
 
     // UI / theme button
     themeBtn.setBounds (right - 26, btnY, 26, btnH);
@@ -94,7 +101,7 @@ void HeaderBar::resized()
 void HeaderBar::paint (juce::Graphics& g)
 {
     // Refresh standard button colours
-    for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn })
+    for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn, &shortcutsBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
         btn->setColour (juce::TextButton::textColourOnId, getTheme().foreground);
@@ -102,8 +109,6 @@ void HeaderBar::paint (juce::Graphics& g)
     }
 
     g.fillAll (getTheme().header);
-
-    // Draw a subtle join line between UNDO and REDO to make them look like a pair
     {
         int rx = redoBtn.getX();
         int ry = redoBtn.getY();
