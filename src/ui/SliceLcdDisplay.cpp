@@ -2,23 +2,41 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 
-// ── Colour palette ─────────────────────────────────────────────────────────────
+// ── Theme-derived LCD palette ──────────────────────────────────────────────────
+// All colours are computed from getTheme() at paint time so they update when
+// the user switches theme.  The helper is called once per paint() call.
 namespace LcdColours
 {
-    // Classic green LCD palette (MPC60 / SP-1200 inspired)
-    static const juce::Colour background  { 0xFF0A1208 };   // near-black green tint
-    static const juce::Colour bezel       { 0xFF141C12 };
-    static const juce::Colour phosphor    { 0xFF6BFF4A };   // bright phosphor green
-    static const juce::Colour dim         { 0xFF2A6020 };   // unlit segment colour
-    static const juce::Colour highlight   { 0xFFB0FFB0 };   // selected row text
-    static const juce::Colour labelCol    { 0xFF4BC035 };   // label text (slightly dimmer)
-    static const juce::Colour scanline    { 0xFF000000 };
-    static const juce::Colour cursor      { 0xFF6BFF4A };
-    static const juce::Colour noDataCol   { 0xFF296020 };
-    static const juce::Colour border      { 0xFF1E3018 };
-    static const juce::Colour flagOn      { 0xFF6BFF4A };
-    static const juce::Colour flagOff     { 0xFF213018 };
-    static const juce::Colour flagBg      { 0xFF0D180B };
+    struct Palette
+    {
+        juce::Colour background, bezel, phosphor, dim, highlight,
+                     labelCol, scanline, cursor, noDataCol, border,
+                     flagOn, flagOff, flagBg;
+    };
+
+    static Palette fromTheme()
+    {
+        const auto& t  = getTheme();
+        const auto  ac = t.accent;                          // main phosphor colour
+        const auto  bg = t.darkBar.darker (0.55f);          // near-black background
+
+        Palette p;
+        p.background = bg;
+        p.bezel      = bg.brighter (0.12f);
+        p.phosphor   = ac;
+        p.dim        = ac.withAlpha (0.18f).withMultipliedSaturation (0.6f)
+                        .overlaidWith (bg);
+        p.highlight  = ac.brighter (0.5f);
+        p.labelCol   = ac.withAlpha (0.70f);
+        p.scanline   = juce::Colours::black;
+        p.cursor     = ac;
+        p.noDataCol  = ac.withAlpha (0.15f).overlaidWith (bg);
+        p.border     = ac.withAlpha (0.12f).overlaidWith (bg);
+        p.flagOn     = ac;
+        p.flagOff    = ac.withAlpha (0.12f).overlaidWith (bg);
+        p.flagBg     = bg.darker (0.3f);
+        return p;
+    }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -128,38 +146,35 @@ void SliceLcdDisplay::repaintLcd()
 
 void SliceLcdDisplay::drawLcdBackground (juce::Graphics& g)
 {
+    const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds();
 
-    // Outer bezel gradient
-    juce::ColourGradient bezelGrad (LcdColours::bezel.brighter (0.08f), 0, 0,
-                                     LcdColours::bezel.darker  (0.2f),  0, (float) b.getHeight(), false);
+    juce::ColourGradient bezelGrad (pal.bezel.brighter (0.08f), 0, 0,
+                                     pal.bezel.darker  (0.2f),  0, (float) b.getHeight(), false);
     g.setGradientFill (bezelGrad);
     g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
-    // Inner screen area
     auto screen = b.reduced (4);
-    g.setColour (LcdColours::background);
+    g.setColour (pal.background);
     g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-    // Scanlines
-    g.setColour (LcdColours::scanline.withAlpha ((uint8_t) kScanlineAlpha));
+    g.setColour (pal.scanline.withAlpha ((uint8_t) kScanlineAlpha));
     for (int y = screen.getY(); y < screen.getBottom(); y += 2)
         g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
 
-    // Subtle inner glow at top
-    juce::ColourGradient glow (LcdColours::phosphor.withAlpha (0.06f), 0, (float) screen.getY(),
-                                juce::Colours::transparentBlack,       0, (float) (screen.getY() + 20), false);
+    juce::ColourGradient glow (pal.phosphor.withAlpha (0.06f), 0, (float) screen.getY(),
+                                juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
     g.setGradientFill (glow);
     g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-    // Border
-    g.setColour (LcdColours::border);
+    g.setColour (pal.border);
     g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
 }
 
 void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& label,
                                 const juce::String& value, bool highlight)
 {
+    const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
     const int rowH = (b.getHeight() - 8) / kRows;
     int y = b.getY() + 4 + row * rowH;
@@ -167,22 +182,19 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     const juce::Font labelFont = DysektLookAndFeel::makeFont (10.0f, true);
     const juce::Font valueFont = DysektLookAndFeel::makeFont (11.0f);
 
-    // Row background on selected
     if (highlight)
     {
-        g.setColour (LcdColours::phosphor.withAlpha (0.10f));
+        g.setColour (pal.phosphor.withAlpha (0.10f));
         g.fillRect (b.getX(), y, b.getWidth(), rowH - 1);
     }
 
-    // Label
     g.setFont (labelFont);
-    g.setColour (highlight ? LcdColours::highlight : LcdColours::labelCol);
+    g.setColour (highlight ? pal.highlight : pal.labelCol);
     g.drawText (label, b.getX() + kLeftPad, y, kLabelW, rowH,
                 juce::Justification::centredLeft, false);
 
-    // Value
     g.setFont (valueFont);
-    g.setColour (highlight ? LcdColours::highlight : LcdColours::phosphor);
+    g.setColour (highlight ? pal.highlight : pal.phosphor);
     g.drawText (value, b.getX() + kLeftPad + kLabelW, y,
                 b.getWidth() - kLeftPad - kLabelW, rowH,
                 juce::Justification::centredLeft, false);
@@ -190,6 +202,7 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
 
 void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
 {
+    const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
     const int rowH = (b.getHeight() - 8) / kRows;
     int y  = b.getY() + 4 + row * rowH;
@@ -213,17 +226,16 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
         int fw = flagFont.getStringWidth (f.text) + pad * 2 + 4;
         juce::Rectangle<int> box (x, y + 1, fw, rowH - 3);
 
-        g.setColour (f.on ? LcdColours::phosphor.withAlpha (0.15f) : LcdColours::flagBg);
+        g.setColour (f.on ? pal.phosphor.withAlpha (0.15f) : pal.flagBg);
         g.fillRoundedRectangle (box.toFloat(), 1.5f);
-        g.setColour (f.on ? LcdColours::flagOn : LcdColours::flagOff);
+        g.setColour (f.on ? pal.flagOn : pal.flagOff);
         g.drawRoundedRectangle (box.toFloat(), 1.5f, 1.0f);
-        g.setColour (f.on ? LcdColours::flagOn : LcdColours::flagOff);
+        g.setColour (f.on ? pal.flagOn : pal.flagOff);
         g.drawText (f.text, box.getX() + pad, box.getY(), box.getWidth() - pad * 2, box.getHeight(),
                     juce::Justification::centred, false);
         x += fw + 5;
     }
 
-    // Filter info on the right
     if (data.filterCutoff < 19000.0f)
     {
         juce::String fStr;
@@ -232,7 +244,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
         else
             fStr = "FLT:" + juce::String (juce::roundToInt (data.filterCutoff)) + "Hz";
 
-        g.setColour (LcdColours::phosphor);
+        g.setColour (pal.phosphor);
         g.setFont (flagFont);
         g.drawText (fStr, b.getRight() - 80, y, 70, rowH,
                     juce::Justification::centredRight, false);
@@ -241,27 +253,26 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
 
 void SliceLcdDisplay::drawNoSliceScreen (juce::Graphics& g)
 {
+    const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
     g.setFont (DysektLookAndFeel::makeFont (10.0f));
-    g.setColour (LcdColours::noDataCol);
+    g.setColour (pal.noDataCol);
 
-    // Sample name header
     if (data.hasSample && data.sampleName.isNotEmpty())
     {
-        g.setColour (LcdColours::phosphor.withAlpha (0.6f));
+        g.setColour (pal.phosphor.withAlpha (0.6f));
         g.drawText (data.sampleName.toUpperCase(),
                     b.reduced (kLeftPad, 0), juce::Justification::centredTop);
-        g.setColour (LcdColours::noDataCol);
+        g.setColour (pal.noDataCol);
     }
 
     g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.drawText ("-- NO SLICE SELECTED --", b, juce::Justification::centred);
 
-    // Slice count hint
     if (data.numSlices > 0)
     {
         g.setFont (DysektLookAndFeel::makeFont (9.0f));
-        g.setColour (LcdColours::dim);
+        g.setColour (pal.dim);
         g.drawText (juce::String (data.numSlices) + " SLICES  |  SELECT A PAD",
                     b, juce::Justification::centredBottom);
     }
@@ -269,13 +280,14 @@ void SliceLcdDisplay::drawNoSliceScreen (juce::Graphics& g)
 
 void SliceLcdDisplay::drawNoSampleScreen (juce::Graphics& g)
 {
+    const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
     g.setFont (DysektLookAndFeel::makeFont (11.0f));
-    g.setColour (LcdColours::noDataCol);
+    g.setColour (pal.noDataCol);
     g.drawText ("-- NO SAMPLE LOADED --", b, juce::Justification::centred);
 
     g.setFont (DysektLookAndFeel::makeFont (9.0f));
-    g.setColour (LcdColours::dim);
+    g.setColour (pal.dim);
     g.drawText ("DROP A FILE OR USE THE BROWSER",
                 b, juce::Justification::centredBottom);
 }

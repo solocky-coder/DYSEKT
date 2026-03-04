@@ -2,7 +2,17 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 
-// ── Colour palette (teal / cyan LCD) ─────────────────────────────────────────
+// ── Theme-derived colours ─────────────────────────────────────────────────────
+// Called once per paint() — all colours come from getTheme() so they
+// update automatically when the user switches theme.
+static juce::Colour lcd2Bg()       { return getTheme().darkBar.darker (0.55f); }
+static juce::Colour lcd2Bezel()    { return lcd2Bg().brighter (0.12f); }
+static juce::Colour lcd2Phosphor() { return getTheme().accent; }
+static juce::Colour lcd2Dim()      { return getTheme().accent.withAlpha (0.15f).overlaidWith (lcd2Bg()); }
+static juce::Colour lcd2Bright()   { return getTheme().accent.brighter (0.45f); }
+static juce::Colour lcd2Label()    { return getTheme().accent.withAlpha (0.55f); }
+
+// Keep the static const members as aliases so the .h declarations compile
 const juce::Colour SliceWaveformLcd::kBg       { 0xFF050F0E };
 const juce::Colour SliceWaveformLcd::kBezel    { 0xFF0D1E1C };
 const juce::Colour SliceWaveformLcd::kPhosphor { 0xFF2AFFD0 };
@@ -109,30 +119,25 @@ void SliceWaveformLcd::drawBackground (juce::Graphics& g)
 {
     auto b = getLocalBounds();
 
-    // Outer bezel
-    juce::ColourGradient grad (kBezel.brighter (0.1f), 0, 0,
-                                kBezel.darker  (0.3f), 0, (float) b.getHeight(), false);
+    juce::ColourGradient grad (lcd2Bezel().brighter (0.1f), 0, 0,
+                                lcd2Bezel().darker  (0.3f), 0, (float) b.getHeight(), false);
     g.setGradientFill (grad);
     g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
-    // Inner screen
     auto screen = b.reduced (4);
-    g.setColour (kBg);
+    g.setColour (lcd2Bg());
     g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-    // Top glow
-    juce::ColourGradient glow (kPhosphor.withAlpha (0.07f), 0, (float) screen.getY(),
-                                juce::Colours::transparentBlack,  0, (float) (screen.getY() + 18), false);
+    juce::ColourGradient glow (lcd2Phosphor().withAlpha (0.07f), 0, (float) screen.getY(),
+                                juce::Colours::transparentBlack, 0, (float) (screen.getY() + 18), false);
     g.setGradientFill (glow);
     g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-    // Scanlines
     g.setColour (juce::Colour (0xFF000000).withAlpha ((uint8_t) kScanlineAlpha));
     for (int y = screen.getY(); y < screen.getBottom(); y += 2)
         g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
 
-    // Border
-    g.setColour (kDim.brighter (0.2f));
+    g.setColour (lcd2Dim().brighter (0.2f));
     g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
 }
 
@@ -147,12 +152,11 @@ void SliceWaveformLcd::drawWaveform (juce::Graphics& g, const juce::Rectangle<fl
     const int   n  = data.peaks.size();
 
     // Centre line
-    g.setColour (kPhosphor.withAlpha (0.08f));
-    g.drawHorizontalLine (juce::roundToInt (cy),
-                          area.getX(), area.getRight());
+    g.setColour (lcd2Phosphor().withAlpha (0.08f));
+    g.drawHorizontalLine (juce::roundToInt (cy), area.getX(), area.getRight());
 
     // Grid lines at ±50% amplitude
-    g.setColour (kDim.withAlpha (0.5f));
+    g.setColour (lcd2Dim().withAlpha (0.5f));
     g.drawHorizontalLine (juce::roundToInt (cy - H * 0.25f), area.getX(), area.getRight());
     g.drawHorizontalLine (juce::roundToInt (cy + H * 0.25f), area.getX(), area.getRight());
 
@@ -183,23 +187,23 @@ void SliceWaveformLcd::drawWaveform (juce::Graphics& g, const juce::Rectangle<fl
     fill.closeSubPath();
 
     // Draw fill
-    g.setColour (kPhosphor.withAlpha (0.10f));
+    g.setColour (lcd2Phosphor().withAlpha (0.10f));
     g.fillPath (fill);
 
     // Draw glow strokes
     juce::PathStrokeType stroke (1.3f, juce::PathStrokeType::mitered);
-    g.setColour (kPhosphor.withAlpha (0.30f));
+    g.setColour (lcd2Phosphor().withAlpha (0.30f));
     g.strokePath (lineTop, stroke);
     g.strokePath (lineBot, stroke);
 
     // Bright strokes on top
-    g.setColour (kPhosphor.withAlpha (0.80f));
+    g.setColour (lcd2Phosphor().withAlpha (0.80f));
     juce::PathStrokeType brightStroke (1.1f, juce::PathStrokeType::mitered);
     g.strokePath (lineTop, brightStroke);
     g.strokePath (lineBot, brightStroke);
 
     // Start / end markers
-    g.setColour (kPhosphor.withAlpha (0.60f));
+    g.setColour (lcd2Phosphor().withAlpha (0.60f));
     g.drawVerticalLine (juce::roundToInt (area.getX() + 1), area.getY(), area.getBottom());
     g.drawVerticalLine (juce::roundToInt (area.getRight() - 1), area.getY(), area.getBottom());
 }
@@ -217,13 +221,13 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
         juce::String nm     = data.sampleName.toUpperCase().substring (0, 20);
 
         g.setFont (hdrFont);
-        g.setColour (kBright.withAlpha (0.85f));
+        g.setColour (lcd2Bright().withAlpha (0.85f));
         g.drawText (nm,
                     juce::Rectangle<float> (area.getX() + kLeftPad, area.getY() + 2,
                                             area.getWidth() * 0.75f, 14.0f),
                     juce::Justification::centredLeft, false);
 
-        g.setColour (kPhosphor.withAlpha (0.55f));
+        g.setColour (lcd2Phosphor().withAlpha (0.55f));
         g.drawText (idxStr,
                     juce::Rectangle<float> (area.getX(), area.getY() + 2,
                                             area.getWidth() - kLeftPad, 14.0f),
@@ -233,7 +237,7 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
     // ── MIDI note — bottom left ────────────────────────────────────────────────
     {
         g.setFont (noteFont);
-        g.setColour (kBright.withAlpha (0.92f));
+        g.setColour (lcd2Bright().withAlpha (0.92f));
         g.drawText (midiNoteName (data.midiNote),
                     juce::Rectangle<float> (area.getX() + kLeftPad,
                                             area.getBottom() - 46,
@@ -267,15 +271,14 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
         const float valW = 36.0f;
         const float lblW = 22.0f;
         const float ty   = area.getBottom() - 22.0f;
-
         float cx2 = sx - valW;
 
-        g.setColour (kLabel.withAlpha (0.8f));
+        g.setColour (lcd2Label().withAlpha (0.8f));
         g.drawText (stats[i].label,
                     juce::Rectangle<float> (cx2 - lblW, ty, lblW, 12.0f),
                     juce::Justification::centredRight, false);
 
-        g.setColour (kPhosphor.withAlpha (0.75f));
+        g.setColour (lcd2Phosphor().withAlpha (0.75f));
         g.drawText (stats[i].value,
                     juce::Rectangle<float> (cx2, ty + 10, valW, 12.0f),
                     juce::Justification::centredLeft, false);
@@ -288,7 +291,7 @@ void SliceWaveformLcd::drawNoData (juce::Graphics& g)
 {
     auto b = getLocalBounds().reduced (4);
     g.setFont (DysektLookAndFeel::makeFont (10.0f));
-    g.setColour (kDim.brighter (0.4f));
+    g.setColour (lcd2Dim().brighter (0.4f));
 
     if (! data.hasSample)
         g.drawText ("-- NO SAMPLE LOADED --", b, juce::Justification::centred);
