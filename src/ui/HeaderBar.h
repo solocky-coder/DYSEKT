@@ -31,6 +31,15 @@ public:
      *  PluginEditor adds this as a visible child and positions it between the LCDs. */
     juce::Component* getControlFrame() { return &controlFrame; }
 
+    // Header buttons — public so PluginEditor can access if needed
+    juce::TextButton undoBtn      { "UNDO"  };
+    juce::TextButton redoBtn      { "REDO"  };
+    juce::TextButton panicBtn     { "PANIC" };
+    juce::TextButton themeBtn     { "UI"    };
+    juce::TextButton shortcutsBtn { "?"     };
+
+    std::function<void()> onShortcutsToggle;
+
 private:
     void showThemePopup();
     void adjustScale (float delta);
@@ -40,15 +49,6 @@ private:
 
     // v8: icon buttons and global knobs live in DualLcdControlFrame
     DualLcdControlFrame controlFrame;
-
-    // Header buttons: UNDO | REDO  PANIC  UI  ?
-    juce::TextButton undoBtn      { "UNDO"  };
-    juce::TextButton redoBtn      { "REDO"  };
-    juce::TextButton panicBtn     { "PANIC" };
-    juce::TextButton themeBtn     { "UI"    };
-    juce::TextButton shortcutsBtn { "?"     };
-
-    std::function<void()> onShortcutsToggle;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<juce::TextEditor>  textEditor;
