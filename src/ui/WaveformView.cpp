@@ -392,3 +392,38 @@ void WaveformView::paintTrimOverlay (juce::Graphics& g)
     if (outPx < getWidth())
         g.fillRect (outPx, 0, getWidth() - outPx, h);
 }
+
+// ─── JUCE Component Event Overrides ──────────────────────────────────────────
+
+void WaveformView::resized() {}
+
+void WaveformView::mouseDown(const juce::MouseEvent& e) {}
+
+void WaveformView::mouseDrag(const juce::MouseEvent& e) {}
+
+void WaveformView::mouseUp(const juce::MouseEvent& e) {}
+
+void WaveformView::mouseMove(const juce::MouseEvent& e) {}
+
+void WaveformView::mouseEnter(const juce::MouseEvent& e) {}
+
+void WaveformView::mouseExit(const juce::MouseEvent& e) {}
+
+void WaveformView::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& w) {}
+
+void WaveformView::modifierKeysChanged(const juce::ModifierKeys& mods) {}
+
+bool WaveformView::isInterestedInFileDrag(const juce::StringArray& files) { return false; }
+
+void WaveformView::filesDropped(const juce::StringArray& files, int x, int y) {}
+
+// ─── Paint trim markers ──────────────────────────────────────────────────────
+
+void WaveformView::paintTrimMarkers(juce::Graphics& g)
+{
+    int inPx  = sampleToPixel(trimInPoint);
+    int outPx = sampleToPixel(trimOutPoint);
+    g.setColour(juce::Colours::orange.withAlpha(0.8f));
+    g.drawVerticalLine(inPx, 0.0f, (float)getHeight());
+    g.drawVerticalLine(outPx, 0.0f, (float)getHeight());
+}
