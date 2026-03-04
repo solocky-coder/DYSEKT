@@ -311,7 +311,7 @@ void SliceControlBar::paint (juce::Graphics& g)
     {
         g.setFont (DysektLookAndFeel::makeFont (15.0f));
         g.setColour (juce::Colours::white);
-        g.drawText ("No slice selected", 8, 24, 220, 18, juce::Justification::centredLeft);
+        // g.drawText ("No slice selected", 8, 24, 220, 18, juce::Justification::centredLeft);
         return;
     }
 
