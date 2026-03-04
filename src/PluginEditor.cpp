@@ -10,7 +10,7 @@ static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
 static constexpr int kOscilloscopeH = OscilloscopeView::kPreferredHeight;
 static constexpr int kMixerPanelH   = 210;
-static constexpr int kCtrlFrameW    = 148; // width of the centre control frame
+static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
 
 static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
