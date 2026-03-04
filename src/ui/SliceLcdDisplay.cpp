@@ -147,13 +147,18 @@ void SliceLcdDisplay::repaintLcd()
 void SliceLcdDisplay::drawLcdBackground (juce::Graphics& g)
 {
     const auto pal = LcdColours::fromTheme();
+    const auto ac  = getTheme().accent;
     auto b = getLocalBounds();
 
-    juce::ColourGradient bezelGrad (pal.bezel.brighter (0.08f), 0, 0,
-                                     pal.bezel.darker  (0.2f),  0, (float) b.getHeight(), false);
-    g.setGradientFill (bezelGrad);
+    // ── Outer frame — matches DualLcdControlFrame style ────────────────────
+    juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
+                                     juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+    g.setGradientFill (outerGrad);
     g.fillRoundedRectangle (b.toFloat(), 4.0f);
+    g.setColour (ac.withAlpha (0.20f));
+    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
+    // ── Inner screen ────────────────────────────────────────────────────────
     auto screen = b.reduced (4);
     g.setColour (pal.background);
     g.fillRoundedRectangle (screen.toFloat(), 2.0f);
@@ -167,7 +172,7 @@ void SliceLcdDisplay::drawLcdBackground (juce::Graphics& g)
     g.setGradientFill (glow);
     g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-    g.setColour (pal.border);
+    g.setColour (ac.withAlpha (0.12f));
     g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
 }
 

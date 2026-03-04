@@ -105,7 +105,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
     headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
     headerBar.onChromaticToggle = [this] { toggleChromatic(); };
-    headerBar.onBodeToggle      = [this] { toggleMixerPanel(); };  // ← CHANGE 1: bode icon opens mixer
+    headerBar.onBodeToggle      = [this] { toggleMixerPanel(); };
 
     // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
     actionPanel.onBrowserToggle    = nullptr;
@@ -145,6 +145,7 @@ int DysektEditor::computeTotalHeight() const
 
     return h;
 }
+
 
 void DysektEditor::toggleBrowserPanel()
 {
@@ -260,7 +261,6 @@ void DysektEditor::toggleMixerPanel()
 {
     mixerOpen = ! mixerOpen;
     mixerPanel.setVisible (mixerOpen);
-    headerBar.setBodeActive (mixerOpen);   // ← CHANGE 2: keeps bode icon highlighted while mixer is open
     setSize (getWidth(), computeTotalHeight());
     resized();
 }

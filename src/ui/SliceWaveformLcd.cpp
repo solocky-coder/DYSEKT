@@ -117,13 +117,18 @@ void SliceWaveformLcd::buildDisplayData()
 
 void SliceWaveformLcd::drawBackground (juce::Graphics& g)
 {
+    const auto ac = getTheme().accent;
     auto b = getLocalBounds();
 
-    juce::ColourGradient grad (lcd2Bezel().brighter (0.1f), 0, 0,
-                                lcd2Bezel().darker  (0.3f), 0, (float) b.getHeight(), false);
-    g.setGradientFill (grad);
+    // ── Outer frame — matches DualLcdControlFrame style ────────────────────
+    juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
+                                     juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+    g.setGradientFill (outerGrad);
     g.fillRoundedRectangle (b.toFloat(), 4.0f);
+    g.setColour (ac.withAlpha (0.20f));
+    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
+    // ── Inner screen ────────────────────────────────────────────────────────
     auto screen = b.reduced (4);
     g.setColour (lcd2Bg());
     g.fillRoundedRectangle (screen.toFloat(), 2.0f);
@@ -137,7 +142,7 @@ void SliceWaveformLcd::drawBackground (juce::Graphics& g)
     for (int y = screen.getY(); y < screen.getBottom(); y += 2)
         g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
 
-    g.setColour (lcd2Dim().brighter (0.2f));
+    g.setColour (ac.withAlpha (0.12f));
     g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
 }
 

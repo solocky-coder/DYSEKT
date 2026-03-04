@@ -54,20 +54,26 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         for (int kb : {0, 1, 3, 4})
             g.fillRect ((int)(cx - 7 + kb*4), (int)(cy2 - 4), 2, 5);
     }
-    else // type == 3: Bode / frequency-response curve
+    else // type == 3: Mixer — three vertical faders at different positions
     {
-        // LP filter Bode shape: flat shelf rolling off to the right
-        juce::Path p;
-        p.startNewSubPath (cx - 10, cy2 - 6);
-        p.lineTo          (cx - 2,  cy2 - 6);
-        p.cubicTo         (cx + 2,  cy2 - 6,
-                           cx + 4,  cy2 + 1,
-                           cx + 6,  cy2 + 6);
-        p.lineTo          (cx + 10, cy2 + 6);
-        g.strokePath (p, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved,
-                                               juce::PathStrokeType::rounded));
-        // -3dB dot at the knee
-        g.fillEllipse (cx - 0.5f, cy2 - 2.5f, 3.5f, 3.5f);
+        // Three fader grooves
+        const float grooveH = 12.0f;
+        const float grooveW = 2.0f;
+        float gx[] = { cx - 7.0f, cx, cx + 7.0f };
+
+        for (float x : gx)
+        {
+            g.fillRoundedRectangle (x - grooveW / 2, cy2 - grooveH / 2,
+                                    grooveW, grooveH, 1.0f);
+        }
+
+        // Three thumbs at different heights (classic mixer look)
+        float thumbY[] = { cy2 - 3.0f, cy2 + 1.0f, cy2 - 6.0f };
+        const float thumbW = 7.0f, thumbH = 4.0f;
+
+        g.setColour (active ? accent.brighter (0.3f) : fg.withAlpha (0.90f));
+        for (int i = 0; i < 3; ++i)
+            g.fillRoundedRectangle (gx[i] - thumbW / 2, thumbY[i], thumbW, thumbH, 1.5f);
     }
 }
 

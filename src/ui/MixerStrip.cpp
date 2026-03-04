@@ -30,43 +30,44 @@ void MixerStrip::buildLayout()
 {
     const auto b  = getLocalBounds();
     const int  w  = b.getWidth();
-    int y = 2;
+    int y = 4;
 
-    // Channel number label
-    channelLabelArea = { 0, y, w, 16 };
+    // ── Channel number label ───────────────────────────────────────────────
+    channelLabelArea = { 0, y, w, 14 };
+    y += 16;
+
+    // ── Three knobs stacked: PAN, CUT, RES ────────────────────────────────
+    // Each knob row = knob circle + label below
+    const int knobDiam  = 22;
+    const int knobLblH  = 11;
+    const int knobRowH  = knobDiam + knobLblH + 3;
+    const int knobX     = (w - knobDiam) / 2;
+
+    knobs[KnobPan].bounds    = { knobX, y, knobDiam, knobDiam };  y += knobRowH;
+    knobs[KnobCutoff].bounds = { knobX, y, knobDiam, knobDiam };  y += knobRowH;
+    knobs[KnobRes].bounds    = { knobX, y, knobDiam, knobDiam };  y += knobRowH + 2;
+
+    knobs[KnobVolume].bounds = { 0, 0, 0, 0 }; // volume uses fader only
+
+    // ── Fader + meter side-by-side ─────────────────────────────────────────
+    // Remaining height after knobs and bottom buttons
+    const int bottomH   = 14 + 4 + 16 + 4; // M/S row + bus row
+    const int faderAreaH = b.getHeight() - y - bottomH;
+    const int meterW    = 8;
+    const int faderW    = w - meterW - 6;
+
+    faderTrack = { 3, y, faderW, faderAreaH };
+    meter.setBounds (3 + faderW + 2, y, meterW, faderAreaH);
+    y += faderAreaH + 4;
+
+    // ── Mute / Solo ────────────────────────────────────────────────────────
+    const int btnW = (w - 6) / 2;
+    muteBtn = { 2,        y, btnW, 14 };
+    soloBtn = { 4 + btnW, y, btnW, 14 };
     y += 18;
 
-    // VU Meter (narrow strip)
-    const int meterH = 60;
-    meter.setBounds (2, y, w - 4, meterH);
-    y += meterH + 4;
-
-    // Volume fader track (taller — main control)
-    const int faderH = 80;
-    faderTrack = { 6, y, w - 12, faderH };
-    y += faderH + 6;
-
-    // Knobs: Pan, Cutoff, Res  (3 small knobs in a row)
-    const int knobDiam = kKnobR * 2 + 4;
-    const int knobSpacing = (w - 3 * knobDiam) / 4;
-    for (int i = 0; i < 3; ++i)
-    {
-        knobs[(size_t)(KnobPan + i)].bounds = {
-            knobSpacing + i * (knobDiam + knobSpacing), y, knobDiam, knobDiam };
-    }
-    // Volume knob uses fader, skip KnobVolume bounds for now
-    knobs[KnobVolume].bounds = { 0, 0, 0, 0 };
-    y += knobDiam + 18;  // +18 for label
-
-    // Mute / Solo buttons
-    const int btnW = (w - 6) / 2;
-    const int btnH = 18;
-    muteBtn = { 2,       y, btnW, btnH };
-    soloBtn = { 4 + btnW, y, btnW, btnH };
-    y += btnH + 4;
-
-    // Output bus selector
-    outputBusArea = { 2, y, w - 4, 16 };
+    // ── Output bus ─────────────────────────────────────────────────────────
+    outputBusArea = { 2, y, w - 4, 14 };
 }
 
 // =============================================================================
@@ -164,29 +165,34 @@ void MixerStrip::paint (juce::Graphics& g)
     const auto& theme = getTheme();
     const auto  b     = getLocalBounds();
 
-    // Background
-    g.setColour (selected ? theme.button.brighter (0.12f) : theme.darkBar);
-    g.fillRoundedRectangle (b.toFloat(), 3.0f);
+    // ── Background ──────────────────────────────────────────────────────────
+    juce::ColourGradient bg (theme.darkBar.brighter (0.06f), 0, 0,
+                              theme.darkBar.darker   (0.1f), 0, (float) b.getHeight(), false);
+    g.setGradientFill (bg);
+    g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
+    // Border — accent when selected, subtle otherwise
     if (selected)
     {
-        g.setColour (theme.accent.withAlpha (0.6f));
-        g.drawRoundedRectangle (b.reduced (1).toFloat(), 3.0f, 1.5f);
+        g.setColour (theme.accent.withAlpha (0.70f));
+        g.drawRoundedRectangle (b.reduced (1).toFloat(), 4.0f, 1.5f);
+        g.setColour (theme.accent.withAlpha (0.10f));
+        g.fillRoundedRectangle (b.reduced (1).toFloat(), 4.0f);
     }
     else
     {
-        g.setColour (theme.separator);
-        g.drawRoundedRectangle (b.toFloat(), 3.0f, 1.0f);
+        g.setColour (theme.accent.withAlpha (0.18f));
+        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
     }
 
     const auto& ui = processor.getUiSliceSnapshot();
     const bool hasSlice = (sliceIdx >= 0 && sliceIdx < ui.numSlices);
 
-    // Channel label
+    // ── Channel label ────────────────────────────────────────────────────────
     {
         g.setFont (DysektLookAndFeel::makeFont (9.0f, true));
         juce::String label = hasSlice ? juce::String (sliceIdx + 1) : "-";
-        g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.7f));
+        g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.65f));
         g.drawText (label, channelLabelArea, juce::Justification::centred);
     }
 
@@ -194,59 +200,63 @@ void MixerStrip::paint (juce::Graphics& g)
 
     const auto& sl = ui.slices[(size_t)sliceIdx];
 
-    // Draw fader track
+    // ── Knobs: PAN, CUT, RES (top to bottom) ─────────────────────────────────
+    struct KnobSpec { KnobId id; const char* label; LockBit lock; };
+    KnobSpec specs[] = {
+        { KnobPan,    "PAN", kLockPan    },
+        { KnobCutoff, "CUT", kLockFilter },
+        { KnobRes,    "RES", kLockFilter },
+    };
+    for (auto& s : specs)
     {
-        const bool locked = (sl.lockMask & kLockVolume) != 0;
-        const float norm = toNorm (KnobVolume, sl.volume);
+        const bool locked = (sl.lockMask & s.lock) != 0;
+        const float norm  = toNorm (s.id, getSliceValue (s.id));
+        KnobArea ka;
+        ka.bounds = knobs[s.id].bounds;
+        ka.value  = norm;
+        drawKnob (g, ka, s.label, locked);
+    }
+
+    // ── Fader ────────────────────────────────────────────────────────────────
+    {
+        const bool  locked = (sl.lockMask & kLockVolume) != 0;
+        const float norm   = toNorm (KnobVolume, sl.volume);
         drawFader (g, faderTrack, norm, locked);
     }
 
-    // Draw knobs: Pan, Cutoff, Res
-    const KnobId ids[] = { KnobPan, KnobCutoff, KnobRes };
-    const char* labels[] = { "PAN", "CUT", "RES" };
-    const LockBit lockBits[] = { kLockPan, kLockFilter, kLockFilter };
-
-    for (int i = 0; i < 3; ++i)
+    // ── Mute button ──────────────────────────────────────────────────────────
     {
-        KnobId kid = ids[i];
-        const bool locked = (sl.lockMask & lockBits[i]) != 0;
-        const float norm = toNorm (kid, getSliceValue (kid));
-        KnobArea ka;
-        ka.bounds = knobs[kid].bounds;
-        ka.value  = norm;
-        drawKnob (g, ka, labels[i], locked);
-    }
-
-    // Mute button
-    {
-        // "muted" state not stored in Slice yet, so just show stub
-        g.setColour (theme.button);
+        g.setColour (theme.button.brighter (0.05f));
         g.fillRoundedRectangle (muteBtn.toFloat(), 2.0f);
-        g.setColour (theme.foreground.withAlpha (0.7f));
-        g.setFont (DysektLookAndFeel::makeFont (8.0f));
+        g.setColour (theme.accent.withAlpha (0.25f));
+        g.drawRoundedRectangle (muteBtn.toFloat(), 2.0f, 0.8f);
+        g.setColour (theme.foreground.withAlpha (0.65f));
+        g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
         g.drawText ("M", muteBtn, juce::Justification::centred);
     }
 
-    // Solo button
+    // ── Solo button ───────────────────────────────────────────────────────────
     {
-        g.setColour (theme.button);
+        g.setColour (theme.button.brighter (0.05f));
         g.fillRoundedRectangle (soloBtn.toFloat(), 2.0f);
-        g.setColour (theme.foreground.withAlpha (0.7f));
-        g.setFont (DysektLookAndFeel::makeFont (8.0f));
+        g.setColour (theme.accent.withAlpha (0.25f));
+        g.drawRoundedRectangle (soloBtn.toFloat(), 2.0f, 0.8f);
+        g.setColour (theme.foreground.withAlpha (0.65f));
+        g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
         g.drawText ("S", soloBtn, juce::Justification::centred);
     }
 
-    // Output bus
+    // ── Output bus ────────────────────────────────────────────────────────────
     {
         g.setColour (theme.button);
         g.fillRoundedRectangle (outputBusArea.toFloat(), 2.0f);
-        g.setColour (theme.foreground.withAlpha (0.6f));
-        g.setFont (DysektLookAndFeel::makeFont (8.0f));
+        g.setColour (theme.foreground.withAlpha (0.55f));
+        g.setFont (DysektLookAndFeel::makeFont (7.5f));
         g.drawText ("BUS " + juce::String (sl.outputBus + 1),
                     outputBusArea, juce::Justification::centred);
     }
 
-    // Lock indicator (small dot top-right)
+    // ── Lock indicator ────────────────────────────────────────────────────────
     if (sl.lockMask & (kLockVolume | kLockPan | kLockFilter | kLockOutputBus))
     {
         g.setColour (theme.lockActive);
@@ -262,42 +272,42 @@ void MixerStrip::drawKnob (juce::Graphics& g, const KnobArea& ka,
     const auto  b     = ka.bounds;
     if (b.isEmpty()) return;
 
-    const int cx = b.getCentreX();
-    const int cy = b.getCentreY();
-    const int r  = juce::jmin (b.getWidth(), b.getHeight()) / 2 - 1;
+    const float cx = (float) b.getCentreX();
+    const float cy = (float) b.getCentreY();
+    const float r  = (float) (juce::jmin (b.getWidth(), b.getHeight()) / 2) - 1.5f;
 
     const float angle = kKnobStart + ka.value * (kKnobEnd - kKnobStart);
 
-    // Track arc
+    // Knob body
+    g.setColour (theme.button.brighter (0.15f));
+    g.fillEllipse (cx - r, cy - r, r * 2, r * 2);
+    g.setColour (theme.accent.withAlpha (0.20f));
+    g.drawEllipse (cx - r, cy - r, r * 2, r * 2, 1.0f);
+
+    // Arc track
     juce::Path track;
-    track.addArc ((float)(cx - r), (float)(cy - r),
-                  (float)(r * 2), (float)(r * 2),
-                  kKnobStart, kKnobEnd, true);
-    g.setColour (theme.lockInactive.withAlpha (0.4f));
+    track.addCentredArc (cx, cy, r - 1.5f, r - 1.5f, 0.f, kKnobStart, kKnobEnd, true);
+    g.setColour (theme.darkBar.brighter (0.4f));
     g.strokePath (track, juce::PathStrokeType (1.5f));
 
-    // Fill arc
-    if (ka.value > 0.0f)
-    {
-        juce::Path fill;
-        fill.addArc ((float)(cx - r), (float)(cy - r),
-                     (float)(r * 2), (float)(r * 2),
-                     kKnobStart, angle, true);
-        g.setColour (locked ? theme.lockActive : theme.accent);
-        g.strokePath (fill, juce::PathStrokeType (2.0f));
-    }
+    // Filled arc
+    juce::Path fill;
+    fill.addCentredArc (cx, cy, r - 1.5f, r - 1.5f, 0.f, kKnobStart, angle, true);
+    g.setColour (locked ? theme.lockActive : theme.accent);
+    g.strokePath (fill, juce::PathStrokeType (2.0f));
 
-    // Pointer line
-    const float pLen = (float)r * 0.6f;
-    g.setColour (theme.foreground.withAlpha (0.9f));
-    g.drawLine ((float)cx, (float)cy,
-                (float)cx + std::sin (angle) * pLen,
-                (float)cy - std::cos (angle) * pLen, 1.5f);
+    // Pointer
+    const float pLen = r * 0.55f;
+    g.setColour (theme.foreground.withAlpha (0.95f));
+    g.drawLine (cx, cy,
+                cx + std::sin (angle) * pLen,
+                cy - std::cos (angle) * pLen, 1.5f);
 
-    // Label below
-    g.setColour (theme.foreground.withAlpha (0.5f));
-    g.setFont (DysektLookAndFeel::makeFont (7.5f));
-    g.drawText (label, b.withTop (b.getBottom()).withHeight (10),
+    // Label below knob
+    g.setColour (theme.foreground.withAlpha (0.50f));
+    g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
+    g.drawText (label,
+                b.getX() - 4, b.getBottom() + 1, b.getWidth() + 8, 10,
                 juce::Justification::centred);
 }
 
@@ -308,32 +318,44 @@ void MixerStrip::drawFader (juce::Graphics& g, const juce::Rectangle<int>& track
     const auto& theme = getTheme();
     if (track.isEmpty()) return;
 
-    // Track background
-    g.setColour (theme.waveformBg.darker (0.2f));
-    g.fillRoundedRectangle (track.reduced (3, 0).toFloat(), 2.0f);
+    // Track groove (narrow, centred)
+    const int grooveX = track.getCentreX() - 2;
+    g.setColour (theme.darkBar.darker (0.3f));
+    g.fillRoundedRectangle ((float) grooveX, (float) track.getY(),
+                             4.0f, (float) track.getHeight(), 2.0f);
+    g.setColour (theme.accent.withAlpha (0.12f));
+    g.drawRoundedRectangle ((float) grooveX, (float) track.getY(),
+                             4.0f, (float) track.getHeight(), 2.0f, 0.8f);
 
-    // Fill level
-    const int fillH = juce::roundToInt (norm * (float)track.getHeight());
-    if (fillH > 0)
-    {
-        auto fillRect = track.reduced (3, 0)
-                             .withTop (track.getBottom() - fillH);
-        g.setColour (locked ? theme.lockActive.withAlpha (0.7f)
-                            : theme.accent.withAlpha (0.6f));
-        g.fillRoundedRectangle (fillRect.toFloat(), 2.0f);
-    }
-
-    // Fader thumb
-    const int thumbY = track.getBottom() - fillH - 4;
-    g.setColour (theme.foreground.withAlpha (0.9f));
-    g.fillRoundedRectangle ((float)(track.getX() + 1), (float)thumbY,
-                             (float)(track.getWidth() - 2), 8.0f, 2.0f);
-
-    // "0 dB" marker line
+    // 0 dB tick mark
     const int zeroDbY = track.getBottom() - juce::roundToInt (
-        toNorm (KnobVolume, 0.0f) * (float)track.getHeight());
-    g.setColour (theme.gridLine.brighter (0.5f));
-    g.drawHorizontalLine (zeroDbY, (float)track.getX(), (float)track.getRight());
+        toNorm (KnobVolume, 0.0f) * (float) track.getHeight());
+    g.setColour (theme.accent.withAlpha (0.35f));
+    g.drawHorizontalLine (zeroDbY, (float)(grooveX - 4), (float)(grooveX + 8));
+
+    // Fader thumb — wide pill like reference image
+    const int thumbH = 16;
+    const int thumbY = track.getBottom() - juce::roundToInt (norm * (float) track.getHeight()) - thumbH / 2;
+    const int thumbX = track.getX() + 1;
+    const int thumbW = track.getWidth() - 2;
+
+    // Thumb shadow
+    g.setColour (juce::Colours::black.withAlpha (0.4f));
+    g.fillRoundedRectangle ((float) thumbX + 1, (float) thumbY + 2,
+                             (float) thumbW, (float) thumbH, 3.0f);
+
+    // Thumb body
+    juce::ColourGradient thumbGrad (
+        theme.foreground.withAlpha (0.92f), (float) thumbX, (float) thumbY,
+        theme.foreground.withAlpha (0.60f), (float) thumbX, (float)(thumbY + thumbH), false);
+    g.setGradientFill (thumbGrad);
+    g.fillRoundedRectangle ((float) thumbX, (float) thumbY,
+                             (float) thumbW, (float) thumbH, 3.0f);
+
+    // Thumb centre line
+    g.setColour ((locked ? theme.lockActive : theme.accent).withAlpha (0.6f));
+    g.drawHorizontalLine (thumbY + thumbH / 2,
+                          (float)(thumbX + 4), (float)(thumbX + thumbW - 4));
 }
 
 // =============================================================================
