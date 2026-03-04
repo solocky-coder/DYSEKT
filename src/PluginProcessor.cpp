@@ -3,6 +3,7 @@
 #include "audio/GrainEngine.h"
 #include "audio/AudioAnalysis.h"
 #include "audio/SoundFontLoader.h"
+#include "DefaultSample.h"
 #include <functional>
 #include <memory>
 
@@ -211,12 +212,9 @@ void DysektProcessor::loadDefaultSampleIfNeeded()
     defaultSampleScheduled = true;
 
     // Write the embedded Empty.wav to a session temp file and load it.
-    int dataSize = 0;
-    const char* data = BinaryData::getNamedResource ("Empty_wav", dataSize);
-    if (data == nullptr || dataSize <= 0)
-        return;
+    const char* data   = reinterpret_cast<const char*> (DefaultSampleData::data);
+    const int dataSize = DefaultSampleData::dataSize;
 
-    // Use a fixed path in the system temp dir so repeated calls are cheap.
     auto tempFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
                         .getChildFile ("dysekt_default_sample.wav");
 
