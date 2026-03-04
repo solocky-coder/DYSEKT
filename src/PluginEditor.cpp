@@ -5,6 +5,9 @@ static constexpr int kBaseW      = 900;
 static constexpr int kLogoH      = 44;
 static constexpr int kHeaderH    = 60;
 static constexpr int kSliceLaneH = 30;
+static constexpr int kLcdH       = SliceLcdDisplay::kPreferredHeight;
+static constexpr int kLcdW       = 320;   // LCD panel width within the header row
+static constexpr int kHeaderRowH = kLcdH; // header row height = LCD height
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
@@ -13,7 +16,7 @@ static constexpr int kMixerPanelH   = 210;
 
 static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
-static constexpr int kBaseHCore  = kLogoH + kHeaderH + kSliceLaneH
+static constexpr int kBaseHCore  = kLogoH + kHeaderRowH + kSliceLaneH
                                  + kScrollbarH + kSliceCtrlH + kActionH
                                  + kOscilloscopeH
                                  + 120; // minimum waveform height
@@ -40,6 +43,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
       browserPanel   (p),
       oscilloscopeView (p),
+      sliceLcdDisplay  (p),
       mixerPanel     (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
@@ -54,6 +58,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (actionPanel);
 
     addAndMakeVisible (oscilloscopeView);
+    addAndMakeVisible (sliceLcdDisplay);
 
     // Panels start hidden
     browserPanel.setVisible (false);
@@ -276,17 +281,12 @@ void DysektEditor::resized()
     // 1. Logo bar
     logoBar.setBounds (area.removeFromTop (kLogoH));
 
-<<<<<<< HEAD
-    // 2. Header controls
-    headerBar.setBounds (area.removeFromTop (kHeaderH));
-=======
-    // 2. Header row — LCD on the left, header controls on the right
+    // 2. Header row — header controls on the left, LCD on the right
     {
         auto headerRow = area.removeFromTop (kHeaderRowH);
-        sliceLcdDisplay.setBounds (headerRow.removeFromLeft (kLcdW).reduced (kMargin, kMargin));
-        headerBar.setBounds (headerRow);
+        headerBar.setBounds (headerRow.removeFromRight (getWidth() - kLcdW));
+        sliceLcdDisplay.setBounds (headerRow.reduced (kMargin, kMargin));
     }
->>>>>>> parent of d4f90f8 (Merge pull request #35 from solocky-coder/copilot/update-lcd-position-header)
 
     // 3. Slice lane
     sliceLane.setBounds (area.removeFromTop (kSliceLaneH).reduced (kMargin, 0));
@@ -438,6 +438,7 @@ void DysektEditor::timerCallback()
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
 
     oscilloscopeView.repaint();
+    sliceLcdDisplay.repaintLcd();
 
     if (mixerOpen) mixerPanel.updateFromSnapshot();
 
@@ -483,7 +484,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
         if (t.name == themeName)
         {
             setTheme (t);
-            processor.sliceManager.setSlicePalette (getTheme().slicePalette.getRawDataPointer());
+            processor.sliceManager.setSlicePalette (getTheme().slicePalette);
             saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
             repaint(); return;
         }
@@ -494,7 +495,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
     else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
     else if (themeName == "hack")  setTheme (ThemeData::hackTheme());
     else                           setTheme (ThemeData::darkTheme());
-    processor.sliceManager.setSlicePalette (getTheme().slicePalette.getRawDataPointer());
+    processor.sliceManager.setSlicePalette (getTheme().slicePalette);
     saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
     repaint();
 }

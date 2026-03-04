@@ -1,203 +1,335 @@
 #pragma once
-
 #include <juce_graphics/juce_graphics.h>
 
-// =============================================================================
-//  ThemeData  —  all colours and palette for one visual theme
-// =============================================================================
-class ThemeData
+struct ThemeData
 {
-public:
     juce::String name;
 
     juce::Colour background;
+    juce::Colour waveformBg;
+    juce::Colour darkBar;
     juce::Colour foreground;
+    juce::Colour header;
+    juce::Colour waveform;
+    juce::Colour selectionOverlay;
+    juce::Colour lockActive;
+    juce::Colour lockInactive;
+    juce::Colour gridLine;
     juce::Colour accent;
     juce::Colour button;
     juce::Colour buttonHover;
-    juce::Colour header;
-    juce::Colour darkBar;
     juce::Colour separator;
-    juce::Colour lockActive;
-    juce::Colour lockInactive;
-    juce::Colour waveformColour;
-    juce::Colour waveformBg;
-    juce::Colour gridLine;
 
-    juce::Array<juce::Colour> slicePalette;
+    juce::Colour slicePalette[16];
 
-    juce::String toThemeFile() const
+    static ThemeData darkTheme()
     {
-        auto hex = [] (juce::Colour c) { return c.toDisplayString (true); };
-        juce::String s;
-        s << "name: "         << name                 << "\n"
-          << "background: "   << hex (background)     << "\n"
-          << "foreground: "   << hex (foreground)     << "\n"
-          << "accent: "       << hex (accent)         << "\n"
-          << "button: "       << hex (button)         << "\n"
-          << "buttonHover: "  << hex (buttonHover)    << "\n"
-          << "header: "       << hex (header)         << "\n"
-          << "darkBar: "      << hex (darkBar)        << "\n"
-          << "separator: "    << hex (separator)      << "\n"
-          << "lockActive: "   << hex (lockActive)     << "\n"
-          << "lockInactive: " << hex (lockInactive)   << "\n"
-          << "waveform: "     << hex (waveformColour) << "\n"
-          << "waveformBg: "   << hex (waveformBg)     << "\n"
-          << "gridLine: "    << hex (gridLine)       << "\n";
-        for (int i = 0; i < slicePalette.size(); ++i)
-            s << "slice" << i << ": " << hex (slicePalette[i]) << "\n";
-        return s;
+        ThemeData t;
+        t.name          = "dark";
+        t.background    = juce::Colour (0xFF0A0A0E);
+        t.waveformBg    = juce::Colour (0xFF060608);
+        t.darkBar       = juce::Colour (0xFF0E0E13);
+        t.foreground    = juce::Colour (0xFFCCD0D8);
+        t.header    = juce::Colour (0xFF0D0D14);
+        t.waveform = juce::Colour::fromFloatRGBA (0.70f, 0.78f, 0.85f, 1.0f);
+        t.selectionOverlay = juce::Colour::fromFloatRGBA (0.25f, 0.35f, 0.55f, 1.0f);
+        t.lockActive      = juce::Colour::fromFloatRGBA (0.90f, 0.35f, 0.22f, 1.0f);
+        t.lockInactive       = juce::Colour::fromFloatRGBA (0.30f, 0.30f, 0.34f, 1.0f);
+        t.gridLine      = juce::Colour::fromFloatRGBA (0.14f, 0.14f, 0.18f, 1.0f);
+        t.accent        = juce::Colour::fromFloatRGBA (0.25f, 0.85f, 0.85f, 1.0f);
+        t.button        = juce::Colour (0xFF1C2028);
+        t.buttonHover   = juce::Colour (0xFF2A3040);
+        t.separator     = juce::Colour::fromFloatRGBA (0.20f, 0.20f, 0.25f, 1.0f);
+        t.slicePalette[0]  = juce::Colour (0xFF4D8C99); // Cold Teal
+        t.slicePalette[1]  = juce::Colour (0xFF8C4747); // Muted Red
+        t.slicePalette[2]  = juce::Colour (0xFF4D8059); // Dark Green
+        t.slicePalette[3]  = juce::Colour (0xFF8C7340); // Rust
+        t.slicePalette[4]  = juce::Colour (0xFF664D8C); // Dusk Violet
+        t.slicePalette[5]  = juce::Colour (0xFF80804D); // Olive
+        t.slicePalette[6]  = juce::Colour (0xFF40808C); // Steel Cyan
+        t.slicePalette[7]  = juce::Colour (0xFF804D6B); // Dark Rose
+        t.slicePalette[8]  = juce::Colour (0xFF597A47); // Moss
+        t.slicePalette[9]  = juce::Colour (0xFF80594D); // Clay
+        t.slicePalette[10] = juce::Colour (0xFF52598C); // Slate Blue
+        t.slicePalette[11] = juce::Colour (0xFF737359); // Concrete
+        t.slicePalette[12] = juce::Colour (0xFF6B4773); // Plum
+        t.slicePalette[13] = juce::Colour (0xFF477A6B); // Patina
+        t.slicePalette[14] = juce::Colour (0xFF7A5973); // Mauve
+        t.slicePalette[15] = juce::Colour (0xFF617A66); // Lichen
+        return t;
+    }
+
+    static ThemeData lightTheme()
+    {
+        ThemeData t;
+        t.name          = "light";
+        t.background    = juce::Colour (0xFFF0F0F4);
+        t.waveformBg    = juce::Colour (0xFFFAFAFE);
+        t.darkBar       = juce::Colour (0xFFE8E8F0);
+        t.foreground    = juce::Colour (0xFF1A1A2E);
+        t.header    = juce::Colour (0xFFE0E0EC);
+        t.waveform = juce::Colour (0xFF2A4060);
+        t.selectionOverlay = juce::Colour (0xFF8090B8);
+        t.lockActive      = juce::Colour (0xFFCC4422);
+        t.lockInactive       = juce::Colour (0xFF9999A8);
+        t.gridLine      = juce::Colour (0xFFD8D8E0);
+        t.accent        = juce::Colour (0xFF1A8888);
+        t.button        = juce::Colour (0xFFD0D4DC);
+        t.buttonHover   = juce::Colour (0xFFBCC0CC);
+        t.separator     = juce::Colour (0xFFC0C0CC);
+        t.slicePalette[0]  = juce::Colour (0xFF5AABB8); // Cold Teal
+        t.slicePalette[1]  = juce::Colour (0xFFB85A5A); // Muted Red
+        t.slicePalette[2]  = juce::Colour (0xFF5AA66E); // Dark Green
+        t.slicePalette[3]  = juce::Colour (0xFFB89650); // Rust
+        t.slicePalette[4]  = juce::Colour (0xFF8066B8); // Dusk Violet
+        t.slicePalette[5]  = juce::Colour (0xFFA6A65A); // Olive
+        t.slicePalette[6]  = juce::Colour (0xFF50A6B8); // Steel Cyan
+        t.slicePalette[7]  = juce::Colour (0xFFB8668E); // Dark Rose
+        t.slicePalette[8]  = juce::Colour (0xFF6E9E5A); // Moss
+        t.slicePalette[9]  = juce::Colour (0xFFB87A66); // Clay
+        t.slicePalette[10] = juce::Colour (0xFF6670B8); // Slate Blue
+        t.slicePalette[11] = juce::Colour (0xFF96966E); // Concrete
+        t.slicePalette[12] = juce::Colour (0xFF8E5A98); // Plum
+        t.slicePalette[13] = juce::Colour (0xFF5A9E88); // Patina
+        t.slicePalette[14] = juce::Colour (0xFFA07098); // Mauve
+        t.slicePalette[15] = juce::Colour (0xFF7A9E80); // Lichen
+        return t;
+    }
+
+
+    // ── LAZY ─────────────────────────────────────────────────────────────────
+    // Electric blue accent · Deep charcoal panels · High contrast
+    static ThemeData lazyTheme()
+    {
+        ThemeData t;
+        t.name             = "lazy";
+        t.background       = juce::Colour (0xFF1A1C22);
+        t.waveformBg       = juce::Colour (0xFF13151A);
+        t.darkBar          = juce::Colour (0xFF16181F);
+        t.foreground       = juce::Colour (0xFFC8D8E8);
+        t.header           = juce::Colour (0xFF13151A);
+        t.waveform         = juce::Colour (0xFF4A9EFF);
+        t.selectionOverlay = juce::Colour (0xFF1E3050);
+        t.lockActive       = juce::Colour (0xFF4A9EFF);
+        t.lockInactive     = juce::Colour (0xFF2A3545);
+        t.gridLine         = juce::Colour (0xFF1E2028);
+        t.accent           = juce::Colour (0xFF4A9EFF);
+        t.button           = juce::Colour (0xFF1E2028);
+        t.buttonHover      = juce::Colour (0xFF2A3545);
+        t.separator        = juce::Colour (0xFF252830);
+        t.slicePalette[0]  = juce::Colour (0xFF4A9EFF); // Blue
+        t.slicePalette[1]  = juce::Colour (0xFFF5A623); // Amber
+        t.slicePalette[2]  = juce::Colour (0xFF56D9A0); // Mint
+        t.slicePalette[3]  = juce::Colour (0xFFB06EF3); // Violet
+        t.slicePalette[4]  = juce::Colour (0xFFF06292); // Pink
+        t.slicePalette[5]  = juce::Colour (0xFF4DD0E1); // Cyan
+        t.slicePalette[6]  = juce::Colour (0xFFF5A623); // Amber
+        t.slicePalette[7]  = juce::Colour (0xFF7986CB); // Indigo
+        t.slicePalette[8]  = juce::Colour (0xFF4DB6AC); // Teal
+        t.slicePalette[9]  = juce::Colour (0xFFFF8A65); // Deep Orange
+        t.slicePalette[10] = juce::Colour (0xFFA5D6A7); // Light Green
+        t.slicePalette[11] = juce::Colour (0xFFCE93D8); // Purple
+        t.slicePalette[12] = juce::Colour (0xFF80DEEA); // Light Cyan
+        t.slicePalette[13] = juce::Colour (0xFFFFCC80); // Orange
+        t.slicePalette[14] = juce::Colour (0xFFF48FB1); // Rose
+        t.slicePalette[15] = juce::Colour (0xFFB0BEC5); // Blue Grey
+        return t;
+    }
+
+    // ── SNOW ─────────────────────────────────────────────────────────────────
+    // Warm orange accent · Dark slate panels · Professional warmth
+    static ThemeData snowTheme()
+    {
+        ThemeData t;
+        t.name             = "snow";
+        t.background       = juce::Colour (0xFF232428);
+        t.waveformBg       = juce::Colour (0xFF1C1D21);
+        t.darkBar          = juce::Colour (0xFF1E1F23);
+        t.foreground       = juce::Colour (0xFFE8E0D4);
+        t.header           = juce::Colour (0xFF1C1D21);
+        t.waveform         = juce::Colour (0xFFE87C2A);
+        t.selectionOverlay = juce::Colour (0xFF3A2810);
+        t.lockActive       = juce::Colour (0xFFE87C2A);
+        t.lockInactive     = juce::Colour (0xFF383940);
+        t.gridLine         = juce::Colour (0xFF2A2B30);
+        t.accent           = juce::Colour (0xFFE87C2A);
+        t.button           = juce::Colour (0xFF2A2B30);
+        t.buttonHover      = juce::Colour (0xFF383940);
+        t.separator        = juce::Colour (0xFF2E3035);
+        t.slicePalette[0]  = juce::Colour (0xFFE87C2A); // Orange
+        t.slicePalette[1]  = juce::Colour (0xFFC4A96A); // Gold
+        t.slicePalette[2]  = juce::Colour (0xFF7AAA8A); // Sage
+        t.slicePalette[3]  = juce::Colour (0xFF8A7AAA); // Lavender
+        t.slicePalette[4]  = juce::Colour (0xFFAA7A8A); // Dusty Rose
+        t.slicePalette[5]  = juce::Colour (0xFF7AAAAA); // Muted Teal
+        t.slicePalette[6]  = juce::Colour (0xFFC4A96A); // Gold
+        t.slicePalette[7]  = juce::Colour (0xFF9AAA7A); // Olive
+        t.slicePalette[8]  = juce::Colour (0xFFAA9A7A); // Sand
+        t.slicePalette[9]  = juce::Colour (0xFF7A8AAA); // Steel
+        t.slicePalette[10] = juce::Colour (0xFFAA7A6A); // Terra
+        t.slicePalette[11] = juce::Colour (0xFF8AAA9A); // Seafoam
+        t.slicePalette[12] = juce::Colour (0xFF9A7AAA); // Lilac
+        t.slicePalette[13] = juce::Colour (0xFFAA8A7A); // Sienna
+        t.slicePalette[14] = juce::Colour (0xFF7AAA9A); // Jade
+        t.slicePalette[15] = juce::Colour (0xFF8A9AAA); // Slate
+        return t;
+    }
+
+    // ── GHOST ────────────────────────────────────────────────────────────────
+    // Bright teal/mint accent · Near-black · Ultra-minimal
+    static ThemeData ghostTheme()
+    {
+        ThemeData t;
+        t.name             = "ghost";
+        t.background       = juce::Colour (0xFF0E1014);
+        t.waveformBg       = juce::Colour (0xFF090B0E);
+        t.darkBar          = juce::Colour (0xFF0B0D10);
+        t.foreground       = juce::Colour (0xFFC8E8E0);
+        t.header           = juce::Colour (0xFF090B0E);
+        t.waveform         = juce::Colour (0xFF2DD4A8);
+        t.selectionOverlay = juce::Colour (0xFF0A2A20);
+        t.lockActive       = juce::Colour (0xFF2DD4A8);
+        t.lockInactive     = juce::Colour (0xFF1E2830);
+        t.gridLine         = juce::Colour (0xFF141820);
+        t.accent           = juce::Colour (0xFF2DD4A8);
+        t.button           = juce::Colour (0xFF141820);
+        t.buttonHover      = juce::Colour (0xFF1E2830);
+        t.separator        = juce::Colour (0xFF1A1E24);
+        t.slicePalette[0]  = juce::Colour (0xFF2DD4A8); // Mint
+        t.slicePalette[1]  = juce::Colour (0xFF2D9DD4); // Sky
+        t.slicePalette[2]  = juce::Colour (0xFFA82DD4); // Purple
+        t.slicePalette[3]  = juce::Colour (0xFFD4852D); // Amber
+        t.slicePalette[4]  = juce::Colour (0xFFD42D6A); // Crimson
+        t.slicePalette[5]  = juce::Colour (0xFF2DD47A); // Green
+        t.slicePalette[6]  = juce::Colour (0xFF2DD4A8); // Mint
+        t.slicePalette[7]  = juce::Colour (0xFFD4C42D); // Yellow
+        t.slicePalette[8]  = juce::Colour (0xFF2D6AD4); // Blue
+        t.slicePalette[9]  = juce::Colour (0xFFD42DA8); // Magenta
+        t.slicePalette[10] = juce::Colour (0xFF6AD42D); // Lime
+        t.slicePalette[11] = juce::Colour (0xFF2DD4D4); // Cyan
+        t.slicePalette[12] = juce::Colour (0xFFD46A2D); // Orange
+        t.slicePalette[13] = juce::Colour (0xFF6A2DD4); // Indigo
+        t.slicePalette[14] = juce::Colour (0xFFD42D2D); // Red
+        t.slicePalette[15] = juce::Colour (0xFF2DA8D4); // Cerulean
+        return t;
+    }
+
+    // ── HACK ─────────────────────────────────────────────────────────────────
+    // Red accent · Pure black · Industrial — classic Akai MPC
+    static ThemeData hackTheme()
+    {
+        ThemeData t;
+        t.name             = "hack";
+        t.background       = juce::Colour (0xFF0A0A0A);
+        t.waveformBg       = juce::Colour (0xFF050505);
+        t.darkBar          = juce::Colour (0xFF070707);
+        t.foreground       = juce::Colour (0xFFC8C8C8);
+        t.header           = juce::Colour (0xFF050505);
+        t.waveform         = juce::Colour (0xFFCC2200);
+        t.selectionOverlay = juce::Colour (0xFF2A0500);
+        t.lockActive       = juce::Colour (0xFFCC2200);
+        t.lockInactive     = juce::Colour (0xFF252525);
+        t.gridLine         = juce::Colour (0xFF141414);
+        t.accent           = juce::Colour (0xFFCC2200);
+        t.button           = juce::Colour (0xFF0F0F0F);
+        t.buttonHover      = juce::Colour (0xFF1A0000);
+        t.separator        = juce::Colour (0xFF1A1A1A);
+        t.slicePalette[0]  = juce::Colour (0xFFCC2200); // Red
+        t.slicePalette[1]  = juce::Colour (0xFF888888); // Grey
+        t.slicePalette[2]  = juce::Colour (0xFF666666); // Dark Grey
+        t.slicePalette[3]  = juce::Colour (0xFF999999); // Silver
+        t.slicePalette[4]  = juce::Colour (0xFF777777); // Mid Grey
+        t.slicePalette[5]  = juce::Colour (0xFF555555); // Charcoal
+        t.slicePalette[6]  = juce::Colour (0xFF888888); // Grey
+        t.slicePalette[7]  = juce::Colour (0xFFAAAAAA); // Light Grey
+        t.slicePalette[8]  = juce::Colour (0xFF444444); // Dim
+        t.slicePalette[9]  = juce::Colour (0xFF993300); // Dark Red
+        t.slicePalette[10] = juce::Colour (0xFF666666); // Dark Grey
+        t.slicePalette[11] = juce::Colour (0xFF777777); // Mid Grey
+        t.slicePalette[12] = juce::Colour (0xFF555555); // Charcoal
+        t.slicePalette[13] = juce::Colour (0xFF888888); // Grey
+        t.slicePalette[14] = juce::Colour (0xFF444444); // Dim
+        t.slicePalette[15] = juce::Colour (0xFF333333); // Near Black
+        return t;
+    }
+
+    static juce::Colour parseHex (const juce::String& hex)
+    {
+        return juce::Colour ((juce::uint32) (0xFF000000 | hex.getHexValue32()));
     }
 
     static ThemeData fromThemeFile (const juce::String& text)
     {
-        ThemeData t;
-        auto parseLine = [&] (const juce::String& key) -> juce::Colour
+        ThemeData t = darkTheme(); // defaults
+
+        for (auto line : juce::StringArray::fromLines (text))
         {
-            for (auto& line : juce::StringArray::fromLines (text))
+            line = line.trim();
+            if (line.isEmpty() || line.startsWith ("#"))
+                continue;
+
+            int colonIdx = line.indexOf (":");
+            if (colonIdx < 0)
+                continue;
+
+            auto key = line.substring (0, colonIdx).trim();
+            auto val = line.substring (colonIdx + 1).trim().unquoted();
+
+            // Strip inline comments (  # ...)
+            int hashIdx = val.indexOf (" #");
+            if (hashIdx >= 0)
+                val = val.substring (0, hashIdx).trimEnd();
+
+            if (key == "name")            t.name = val;
+            else if (key == "background")    t.background = parseHex (val);
+            else if (key == "waveformBg")    t.waveformBg = parseHex (val);
+            else if (key == "darkBar")       t.darkBar = parseHex (val);
+            else if (key == "foreground")    t.foreground = parseHex (val);
+            else if (key == "header")    t.header = parseHex (val);
+            else if (key == "waveform") t.waveform = parseHex (val);
+            else if (key == "selectionOverlay") t.selectionOverlay = parseHex (val);
+            else if (key == "lockActive")      t.lockActive = parseHex (val);
+            else if (key == "lockInactive")       t.lockInactive = parseHex (val);
+            else if (key == "gridLine")      t.gridLine = parseHex (val);
+            else if (key == "accent")        t.accent = parseHex (val);
+            else if (key == "button")        t.button = parseHex (val);
+            else if (key == "buttonHover")   t.buttonHover = parseHex (val);
+            else if (key == "separator")     t.separator = parseHex (val);
+            else if (key.startsWith ("slice"))
             {
-                auto l = line.trim();
-                if (l.startsWith (key + ":"))
-                {
-                    auto hex = l.fromFirstOccurrenceOf (":", false, false).trim();
-                    if (! hex.startsWith ("#")) hex = "#" + hex;
-                    return juce::Colour::fromString (hex);
-                }
+                int idx = key.substring (5).getIntValue() - 1;
+                if (idx >= 0 && idx < 16)
+                    t.slicePalette[idx] = parseHex (val);
             }
-            return juce::Colours::black;
-        };
-        for (auto& line : juce::StringArray::fromLines (text))
-        {
-            auto l = line.trim();
-            if (l.startsWith ("name:"))
-                t.name = l.fromFirstOccurrenceOf (":", false, false).trim();
         }
-        t.background     = parseLine ("background");
-        t.foreground     = parseLine ("foreground");
-        t.accent         = parseLine ("accent");
-        t.button         = parseLine ("button");
-        t.buttonHover    = parseLine ("buttonHover");
-        t.header         = parseLine ("header");
-        t.darkBar        = parseLine ("darkBar");
-        t.separator      = parseLine ("separator");
-        t.lockActive     = parseLine ("lockActive");
-        t.lockInactive   = parseLine ("lockInactive");
-t.waveformColour = parseLine ("waveform");
-        t.waveformBg     = parseLine ("waveformBg");
-        t.gridLine       = parseLine ("gridLine");
-        for (int i = 0; i < 16; ++i)
-        {
-            juce::String key = "slice" + juce::String (i);
-            bool found = false;
-            for (auto& line : juce::StringArray::fromLines (text))
-            {
-                auto l = line.trim();
-                if (l.startsWith (key + ":"))
-                {
-                    auto hex = l.fromFirstOccurrenceOf (":", false, false).trim();
-                    if (! hex.startsWith ("#")) hex = "#" + hex;
-                    t.slicePalette.add (juce::Colour::fromString (hex));
-                    found = true; break;
-                }
-            }
-            if (! found) break;
-        }
-        if (t.slicePalette.isEmpty())
-            t.slicePalette = defaultSlicePalette();
         return t;
     }
 
-    static ThemeData darkTheme()
+    static juce::String colourToHex (juce::Colour c)
     {
-        ThemeData t; t.name = "dark";
-        t.background = juce::Colour (0xff1a1a1a); t.foreground  = juce::Colour (0xffe0e0e0);
-        t.accent     = juce::Colour (0xff4fc3f7); t.button      = juce::Colour (0xff2c2c2c);
-        t.buttonHover= juce::Colour (0xff3a3a3a); t.header      = juce::Colour (0xff252525);
-        t.darkBar    = juce::Colour (0xff121212); t.separator   = juce::Colour (0xff333333);
-        t.lockActive = juce::Colour (0xff4fc3f7); t.lockInactive= juce::Colour (0xff444444);
-        t.waveformColour = juce::Colour (0xff4fc3f7);
-        t.waveformBg     = juce::Colour (0xff0d0d0d);
-        t.gridLine       = juce::Colour (0xff2a2a2a);
-        t.slicePalette = defaultSlicePalette(); return t;
-    }
-    static ThemeData lightTheme()
-    {
-        ThemeData t; t.name = "light";
-        t.background = juce::Colour (0xfff0f0f0); t.foreground  = juce::Colour (0xff1a1a1a);
-        t.accent     = juce::Colour (0xff0277bd); t.button      = juce::Colour (0xffdcdcdc);
-        t.buttonHover= juce::Colour (0xffc8c8c8); t.header     = juce::Colour (0xffe4e4e4);
-        t.darkBar    = juce::Colour (0xffb0b0b0); t.separator   = juce::Colour (0xffbdbdbd);
-        t.lockActive = juce::Colour (0xff0277bd); t.lockInactive= juce::Colour (0xff9e9e9e);
-        t.waveformColour = juce::Colour (0xff0277bd);
-        t.waveformBg     = juce::Colour (0xffe8e8e8);
-        t.gridLine       = juce::Colour (0xffcccccc);
-        t.slicePalette = defaultSlicePalette(); return t;
-    }
-    static ThemeData lazyTheme()
-    {
-        ThemeData t; t.name = "lazy";
-        t.background = juce::Colour (0xff1b1f23); t.foreground  = juce::Colour (0xffcdd9e5);
-        t.accent     = juce::Colour (0xff58a6ff); t.button      = juce::Colour (0xff21262d);
-        t.buttonHover= juce::Colour (0xff30363d); t.header      = juce::Colour (0xff161b22);
-        t.darkBar    = juce::Colour (0xff0d1117); t.separator   = juce::Colour (0xff30363d);
-        t.lockActive = juce::Colour (0xff58a6ff); t.lockInactive= juce::Colour (0xff484f58);
-        t.waveformColour = juce::Colour (0xff58a6ff);
-        t.waveformBg     = juce::Colour (0xff0d1117);
-        t.gridLine       = juce::Colour (0xff21262d);
-        t.slicePalette = defaultSlicePalette(); return t;
-    }
-    static ThemeData snowTheme()
-    {
-        ThemeData t; t.name = "snow";
-        t.background = juce::Colour (0xfffafafa); t.foreground  = juce::Colour (0xff212121);
-        t.accent     = juce::Colour (0xff90caf9); t.button      = juce::Colour (0xffeeeeee);
-        t.buttonHover= juce::Colour (0xffe0e0e0); t.header      = juce::Colour (0xffe3f2fd);
-        t.darkBar    = juce::Colour (0xffbbdefb); t.separator   = juce::Colour (0xffcfd8dc);
-        t.lockActive = juce::Colour (0xff42a5f5); t.lockInactive= juce::Colour (0xffb0bec5);
-        t.waveformColour = juce::Colour (0xff42a5f5);
-        t.waveformBg     = juce::Colour (0xfff5f9ff);
-        t.gridLine       = juce::Colour (0xffd0dde8);
-        t.slicePalette = defaultSlicePalette(); return t;
-    }
-    static ThemeData ghostTheme()
-    {
-        ThemeData t; t.name = "ghost";
-        t.background = juce::Colour (0xff0f0f0f); t.foreground  = juce::Colour (0xffaaaaaa);
-        t.accent     = juce::Colour (0xffeeeeee); t.button      = juce::Colour (0xff1c1c1c);
-        t.buttonHover= juce::Colour (0xff2a2a2a); t.header      = juce::Colour (0xff141414);
-        t.darkBar    = juce::Colour (0xff080808); t.separator   = juce::Colour (0xff2a2a2a);
-        t.lockActive = juce::Colour (0xffcccccc); t.lockInactive= juce::Colour (0xff3a3a3a);
-        t.waveformColour = juce::Colour (0xff888888);
-        t.waveformBg     = juce::Colour (0xff080808);
-        t.gridLine       = juce::Colour (0xff1a1a1a);
-        t.slicePalette = defaultSlicePalette(); return t;
-    }
-    static ThemeData hackTheme()
-    {
-        ThemeData t; t.name = "hack";
-        t.background = juce::Colour (0xff001100); t.foreground  = juce::Colour (0xff00ff41);
-        t.accent     = juce::Colour (0xff00ff41); t.button      = juce::Colour (0xff002200);
-        t.buttonHover= juce::Colour (0xff003300); t.header      = juce::Colour (0xff000d00);
-        t.darkBar    = juce::Colour (0xff000800); t.separator   = juce::Colour (0xff004400);
-        t.lockActive = juce::Colour (0xff00ff41); t.lockInactive= juce::Colour (0xff005500);
-        t.waveformColour = juce::Colour (0xff00cc33);
-        t.waveformBg     = juce::Colour (0xff000800);
-        t.gridLine       = juce::Colour (0xff003300);
-        t.slicePalette = defaultSlicePalette(); return t;
+        return juce::String::toHexString ((int) (c.getARGB() & 0x00FFFFFF)).paddedLeft ('0', 6);
     }
 
-private:
-    static juce::Array<juce::Colour> defaultSlicePalette()
+    juce::String toThemeFile() const
     {
-        return {
-            juce::Colour (0xffef5350), juce::Colour (0xffec407a),
-            juce::Colour (0xffab47bc), juce::Colour (0xff7e57c2),
-            juce::Colour (0xff42a5f5), juce::Colour (0xff26c6da),
-            juce::Colour (0xff26a69a), juce::Colour (0xff66bb6a),
-            juce::Colour (0xffd4e157), juce::Colour (0xffffca28),
-            juce::Colour (0xffffa726), juce::Colour (0xffff7043),
-            juce::Colour (0xff8d6e63), juce::Colour (0xffbdbdbd),
-            juce::Colour (0xff78909c), juce::Colour (0xff80deea)
-        };
+        juce::String s;
+        s << "name: " << name << "\n";
+        s << "background: " << colourToHex (background) << "\n";
+        s << "waveformBg: " << colourToHex (waveformBg) << "\n";
+        s << "darkBar: " << colourToHex (darkBar) << "\n";
+        s << "foreground: " << colourToHex (foreground) << "\n";
+        s << "header: " << colourToHex (header) << "\n";
+        s << "waveform: " << colourToHex (waveform) << "\n";
+        s << "selectionOverlay: " << colourToHex (selectionOverlay) << "\n";
+        s << "lockActive: " << colourToHex (lockActive) << "\n";
+        s << "lockInactive: " << colourToHex (lockInactive) << "\n";
+        s << "gridLine: " << colourToHex (gridLine) << "\n";
+        s << "accent: " << colourToHex (accent) << "\n";
+        s << "button: " << colourToHex (button) << "\n";
+        s << "buttonHover: " << colourToHex (buttonHover) << "\n";
+        s << "separator: " << colourToHex (separator) << "\n";
+        for (int i = 0; i < 16; ++i)
+            s << "slice" << (i + 1) << ": " << colourToHex (slicePalette[i]) << "\n";
+        return s;
     }
 };
