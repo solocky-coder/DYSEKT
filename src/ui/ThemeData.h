@@ -21,6 +21,8 @@ public:
     juce::Colour lockActive;
     juce::Colour lockInactive;
     juce::Colour waveformColour;
+    juce::Colour waveformBg;
+    juce::Colour gridLine;
 
     juce::Array<juce::Colour> slicePalette;
 
@@ -39,7 +41,9 @@ public:
           << "separator: "    << hex (separator)      << "\n"
           << "lockActive: "   << hex (lockActive)     << "\n"
           << "lockInactive: " << hex (lockInactive)   << "\n"
-          << "waveform: "     << hex (waveformColour) << "\n";
+          << "waveform: "     << hex (waveformColour) << "\n"
+          << "waveformBg: "   << hex (waveformBg)     << "\n"
+          << "gridLine: "    << hex (gridLine)       << "\n";
         for (int i = 0; i < slicePalette.size(); ++i)
             s << "slice" << i << ": " << hex (slicePalette[i]) << "\n";
         return s;
@@ -78,7 +82,9 @@ public:
         t.separator      = parseLine ("separator");
         t.lockActive     = parseLine ("lockActive");
         t.lockInactive   = parseLine ("lockInactive");
-        t.waveformColour = parseLine ("waveform");
+t.waveformColour = parseLine ("waveform");
+        t.waveformBg     = parseLine ("waveformBg");
+        t.gridLine       = parseLine ("gridLine");
         for (int i = 0; i < 16; ++i)
         {
             juce::String key = "slice" + juce::String (i);
@@ -110,6 +116,8 @@ public:
         t.darkBar    = juce::Colour (0xff121212); t.separator   = juce::Colour (0xff333333);
         t.lockActive = juce::Colour (0xff4fc3f7); t.lockInactive= juce::Colour (0xff444444);
         t.waveformColour = juce::Colour (0xff4fc3f7);
+        t.waveformBg     = juce::Colour (0xff0d0d0d);
+        t.gridLine       = juce::Colour (0xff2a2a2a);
         t.slicePalette = defaultSlicePalette(); return t;
     }
     static ThemeData lightTheme()
@@ -121,6 +129,8 @@ public:
         t.darkBar    = juce::Colour (0xffb0b0b0); t.separator   = juce::Colour (0xffbdbdbd);
         t.lockActive = juce::Colour (0xff0277bd); t.lockInactive= juce::Colour (0xff9e9e9e);
         t.waveformColour = juce::Colour (0xff0277bd);
+        t.waveformBg     = juce::Colour (0xffe8e8e8);
+        t.gridLine       = juce::Colour (0xffcccccc);
         t.slicePalette = defaultSlicePalette(); return t;
     }
     static ThemeData lazyTheme()
@@ -132,6 +142,8 @@ public:
         t.darkBar    = juce::Colour (0xff0d1117); t.separator   = juce::Colour (0xff30363d);
         t.lockActive = juce::Colour (0xff58a6ff); t.lockInactive= juce::Colour (0xff484f58);
         t.waveformColour = juce::Colour (0xff58a6ff);
+        t.waveformBg     = juce::Colour (0xff0d1117);
+        t.gridLine       = juce::Colour (0xff21262d);
         t.slicePalette = defaultSlicePalette(); return t;
     }
     static ThemeData snowTheme()
@@ -143,6 +155,8 @@ public:
         t.darkBar    = juce::Colour (0xffbbdefb); t.separator   = juce::Colour (0xffcfd8dc);
         t.lockActive = juce::Colour (0xff42a5f5); t.lockInactive= juce::Colour (0xffb0bec5);
         t.waveformColour = juce::Colour (0xff42a5f5);
+        t.waveformBg     = juce::Colour (0xfff5f9ff);
+        t.gridLine       = juce::Colour (0xffd0dde8);
         t.slicePalette = defaultSlicePalette(); return t;
     }
     static ThemeData ghostTheme()
@@ -154,6 +168,8 @@ public:
         t.darkBar    = juce::Colour (0xff080808); t.separator   = juce::Colour (0xff2a2a2a);
         t.lockActive = juce::Colour (0xffcccccc); t.lockInactive= juce::Colour (0xff3a3a3a);
         t.waveformColour = juce::Colour (0xff888888);
+        t.waveformBg     = juce::Colour (0xff080808);
+        t.gridLine       = juce::Colour (0xff1a1a1a);
         t.slicePalette = defaultSlicePalette(); return t;
     }
     static ThemeData hackTheme()
@@ -165,6 +181,8 @@ public:
         t.darkBar    = juce::Colour (0xff000800); t.separator   = juce::Colour (0xff004400);
         t.lockActive = juce::Colour (0xff00ff41); t.lockInactive= juce::Colour (0xff005500);
         t.waveformColour = juce::Colour (0xff00cc33);
+        t.waveformBg     = juce::Colour (0xff000800);
+        t.gridLine       = juce::Colour (0xff003300);
         t.slicePalette = defaultSlicePalette(); return t;
     }
 

@@ -474,7 +474,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
         if (t.name == themeName)
         {
             setTheme (t);
-            processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+            processor.sliceManager.setSlicePalette (getTheme().slicePalette.getRawDataPointer());
             saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
             repaint(); return;
         }
@@ -485,7 +485,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
     else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
     else if (themeName == "hack")  setTheme (ThemeData::hackTheme());
     else                           setTheme (ThemeData::darkTheme());
-    processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+    processor.sliceManager.setSlicePalette (getTheme().slicePalette.getRawDataPointer());
     saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
     repaint();
 }
