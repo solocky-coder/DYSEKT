@@ -390,5 +390,5 @@ void WaveformView::paintTrimOverlay (juce::Graphics& g)
     if (inPx > 0)
         g.fillRect (0, 0, inPx, h);
     if (outPx < getWidth())
-        g.fillRect (outPx, 0, get*
-
+        g.fillRect (outPx, 0, getWidth() - outPx, h);
+}
