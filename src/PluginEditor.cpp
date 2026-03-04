@@ -276,8 +276,17 @@ void DysektEditor::resized()
     // 1. Logo bar
     logoBar.setBounds (area.removeFromTop (kLogoH));
 
+<<<<<<< HEAD
     // 2. Header controls
     headerBar.setBounds (area.removeFromTop (kHeaderH));
+=======
+    // 2. Header row — LCD on the left, header controls on the right
+    {
+        auto headerRow = area.removeFromTop (kHeaderRowH);
+        sliceLcdDisplay.setBounds (headerRow.removeFromLeft (kLcdW).reduced (kMargin, kMargin));
+        headerBar.setBounds (headerRow);
+    }
+>>>>>>> parent of d4f90f8 (Merge pull request #35 from solocky-coder/copilot/update-lcd-position-header)
 
     // 3. Slice lane
     sliceLane.setBounds (area.removeFromTop (kSliceLaneH).reduced (kMargin, 0));
