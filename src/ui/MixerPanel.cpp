@@ -96,3 +96,14 @@ void MixerPanel::updateFromSnapshot()
         rebuildStrips(numSlices);
     // Update selection/highlights per your logic
 }
+void MixerPanel::scrollBarMoved (juce::ScrollBar* bar, double newRangeStart)
+{
+    if (bar == &hScrollBar)
+    {
+        scrollOffset = juce::jlimit (0,
+                                     juce::jmax (0, (int)strips.size() - kVisibleStrips),
+                                     (int)newRangeStart);
+        layoutStrips();
+        repaint();
+    }
+}
