@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "DualLcdControlFrame.h"
 
 class DysektProcessor;
 
@@ -14,64 +15,43 @@ public:
     void mouseUp          (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
 
-    // Callbacks set by PluginEditor (same targets as ActionPanel had)
+    // Callbacks set by PluginEditor
     std::function<void()> onBrowserToggle;
     std::function<void()> onWaveToggle;
     std::function<void()> onChromaticToggle;
 
-    // State sync — called by PluginEditor so buttons stay in sync
+    // State sync
     void setBrowserActive   (bool v);
     void setWaveActive      (bool v);
     void setChromaticActive (bool v);
 
+    /** Returns the control frame component (FIL/WA/CH icons + ROOT/PITCH/VOL knobs).
+     *  PluginEditor adds this as a visible child and positions it between the LCDs. */
+    juce::Component* getControlFrame() { return &controlFrame; }
+
 private:
     void showThemePopup();
     void adjustScale (float delta);
-    void openFileBrowser();
     void openRelinkBrowser();
-    void updateAccentBtn (juce::TextButton& btn);
 
     DysektProcessor& processor;
 
-    juce::TextButton undoBtn  { "UNDO" };
-    juce::TextButton redoBtn  { "REDO" };
+    // v8: icon buttons and global knobs live in DualLcdControlFrame
+    DualLcdControlFrame controlFrame;
+
+    // Header buttons: UNDO | REDO  PANIC  UI
+    juce::TextButton undoBtn  { "UNDO"  };
+    juce::TextButton redoBtn  { "REDO"  };
     juce::TextButton panicBtn { "PANIC" };
-    juce::TextButton themeBtn { "UI" };
+    juce::TextButton themeBtn { "UI"    };
 
-    // FIL / WA / CH toggle buttons (moved from ActionPanel)
-    juce::TextButton filBtn  { "FIL" };
-    juce::TextButton waBtn   { "WA"  };
-    juce::TextButton chBtn   { "CH"  };
-    bool browserActive    = false;
-    bool waveActive       = false;
-    bool chromaticActive  = false;
+    std::unique_ptr<juce::FileChooser> fileChooser;
+    std::unique_ptr<juce::TextEditor>  textEditor;
 
-    std::unique_ptr<juce::FileChooser>  fileChooser;
-    std::unique_ptr<juce::TextEditor>   textEditor;
-
-    // Drag state for ROOT knob
-    bool  draggingRoot     = false;
-    int   activeDragCell   = -1;
-    float dragStartValue   = 0.0f;
-    int   dragStartY       = 0;
-
-    // Hit areas
+    // Hit areas for sample info / root (left side, same as before)
     juce::Rectangle<int> sampleInfoBounds;
     juce::Rectangle<int> rootNoteArea;
     juce::Rectangle<int> slicesInfoArea;
-    juce::Rectangle<int> globalBoxBounds;
-    juce::Rectangle<int> globalPitchKnobArea;
-    juce::Rectangle<int> globalVolKnobArea;
 
-    // Global knob drag state
-    enum class GlobalDragTarget { None, Pitch, Volume };
-    GlobalDragTarget globalDragTarget = GlobalDragTarget::None;
-    float  globalDragStartValue = 0.f;
-    int    globalDragStartY     = 0;
-
-    struct HeaderCell { int x = 0, y = 0, w = 0, h = 0; juce::String paramId;
-                        float minVal = 0, maxVal = 1, step = 1;
-                        bool isChoice = false, isBoolean = false,
-                             isReadOnly = false, isSetBpm = false; };
-    std::vector<HeaderCell> headerCells;
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeaderBar)
 };

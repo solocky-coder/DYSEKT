@@ -185,6 +185,21 @@ public:
 
     void publishUiSliceSnapshot();
 
+    /** Returns the peak amplitude (0..1) at a given sample position in the
+     *  loaded audio buffer.  Used by SliceWaveformLcd to render the mini waveform.
+     *  Safe to call from the UI (message) thread. */
+    float getWaveformPeakAt (int samplePosition) const noexcept
+    {
+        if (! sampleData.isLoaded()) return 0.0f;
+        const auto& buf = sampleData.getBuffer();
+        const int n = buf.getNumSamples();
+        if (samplePosition < 0 || samplePosition >= n) return 0.0f;
+        float peak = 0.0f;
+        for (int ch = 0; ch < buf.getNumChannels(); ++ch)
+            peak = std::max (peak, std::abs (buf.getSample (ch, samplePosition)));
+        return peak;
+    }
+
     // =========================================================================
     // Public subsystem members (accessed directly by UI)
     // =========================================================================
