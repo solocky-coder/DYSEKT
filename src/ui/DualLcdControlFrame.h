@@ -25,10 +25,12 @@ public:
     std::function<void()> onBrowserToggle;
     std::function<void()> onWaveToggle;
     std::function<void()> onChromaticToggle;
+    std::function<void()> onBodeToggle;
 
     void setBrowserActive   (bool v) { browserActive   = v; repaint(); }
     void setWaveActive      (bool v) { waveActive      = v; repaint(); }
     void setChromaticActive (bool v) { chromaticActive = v; repaint(); }
+    void setBodeActive      (bool v) { bodeActive      = v; repaint(); }
 
 private:
     void drawIcon (juce::Graphics& g, juce::Rectangle<float> b, int type, bool active);
@@ -39,11 +41,13 @@ private:
     bool browserActive   = false;
     bool waveActive      = false;
     bool chromaticActive = false;
+    bool bodeActive      = false;
 
     // Hit areas (set during paint, used in mouseDown)
     juce::Rectangle<int> filIconArea;
     juce::Rectangle<int> waIconArea;
     juce::Rectangle<int> chIconArea;
+    juce::Rectangle<int> bodeIconArea;
     juce::Rectangle<int> rootKnobArea;
     juce::Rectangle<int> pitchKnobArea;
     juce::Rectangle<int> volKnobArea;

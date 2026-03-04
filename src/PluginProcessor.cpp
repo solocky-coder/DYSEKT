@@ -196,6 +196,37 @@ void DysektProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
     currentSampleRate = sampleRate;
     voicePool.setSampleRate (sampleRate);
     std::fill (std::begin (heldNotes), std::end (heldNotes), false);
+
+    // Load the built-in default sample on a fresh (never-saved) instance.
+    // setStateInformation() sets defaultSampleScheduled = true when it finds
+    // a saved file path, so we skip this when restoring a project.
+    if (! defaultSampleScheduled)
+        loadDefaultSampleIfNeeded();
+}
+
+void DysektProcessor::loadDefaultSampleIfNeeded()
+{
+    if (defaultSampleScheduled)
+        return;
+    defaultSampleScheduled = true;
+
+    // Write the embedded Empty.wav to a session temp file and load it.
+    int dataSize = 0;
+    const char* data = BinaryData::getNamedResource ("Empty_wav", dataSize);
+    if (data == nullptr || dataSize <= 0)
+        return;
+
+    // Use a fixed path in the system temp dir so repeated calls are cheap.
+    auto tempFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                        .getChildFile ("dysekt_default_sample.wav");
+
+    if (! tempFile.existsAsFile())
+    {
+        if (! tempFile.replaceWithData (data, (size_t) dataSize))
+            return;
+    }
+
+    requestSampleLoad (tempFile, LoadKindReplace);
 }
 
 void DysektProcessor::releaseResources() {}
@@ -1718,6 +1749,9 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     if (filePath.isNotEmpty())
     {
+        // A real file was saved — suppress the default sample.
+        defaultSampleScheduled = true;
+
         const juce::File restoredFile (filePath);
         sampleMissing.store (false);
         missingFilePath.clear();
@@ -1729,11 +1763,14 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     }
     else
     {
+        // No saved file — allow the default sample to load (or re-load it now).
+        defaultSampleScheduled = false;
         sampleMissing.store (false);
         missingFilePath.clear();
         sampleData.setFileName ({});
         sampleData.setFilePath ({});
         sampleAvailability.store ((int) SampleStateEmpty, std::memory_order_relaxed);
+        loadDefaultSampleIfNeeded();
     }
 
     sliceManager.rebuildMidiMap();

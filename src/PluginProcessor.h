@@ -267,6 +267,7 @@ private:
     // Private helpers
     // =========================================================================
     void requestSampleLoad (const juce::File& file, LoadKind kind);
+    void loadDefaultSampleIfNeeded();   // loads Empty.wav on first launch
     void clearVoicesBeforeSampleSwap();
     void clampSlicesToSampleBounds();
     void handleCommand (const Command& cmd);
@@ -333,6 +334,7 @@ private:
     // Sample loading
     // =========================================================================
     juce::ThreadPool fileLoadPool { 1 };
+    bool             defaultSampleScheduled { false }; // true once default or saved sample is queued
     std::atomic<int>  nextLoadToken  { 0 };
     std::atomic<int>  latestLoadToken{ 0 };
     std::atomic<int>  latestLoadKind { (int) LoadKindReplace };

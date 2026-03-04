@@ -48,6 +48,7 @@ HeaderBar::HeaderBar (DysektProcessor& p)
     controlFrame.onBrowserToggle   = [this] { if (onBrowserToggle)   onBrowserToggle(); };
     controlFrame.onWaveToggle      = [this] { if (onWaveToggle)      onWaveToggle(); };
     controlFrame.onChromaticToggle = [this] { if (onChromaticToggle) onChromaticToggle(); };
+    controlFrame.onBodeToggle      = [this] { if (onBodeToggle)      onBodeToggle(); };
     // Note: controlFrame is NOT added as a visible child here —
     // PluginEditor::resized() calls addAndMakeVisible(*headerBar.getControlFrame())
     // and positions it between the two LCD panels.
@@ -58,6 +59,7 @@ HeaderBar::HeaderBar (DysektProcessor& p)
 void HeaderBar::setBrowserActive   (bool v) { controlFrame.setBrowserActive   (v); }
 void HeaderBar::setWaveActive      (bool v) { controlFrame.setWaveActive      (v); }
 void HeaderBar::setChromaticActive (bool v) { controlFrame.setChromaticActive (v); }
+void HeaderBar::setBodeActive      (bool v) { controlFrame.setBodeActive      (v); }
 
 // ── resized ───────────────────────────────────────────────────────────────────
 

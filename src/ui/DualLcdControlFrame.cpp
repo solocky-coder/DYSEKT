@@ -46,13 +46,28 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         }
         g.strokePath (p, juce::PathStrokeType (1.5f));
     }
-    else // Piano / Chromatic
+    else if (type == 2) // Piano / Chromatic
     {
         for (int k = 0; k < 5; ++k)
             g.fillRect ((int)(cx - 9 + k*4), (int)(cy2 - 4), 3, 9);
         g.setColour (active ? accent.darker (0.6f) : fg.withAlpha (0.20f));
         for (int kb : {0, 1, 3, 4})
             g.fillRect ((int)(cx - 7 + kb*4), (int)(cy2 - 4), 2, 5);
+    }
+    else // type == 3: Bode / frequency-response curve
+    {
+        // Flat shelf on the left rolling off to the right — classic LP filter Bode shape
+        juce::Path p;
+        p.startNewSubPath (cx - 9, cy2 - 5);
+        p.lineTo          (cx - 3, cy2 - 5);
+        p.cubicTo         (cx,     cy2 - 5,
+                           cx + 2, cy2 + 2,
+                           cx + 4, cy2 + 5);
+        p.lineTo          (cx + 9, cy2 + 5);
+        g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved,
+                                               juce::PathStrokeType::rounded));
+        // Small -3dB dot at the knee
+        g.fillEllipse (cx - 0.5f, cy2 - 1.5f, 3.0f, 3.0f);
     }
 }
 
@@ -80,25 +95,29 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
     g.setColour (accent.withAlpha (0.10f));
     g.drawHorizontalLine (half, 6.0f, (float) w - 6.0f);
 
-    // ── Top row: three icons + slice-count chip ───────────────────────────────
+    // ── Top row: four icons + slice-count chip ────────────────────────────────
     {
-        const int btnSz = 26;
+        const int btnSz = 22;
         const int btnY  = (half - btnSz) / 2;
-        const int gap   = (w - 3 * btnSz) / 4;
+        // Space 4 icons evenly, leaving room for the chip on the right
+        const int usableW = w - 34; // 34px reserved for chip
+        const int gap   = (usableW - 4 * btnSz) / 5;
 
-        filIconArea = { gap,                 btnY, btnSz, btnSz };
-        waIconArea  = { gap * 2 + btnSz,     btnY, btnSz, btnSz };
-        chIconArea  = { gap * 3 + btnSz * 2, btnY, btnSz, btnSz };
+        filIconArea  = { gap,                       btnY, btnSz, btnSz };
+        waIconArea   = { gap * 2 + btnSz,           btnY, btnSz, btnSz };
+        chIconArea   = { gap * 3 + btnSz * 2,       btnY, btnSz, btnSz };
+        bodeIconArea = { gap * 4 + btnSz * 3,       btnY, btnSz, btnSz };
 
-        drawIcon (g, filIconArea.toFloat(), 0, browserActive);
-        drawIcon (g, waIconArea .toFloat(), 1, waveActive);
-        drawIcon (g, chIconArea .toFloat(), 2, chromaticActive);
+        drawIcon (g, filIconArea .toFloat(), 0, browserActive);
+        drawIcon (g, waIconArea  .toFloat(), 1, waveActive);
+        drawIcon (g, chIconArea  .toFloat(), 2, chromaticActive);
+        drawIcon (g, bodeIconArea.toFloat(), 3, bodeActive);
 
         // Slice-count chip — right of icons
         const auto& ui  = processor.getUiSliceSnapshot();
         juce::String slcStr = juce::String (ui.numSlices);
         int chipW = 26, chipH = 14;
-        int chipX = w - chipW - 5;
+        int chipX = w - chipW - 3;
         int chipY = (half - chipH) / 2;
         g.setColour (accent.withAlpha (0.12f));
         g.fillRoundedRectangle ((float) chipX, (float) chipY,
@@ -206,6 +225,13 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
         chromaticActive = ! chromaticActive;
         repaint();
         if (onChromaticToggle) onChromaticToggle();
+        return;
+    }
+    if (bodeIconArea.contains (pos))
+    {
+        bodeActive = ! bodeActive;
+        repaint();
+        if (onBodeToggle) onBodeToggle();
         return;
     }
 
