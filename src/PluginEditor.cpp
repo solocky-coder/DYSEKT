@@ -1,22 +1,20 @@
 #include "PluginEditor.h"
 #include <algorithm>
 
-static constexpr int kBaseW      = 900;
-static constexpr int kLogoH      = 44;
-static constexpr int kHeaderH    = 60;
+static constexpr int kBaseW      = 1130;
+static constexpr int kLogoH      = 52;    // single combined header bar
+static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LCD row + padding
 static constexpr int kSliceLaneH = 30;
-static constexpr int kLcdH       = SliceLcdDisplay::kPreferredHeight;
-static constexpr int kLcdW       = 320;   // LCD panel width within the header row
-static constexpr int kHeaderRowH = kLcdH; // header row height = LCD height
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
 static constexpr int kOscilloscopeH = OscilloscopeView::kPreferredHeight;
 static constexpr int kMixerPanelH   = 210;
+static constexpr int kCtrlFrameW    = 148; // width of the centre control frame
 
 static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
-static constexpr int kBaseHCore  = kLogoH + kHeaderRowH + kSliceLaneH
+static constexpr int kBaseHCore  = kLogoH + kLcdRowH + kSliceLaneH
                                  + kScrollbarH + kSliceCtrlH + kActionH
                                  + kOscilloscopeH
                                  + 120; // minimum waveform height
@@ -35,6 +33,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       processor (p),
       logoBar        (p),
       headerBar      (p),
+      sliceLcd       (p),
+      sliceWaveformLcd (p),
       sliceLane      (p),
       waveformView   (p),
       scrollZoomBar  (p),
@@ -43,7 +43,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
       browserPanel   (p),
       oscilloscopeView (p),
-      sliceLcdDisplay  (p),
       mixerPanel     (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
@@ -51,6 +50,15 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     addAndMakeVisible (logoBar);
     addAndMakeVisible (headerBar);
+
+    // v8: dual LCD row
+    addAndMakeVisible (sliceLcd);
+    addAndMakeVisible (sliceWaveformLcd);
+    // Control frame (icons + knobs) is a child of headerBar — exposed via
+    // headerBar.getControlFrame() and laid out in resized().
+    if (auto* cf = headerBar.getControlFrame())
+        addAndMakeVisible (*cf);
+
     addAndMakeVisible (sliceLane);
     addAndMakeVisible (waveformView);
     addAndMakeVisible (scrollZoomBar);
@@ -58,7 +66,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (actionPanel);
 
     addAndMakeVisible (oscilloscopeView);
-    addAndMakeVisible (sliceLcdDisplay);
 
     // Panels start hidden
     browserPanel.setVisible (false);
@@ -278,14 +285,33 @@ void DysektEditor::resized()
 {
     auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
 
-    // 1. Logo bar
-    logoBar.setBounds (area.removeFromTop (kLogoH));
-
-    // 2. Header row — header controls on the left, LCD on the right
+    // 1. Combined header bar (logo left + UNDO/REDO/PANIC/UI right)
+    //    LogoBar and HeaderBar share the same horizontal strip.
     {
-        auto headerRow = area.removeFromTop (kHeaderRowH);
-        headerBar.setBounds (headerRow.removeFromRight (getWidth() - kLcdW));
-        sliceLcdDisplay.setBounds (headerRow.reduced (kMargin, kMargin));
+        auto headerStrip = area.removeFromTop (kLogoH);
+        // LogoBar takes a fixed width on the left; HeaderBar gets the rest.
+        logoBar.setBounds (headerStrip.removeFromLeft (220));
+        headerBar.setBounds (headerStrip);
+    }
+
+    // 2. Dual LCD row — LCD1 | CtrlFrame | LCD2
+    {
+        auto lcdRow = area.removeFromTop (kLcdRowH).reduced (kMargin, 6);
+
+        // Left LCD — slice data
+        const int lcdW = (lcdRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
+        sliceLcd.setBounds (lcdRow.removeFromLeft (lcdW));
+
+        lcdRow.removeFromLeft (kMargin);  // gap
+
+        // Centre control frame (icons top row + knobs bottom row)
+        if (auto* cf = headerBar.getControlFrame())
+            cf->setBounds (lcdRow.removeFromLeft (kCtrlFrameW));
+
+        lcdRow.removeFromLeft (kMargin);  // gap
+
+        // Right LCD — slice mini waveform
+        sliceWaveformLcd.setBounds (lcdRow);
     }
 
     // 3. Slice lane
@@ -313,7 +339,7 @@ void DysektEditor::resized()
     // 9. Oscilloscope — below waveform
     oscilloscopeView.setBounds (area.removeFromBottom (kOscilloscopeH).reduced (kMargin, 0));
 
-    // 10. Waveform — remaining
+    // 10. Waveform — remaining space
     waveformView.setBounds (area.reduced (kMargin, 0));
 
     // ShortcutsPanel covers the whole editor as an overlay
@@ -438,7 +464,10 @@ void DysektEditor::timerCallback()
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
 
     oscilloscopeView.repaint();
-    sliceLcdDisplay.repaintLcd();
+
+    // v8: refresh both LCD panels
+    sliceLcd.repaintLcd();
+    sliceWaveformLcd.repaintLcd();
 
     if (mixerOpen) mixerPanel.updateFromSnapshot();
 

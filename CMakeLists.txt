@@ -116,6 +116,7 @@ target_sources(Dysekt PRIVATE
     src/ui/MasterMixerStrip.cpp
     src/ui/MixerPanel.cpp
     src/ui/ShortcutsPanel.cpp
+    src/ui/SliceWaveformLcd.cpp
 )
 
 target_include_directories(Dysekt PRIVATE
