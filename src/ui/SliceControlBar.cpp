@@ -24,8 +24,8 @@ constexpr int kKnobCellPadRight = 14;  // generous pad — prevents font-metric 
 
 SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
 {
-    setInterceptsMouseClicks (true, true);
-    setCursor (juce::MouseCursor::UpDownResizeCursor);
+    this->setInterceptsMouseClicks (true, true);
+    this->setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
 }
 void SliceControlBar::resized() {}
 
@@ -701,7 +701,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
     // yet, or was cleared by a concurrent repaint), force a synchronous repaint now
     // so hit-testing works on the first click.
     if (cells.empty())
-        paintImmediately (getLocalBounds());
+        this->paintImmediately (getLocalBounds());
 
     for (int i = 0; i < (int) cells.size(); ++i)
     {
