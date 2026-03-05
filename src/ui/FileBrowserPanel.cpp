@@ -17,11 +17,11 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     addAndMakeVisible (browser);
 
     // ── Audio preview setup ───────────────────────────────────────────────────
-    // Use a null audio device to avoid conflicting with the DAW's audio device.
-    // Preview is routed through the default output without taking exclusive control.
+    // Device manager is intentionally NOT initialised here — opening an audio
+    // device inside a plugin constructor conflicts with the DAW's audio thread
+    // and causes the waveform view to jump on any UI interaction.
+    // It is opened lazily in startPreview() and closed in stopPreview().
     formatManager.registerBasicFormats();
-    deviceManager.initialise (0, 2, nullptr, false, {}, nullptr);
-    deviceManager.addAudioCallback (&sourcePlayer);
     sourcePlayer.setSource (&transport);
     transport.addChangeListener (this);
 
@@ -103,7 +103,8 @@ FileBrowserPanel::~FileBrowserPanel()
     transport.setSource (nullptr);
     readerSource.reset();
     sourcePlayer.setSource (nullptr);
-    deviceManager.removeAudioCallback (&sourcePlayer);
+    if (deviceManager.getCurrentAudioDevice() != nullptr)
+        deviceManager.removeAudioCallback (&sourcePlayer);
     browser.removeListener (this);
     ioThread.stopThread (2000);
 }
@@ -209,6 +210,14 @@ void FileBrowserPanel::startPreview (const juce::File& f)
 {
     if (! f.existsAsFile()) return;
 
+    // Open the audio device lazily on first use — never during constructor
+    // so we don't conflict with the DAW's audio thread at load time.
+    if (deviceManager.getCurrentAudioDevice() == nullptr)
+    {
+        deviceManager.initialise (0, 2, nullptr, true, {}, nullptr);
+        deviceManager.addAudioCallback (&sourcePlayer);
+    }
+
     transport.stop();
     transport.setSource (nullptr);
     readerSource.reset();
@@ -217,8 +226,7 @@ void FileBrowserPanel::startPreview (const juce::File& f)
     if (reader == nullptr) return;
 
     readerSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
-    transport.setSource (readerSource.get(), 0, nullptr,
-                         reader->sampleRate);
+    transport.setSource (readerSource.get(), 0, nullptr, reader->sampleRate);
     transport.setGain ((float) volumeSlider.getValue());
     transport.setPosition (0.0);
     transport.start();
