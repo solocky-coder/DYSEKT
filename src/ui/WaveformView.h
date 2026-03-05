@@ -133,6 +133,11 @@ private:
     int ghostStart = 0;    // for DuplicateSlice: ghost overlay start sample
     int ghostEnd   = 0;    // for DuplicateSlice: ghost overlay end sample
 
+    // Linked slice preview state (set by SliceLane to highlight a hovered slice)
+    int linkedSliceIdx    = -1;
+    int linkedPreviewStart = 0;
+    int linkedPreviewEnd   = 0;
+
     // Middle-mouse drag (scroll+zoom like ScrollZoomBar)
     bool midDragging = false;
     float midDragStartZoom = 1.0f;

@@ -22,7 +22,11 @@ constexpr float kKnobEnd   = juce::MathConstants<float>::pi * 2.75f;
 constexpr int kKnobCellPadRight = 14;  // generous pad — prevents font-metric vs render discrepancies clipping labels
 }
 
-SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p) {}
+SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
+{
+    this->setInterceptsMouseClicks (true, true);
+    this->setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+}
 void SliceControlBar::resized() {}
 
 // =============================================================================
@@ -311,7 +315,7 @@ void SliceControlBar::paint (juce::Graphics& g)
     {
         g.setFont (DysektLookAndFeel::makeFont (15.0f));
         g.setColour (juce::Colours::white);
-        g.drawText ("No slice selected", 8, 24, 220, 18, juce::Justification::centredLeft);
+        // g.drawText ("No slice selected", 8, 24, 220, 18, juce::Justification::centredLeft);
         return;
     }
 
@@ -337,18 +341,7 @@ void SliceControlBar::paint (juce::Graphics& g)
     int cw;
     using F = DysektProcessor;
 
-    // ── Row 1 right: slice info (sample range only — no time length) ─────────
-    {
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (getTheme().accent.withAlpha (0.7f));
-        g.drawText ("SLICE " + juce::String (idx + 1),
-                    8, row1y + 2, rightEdge - 8, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeFont (14.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.5f));
-        // Sample range only — no time display per request
-        g.drawText (juce::String (s.startSample) + " - " + juce::String (s.endSample),
-                    8, row1y + 15, rightEdge - 8, 14, juce::Justification::right);
-    }
+    // ── Slice info removed — displayed in LCD panel (redundant here) ────────────
 
     // =========================================================================
     //  ROW 1: Toggle buttons (ALGO, STRETCH, 1SHOT, TAIL, REV, LOOP) + START + END + LINK
@@ -752,6 +745,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             DysektProcessor::Command gc; gc.type = DysektProcessor::CmdBeginGesture;
             processor.pushCommand (gc);
             activeDragCell = i; dragStartY = pos.y;
+            activeCellSnapshot = cell;  // snapshot before cells.clear() on next paint
 
             // Notify host of gesture start for APVTS-backed params (enables Quick Controls / MIDI Learn)
             {
@@ -876,8 +870,11 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
 // =============================================================================
 void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
 {
-    if (activeDragCell < 0 || activeDragCell >= (int) cells.size()) return;
-    const auto& cell = cells[(size_t) activeDragCell];
+    if (activeDragCell < 0) return;
+
+    // Use the snapshot taken at mouseDown — cells[] may have been cleared and
+    // rebuilt by paint() between mouseDown and this mouseDrag event.
+    const auto& cell = activeCellSnapshot;
     if (! cell.isKnob) return;
 
     float deltaY = (float) (dragStartY - e.y);
@@ -966,9 +963,9 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
 {
     using F = DysektProcessor;
 
-    if (activeDragCell >= 0 && activeDragCell < (int) cells.size())
+    if (activeDragCell >= 0)
     {
-        const auto& cell = cells[(size_t) activeDragCell];
+        const auto& cell = activeCellSnapshot;  // use snapshot, not cells[] which may be stale
 
         // Commit slice boundary drags
         if (cell.fieldId == F::FieldSliceStart || cell.fieldId == F::FieldSliceEnd)

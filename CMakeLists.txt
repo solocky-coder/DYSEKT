@@ -84,6 +84,7 @@ juce_add_binary_data(DysektFonts SOURCES
     src/ui/fonts/IBMPlexSans-Regular.ttf
     src/ui/fonts/IBMPlexSans-Bold.ttf
     src/ui/assets/dysekt_logo.svg
+    src/ui/assets/Empty.wav
 )
 
 target_sources(Dysekt PRIVATE
@@ -116,6 +117,8 @@ target_sources(Dysekt PRIVATE
     src/ui/MasterMixerStrip.cpp
     src/ui/MixerPanel.cpp
     src/ui/ShortcutsPanel.cpp
+    src/ui/SliceWaveformLcd.cpp
+    src/ui/DualLcdControlFrame.cpp
 )
 
 target_include_directories(Dysekt PRIVATE
