@@ -73,6 +73,10 @@ private:
     float dragStartValue = 0.0f;
     int dragStartY = 0;
 
+    // Snapshot of the cell matched in mouseDown — copied out of cells[] so that
+    // paint()'s cells.clear() cannot invalidate the active drag mid-gesture.
+    ParamCell activeCellSnapshot {};
+
     // Root note cell (editable when no slices exist)
 
 
