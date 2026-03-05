@@ -63,8 +63,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (sliceControlBar);
     addAndMakeVisible (actionPanel);
 
-    addAndMakeVisible (oscilloscopeView);
-    oscilloscopeView.setVisible (false);  // removed per design — waveform view replaces it
+    addChildComponent (oscilloscopeView);  // kept in hierarchy but never shown or laid out
 
     // Panels start hidden
     browserPanel.setVisible (false);
@@ -281,33 +280,52 @@ void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
 
-    // ── LCD-style bezel frame: ActionPanel + SliceLane + WaveformView + ScrollZoomBar
+    // ── Waveform frame — exact same style as SliceLcdDisplay / SliceWaveformLcd ──
     if (actionPanel.isVisible() && waveformView.isVisible() && scrollZoomBar.isVisible())
     {
         const auto& abnd = actionPanel.getBounds();
         const auto& sbnd = scrollZoomBar.getBounds();
+        const auto  ac   = getTheme().accent;
 
-        const juce::Rectangle<int> bezel (abnd.getX() - 2,
-                                          abnd.getY() - 2,
-                                          abnd.getWidth() + 4,
-                                          sbnd.getBottom() - abnd.getY() + 4);
+        const juce::Rectangle<float> outerF (
+            (float) abnd.getX(),      (float) abnd.getY(),
+            (float) abnd.getWidth(),  (float) (sbnd.getBottom() - abnd.getY()));
 
-        g.setColour (getTheme().darkBar);
-        g.fillRect (bezel);
+        // 1. Outer gradient fill
+        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
+                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
+        g.setGradientFill (outerGrad);
+        g.fillRoundedRectangle (outerF, 4.0f);
 
-        const juce::Rectangle<int> inner (abnd.getX(), abnd.getY(),
-                                          abnd.getWidth(),
-                                          sbnd.getBottom() - abnd.getY());
-        g.setColour (getTheme().background);
-        g.fillRect (inner);
+        // 2. Outer accent border
+        g.setColour (ac.withAlpha (0.20f));
+        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.0f);
 
-        g.setColour (getTheme().separator);
-        g.drawRect (bezel, 1);
+        // 3. Inner screen
+        const auto screenF = outerF.reduced (4.0f);
+        g.setColour (getTheme().darkBar.darker (0.55f));
+        g.fillRoundedRectangle (screenF, 2.0f);
 
-        // Divider between action bar and slice lane
+        // 4. Scanlines every 2px
+        g.setColour (juce::Colours::black.withAlpha (0.18f));
+        for (int y = juce::roundToInt (screenF.getY()); y < juce::roundToInt (screenF.getBottom()); y += 2)
+            g.drawHorizontalLine (y, screenF.getX(), screenF.getRight());
+
+        // 5. Phosphor glow at top
+        juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, screenF.getY(),
+                                    juce::Colours::transparentBlack, 0.f, screenF.getY() + 20.f, false);
+        g.setGradientFill (glow);
+        g.fillRoundedRectangle (screenF, 2.0f);
+
+        // 6. Inner accent border
+        g.setColour (ac.withAlpha (0.12f));
+        g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
+
+        // 7. Subtle divider between action bar and slice lane
         const auto& lbnd = sliceLane.getBounds();
-        g.setColour (getTheme().separator.withAlpha (0.5f));
-        g.drawHorizontalLine (lbnd.getY(), (float) bezel.getX(), (float) bezel.getRight());
+        g.setColour (ac.withAlpha (0.08f));
+        g.drawHorizontalLine (lbnd.getY(),
+                              screenF.getX() + 4.f, screenF.getRight() - 4.f);
     }
 }
 
