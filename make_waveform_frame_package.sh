@@ -4,146 +4,242 @@ set -e
 
 mkdir -p src/ui
 
+# --- ControlBar ---
+cat > src/ui/ControlBar.h <<'EOF'
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+
+// Top control bar for waveform section, with buttons/stubs for "ADD SLICE" etc.
+class ControlBar : public juce::Component
+{
+public:
+    ControlBar();
+    void paint(juce::Graphics&) override;
+    void resized() override;
+private:
+    juce::TextButton addSliceBtn {"ADD SLICE"};
+    juce::TextButton midiSliceBtn {"MIDI SLICE"};
+    juce::TextButton trimBtn {"TRIM"};
+};
+EOF
+
+cat > src/ui/ControlBar.cpp <<'EOF'
+#include "ControlBar.h"
+
+ControlBar::ControlBar()
+{
+    addAndMakeVisible(addSliceBtn);
+    addAndMakeVisible(midiSliceBtn);
+    addAndMakeVisible(trimBtn);
+}
+
+void ControlBar::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colours::darkslategrey.withAlpha(0.85f));
+    g.setColour(juce::Colours::white.withAlpha(0.4f));
+    g.drawRect(getLocalBounds(), 2);
+}
+
+void ControlBar::resized()
+{
+    auto area = getLocalBounds().reduced(4);
+    auto buttonWidth = area.getWidth() / 3;
+    addSliceBtn.setBounds(area.removeFromLeft(buttonWidth).reduced(2));
+    midiSliceBtn.setBounds(area.removeFromLeft(buttonWidth).reduced(2));
+    trimBtn.setBounds(area.reduced(2));
+}
+EOF
+
+# --- SliceLane ---
+
+cat > src/ui/SliceLane.h <<'EOF'
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+
+class WaveformView;
+class SliceLane : public juce::Component
+{
+public:
+    SliceLane();
+    void paint(juce::Graphics&) override;
+    void setWaveformView(WaveformView*);
+private:
+    WaveformView* waveformView = nullptr;
+};
+EOF
+
+cat > src/ui/SliceLane.cpp <<'EOF'
+#include "SliceLane.h"
+#include "WaveformView.h"
+
+SliceLane::SliceLane() {}
+void SliceLane::setWaveformView(WaveformView* wv) { waveformView = wv; }
+void SliceLane::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colours::darkgreen.darker(0.2f));
+    g.setColour(juce::Colours::white.withAlpha(0.5f));
+    g.drawText("Slice Lane [waveform + slice markers]", getLocalBounds(), juce::Justification::centred);
+}
+EOF
+
+# --- WaveformView ---
+
+cat > src/ui/WaveformView.h <<'EOF'
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+
+class WaveformView : public juce::Component
+{
+public:
+    WaveformView();
+    void paint(juce::Graphics&) override;
+private:
+};
+EOF
+
+cat > src/ui/WaveformView.cpp <<'EOF'
+#include "WaveformView.h"
+WaveformView::WaveformView() {}
+void WaveformView::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colours::deepskyblue.darker(0.3f));
+    g.setColour(juce::Colours::white);
+    g.drawText("Waveform Display Area", getLocalBounds(), juce::Justification::centred);
+}
+EOF
+
+# --- SliceWaveformLcd ---
+
+cat > src/ui/SliceWaveformLcd.h <<'EOF'
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+
+class SliceWaveformLcd : public juce::Component
+{
+public:
+    SliceWaveformLcd();
+    void paint(juce::Graphics&) override;
+private:
+};
+EOF
+
+cat > src/ui/SliceWaveformLcd.cpp <<'EOF'
+#include "SliceWaveformLcd.h"
+SliceWaveformLcd::SliceWaveformLcd() {}
+void SliceWaveformLcd::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colours::teal.darker(0.2f));
+    g.setColour(juce::Colours::white);
+    g.drawText("SliceWaveformLcd (mini waveform/sample info)", getLocalBounds(), juce::Justification::centred);
+}
+EOF
+
+# --- WaveformSectionFrame ---
+
 cat > src/ui/WaveformSectionFrame.h <<'EOF'
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "ControlBar.h"
 #include "WaveformView.h"
 #include "SliceLane.h"
 
-class DysektProcessor;
-
-// Frame that contains the control bar, waveform, and slice lane for the “Waveform Section”.
+// Themed frame containing [control bar + waveform + slice lane]
 class WaveformSectionFrame : public juce::Component
 {
 public:
-    explicit WaveformSectionFrame(DysektProcessor& processor);
-
+    WaveformSectionFrame();
     void resized() override;
-    void paint(juce::Graphics& g) override;
-
-    // Set child pointers in case these are needed for external setup
-    SliceLane& getSliceLane()        { return sliceLane; }
-    WaveformView& getWaveformView()  { return waveformView; }
-
+    void paint(juce::Graphics&) override;
+    WaveformView& getWaveformView() { return waveformView; }
+    SliceLane& getSliceLane() { return sliceLane; }
+    ControlBar& getControlBar() { return controlBar; }
 private:
-    DysektProcessor& processor;
-    juce::Component controlBar;
-    SliceLane sliceLane;
+    ControlBar controlBar;
     WaveformView waveformView;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformSectionFrame)
+    SliceLane sliceLane;
 };
 EOF
 
 cat > src/ui/WaveformSectionFrame.cpp <<'EOF'
 #include "WaveformSectionFrame.h"
-#include "DysektLookAndFeel.h"
 
-WaveformSectionFrame::WaveformSectionFrame(DysektProcessor& p)
-    : processor(p), sliceLane(p), waveformView(p)
+WaveformSectionFrame::WaveformSectionFrame()
 {
-    // -- Dummy Control Bar (Replace with your actual implementation) --
-    controlBar.setName("Waveform Control Bar");
     addAndMakeVisible(controlBar);
-
     addAndMakeVisible(waveformView);
     addAndMakeVisible(sliceLane);
 
-    // You might want to wire things up:
     sliceLane.setWaveformView(&waveformView);
 }
 
 void WaveformSectionFrame::resized()
 {
-    auto r = getLocalBounds();
+    auto area = getLocalBounds().reduced(8);
+    int cbHeight = 38;
+    int wfHeight = (area.getHeight() - cbHeight) * 2 / 3;
+    int slHeight = area.getHeight() - cbHeight - wfHeight;
 
-    // Height allocations, adjust as needed!
-    int barHeight = 32;
-    int waveformHeight = r.getHeight() * 0.65;
-    int sliceLaneHeight = r.getHeight() - barHeight - waveformHeight;
-
-    controlBar.setBounds(r.removeFromTop(barHeight));
-    waveformView.setBounds(r.removeFromTop(waveformHeight));
-    sliceLane.setBounds(r);
+    controlBar.setBounds(area.removeFromTop(cbHeight));
+    waveformView.setBounds(area.removeFromTop(wfHeight));
+    sliceLane.setBounds(area);
 }
 
 void WaveformSectionFrame::paint(juce::Graphics& g)
 {
-    // Frame background
-    g.setColour(findColour(juce::ResizableWindow::backgroundColourId).darker(0.2f));
-    g.fillRoundedRectangle(getLocalBounds().toFloat(), 6.0f);
-
-    // Themed border (change as needed)
-    g.setColour(juce::Colour(0xFF28b2c7));
-    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 6.0f, 2.5f);
+    g.setColour(juce::Colours::black.withAlpha(0.45f));
+    g.fillRoundedRectangle(getLocalBounds().toFloat(), 10.0f);
+    g.setColour(juce::Colours::cyan);
+    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(2), 10.0f, 2.5f);
 }
 EOF
 
-# Dummy control bar for demonstration (replace with your version)
-cat > src/ui/ControlBar.h <<'EOF'
+# --- PluginEditor ---
+
+cat > src/ui/PluginEditor.h <<'EOF'
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
-
-// A placeholder for the “ADD SLICE”, “MIDI SLICE”, “TRIM” etc. control bar.
-class ControlBar : public juce::Component
-{
-public:
-    ControlBar() {}
-    void paint(juce::Graphics& g) override {
-        g.fillAll(juce::Colours::darkgrey);
-        g.setColour(juce::Colours::white);
-        g.setFont(juce::Font(18.0f, juce::Font::bold));
-        g.drawText("ADD SLICE   MIDI SLICE   TRIM", getLocalBounds(), juce::Justification::centred);
-    }
-};
-EOF
-
-# --- Patch PluginEditor.cpp to use the new frame!
-cat > src/ui/PluginEditor.cpp <<'EOF'
-// This is a representative snippet for how to use the new frame in your editor.
-
-#include "PluginEditor.h"
 #include "WaveformSectionFrame.h"
 #include "SliceWaveformLcd.h"
-#include "ControlBar.h"
 
 class PluginEditor : public juce::AudioProcessorEditor
 {
 public:
-    PluginEditor(DysektProcessor& p)
-    : juce::AudioProcessorEditor(p),
-      waveformSectionFrame(p),
-      sliceWaveformLcd(p)
-    {
-        addAndMakeVisible(waveformSectionFrame);
-        addAndMakeVisible(sliceWaveformLcd);
-        setSize(1080, 600);
-    }
-
-    void resized() override
-    {
-        auto area = getLocalBounds();
-        // Place main waveform section in a dedicated frame
-        waveformSectionFrame.setBounds(area.removeFromTop(340).reduced(16, 8));
-        sliceWaveformLcd.setBounds(area.removeFromTop(140).reduced(16, 8));
-        // ... layout the rest of your UI as needed
-    }
-
+    PluginEditor();
+    void resized() override;
 private:
     WaveformSectionFrame waveformSectionFrame;
     SliceWaveformLcd sliceWaveformLcd;
 };
 EOF
 
-# Assuming all your other files are present, exclude duplicating them here.
+cat > src/ui/PluginEditor.cpp <<'EOF'
+#include "PluginEditor.h"
 
-# Package!
+PluginEditor::PluginEditor()
+    : juce::AudioProcessorEditor(0), // Pass dummy processor pointer for demo; replace with your DysektProcessor&
+      waveformSectionFrame(),
+      sliceWaveformLcd()
+{
+    addAndMakeVisible(waveformSectionFrame);
+    addAndMakeVisible(sliceWaveformLcd);
+    setSize(900, 600);
+}
+
+void PluginEditor::resized()
+{
+    auto area = getLocalBounds().reduced(14);
+
+    waveformSectionFrame.setBounds(area.removeFromTop(340).reduced(0, 8));
+    sliceWaveformLcd.setBounds(area.removeFromTop(130));
+    // Add more UI elements as needed below
+}
+EOF
+
+# ------- PACKAGE UP --------
 cd src
 zip -r ../waveform_section_dragdrop.zip ui/*
 cd ..
 
 echo
-echo "Ready! Your package is:"
-echo "   waveform_section_dragdrop.zip"
-echo "Unzip this into your src/ui/ directory (drag into your repo),"
-echo "and adapt the .cpp/.h includes and integration as shown in PluginEditor.cpp!"
+echo "DONE! Your archive is: waveform_section_dragdrop.zip"
+echo "Unzip and copy to your src/ui folder in your repo for a working, drag+drop baseline!"
