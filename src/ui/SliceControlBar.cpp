@@ -27,7 +27,12 @@ SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
     this->setInterceptsMouseClicks (true, true);
     this->setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
 }
-void SliceControlBar::resized() {}
+void SliceControlBar::resized()
+{
+    // cells are populated during paint(); trigger a paint now so hit-testing
+    // works immediately on the first mouse event without waiting for an external repaint.
+    repaint();
+}
 
 // =============================================================================
 //  drawLockIcon  (unchanged)
@@ -819,7 +824,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             return;
         }
 
-        // Boolean toggle
+        // Boolean toggle — show ON/OFF dropdown menu
         if (cell.isBoolean)
         {
             int sIdx = ui.selectedSlice;
@@ -834,15 +839,32 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                 else if (cell.fieldId == F::FieldReleaseTail)   currentVal = sliceLocked ? sl.releaseTail    : (processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load()    > 0.5f);
                 else if (cell.fieldId == F::FieldReverse)       currentVal = sliceLocked ? sl.reverse        : (processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load()        > 0.5f);
                 else if (cell.fieldId == F::FieldOneShot)       currentVal = sliceLocked ? sl.oneShot        : (processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load()        > 0.5f);
-                DysektProcessor::Command cmd;
-                cmd.type = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1 = cell.fieldId; cmd.floatParam1 = currentVal ? 0.f : 1.f;
-                processor.pushCommand (cmd); repaint();
+
+                juce::PopupMenu menu;
+                menu.addItem (1, "ON",  true, currentVal);
+                menu.addItem (2, "OFF", true, ! currentVal);
+                const int fid = cell.fieldId;
+                menu.showMenuAsync (
+                    juce::PopupMenu::Options()
+                        .withTargetComponent (this)
+                        .withTargetScreenArea (juce::Rectangle<int> (
+                            localPointToGlobal (juce::Point<int> (cell.x, cell.y)),
+                            juce::Point<int> (localPointToGlobal (juce::Point<int> (cell.x + cell.w, cell.y + cell.h))))),
+                    [this, fid] (int result)
+                    {
+                        if (result == 0) return;
+                        DysektProcessor::Command cmd;
+                        cmd.type      = DysektProcessor::CmdSetSliceParam;
+                        cmd.intParam1 = fid;
+                        cmd.floatParam1 = (result == 1) ? 1.f : 0.f;
+                        processor.pushCommand (cmd);
+                        repaint();
+                    });
             }
             return;
         }
 
-        // Choice cycle
+        // Choice — show labelled dropdown menu
         if (cell.isChoice)
         {
             int sIdx = ui.selectedSlice;
@@ -851,14 +873,45 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                 const auto& sl = ui.slices[(size_t) sIdx];
                 int current = 0;
                 using F = DysektProcessor;
-                if      (cell.fieldId == F::FieldAlgorithm) current = (sl.lockMask & kLockAlgorithm) ? sl.algorithm : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
-                else if (cell.fieldId == F::FieldGrainMode) current = (sl.lockMask & kLockGrainMode) ? sl.grainMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
-                else if (cell.fieldId == F::FieldLoop)      current = (sl.lockMask & kLockLoop)      ? sl.loopMode  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
-                int next = (current + 1) > (int) cell.maxVal ? 0 : current + 1;
-                DysektProcessor::Command cmd;
-                cmd.type = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1 = cell.fieldId; cmd.floatParam1 = (float) next;
-                processor.pushCommand (cmd); repaint();
+                juce::StringArray options;
+
+                if (cell.fieldId == F::FieldAlgorithm)
+                {
+                    current = (sl.lockMask & kLockAlgorithm) ? sl.algorithm : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
+                    options = { "Repitch", "Stretch", "Bungee" };
+                }
+                else if (cell.fieldId == F::FieldGrainMode)
+                {
+                    current = (sl.lockMask & kLockGrainMode) ? sl.grainMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
+                    options = { "Standard", "Reverse", "Scatter", "Random" };
+                }
+                else if (cell.fieldId == F::FieldLoop)
+                {
+                    current = (sl.lockMask & kLockLoop) ? sl.loopMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
+                    options = { "OFF", "LOOP", "PING-PONG" };
+                }
+
+                juce::PopupMenu menu;
+                for (int i = 0; i < options.size(); ++i)
+                    menu.addItem (i + 1, options[i], true, i == current);
+
+                const int fid = cell.fieldId;
+                menu.showMenuAsync (
+                    juce::PopupMenu::Options()
+                        .withTargetComponent (this)
+                        .withTargetScreenArea (juce::Rectangle<int> (
+                            localPointToGlobal (juce::Point<int> (cell.x, cell.y)),
+                            juce::Point<int> (localPointToGlobal (juce::Point<int> (cell.x + cell.w, cell.y + cell.h))))),
+                    [this, fid] (int result)
+                    {
+                        if (result == 0) return;
+                        DysektProcessor::Command cmd;
+                        cmd.type        = DysektProcessor::CmdSetSliceParam;
+                        cmd.intParam1   = fid;
+                        cmd.floatParam1 = (float) (result - 1);
+                        processor.pushCommand (cmd);
+                        repaint();
+                    });
             }
             return;
         }

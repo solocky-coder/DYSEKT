@@ -227,34 +227,6 @@ void FileBrowserPanel::stopPreview()
     updatePlayButton();
 }
 
-void FileBrowserPanel::paintOverChildren (juce::Graphics& g)
-{
-    if (! playStopBtn.isVisible()) return;
-
-    const bool playing = transport.isPlaying();
-    auto b = playStopBtn.getBounds().toFloat();
-    float cx = b.getCentreX();
-    float cy = b.getCentreY();
-
-    if (playing)
-    {
-        // Red square = STOP
-        const float sz = juce::jmin (b.getWidth(), b.getHeight()) * 0.38f;
-        g.setColour (juce::Colours::red.brighter (0.3f));
-        g.fillRect (juce::Rectangle<float> (cx - sz, cy - sz, sz * 2.0f, sz * 2.0f));
-    }
-    else
-    {
-        // Green right-pointing triangle = PLAY
-        const float sz = juce::jmin (b.getWidth(), b.getHeight()) * 0.40f;
-        juce::Path tri;
-        tri.addTriangle (cx - sz * 0.7f, cy - sz,
-                         cx - sz * 0.7f, cy + sz,
-                         cx + sz,        cy);
-        g.setColour (juce::Colours::limegreen.brighter (0.2f));
-        g.fillPath (tri);
-    }
-}
 
 void FileBrowserPanel::updatePlayButton()
 {
