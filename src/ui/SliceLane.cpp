@@ -253,7 +253,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                     .withTargetComponent (this)
                     .withParentComponent (topLvl)
                     .withStandardItemHeight ((int) (24 * ms)),
-                [this, targetSlice, allLocked] (int result)
+                [this, targetSlice] (int result)
                 {
                     if (result == 1)
                     {
@@ -264,10 +264,12 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                     }
                     else if (result == 2)
                     {
+                        // TODO: add CmdSetSliceLockAll (intParam1=sliceIdx, floatParam1=1 lock/0 unlock)
+                        // to DysektProcessor::CommandType and handle in processCommand().
+                        // Until then, selecting the slice so the user can lock via SliceControlBar.
                         DysektProcessor::Command cmd;
-                        cmd.type        = DysektProcessor::CmdSetSliceLockAll;
-                        cmd.intParam1   = targetSlice;
-                        cmd.floatParam1 = allLocked ? 0.f : 1.f;
+                        cmd.type      = DysektProcessor::CmdSelectSlice;
+                        cmd.intParam1 = targetSlice;
                         processor.pushCommand (cmd);
                     }
                     repaint();
