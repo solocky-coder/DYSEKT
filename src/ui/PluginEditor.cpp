@@ -16,7 +16,6 @@ static constexpr int kBrowserH   = 170;
 static constexpr int kMargin     = 8;
 static constexpr int kBaseHCore  = kLogoH + kLcdRowH + kSliceLaneH
                                  + kScrollbarH + kSliceCtrlH + kActionH
-                                 + kOscilloscopeH
                                  + 120; // minimum waveform height
 
 static juce::File getSettingsDir()
@@ -66,6 +65,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (actionPanel);
 
     addAndMakeVisible (oscilloscopeView);
+    oscilloscopeView.setVisible (false);  // removed per design — waveform view replaces it
 
     // Panels start hidden
     browserPanel.setVisible (false);
@@ -282,33 +282,34 @@ void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
 
-    // ── Fix #10: Shared frame around WaveDisplay + Oscilloscope + ScrollZoomBar ──
-    // Compute the union of all three components' bounds (they share the same x width)
-    // and draw a 1px themed border just outside them, with a small "WAVE" label.
-    if (waveformView.isVisible() && oscilloscopeView.isVisible() && scrollZoomBar.isVisible())
+    // ── Waveform frame — same bezel style as the LCD panels ──────────────────
+    // Wraps waveformView + scrollZoomBar together. The LCD row uses
+    // area.reduced(kMargin, 6) so we match that same 1px border + darkBar fill.
+    if (waveformView.isVisible() && scrollZoomBar.isVisible())
     {
         const auto& wbnd = waveformView.getBounds();
         const auto& sbnd = scrollZoomBar.getBounds();
 
-        // Frame: 1px outside the combined rect
-        const int fx = wbnd.getX() - 1;
-        const int fy = wbnd.getY() - 1;
-        const int fw = wbnd.getWidth() + 2;
-        const int fh = sbnd.getBottom() - wbnd.getY() + 2;
+        // Outer bezel rect — 2px outside the content, matching LCD outer frame
+        const juce::Rectangle<int> bezel (wbnd.getX() - 2,
+                                          wbnd.getY() - 2,
+                                          wbnd.getWidth() + 4,
+                                          sbnd.getBottom() - wbnd.getY() + 4);
 
-        g.setColour (getTheme().separator);
-        g.drawRect (fx, fy, fw, fh, 1);
+        // Dark filled border strip (same as LCD bezel background)
+        g.setColour (getTheme().darkBar);
+        g.fillRect (bezel);
 
-        // Small section label in the top-left corner of the frame
-        const int labelW = 44;
-        const int labelH = 12;
-        // Fill a tiny pill behind the text so it sits cleanly on the border
+        // Inner content area fill (background)
+        const juce::Rectangle<int> inner (wbnd.getX(), wbnd.getY(),
+                                          wbnd.getWidth(),
+                                          sbnd.getBottom() - wbnd.getY());
         g.setColour (getTheme().background);
-        g.fillRect (fx + 6, fy - 1, labelW, labelH);
-        g.setColour (getTheme().foreground.withAlpha (0.38f));
-        g.setFont (DysektLookAndFeel::makeFont (9.0f));
-        g.drawText ("WAVE", fx + 7, fy - 1, labelW - 2, labelH,
-                    juce::Justification::centredLeft);
+        g.fillRect (inner);
+
+        // 1px separator border
+        g.setColour (getTheme().separator);
+        g.drawRect (bezel, 1);
     }
 }
 
@@ -364,18 +365,14 @@ void DysektEditor::resized()
 
     // 7. (Action panel now placed directly below LCDs — see above)
 
-    area.removeFromBottom (4);  // gap before the shared wave frame
+    area.removeFromBottom (4);  // gap before the wave frame
 
-    // ── Shared frame: ScrollZoom + Oscilloscope + Waveform ────────────────────
-    // All three share the same horizontal margins so the frame wraps them cleanly.
+    // ── Wave frame: ScrollZoom + Waveform ─────────────────────────────────────
 
     // 8. Scrollbar (bottom of the frame)
     scrollZoomBar.setBounds (area.removeFromBottom (kScrollbarH).reduced (kMargin, 0));
 
-    // 9. Oscilloscope — sits directly above the scrollbar, no gap
-    oscilloscopeView.setBounds (area.removeFromBottom (kOscilloscopeH).reduced (kMargin, 0));
-
-    // 10. Waveform — fills remaining space, flush above oscilloscope
+    // 9. Waveform — fills remaining space
     waveformView.setBounds (area.reduced (kMargin, 0));
 
     // ShortcutsPanel covers the whole editor as an overlay
@@ -499,7 +496,7 @@ void DysektEditor::timerCallback()
     if (laneNeedsRepaint)     sliceLane.repaint();
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
 
-    oscilloscopeView.repaint();
+    // oscilloscopeView removed — waveform view replaces it
 
     // v8: refresh both LCD panels
     sliceLcd.repaintLcd();

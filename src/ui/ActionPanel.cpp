@@ -128,28 +128,26 @@ void ActionPanel::resized()
 {
     const int gap   = 5;
     const int h     = getHeight();
-    const int thinW = 30;   // snap, MIDI select buttons
-    const int thinTotal = thinW * 2 + gap;
-    const int trimW = 40;
-    const int availW = getWidth() - thinTotal - trimW - gap * 2;
-    const int numMain = 2;  // ADD SLICE, MIDI SLICE only
-    const int btnW  = (availW - gap * (numMain - 1)) / numMain;
-    int x = 0;
+    const int thinW = 30;   // snap, MIDI select icon buttons
+    const int trimW = 42;
 
-    addSliceBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
-    lazyChopBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
+    // Lay out right-to-left so icon buttons always sit flush at the right edge,
+    // preventing overflow regardless of panel width.
+    int right = getWidth();
 
-    // dupBtn, splitBtn, deleteBtn removed — not laid out
+    midiSelectBtn.setBounds (right - thinW, 0, thinW, h); right -= thinW + gap;
+    snapBtn.setBounds       (right - thinW, 0, thinW, h); right -= thinW + gap;
+    trimBtn.setBounds       (right - trimW, 0, trimW, h); right -= trimW + gap;
 
-    trimBtn.setBounds       (x, 0, trimW, h); x += trimW + gap;
-    snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
-    midiSelectBtn.setBounds (x, 0, thinW, h);
+    // ADD SLICE and MIDI SLICE split the remaining width equally
+    const int remaining = right;
+    const int btnW      = (remaining - gap) / 2;
+    addSliceBtn.setBounds (0,          0, btnW, h);
+    lazyChopBtn.setBounds (btnW + gap, 0, btnW, h);
 
     shortcutsBtn.setVisible (false);
-
-    // browserBtn/waveBtn/chromaticBtn moved to HeaderBar — hide them
-    browserBtn.setVisible (false);
-    waveBtn.setVisible    (false);
+    browserBtn.setVisible   (false);
+    waveBtn.setVisible      (false);
     chromaticBtn.setVisible (false);
 }
 
