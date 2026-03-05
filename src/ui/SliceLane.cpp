@@ -169,6 +169,25 @@ void SliceLane::paint (juce::Graphics& g)
         g.drawText (label, cl.x, 0, labelW, h, juce::Justification::centredLeft);
     }
 
+    // ── Lock icons: draw a small solid rect in the top-right of fully-locked slices ──
+    for (int i = 0; i < visibleCount; ++i)
+    {
+        const auto& si = visibleSlices[(size_t) i];
+        const auto& sl = ui.slices[(size_t) si.idx];
+        if (sl.lockMask != 0xFFFFFFFFu) continue;  // not fully locked
+
+        const int iconSz = 5;
+        const int iconX  = si.x2 - iconSz - 2;
+        const int iconY  = 2;
+        if (iconX < si.x1 + 4) continue;  // slice too narrow to show icon
+
+        g.setColour (getTheme().lockActive.withAlpha (0.9f));
+        g.fillRect (iconX, iconY, iconSz, iconSz);
+        // Small shackle hint (top bar)
+        g.setColour (getTheme().lockActive);
+        g.drawRect (iconX, iconY, iconSz, iconSz, 1);
+    }
+
     // Bottom separator line
     g.setColour (getTheme().separator);
     g.drawHorizontalLine (h - 1, 0.0f, (float) w);
@@ -205,6 +224,62 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
             overlapping.push_back (i);
     }
 
+    // ── Right-click: show context menu for the selected (or topmost) slice ──
+    if (e.mods.isRightButtonDown())
+    {
+        int targetSlice = ui.selectedSlice;
+        if (! overlapping.empty())
+        {
+            // Use topmost overlapping slice (same logic as left-click selection)
+            auto it = std::find (overlapping.begin(), overlapping.end(), ui.selectedSlice);
+            targetSlice = (it != overlapping.end()) ? *it : overlapping.front();
+        }
+
+        if (targetSlice >= 0 && targetSlice < ui.numSlices)
+        {
+            const auto& s = ui.slices[(size_t) targetSlice];
+            // A slice is "fully locked" when every parameter lock bit is set
+            const bool allLocked = (s.lockMask == 0xFFFFFFFFu);
+            const juce::String lockLabel = allLocked ? "Unlock Slice" : "Lock Slice";
+
+            juce::PopupMenu menu;
+            menu.addItem (1, "Delete Slice");
+            menu.addSeparator();
+            menu.addItem (2, lockLabel, true, allLocked);
+
+            auto* topLvl = getTopLevelComponent();
+            float ms = DysektLookAndFeel::getMenuScale();
+            menu.showMenuAsync (
+                juce::PopupMenu::Options()
+                    .withTargetComponent (this)
+                    .withParentComponent (topLvl)
+                    .withStandardItemHeight ((int) (24 * ms)),
+                [this, targetSlice, allLocked] (int result)
+                {
+                    if (result == 1)
+                    {
+                        // Delete the slice
+                        DysektProcessor::Command cmd;
+                        cmd.type      = DysektProcessor::CmdDeleteSlice;  // add this to your Cmd enum if missing
+                        cmd.intParam1 = targetSlice;
+                        processor.pushCommand (cmd);
+                    }
+                    else if (result == 2)
+                    {
+                        // Toggle lock: all bits on = full lock, 0 = unlock
+                        DysektProcessor::Command cmd;
+                        cmd.type      = DysektProcessor::CmdSetSliceLockAll;  // add to Cmd enum if missing
+                        cmd.intParam1 = targetSlice;
+                        cmd.floatParam1 = allLocked ? 0.f : 1.f;
+                        processor.pushCommand (cmd);
+                    }
+                    repaint();
+                });
+        }
+        return;
+    }
+
+    // ── Left-click: cycle selection through overlapping slices ──────────────
     if (! overlapping.empty())
     {
         int current = ui.selectedSlice;

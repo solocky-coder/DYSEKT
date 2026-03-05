@@ -51,10 +51,18 @@ void DysektLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
     if (baseBg.isTransparent())
         return;
 
+    // Sharp fill — no rounded corners
     g.setColour (isDown ? baseBg.brighter (0.15f)
                         : isHighlighted ? baseBg.brighter (0.08f)
                                         : baseBg);
     g.fillRect (bounds);
+
+    // Frame: draw a 1px border following the theme
+    auto frameCol = button.getToggleState()
+                    ? getTheme().accent
+                    : getTheme().separator;
+    g.setColour (isHighlighted ? frameCol.brighter (0.2f) : frameCol);
+    g.drawRect (bounds, 1.0f);
 }
 
 void DysektLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
@@ -63,10 +71,19 @@ void DysektLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
     auto textCol = button.findColour (button.getToggleState()
                                        ? juce::TextButton::textColourOnId
                                        : juce::TextButton::textColourOffId);
-    g.setColour (textCol.isTransparent() ? getTheme().foreground : textCol);
-    float fontSize = button.getHeight() < 20 ? 10.0f : 15.0f;
+    if (textCol.isTransparent())
+        textCol = button.getToggleState() ? getTheme().accent : getTheme().foreground;
+
+    g.setColour (textCol);
+
+    // Scale font tightly to button height — sharper appearance for small top buttons
+    const int h = button.getHeight();
+    float fontSize = h < 16 ? 8.0f
+                   : h < 22 ? 10.0f
+                   : h < 28 ? 11.0f
+                   : 13.0f;
     g.setFont (makeFont (fontSize));
-    g.drawText (button.getButtonText(), button.getLocalBounds(),
+    g.drawText (button.getButtonText(), button.getLocalBounds().reduced (2, 0),
                 juce::Justification::centred);
 }
 
@@ -96,10 +113,27 @@ void DysektLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectan
         g.fillRect (area);
     }
 
-    g.setColour (isTicked ? getTheme().accent
-                          : (isActive ? getTheme().foreground : getTheme().foreground.withAlpha (0.4f)));
+    // Tick indicator: draw a small filled rect (no unicode glyphs that may render as random symbols)
+    const int tickZoneW = (int) (16 * sMenuScale);
+    if (isTicked)
+    {
+        const int dotSize = (int) (4 * sMenuScale);
+        g.setColour (getTheme().accent);
+        g.fillRect (area.getX() + (tickZoneW - dotSize) / 2,
+                    area.getCentreY() - dotSize / 2,
+                    dotSize, dotSize);
+    }
+
+    const juce::Colour textCol = isTicked  ? getTheme().accent
+                               : isActive  ? getTheme().foreground
+                                           : getTheme().foreground.withAlpha (0.4f);
+    g.setColour (textCol);
     g.setFont (getPopupMenuFont());
-    g.drawText (text, area.reduced ((int) (8 * sMenuScale), 0), juce::Justification::centredLeft);
+
+    // Indent text past tick zone to prevent overlap
+    auto textArea = area.withLeft (area.getX() + tickZoneW)
+                        .withRight (area.getRight() - (int) (4 * sMenuScale));
+    g.drawText (text, textArea, juce::Justification::centredLeft);
 }
 
 void DysektLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g,

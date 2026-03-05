@@ -339,15 +339,22 @@ void SliceControlBar::paint (juce::Graphics& g)
 
     // ── Row 1 right: slice info (sample range only — no time length) ─────────
     {
+        const bool sliceFullyLocked = (s.lockMask == 0xFFFFFFFFu);
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (getTheme().accent.withAlpha (0.7f));
-        g.drawText ("SLICE " + juce::String (idx + 1),
-                    8, row1y + 2, rightEdge - 8, 13, juce::Justification::right);
+        g.setColour (sliceFullyLocked ? getTheme().lockActive : getTheme().accent.withAlpha (0.7f));
+        juce::String sliceLabel = "SLICE " + juce::String (idx + 1)
+                                  + (sliceFullyLocked ? "  [LOCKED]" : "");
+        g.drawText (sliceLabel, 8, row1y + 2, rightEdge - 8, 13, juce::Justification::right);
         g.setFont (DysektLookAndFeel::makeFont (14.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.5f));
+        g.setColour (sliceFullyLocked ? getTheme().lockActive.withAlpha (0.7f)
+                                      : getTheme().foreground.withAlpha (0.5f));
         // Sample range only — no time display per request
         g.drawText (juce::String (s.startSample) + " - " + juce::String (s.endSample),
                     8, row1y + 15, rightEdge - 8, 14, juce::Justification::right);
+
+        // Lock icon in upper-right corner of the bar
+        if (sliceFullyLocked)
+            drawLockIcon (g, rightEdge - 12, row1y + 1, true);
     }
 
     // =========================================================================

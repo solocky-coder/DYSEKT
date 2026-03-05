@@ -25,9 +25,9 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
 
     // ── Play/Stop button ──────────────────────────────────────────────────────
     playStopBtn.setColour (juce::TextButton::buttonColourId,
-                           juce::Colour (0xFF1A6B3A));
+                           getTheme().accent.withAlpha (0.35f));
     playStopBtn.setColour (juce::TextButton::textColourOffId,
-                           juce::Colours::white);
+                           getTheme().foreground);
     playStopBtn.onClick = [this]
     {
         if (transport.isPlaying())
@@ -43,9 +43,9 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     volumeSlider.setRange (0.0, 1.0);
     volumeSlider.setValue (0.8);
     volumeSlider.setColour (juce::Slider::thumbColourId,
-                            juce::Colour (0xFF4AABFF));
+                            getTheme().accent);
     volumeSlider.setColour (juce::Slider::trackColourId,
-                            juce::Colour (0xFF2A4060));
+                            getTheme().accent.withAlpha (0.25f));
     volumeSlider.onValueChange = [this]
     {
         transport.setGain ((float) volumeSlider.getValue());
@@ -55,10 +55,29 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
 
     // ── File name label ───────────────────────────────────────────────────────
     fileNameLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
-    fileNameLabel.setColour (juce::Label::textColourId,
-                             juce::Colours::white.withAlpha (0.7f));
+    fileNameLabel.setColour (juce::Label::textColourId, getTheme().accent);
+    fileNameLabel.setColour (juce::Label::backgroundColourId, juce::Colour (0x00000000));
     fileNameLabel.setMinimumHorizontalScale (0.5f);
+    fileNameLabel.setEditable (false, false, false);  // read-only: never editable
     addChildComponent (fileNameLabel);
+
+    // Make the FileBrowserComponent's built-in filename TextEditor read-only.
+    // JUCE creates this editor lazily as a child component; walk children after
+    // the browser has been added and disable editing on any TextEditor found.
+    juce::Timer::callAfterDelay (100, [this]
+    {
+        for (int i = 0; i < browser.getNumChildComponents(); ++i)
+        {
+            if (auto* te = dynamic_cast<juce::TextEditor*> (browser.getChildComponent (i)))
+            {
+                te->setReadOnly (true);
+                te->setCaretVisible (false);
+                te->setColour (juce::TextEditor::outlineColourId, getTheme().accent.withAlpha (0.5f));
+                te->setColour (juce::TextEditor::focusedOutlineColourId, getTheme().accent);
+                te->setColour (juce::TextEditor::textColourId, getTheme().accent);
+            }
+        }
+    });
 }
 
 FileBrowserPanel::~FileBrowserPanel()
@@ -206,13 +225,13 @@ void FileBrowserPanel::updatePlayButton()
     {
         playStopBtn.setButtonText ("STOP");
         playStopBtn.setColour (juce::TextButton::buttonColourId,
-                               juce::Colour (0xFF8B1A1A));
+                               getTheme().accent.withAlpha (0.55f));
     }
     else
     {
         playStopBtn.setButtonText ("PLAY");
         playStopBtn.setColour (juce::TextButton::buttonColourId,
-                               juce::Colour (0xFF1A6B3A));
+                               getTheme().accent.withAlpha (0.25f));
     }
 }
 

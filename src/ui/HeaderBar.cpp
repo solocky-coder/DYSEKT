@@ -100,28 +100,41 @@ void HeaderBar::resized()
 
 void HeaderBar::paint (juce::Graphics& g)
 {
-    // Refresh standard button colours
+    // Refresh standard button colours to follow theme
     for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn, &shortcutsBtn })
     {
-        btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
-        btn->setColour (juce::TextButton::textColourOnId, getTheme().foreground);
+        btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
+        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);      // on = accent
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
     g.fillAll (getTheme().header);
+
+    // ── Frame around the button group ─────────────────────────────────────────
+    // Compute a tight bounding rect around all 5 buttons with 2px padding
+    const int frameX1 = undoBtn.getX() - 2;
+    const int frameY1 = undoBtn.getY() - 2;
+    const int frameX2 = shortcutsBtn.getRight() + 2;
+    const int frameY2 = shortcutsBtn.getBottom() + 2;
+    const juce::Rectangle<int> btnFrame (frameX1, frameY1,
+                                         frameX2 - frameX1, frameY2 - frameY1);
+
+    g.setColour (getTheme().separator);
+    g.drawRect (btnFrame, 1);
+
+    // ── Subtle divider between UNDO and REDO ──────────────────────────────────
     {
-        int rx = redoBtn.getX();
-        int ry = redoBtn.getY();
-        int rh = redoBtn.getHeight();
+        const int rx = redoBtn.getX();
+        const int ry = redoBtn.getY();
+        const int rh = redoBtn.getHeight();
         g.setColour (getTheme().foreground.withAlpha (0.15f));
         g.drawVerticalLine (rx, (float) ry + 3, (float) (ry + rh - 3));
     }
 
-    // Left side now intentionally empty — sample name lives in LCD 1,
-    // slice count lives in the DualLcdControlFrame chip.
+    // Left side intentionally empty — sample name lives in LCD 1
     sampleInfoBounds = {};
     slicesInfoArea   = {};
-    (void) processor; // suppress unused warning if no other processor access below
+    (void) processor;
 }
 
 // ── Mouse ─────────────────────────────────────────────────────────────────────

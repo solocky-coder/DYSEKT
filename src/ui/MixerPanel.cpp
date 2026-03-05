@@ -41,9 +41,12 @@ void MixerPanel::rebuildStrips (int numSlices)
 // =============================================================================
 void MixerPanel::layoutStrips()
 {
+    constexpr int kLabelBarH = 14;  // height of the "MIXER" header label bar
+
     const int visibleW = getWidth() - kMasterWidth - 4;
-    const int h        = getHeight() - kScrollBarH;
-    stripViewport = { 0, 0, visibleW, h };
+    const int h        = getHeight() - kScrollBarH - kLabelBarH;
+    const int yOff     = kLabelBarH;
+    stripViewport = { 0, yOff, visibleW, h };
 
     const int numStrips = (int)strips.size();
 
@@ -58,7 +61,7 @@ void MixerPanel::layoutStrips()
         hScrollBar.setVisible (true);
         hScrollBar.setRangeLimits (0.0, (double)numStrips);
         hScrollBar.setCurrentRange ((double)scrollOffset, (double)kVisibleStrips);
-        hScrollBar.setBounds (0, h, visibleW, kScrollBarH);
+        hScrollBar.setBounds (0, yOff + h, visibleW, kScrollBarH);
     }
 
     // Position visible strips
@@ -72,12 +75,12 @@ void MixerPanel::layoutStrips()
         else
         {
             strips[(size_t)i]->setVisible (true);
-            strips[(size_t)i]->setBounds (visIdx * kStripWidth, 0, kStripWidth - 2, h);
+            strips[(size_t)i]->setBounds (visIdx * kStripWidth, yOff, kStripWidth - 2, h);
         }
     }
 
     // Master strip on the right
-    masterStrip.setBounds (getWidth() - kMasterWidth, 0, kMasterWidth, h);
+    masterStrip.setBounds (getWidth() - kMasterWidth, yOff, kMasterWidth, h);
 }
 
 // =============================================================================
@@ -90,12 +93,32 @@ void MixerPanel::resized()
 void MixerPanel::paint (juce::Graphics& g)
 {
     const auto& theme = getTheme();
-    g.setColour (theme.darkBar);
-    g.fillRect (getLocalBounds());
+    const auto localBounds = getLocalBounds();
 
-    // Separator line between strips and master
+    // ── Panel background ──────────────────────────────────────────────────────
+    g.setColour (theme.darkBar);
+    g.fillRect (localBounds);
+
+    // ── Outer frame matching the rest of the UI ───────────────────────────────
     g.setColour (theme.separator);
-    g.drawVerticalLine (getWidth() - kMasterWidth - 2, 0.0f, (float)getHeight());
+    g.drawRect (localBounds, 1);
+
+    // ── Header label bar (top edge accent strip) ──────────────────────────────
+    const int labelH = 14;
+    const juce::Rectangle<int> labelBar (0, 0, localBounds.getWidth(), labelH);
+    g.setColour (theme.darkBar.brighter (0.07f));
+    g.fillRect (labelBar);
+
+    g.setFont (DysektLookAndFeel::makeFont (9.0f));
+    g.setColour (theme.foreground.withAlpha (0.45f));
+    g.drawText ("MIXER", labelBar.reduced (6, 0), juce::Justification::centredLeft);
+
+    // ── Bottom border of label bar ────────────────────────────────────────────
+    g.setColour (theme.separator);
+    g.drawHorizontalLine (labelH, 0.0f, (float) localBounds.getWidth());
+
+    // ── Separator line between strips and master ──────────────────────────────
+    g.drawVerticalLine (localBounds.getWidth() - kMasterWidth - 2, 0.0f, (float) localBounds.getHeight());
 }
 
 // =============================================================================
