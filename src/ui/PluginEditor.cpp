@@ -287,9 +287,14 @@ void DysektEditor::paint (juce::Graphics& g)
         const auto& sbnd = scrollZoomBar.getBounds();
         const auto  ac   = getTheme().accent;
 
+        // Outer frame rect — kMargin inset on left/right, spanning actionPanel
+        // top to scrollZoomBar bottom.  Must match resized() exactly.
+        const int kFrameInset = 4;
+        const int kFrameX     = kMargin;
+        const int kFrameW     = getWidth() - kMargin * 2;
         const juce::Rectangle<float> outerF (
-            (float) abnd.getX(),      (float) abnd.getY(),
-            (float) abnd.getWidth(),  (float) (sbnd.getBottom() - abnd.getY()));
+            (float) kFrameX,   (float) abnd.getY() - kFrameInset,
+            (float) kFrameW,   (float) (sbnd.getBottom() - abnd.getY() + kFrameInset * 2));
 
         // 1. Outer gradient fill
         juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
@@ -362,8 +367,7 @@ void DysektEditor::resized()
         sliceWaveformLcd.setBounds (lcdRow);
     }
 
-    // 2b. Action panel — TOP of the waveform frame (placed before frame bounds computed)
-    // Reserve it from area first so it's included in the frame bezel.
+    // 2b. Reserve the action panel height — it becomes the TOP of the LCD frame.
     auto actionArea = area.removeFromTop (kActionH);
 
     // 4. Slice control bar — bottom (outside frame)
@@ -379,21 +383,51 @@ void DysektEditor::resized()
 
     area.removeFromBottom (4);  // bottom gap
 
-    // ── Framed area: ActionPanel + SliceLane + WaveformView + ScrollZoomBar ───
-    // ActionPanel (ADD SLICE / MIDI SLICE / TRIM / SNAP / MIDI) sits at the top
-    // of this frame. All components share the same horizontal margins.
+    // ── LCD frame outer rect ─────────────────────────────────────────────────
+    // The full outer rect spans actionArea.top → area.bottom, kMargin inset
+    // on left/right.  paint() draws the frame border over this rect.
+    // Components sit inside the "screen" — reduced by 4px on all sides —
+    // just like the LCD panels do with b.reduced(4).
+    const int kFrameInset = 4;  // matches LCD b.reduced(4)
+    const int kFrameX     = kMargin;
+    const int kFrameW     = getWidth() - kMargin * 2;
 
-    // Scrollbar — bottom of frame
-    scrollZoomBar.setBounds (area.removeFromBottom (kScrollbarH).reduced (kMargin, 0));
+    // Full outer frame rect (used by paint() — computed identically there)
+    const int frameTop    = actionArea.getY();
+    const int frameBot    = area.getBottom();
 
-    // Slice lane — just below action panel inside frame
-    sliceLane.setBounds (area.removeFromTop (kSliceLaneH).reduced (kMargin, 0));
+    // Inner screen rect — components live here
+    const int screenX     = kFrameX  + kFrameInset;
+    const int screenW     = kFrameW  - kFrameInset * 2;
+    const int screenTop   = frameTop + kFrameInset;
+    const int screenBot   = frameBot - kFrameInset;
+    const int screenH     = screenBot - screenTop;
 
-    // Action panel — flush at top inside frame (no extra margin — bezel provides it)
-    actionPanel.setBounds (actionArea.reduced (kMargin, 0));
+    // Scrollbar — bottom of screen
+    {
+        auto r = juce::Rectangle<int> (screenX, screenBot - kScrollbarH, screenW, kScrollbarH);
+        scrollZoomBar.setBounds (r);
+    }
 
-    // Waveform — fills remaining space
-    waveformView.setBounds (area.reduced (kMargin, 0));
+    // Action panel — top of screen
+    {
+        auto r = juce::Rectangle<int> (screenX, screenTop, screenW, kActionH);
+        actionPanel.setBounds (r);
+    }
+
+    // Slice lane — just below action panel
+    {
+        int y = screenTop + kActionH;
+        auto r = juce::Rectangle<int> (screenX, y, screenW, kSliceLaneH);
+        sliceLane.setBounds (r);
+    }
+
+    // Waveform — fills remaining space between slice lane and scrollbar
+    {
+        int y  = screenTop + kActionH + kSliceLaneH;
+        int h  = screenBot - kScrollbarH - y;
+        waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
+    }
 
     // ShortcutsPanel covers the whole editor as an overlay
     if (shortcutsPanel.isVisible())
