@@ -697,12 +697,6 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
     auto pos = e.getPosition();
     const auto& ui = processor.getUiSliceSnapshot();
 
-    // Cells are built in paint(). If cells is empty (component hasn't been painted
-    // yet, or was cleared by a concurrent repaint), force a synchronous repaint now
-    // so hit-testing works on the first click.
-    if (cells.empty())
-        this->paintImmediately (getLocalBounds());
-
     for (int i = 0; i < (int) cells.size(); ++i)
     {
         const auto& cell = cells[(size_t) i];
