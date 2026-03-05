@@ -753,7 +753,49 @@ void DysektProcessor::handleCommand (const Command& cmd)
             break;
         }
 
-        case CmdSetSliceParam:
+        case CmdSetSliceLockAll:
+        {
+            int idx = cmd.intParam1;
+            if (idx >= 0 && idx < sliceManager.getNumSlices())
+            {
+                auto& s = sliceManager.getSlice (idx);
+                const bool locking = (cmd.floatParam1 > 0.5f);
+
+                if (locking)
+                {
+                    // Snapshot every global param value into the slice before locking,
+                    // so locked values match what was displayed — same logic as CmdToggleLock.
+                    s.bpm               = bpmParam->load();
+                    s.pitchSemitones    = pitchParam->load();
+                    s.algorithm         = (int) algoParam->load();
+                    s.attackSec         = attackParam->load()      / 1000.0f;
+                    s.decaySec          = decayParam->load()       / 1000.0f;
+                    s.sustainLevel      = sustainParam->load()     / 100.0f;
+                    s.releaseSec        = releaseParam->load()     / 1000.0f;
+                    s.muteGroup         = (int) muteGroupParam->load();
+                    s.loopMode          = (int) loopParam->load();
+                    s.stretchEnabled    = stretchParam->load()     > 0.5f;
+                    s.releaseTail       = releaseTailParam->load() > 0.5f;
+                    s.reverse           = reverseParam->load()     > 0.5f;
+                    s.oneShot           = oneShotParam->load()     > 0.5f;
+                    s.centsDetune       = centsDetuneParam->load();
+                    s.tonalityHz        = tonalityParam->load();
+                    s.formantSemitones  = formantParam->load();
+                    s.formantComp       = formantCompParam->load() > 0.5f;
+                    s.grainMode         = (int) grainModeParam->load();
+                    s.volume            = masterVolParam->load();
+                    s.pan               = panParam->load();
+                    s.filterCutoff      = filterCutoffParam->load();
+                    s.filterRes         = filterResParam->load();
+                    s.lockMask          = kValidLockMask;
+                }
+                else
+                {
+                    s.lockMask = 0;
+                }
+            }
+            break;
+        }
         {
             int sel = sliceManager.selectedSlice;
             if (sel >= 0 && sel < sliceManager.getNumSlices())

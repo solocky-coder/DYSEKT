@@ -238,7 +238,6 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
         if (targetSlice >= 0 && targetSlice < ui.numSlices)
         {
             const auto& s = ui.slices[(size_t) targetSlice];
-            // A slice is "fully locked" when every parameter lock bit is set
             const bool allLocked = (s.lockMask == 0xFFFFFFFFu);
             const juce::String lockLabel = allLocked ? "Unlock Slice" : "Lock Slice";
 
@@ -258,18 +257,16 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                 {
                     if (result == 1)
                     {
-                        // Delete the slice
                         DysektProcessor::Command cmd;
-                        cmd.type      = DysektProcessor::CmdDeleteSlice;  // add this to your Cmd enum if missing
+                        cmd.type      = DysektProcessor::CmdDeleteSlice;
                         cmd.intParam1 = targetSlice;
                         processor.pushCommand (cmd);
                     }
                     else if (result == 2)
                     {
-                        // Toggle lock: all bits on = full lock, 0 = unlock
                         DysektProcessor::Command cmd;
-                        cmd.type      = DysektProcessor::CmdSetSliceLockAll;  // add to Cmd enum if missing
-                        cmd.intParam1 = targetSlice;
+                        cmd.type        = DysektProcessor::CmdSetSliceLockAll;
+                        cmd.intParam1   = targetSlice;
                         cmd.floatParam1 = allLocked ? 0.f : 1.f;
                         processor.pushCommand (cmd);
                     }
