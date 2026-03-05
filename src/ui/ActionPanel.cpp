@@ -24,8 +24,16 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     lazyChopBtn.onClick = [this] {
         DysektProcessor::Command cmd;
-        cmd.type = processor.lazyChop.isActive() ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
-        processor.pushCommand (cmd); repaint();
+        const bool wasActive = processor.lazyChop.isActive();
+        cmd.type = wasActive ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
+        processor.pushCommand (cmd);
+        // Auto-enable MIDI Follow when MIDI Slice starts (mirrors Ableton Live behaviour)
+        if (! wasActive)
+        {
+            processor.midiSelectsSlice.store (true);
+            updateMidiButtonAppearance (true);
+        }
+        repaint();
     };
 
     // dupBtn (Copy) removed per Fix #3 — function entirely removed
@@ -126,10 +134,10 @@ void ActionPanel::toggleTrimMode()
 
 void ActionPanel::resized()
 {
-    const int gap   = 5;
+    const int gap   = 3;
     const int h     = getHeight();
-    const int thinW = 30;   // snap, MIDI select icon buttons
-    const int trimW = 42;
+    const int thinW = 26;   // snap, MIDI select icon buttons
+    const int trimW = 40;
 
     // Lay out right-to-left so icon buttons always sit flush at the right edge,
     // preventing overflow regardless of panel width.
@@ -202,61 +210,68 @@ void ActionPanel::updateSnapButtonAppearance (bool active)
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // Draw 5-pin DIN MIDI connector icon for midiSelectBtn (Halion-style)
+    // Draw 5-pin DIN MIDI connector icon for midiSelectBtn
     {
         bool active = processor.midiSelectsSlice.load();
         auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
-        g.setColour (col);
 
-        auto b   = midiSelectBtn.getBounds().toFloat();
+        auto b   = midiSelectBtn.getBounds();
+        // Clip strictly to button bounds so nothing bleeds outside
+        juce::Graphics::ScopedSaveState save (g);
+        g.reduceClipRegion (b);
+
         float cx = b.getCentreX();
-        float cy = b.getCentreY() + 1.0f;
+        float cy = b.getCentreY();
 
-        // Outer circle (connector body)
-        const float outerR = 8.5f;
-        g.drawEllipse (cx - outerR, cy - outerR, outerR * 2, outerR * 2, 1.2f);
+        // Scale icon to fit inside button with 3px padding
+        const float maxR = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f - 3.0f;
+        const float outerR = juce::jmin (maxR, 8.0f);
 
-        // Flat edge on bottom (D-shell cutoff)
-        g.setColour (active ? getTheme().accent.withAlpha(0.0f) : getTheme().button);
-        g.fillRect  (cx - outerR - 1, cy + 4.5f, outerR * 2 + 2, outerR);
         g.setColour (col);
-        g.drawLine  (cx - outerR, cy + 4.5f, cx + outerR, cy + 4.5f, 1.2f);
+        // Outer circle
+        g.drawEllipse (cx - outerR, cy - outerR, outerR * 2.0f, outerR * 2.0f, 1.2f);
 
-        // 5 pins arranged in a semicircle (top arc)
-        // Pin layout: 2 top row, 3 bottom row (standard DIN-5 arrangement)
+        // Flat bottom (D-shell)
+        g.setColour (active ? getTheme().accent.withAlpha(0.0f) : getTheme().button);
+        g.fillRect  (cx - outerR - 1.0f, cy + outerR * 0.5f, outerR * 2.0f + 2.0f, outerR + 2.0f);
+        g.setColour (col);
+        g.drawLine  (cx - outerR, cy + outerR * 0.5f, cx + outerR, cy + outerR * 0.5f, 1.2f);
+
+        // 5 pins in DIN arrangement
+        const float pinR = 1.3f;
+        const float arcR = outerR * 0.58f;
         struct Pin { float x, y; };
-        const float pinR = 1.4f;
-        const float arcR = 5.0f;
-        // Standard MIDI DIN-5: 3 pins on top arc, 2 on lower arc
         Pin pins[] = {
-            { cx - arcR * 0.95f, cy - arcR * 0.31f },   // pin 1 (left)
-            { cx + arcR * 0.95f, cy - arcR * 0.31f },   // pin 2 (right)
-            { cx,                cy - arcR          },   // pin 3 (top centre)
-            { cx - arcR * 0.59f, cy + arcR * 0.81f },   // pin 4 (bottom left)
-            { cx + arcR * 0.59f, cy + arcR * 0.81f },   // pin 5 (bottom right)
+            { cx - arcR * 0.95f, cy - arcR * 0.31f },
+            { cx + arcR * 0.95f, cy - arcR * 0.31f },
+            { cx,                cy - arcR          },
+            { cx - arcR * 0.59f, cy + arcR * 0.60f },
+            { cx + arcR * 0.59f, cy + arcR * 0.60f },
         };
         for (auto& pin : pins)
-            g.fillEllipse (pin.x - pinR, pin.y - pinR, pinR * 2, pinR * 2);
+            g.fillEllipse (pin.x - pinR, pin.y - pinR, pinR * 2.0f, pinR * 2.0f);
     }
 
     // Draw zero-crossing icon for snapBtn
     {
         bool active = processor.snapToZeroCrossing.load();
         auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
-        g.setColour (col);
 
-        auto b   = snapBtn.getBounds();
+        auto b = snapBtn.getBounds();
+        juce::Graphics::ScopedSaveState save2 (g);
+        g.reduceClipRegion (b);
+
         float cx = (float) b.getCentreX();
         float cy = (float) b.getCentreY();
+        const float span = juce::jmin (b.getWidth() * 0.42f, 9.0f);
 
-        // Horizontal zero line
-        g.drawLine (cx - 9.0f, cy, cx + 9.0f, cy, 1.0f);
+        g.setColour (col);
+        g.drawLine (cx - span, cy, cx + span, cy, 1.0f);
 
-        // Sine wave crossing through the zero line
         juce::Path wave;
-        wave.startNewSubPath (cx - 9.0f, cy);
-        wave.cubicTo (cx - 5.0f, cy,        cx - 5.0f, cy - 6.5f, cx,        cy);
-        wave.cubicTo (cx + 5.0f, cy,        cx + 5.0f, cy + 6.5f, cx + 9.0f, cy);
+        wave.startNewSubPath (cx - span, cy);
+        wave.cubicTo (cx - span * 0.55f, cy, cx - span * 0.55f, cy - 6.0f, cx, cy);
+        wave.cubicTo (cx + span * 0.55f, cy, cx + span * 0.55f, cy + 6.0f, cx + span, cy);
         g.strokePath (wave, juce::PathStrokeType (1.5f));
     }
 }
