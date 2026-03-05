@@ -114,14 +114,14 @@ void OscilloscopeView::paint (juce::Graphics& g)
     // Soft glow pass
     g.setColour (waveColour.withAlpha (0.18f));
     g.strokePath (path, juce::PathStrokeType (3.0f,
-                                              juce::PathStrokeType::mitre,
-                                              juce::PathStrokeType::square));
+                                              juce::PathStrokeType::mitered,
+                                              juce::PathStrokeType::butt));
 
     // Main line
     g.setColour (waveColour.withAlpha (0.80f));
     g.strokePath (path, juce::PathStrokeType (1.0f,
-                                              juce::PathStrokeType::mitre,
-                                              juce::PathStrokeType::square));
+                                              juce::PathStrokeType::mitered,
+                                              juce::PathStrokeType::butt));
 
     // ── Top / bottom border ───────────────────────────────────────────────────
     g.setColour (getTheme().darkBar);
