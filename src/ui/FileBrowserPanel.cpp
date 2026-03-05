@@ -16,9 +16,11 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     browser.setLookAndFeel (&smallLAF);
     addAndMakeVisible (browser);
 
-    // ── Audio device setup ────────────────────────────────────────────────────
+    // ── Audio preview setup ───────────────────────────────────────────────────
+    // Use a null audio device to avoid conflicting with the DAW's audio device.
+    // Preview is routed through the default output without taking exclusive control.
     formatManager.registerBasicFormats();
-    deviceManager.initialiseWithDefaultDevices (0, 2);
+    deviceManager.initialise (0, 2, nullptr, false, {}, nullptr);
     deviceManager.addAudioCallback (&sourcePlayer);
     sourcePlayer.setSource (&transport);
     transport.addChangeListener (this);
@@ -151,24 +153,24 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
 {
     if (! f.existsAsFile()) return;
 
-    // Show the preview bar if not already visible
     const bool wasVisible = previewVisible;
     previewFile    = f;
     previewVisible = true;
 
     fileNameLabel.setText (f.getFileName(), juce::dontSendNotification);
+
+    // Stop any current preview and update button — but do NOT auto-start.
+    // Auto-play on single click caused the deviceManager to conflict with
+    // the DAW audio thread, making the waveform view jump on slice clicks.
+    stopPreview();
     updatePlayButton();
 
     playStopBtn.setVisible   (true);
     volumeSlider.setVisible  (true);
     fileNameLabel.setVisible (true);
 
-    // Auto-start preview on single click
-    stopPreview();
-    startPreview (f);
-
     if (! wasVisible)
-        resized();    // re-layout to make room for bar
+        resized();
 
     repaint();
 }
