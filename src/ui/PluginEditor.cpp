@@ -8,7 +8,6 @@ static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 34;
-static constexpr int kOscilloscopeH = OscilloscopeView::kPreferredHeight;
 static constexpr int kMixerPanelH   = 210;
 static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
 
@@ -282,34 +281,38 @@ void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
 
-    // ── Waveform frame — same bezel style as the LCD panels ──────────────────
-    // Wraps waveformView + scrollZoomBar together. The LCD row uses
-    // area.reduced(kMargin, 6) so we match that same 1px border + darkBar fill.
-    if (waveformView.isVisible() && scrollZoomBar.isVisible())
+    // ── LCD-style bezel frame: SliceLane + WaveformView + ScrollZoomBar ───────
+    // Matches the LCD panel treatment: darkBar border strip + separator outline.
+    if (sliceLane.isVisible() && waveformView.isVisible() && scrollZoomBar.isVisible())
     {
-        const auto& wbnd = waveformView.getBounds();
+        const auto& lbnd = sliceLane.getBounds();
         const auto& sbnd = scrollZoomBar.getBounds();
 
-        // Outer bezel rect — 2px outside the content, matching LCD outer frame
-        const juce::Rectangle<int> bezel (wbnd.getX() - 2,
-                                          wbnd.getY() - 2,
-                                          wbnd.getWidth() + 4,
-                                          sbnd.getBottom() - wbnd.getY() + 4);
+        // Outer bezel — 2px outside the combined rect (same as LCD bezel style)
+        const juce::Rectangle<int> bezel (lbnd.getX() - 2,
+                                          lbnd.getY() - 2,
+                                          lbnd.getWidth() + 4,
+                                          sbnd.getBottom() - lbnd.getY() + 4);
 
-        // Dark filled border strip (same as LCD bezel background)
+        // Dark filled border strip
         g.setColour (getTheme().darkBar);
         g.fillRect (bezel);
 
-        // Inner content area fill (background)
-        const juce::Rectangle<int> inner (wbnd.getX(), wbnd.getY(),
-                                          wbnd.getWidth(),
-                                          sbnd.getBottom() - wbnd.getY());
+        // Background fill behind content
+        const juce::Rectangle<int> inner (lbnd.getX(), lbnd.getY(),
+                                          lbnd.getWidth(),
+                                          sbnd.getBottom() - lbnd.getY());
         g.setColour (getTheme().background);
         g.fillRect (inner);
 
         // 1px separator border
         g.setColour (getTheme().separator);
         g.drawRect (bezel, 1);
+
+        // Thin divider line between slice lane and waveform view
+        const auto& wbnd = waveformView.getBounds();
+        g.setColour (getTheme().separator.withAlpha (0.5f));
+        g.drawHorizontalLine (wbnd.getY(), (float) bezel.getX(), (float) bezel.getRight());
     }
 }
 
@@ -349,9 +352,6 @@ void DysektEditor::resized()
     // 2b. Action panel — directly below LCDs
     actionPanel.setBounds (area.removeFromTop (kActionH).reduced (kMargin, 0));
 
-    // 3. Slice lane
-    sliceLane.setBounds (area.removeFromTop (kSliceLaneH).reduced (kMargin, 0));
-
     // 4. Slice control bar — bottom
     sliceControlBar.setBounds (area.removeFromBottom (kSliceCtrlH));
 
@@ -363,16 +363,19 @@ void DysektEditor::resized()
     if (mixerOpen)
         mixerPanel.setBounds (area.removeFromBottom (kMixerPanelH).reduced (kMargin, 0));
 
-    // 7. (Action panel now placed directly below LCDs — see above)
+    area.removeFromBottom (4);  // bottom gap
 
-    area.removeFromBottom (4);  // gap before the wave frame
+    // ── Framed area: SliceLane + Waveform + ScrollZoomBar ────────────────────
+    // All three share the same horizontal margins so the LCD-style frame wraps
+    // them cleanly as one unified panel (annotation 3).
 
-    // ── Wave frame: ScrollZoom + Waveform ─────────────────────────────────────
-
-    // 8. Scrollbar (bottom of the frame)
+    // 8. Scrollbar — bottom of frame
     scrollZoomBar.setBounds (area.removeFromBottom (kScrollbarH).reduced (kMargin, 0));
 
-    // 9. Waveform — fills remaining space
+    // 3. Slice lane — top of frame (inside the same bezel as waveform)
+    sliceLane.setBounds (area.removeFromTop (kSliceLaneH).reduced (kMargin, 0));
+
+    // 9. Waveform — remaining space inside frame
     waveformView.setBounds (area.reduced (kMargin, 0));
 
     // ShortcutsPanel covers the whole editor as an overlay

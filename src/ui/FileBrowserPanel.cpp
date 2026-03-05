@@ -61,23 +61,36 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     fileNameLabel.setEditable (false, false, false);  // read-only: never editable
     addChildComponent (fileNameLabel);
 
-    // Make the FileBrowserComponent's built-in filename TextEditor read-only.
-    // JUCE creates this editor lazily as a child component; walk children after
-    // the browser has been added and disable editing on any TextEditor found.
-    juce::Timer::callAfterDelay (100, [this]
+    // Make the FileBrowserComponent's built-in filename TextEditor and path bar
+    // read-only with black background — walk ALL descendants recursively.
+    auto enforceReadOnly = [this]
     {
-        for (int i = 0; i < browser.getNumChildComponents(); ++i)
+        std::function<void(juce::Component*)> walk = [&](juce::Component* comp)
         {
-            if (auto* te = dynamic_cast<juce::TextEditor*> (browser.getChildComponent (i)))
+            if (auto* te = dynamic_cast<juce::TextEditor*> (comp))
             {
                 te->setReadOnly (true);
                 te->setCaretVisible (false);
-                te->setColour (juce::TextEditor::outlineColourId, getTheme().accent.withAlpha (0.5f));
-                te->setColour (juce::TextEditor::focusedOutlineColourId, getTheme().accent);
-                te->setColour (juce::TextEditor::textColourId, getTheme().accent);
+                te->setMouseCursor (juce::MouseCursor::NormalCursor);
+                te->setColour (juce::TextEditor::backgroundColourId,    juce::Colour (0xFF000000));
+                te->setColour (juce::TextEditor::outlineColourId,       getTheme().separator);
+                te->setColour (juce::TextEditor::focusedOutlineColourId, getTheme().accent.withAlpha (0.5f));
+                te->setColour (juce::TextEditor::textColourId,          getTheme().accent);
             }
-        }
-    });
+            if (auto* lb = dynamic_cast<juce::Label*> (comp))
+            {
+                lb->setEditable (false, false, false);
+                lb->setColour (juce::Label::backgroundColourId, juce::Colour (0xFF000000));
+                lb->setColour (juce::Label::textColourId,       getTheme().accent);
+            }
+            for (int i = 0; i < comp->getNumChildComponents(); ++i)
+                walk (comp->getChildComponent (i));
+        };
+        walk (&browser);
+    };
+
+    juce::Timer::callAfterDelay (100,  [enforceReadOnly] { enforceReadOnly(); });
+    juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });  // catch lazy-init children
 }
 
 FileBrowserPanel::~FileBrowserPanel()
@@ -119,15 +132,14 @@ void FileBrowserPanel::resized()
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xFF050608));
+    g.fillAll (juce::Colour (0xFF000000));  // true black per design
 
     if (previewVisible)
     {
-        // Draw a slightly raised bar behind the preview controls
         auto bar = getLocalBounds().removeFromBottom (kBarH);
-        g.setColour (juce::Colour (0xFF040507));
+        g.setColour (juce::Colour (0xFF0A0A0A));
         g.fillRect (bar);
-        g.setColour (juce::Colour (0xFF0C1018));
+        g.setColour (getTheme().separator);
         g.drawLine ((float) bar.getX(), (float) bar.getY(),
                     (float) bar.getRight(), (float) bar.getY(), 1.0f);
     }

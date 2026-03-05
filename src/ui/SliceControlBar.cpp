@@ -22,7 +22,11 @@ constexpr float kKnobEnd   = juce::MathConstants<float>::pi * 2.75f;
 constexpr int kKnobCellPadRight = 14;  // generous pad — prevents font-metric vs render discrepancies clipping labels
 }
 
-SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p) {}
+SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
+{
+    setInterceptsMouseClicks (true, true);
+    setCursor (juce::MouseCursor::UpDownResizeCursor);
+}
 void SliceControlBar::resized() {}
 
 // =============================================================================
@@ -337,25 +341,7 @@ void SliceControlBar::paint (juce::Graphics& g)
     int cw;
     using F = DysektProcessor;
 
-    // ── Row 1 right: slice info (sample range only — no time length) ─────────
-    {
-        const bool sliceFullyLocked = (s.lockMask == 0xFFFFFFFFu);
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (sliceFullyLocked ? getTheme().lockActive : getTheme().accent.withAlpha (0.7f));
-        juce::String sliceLabel = "SLICE " + juce::String (idx + 1)
-                                  + (sliceFullyLocked ? "  [LOCKED]" : "");
-        g.drawText (sliceLabel, 8, row1y + 2, rightEdge - 8, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeFont (14.0f));
-        g.setColour (sliceFullyLocked ? getTheme().lockActive.withAlpha (0.7f)
-                                      : getTheme().foreground.withAlpha (0.5f));
-        // Sample range only — no time display per request
-        g.drawText (juce::String (s.startSample) + " - " + juce::String (s.endSample),
-                    8, row1y + 15, rightEdge - 8, 14, juce::Justification::right);
-
-        // Lock icon in upper-right corner of the bar
-        if (sliceFullyLocked)
-            drawLockIcon (g, rightEdge - 12, row1y + 1, true);
-    }
+    // ── Slice info removed — displayed in LCD panel (redundant here) ────────────
 
     // =========================================================================
     //  ROW 1: Toggle buttons (ALGO, STRETCH, 1SHOT, TAIL, REV, LOOP) + START + END + LINK
@@ -710,6 +696,12 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
     activeDragCell = -1;
     auto pos = e.getPosition();
     const auto& ui = processor.getUiSliceSnapshot();
+
+    // Cells are built in paint(). If cells is empty (component hasn't been painted
+    // yet, or was cleared by a concurrent repaint), force a synchronous repaint now
+    // so hit-testing works on the first click.
+    if (cells.empty())
+        paintImmediately (getLocalBounds());
 
     for (int i = 0; i < (int) cells.size(); ++i)
     {
