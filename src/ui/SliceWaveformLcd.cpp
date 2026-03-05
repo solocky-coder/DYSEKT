@@ -250,47 +250,7 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
                     juce::Justification::centredLeft, false);
     }
 
-    // ── Stats — bottom right ──────────────────────────────────────────────────
-    const int   lenSamples = data.endSample - data.startSample;
-    const float lenSecs    = (float) lenSamples / (float) data.sampleRate;
-    const float lenMs      = lenSecs * 1000.0f;
-    juce::String lenStr    = lenMs < 1000.0f
-                             ? juce::String (juce::roundToInt (lenMs)) + "ms"
-                             : juce::String (lenSecs, 2) + "s";
-
-    juce::String volStr  = (data.volume >= 0.0f ? "+" : "") + juce::String (data.volume, 1);
-    juce::String panStr  = formatPan (data.pan);
-    juce::String pitStr  = (data.pitchSemitones >= 0.0f ? "+" : "")
-                         + juce::String (data.pitchSemitones, 1);
-    juce::String algStr  = formatAlgo (data.algorithm);
-
-    struct Stat { juce::String label; juce::String value; };
-    Stat stats[] = { {"LEN", lenStr}, {"VOL", volStr}, {"PAN", panStr},
-                     {"PIT", pitStr}, {"ALG", algStr} };
-
-    float sx = area.getRight() - kLeftPad;
-    g.setFont (smallFont);
-
-    // Lay out stats evenly across the full width
-    const int nStats = (int) std::size (stats);
-    const float statW = area.getWidth() / (float) nStats;
-
-    for (int i = 0; i < nStats; ++i)
-    {
-        const float colX = area.getX() + i * statW;
-        const float ty   = area.getBottom() - 22.0f;
-
-        g.setColour (lcd2Label().withAlpha (0.8f));
-        g.drawText (stats[i].label,
-                    juce::Rectangle<float> (colX, ty, statW, 11.0f),
-                    juce::Justification::centred, false);
-
-        g.setColour (lcd2Phosphor().withAlpha (0.75f));
-        g.drawText (stats[i].value,
-                    juce::Rectangle<float> (colX, ty + 11.0f, statW, 11.0f),
-                    juce::Justification::centred, false);
-    }
-    (void) sx;
+    // Stats row removed — all params shown in the left LCD panel
 }
 
 void SliceWaveformLcd::drawNoData (juce::Graphics& g)

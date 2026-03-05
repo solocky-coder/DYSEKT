@@ -193,16 +193,52 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
         g.fillRect (b.getX(), y, b.getWidth(), rowH - 1);
     }
 
+    // Label: right-aligned up to the horizontal centre of the screen
+    const int centreX   = b.getX() + b.getWidth() / 2;
+    const int labelX    = b.getX() + kLeftPad;
+    const int labelW    = centreX - labelX - 4;
+
     g.setFont (labelFont);
     g.setColour (highlight ? pal.highlight : pal.labelCol);
-    g.drawText (label, b.getX() + kLeftPad, y, kLabelW, rowH,
-                juce::Justification::centredLeft, false);
+    g.drawText (label, labelX, y, labelW, rowH,
+                juce::Justification::centredRight, false);
+
+    // Value: starts just right of centre; scrolls if wider than available space
+    const int valueX = centreX + 4;
+    const int valueW = b.getRight() - valueX - kLeftPad;
 
     g.setFont (valueFont);
     g.setColour (highlight ? pal.highlight : pal.phosphor);
-    g.drawText (value, b.getX() + kLeftPad + kLabelW, y,
-                b.getWidth() - kLeftPad - kLabelW, rowH,
-                juce::Justification::centredLeft, false);
+
+    const int textW = valueFont.getStringWidth (value);
+
+    if (textW <= valueW)
+    {
+        g.drawText (value, valueX, y, valueW, rowH,
+                    juce::Justification::centredLeft, false);
+    }
+    else
+    {
+        // Horizontal marquee scroll — driven by wall-clock, no extra timer needed
+        g.saveState();
+        g.reduceClipRegion (valueX, y, valueW, rowH);
+
+        const double totalScroll = (double) (textW - valueW + 10);
+        const double period      = 2.5 + value.length() * 0.04; // seconds per cycle
+        const double t           = (double) juce::Time::currentTimeMillis() / 1000.0;
+        const double phase       = std::fmod (t, period) / period;
+
+        double scrollX = 0.0;
+        if      (phase < 0.25)  scrollX = 0.0;                               // hold start
+        else if (phase < 0.70)  scrollX = ((phase - 0.25) / 0.45) * totalScroll;  // forward
+        else if (phase < 0.85)  scrollX = totalScroll;                        // hold end
+        else                    scrollX = ((1.0 - (phase - 0.85) / 0.15)) * totalScroll; // back
+
+        const int baseline = y + (rowH + valueFont.getAscent() - valueFont.getDescent()) / 2;
+        g.drawSingleLineText (value, valueX - (int) scrollX, baseline);
+
+        g.restoreState();
+    }
 }
 
 void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
