@@ -240,6 +240,7 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
     }
 
     // ── MIDI note — bottom right ───────────────────────────────────────────────
+/*
     {
         g.setFont (noteFont);
         g.setColour (lcd2Bright().withAlpha (0.92f));
@@ -249,6 +250,8 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
                                             60.0f, 28.0f),
                     juce::Justification::centredRight, false);
     }
+*/
+
 
     // Stats row removed — all params shown in the left LCD panel
 }
