@@ -922,21 +922,8 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         }
     }
 
-    // ── Click on waveform outside any interaction: select whichever slice
-    //    contains this sample position. Clicks between or outside slices
-    //    do nothing (selection stays as-is).
-    for (int i = 0; i < num; ++i)
-    {
-        const auto& sl = ui.slices[(size_t) i];
-        if (sl.active && samplePos >= sl.startSample && samplePos <= sl.endSample)
-        {
-            DysektProcessor::Command cmd;
-            cmd.type      = DysektProcessor::CmdSelectSlice;
-            cmd.intParam1 = i;
-            processor.pushCommand (cmd);
-            break;
-        }
-    }
+    // Selection is handled exclusively by SliceLane (matching Intersect behaviour).
+    // Clicking in the waveform outside the selected slice's edges/body does nothing.
 }
 
 void WaveformView::mouseDrag (const juce::MouseEvent& e)
