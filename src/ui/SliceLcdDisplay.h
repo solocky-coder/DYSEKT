@@ -8,6 +8,9 @@ class SliceLcdDisplay : public juce::Component
 public:
     explicit SliceLcdDisplay (DysektProcessor& p);
 
+    // Height the component requests — used by PluginEditor for layout
+    static constexpr int kPreferredHeight = 90;
+
     void paint    (juce::Graphics& g) override;
     void resized  ()                  override {}
 

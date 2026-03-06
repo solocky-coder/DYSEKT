@@ -449,7 +449,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
             : juce::String (lenMs / 1000.0f, 2) + "s");
 
         const float vol = data.volume;
-        juce::String volStr = "VOL:" + (vol >= 0.0f ? "+" : "") + juce::String (vol, 1) + "dB";
+        juce::String volStr = juce::String ("VOL:") + (vol >= 0.0f ? "+" : "") + juce::String (vol, 1) + "dB";
         drawRowPair (g, 3, lenStr, volStr);
     }
 
@@ -457,14 +457,14 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
     {
         juce::String panStr = "PAN:" + formatPan (data.pan).trimEnd();
         const float  pit    = data.pitchSemitones;
-        juce::String pitStr = "PIT:" + (pit >= 0.0f ? "+" : "") + juce::String (pit, 1) + "st";
+        juce::String pitStr = juce::String ("PIT:") + (pit >= 0.0f ? "+" : "") + juce::String (pit, 1) + "st";
         drawRowPair (g, 4, panStr, pitStr);
     }
 
     // ── Row 5:  DET:+xct  |  ALGO:xxxxxxxx ───────────────────────────────────
     {
         const float det = data.centsDetune;
-        juce::String detStr  = "DET:" + (det >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (det)) + "ct";
+        juce::String detStr  = juce::String ("DET:") + (det >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (det)) + "ct";
         juce::String algoStr = "ALGO:" + formatAlgo (data.algorithm).trimEnd();
         drawRowPair (g, 5, detStr, algoStr);
     }
