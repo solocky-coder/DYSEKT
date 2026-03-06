@@ -433,8 +433,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
         if (! s.active) continue;
 
         int drawStartSample = s.startSample;
-        // Marker model: derive end from next slice's start.
-        int drawEndSample = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
+        int drawEndSample = s.endSample;
         if (i == sel && dragSliceIdx == i
             && (dragMode == DragEdgeLeft || dragMode == DragEdgeRight || dragMode == MoveSlice))
         {
@@ -579,8 +578,7 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
         if (s.active)
         {
             int x1 = sampleToPixel (s.startSample);
-            const int hoverEnd = processor.sliceManager.getEndForSlice (sel, ui.sampleNumFrames);
-            int x2 = sampleToPixel (hoverEnd);
+            int x2 = sampleToPixel (s.endSample);
             if      (std::abs (e.x - x1) < 6) newEdge = HoveredEdge::Left;
             else if (std::abs (e.x - x2) < 6) newEdge = HoveredEdge::Right;
         }
@@ -667,8 +665,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         if (s.active)
         {
             int x1 = sampleToPixel (s.startSample);
-            const int mouseDownEnd = processor.sliceManager.getEndForSlice (sel, ui.sampleNumFrames);
-            int x2 = sampleToPixel (mouseDownEnd);
+            int x2 = sampleToPixel (s.endSample);
 
             if (std::abs (e.x - x1) < 6)
             {
@@ -678,9 +675,9 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 dragMode = DragEdgeLeft;
                 dragSliceIdx = sel;
                 dragPreviewStart = s.startSample;
-                dragPreviewEnd   = mouseDownEnd;
-                dragOrigStart    = s.startSample;
-                dragOrigEnd      = mouseDownEnd;
+                dragPreviewEnd = s.endSample;
+                dragOrigStart = s.startSample;
+                dragOrigEnd   = s.endSample;
                 return;
             }
             if (std::abs (e.x - x2) < 6)
@@ -691,9 +688,9 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 dragMode = DragEdgeRight;
                 dragSliceIdx = sel;
                 dragPreviewStart = s.startSample;
-                dragPreviewEnd   = mouseDownEnd;
-                dragOrigStart    = s.startSample;
-                dragOrigEnd      = mouseDownEnd;
+                dragPreviewEnd = s.endSample;
+                dragOrigStart = s.startSample;
+                dragOrigEnd   = s.endSample;
                 return;
             }
 
@@ -705,19 +702,19 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
 
                 dragSliceIdx = sel;
                 dragOffset   = samplePos - s.startSample;
-                dragSliceLen = mouseDownEnd - s.startSample;
+                dragSliceLen = s.endSample - s.startSample;
 
                 if (e.mods.isCtrlDown())
                 {
                     dragMode   = DuplicateSlice;
                     ghostStart = s.startSample;
-                    ghostEnd   = mouseDownEnd;
+                    ghostEnd   = s.endSample;
                 }
                 else
                 {
                     dragMode = MoveSlice;
                     dragPreviewStart = s.startSample;
-                    dragPreviewEnd   = mouseDownEnd;
+                    dragPreviewEnd = s.endSample;
                 }
                 return;
             }
@@ -730,8 +727,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     for (int i = 0; i < num; ++i)
     {
         const auto& sl = ui.slices[(size_t) i];
-        const int slHitEnd = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
-        if (sl.active && samplePos >= sl.startSample && samplePos < slHitEnd)
+        if (sl.active && samplePos >= sl.startSample && samplePos <= sl.endSample)
         {
             DysektProcessor::Command cmd;
             cmd.type      = DysektProcessor::CmdSelectSlice;
@@ -994,4 +990,34 @@ void WaveformView::filesDropped (const juce::StringArray& files, int, int)
         processor.loadSoundFontAsync (f);
     else
         processor.loadFileAsync (f);
+}
+
+// =============================================================================
+//  Trim mode entry points
+// =============================================================================
+
+// enterTrimMode — called by ActionPanel/PluginEditor when the user opens trim.
+// start / end are the initial marker positions in samples (typically 0 and
+// totalFrames so the markers sit at the extremes and the user drags inward).
+void WaveformView::enterTrimMode (int start, int end)
+{
+    trimMode    = true;
+    trimStart   = start;
+    trimEnd     = end;
+    trimInPoint = start;
+    trimOutPoint = end;
+    dragMode    = None;
+    repaint();
+}
+
+// setTrimMode — toggle used by TrimDialog buttons (Apply / Cancel).
+// When active=false the overlay is hidden; a repaint clears the markers.
+void WaveformView::setTrimMode (bool active)
+{
+    trimMode = active;
+    if (! active)
+    {
+        dragMode = None;
+    }
+    repaint();
 }
