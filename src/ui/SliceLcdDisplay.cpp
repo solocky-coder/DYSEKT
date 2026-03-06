@@ -193,7 +193,7 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
         g.fillRect (b.getX(), y, b.getWidth(), rowH - 1);
     }
 
-    // Label: right-aligned up to the horizontal centre of the screen
+    // Label: left-aligned from the left edge
     const int centreX   = b.getX() + b.getWidth() / 2;
     const int labelX    = b.getX() + kLeftPad;
     const int labelW    = centreX - labelX - 4;
@@ -201,9 +201,9 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     g.setFont (labelFont);
     g.setColour (highlight ? pal.highlight : pal.labelCol);
     g.drawText (label, labelX, y, labelW, rowH,
-                juce::Justification::centredRight, false);
+                juce::Justification::centredLeft, false);
 
-    // Value: starts just right of centre; scrolls if wider than available space
+    // Value: centred in the right half of the screen; scrolls if wider than available space
     const int valueX = centreX + 4;
     const int valueW = b.getRight() - valueX - kLeftPad;
 
@@ -215,7 +215,7 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     if (textW <= valueW)
     {
         g.drawText (value, valueX, y, valueW, rowH,
-                    juce::Justification::centredLeft, false);
+                    juce::Justification::centred, false);
     }
     else
     {
