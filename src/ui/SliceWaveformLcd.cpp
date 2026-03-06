@@ -86,7 +86,9 @@ void SliceWaveformLcd::buildDisplayData()
 
     const auto& sl       = snap.slices[(size_t) snap.selectedSlice];
     data.startSample     = sl.startSample;
-    data.endSample       = sl.endSample;
+    // Marker model: end derived from next slice's start (or totalFrames).
+    data.endSample       = processor.sliceManager.getEndForSlice (
+                               snap.selectedSlice, data.totalFrames);
     data.midiNote        = sl.midiNote;
     data.volume          = sl.volume;
     data.pan             = sl.pan;
