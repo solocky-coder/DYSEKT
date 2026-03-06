@@ -220,7 +220,6 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
     const juce::Font hdrFont   = DysektLookAndFeel::makeFont (8.0f, true);
 
     // ── Sample name + index — top ─────────────────────────────────────────────
-/*
     {
         juce::String idxStr = juce::String (data.sliceIndex + 1).paddedLeft ('0', 2)
                             + "/" + juce::String (data.numSlices).paddedLeft ('0', 2);
@@ -239,10 +238,8 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
                                             area.getWidth() - kLeftPad, 14.0f),
                     juce::Justification::centredRight, false);
     }
-*/
 
     // ── MIDI note — bottom right ───────────────────────────────────────────────
-/*
     {
         g.setFont (noteFont);
         g.setColour (lcd2Bright().withAlpha (0.92f));
@@ -252,8 +249,6 @@ void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<flo
                                             60.0f, 28.0f),
                     juce::Justification::centredRight, false);
     }
-*/
-
 
     // Stats row removed — all params shown in the left LCD panel
 }

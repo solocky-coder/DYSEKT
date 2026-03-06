@@ -9,8 +9,8 @@
 ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
-    for (auto* btn : { &addSliceBtn, &lazyChopBtn,
-                       &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
+    for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn,
+                       &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -24,21 +24,22 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     lazyChopBtn.onClick = [this] {
         DysektProcessor::Command cmd;
-        const bool wasActive = processor.lazyChop.isActive();
-        cmd.type = wasActive ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
-        processor.pushCommand (cmd);
-        // Auto-enable MIDI Follow when MIDI Slice starts (mirrors Ableton Live behaviour)
-        if (! wasActive)
-        {
-            processor.midiSelectsSlice.store (true);
-            updateMidiButtonAppearance (true);
-        }
-        repaint();
+        cmd.type = processor.lazyChop.isActive() ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
+        processor.pushCommand (cmd); repaint();
     };
 
-    // dupBtn (Copy) removed per Fix #3 — function entirely removed
-    // splitBtn (Auto Chop) removed per Fix #3 — function entirely removed
-    // deleteBtn (Del) removed per Fix #4 — function moved to right-click on slice lane
+    dupBtn.onClick = [this] {
+        DysektProcessor::Command cmd; cmd.type = DysektProcessor::CmdDuplicateSlice; cmd.intParam1 = -1;
+        processor.pushCommand (cmd); repaint();
+    };
+
+    splitBtn.onClick   = [this] { toggleAutoChop(); };
+
+    deleteBtn.onClick = [this] {
+        const auto& ui = processor.getUiSliceSnapshot();
+        if (ui.selectedSlice >= 0)
+        { DysektProcessor::Command cmd; cmd.type = DysektProcessor::CmdDeleteSlice; cmd.intParam1 = ui.selectedSlice; processor.pushCommand (cmd); }
+    };
 
     trimBtn.onClick = [this] { toggleTrimMode(); };
 
@@ -67,6 +68,9 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     addSliceBtn.setButtonText ("ADD SLICE");
     lazyChopBtn.setButtonText ("MIDI SLICE");
+    dupBtn.setTooltip      ("Duplicate Slice (D)");
+    splitBtn.setTooltip    ("Auto Chop (C)");
+    deleteBtn.setTooltip   ("Delete Slice (Del)");
     trimBtn.setTooltip     ("Trim - crop sample to a selected region");
     snapBtn.setTooltip     ("Snap to Zero-Crossing (Z)");
 
@@ -98,9 +102,19 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
 
 void ActionPanel::toggleAutoChop()
 {
-    // Auto Chop removed per Fix #3 — function entirely removed
-    // This method is kept to avoid breaking call sites in PluginEditor key handler;
-    // callers should be updated to remove 'C' key binding as well.
+    if (autoChopPanel != nullptr)
+    {
+        if (auto* parent = autoChopPanel->getParentComponent())
+            parent->removeChildComponent (autoChopPanel.get());
+        autoChopPanel.reset(); return;
+    }
+    autoChopPanel = std::make_unique<AutoChopPanel> (processor, waveformView);
+    if (auto* editor = waveformView.getParentComponent())
+    {
+        auto wfBounds = waveformView.getBoundsInParent();
+        autoChopPanel->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34, wfBounds.getWidth(), 34);
+        editor->addAndMakeVisible (*autoChopPanel);
+    }
 }
 
 void ActionPanel::toggleTrimMode()
@@ -134,34 +148,38 @@ void ActionPanel::toggleTrimMode()
 
 void ActionPanel::resized()
 {
-    const int gap   = 3;
+    const int gap   = 5;
     const int h     = getHeight();
-    const int thinW = 26;   // snap, MIDI select icon buttons
-    const int trimW = 40;
+    const int thinW = 36;   // snap, MIDI select, and shortcuts buttons
+    const int thinTotal = thinW * 3 + gap * 2;
+    const int trimW = 40;   // TRIM button
+    const int availW = getWidth() - thinTotal - trimW - gap * 2;
+    const int numMain = 5;
+    const int btnW  = (availW - gap * (numMain - 1)) / numMain;
+    int x = 0;
 
-    // Lay out right-to-left so icon buttons always sit flush at the right edge,
-    // preventing overflow regardless of panel width.
-    int right = getWidth();
+    addSliceBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
+    lazyChopBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
+    splitBtn.setBounds    (x, 0, btnW, h); x += btnW + gap;
+    dupBtn.setBounds      (x, 0, btnW, h); x += btnW + gap;
+    deleteBtn.setBounds   (x, 0, btnW, h); x += btnW + gap;
 
-    midiSelectBtn.setBounds (right - thinW, 0, thinW, h); right -= thinW + gap;
-    snapBtn.setBounds       (right - thinW, 0, thinW, h); right -= thinW + gap;
-    trimBtn.setBounds       (right - trimW, 0, trimW, h); right -= trimW + gap;
-
-    // ADD SLICE and MIDI SLICE split the remaining width equally
-    const int remaining = right;
-    const int btnW      = (remaining - gap) / 2;
-    addSliceBtn.setBounds (0,          0, btnW, h);
-    lazyChopBtn.setBounds (btnW + gap, 0, btnW, h);
+    trimBtn.setBounds       (x, 0, trimW, h); x += trimW + gap;
+    snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
+    midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
+    shortcutsBtn.setBounds  (x, 0, thinW, h);
 
     shortcutsBtn.setVisible (false);
-    browserBtn.setVisible   (false);
-    waveBtn.setVisible      (false);
+
+    // browserBtn/waveBtn/chromaticBtn moved to HeaderBar — hide them
+    browserBtn.setVisible (false);
+    waveBtn.setVisible    (false);
     chromaticBtn.setVisible (false);
 }
 
 void ActionPanel::paint (juce::Graphics& g)
 {
-    for (auto* btn : { &addSliceBtn, &lazyChopBtn })
+    for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn, &deleteBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
         btn->setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
@@ -169,6 +187,7 @@ void ActionPanel::paint (juce::Graphics& g)
     }
     updateMidiButtonAppearance (processor.midiSelectsSlice.load());
     updateSnapButtonAppearance (processor.snapToZeroCrossing.load());
+    // FIL/WA/CH toggle state managed by HeaderBar
 
     if (waveformView.isSliceDrawModeActive())
     { g.setColour (getTheme().accent.withAlpha (0.25f)); g.fillRect (addSliceBtn.getBounds()); }
@@ -210,68 +229,61 @@ void ActionPanel::updateSnapButtonAppearance (bool active)
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // Draw 5-pin DIN MIDI connector icon for midiSelectBtn
+    // Draw 5-pin DIN MIDI connector icon for midiSelectBtn (Halion-style)
     {
         bool active = processor.midiSelectsSlice.load();
         auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
+        g.setColour (col);
 
-        auto b   = midiSelectBtn.getBounds();
-        // Clip strictly to button bounds so nothing bleeds outside
-        juce::Graphics::ScopedSaveState save (g);
-        g.reduceClipRegion (b);
-
+        auto b   = midiSelectBtn.getBounds().toFloat();
         float cx = b.getCentreX();
-        float cy = b.getCentreY();
+        float cy = b.getCentreY() + 1.0f;
 
-        // Scale icon to fit inside button with 3px padding
-        const float maxR = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f - 3.0f;
-        const float outerR = juce::jmin (maxR, 8.0f);
+        // Outer circle (connector body)
+        const float outerR = 8.5f;
+        g.drawEllipse (cx - outerR, cy - outerR, outerR * 2, outerR * 2, 1.2f);
 
-        g.setColour (col);
-        // Outer circle
-        g.drawEllipse (cx - outerR, cy - outerR, outerR * 2.0f, outerR * 2.0f, 1.2f);
-
-        // Flat bottom (D-shell)
+        // Flat edge on bottom (D-shell cutoff)
         g.setColour (active ? getTheme().accent.withAlpha(0.0f) : getTheme().button);
-        g.fillRect  (cx - outerR - 1.0f, cy + outerR * 0.5f, outerR * 2.0f + 2.0f, outerR + 2.0f);
+        g.fillRect  (cx - outerR - 1, cy + 4.5f, outerR * 2 + 2, outerR);
         g.setColour (col);
-        g.drawLine  (cx - outerR, cy + outerR * 0.5f, cx + outerR, cy + outerR * 0.5f, 1.2f);
+        g.drawLine  (cx - outerR, cy + 4.5f, cx + outerR, cy + 4.5f, 1.2f);
 
-        // 5 pins in DIN arrangement
-        const float pinR = 1.3f;
-        const float arcR = outerR * 0.58f;
+        // 5 pins arranged in a semicircle (top arc)
+        // Pin layout: 2 top row, 3 bottom row (standard DIN-5 arrangement)
         struct Pin { float x, y; };
+        const float pinR = 1.4f;
+        const float arcR = 5.0f;
+        // Standard MIDI DIN-5: 3 pins on top arc, 2 on lower arc
         Pin pins[] = {
-            { cx - arcR * 0.95f, cy - arcR * 0.31f },
-            { cx + arcR * 0.95f, cy - arcR * 0.31f },
-            { cx,                cy - arcR          },
-            { cx - arcR * 0.59f, cy + arcR * 0.60f },
-            { cx + arcR * 0.59f, cy + arcR * 0.60f },
+            { cx - arcR * 0.95f, cy - arcR * 0.31f },   // pin 1 (left)
+            { cx + arcR * 0.95f, cy - arcR * 0.31f },   // pin 2 (right)
+            { cx,                cy - arcR          },   // pin 3 (top centre)
+            { cx - arcR * 0.59f, cy + arcR * 0.81f },   // pin 4 (bottom left)
+            { cx + arcR * 0.59f, cy + arcR * 0.81f },   // pin 5 (bottom right)
         };
         for (auto& pin : pins)
-            g.fillEllipse (pin.x - pinR, pin.y - pinR, pinR * 2.0f, pinR * 2.0f);
+            g.fillEllipse (pin.x - pinR, pin.y - pinR, pinR * 2, pinR * 2);
     }
 
     // Draw zero-crossing icon for snapBtn
     {
         bool active = processor.snapToZeroCrossing.load();
         auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
+        g.setColour (col);
 
-        auto b = snapBtn.getBounds();
-        juce::Graphics::ScopedSaveState save2 (g);
-        g.reduceClipRegion (b);
-
+        auto b   = snapBtn.getBounds();
         float cx = (float) b.getCentreX();
         float cy = (float) b.getCentreY();
-        const float span = juce::jmin (b.getWidth() * 0.42f, 9.0f);
 
-        g.setColour (col);
-        g.drawLine (cx - span, cy, cx + span, cy, 1.0f);
+        // Horizontal zero line
+        g.drawLine (cx - 9.0f, cy, cx + 9.0f, cy, 1.0f);
 
+        // Sine wave crossing through the zero line
         juce::Path wave;
-        wave.startNewSubPath (cx - span, cy);
-        wave.cubicTo (cx - span * 0.55f, cy, cx - span * 0.55f, cy - 6.0f, cx, cy);
-        wave.cubicTo (cx + span * 0.55f, cy, cx + span * 0.55f, cy + 6.0f, cx + span, cy);
+        wave.startNewSubPath (cx - 9.0f, cy);
+        wave.cubicTo (cx - 5.0f, cy,        cx - 5.0f, cy - 6.5f, cx,        cy);
+        wave.cubicTo (cx + 5.0f, cy,        cx + 5.0f, cy + 6.5f, cx + 9.0f, cy);
         g.strokePath (wave, juce::PathStrokeType (1.5f));
     }
 }

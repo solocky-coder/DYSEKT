@@ -7,7 +7,8 @@ static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LC
 static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
-static constexpr int kActionH    = 26;
+static constexpr int kActionH    = 34;
+static constexpr int kOscilloscopeH = OscilloscopeView::kPreferredHeight;
 static constexpr int kMixerPanelH   = 210;
 static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
 
@@ -63,7 +64,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (sliceControlBar);
     addAndMakeVisible (actionPanel);
 
-    addChildComponent (oscilloscopeView);  // kept in hierarchy but never shown or laid out
+    addAndMakeVisible (oscilloscopeView);
 
     // Panels start hidden
     browserPanel.setVisible (false);
@@ -279,59 +280,6 @@ void DysektEditor::toggleShortcutsPanel()
 void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
-
-    // ── Waveform frame — exact same style as SliceLcdDisplay / SliceWaveformLcd ──
-    if (actionPanel.isVisible() && waveformView.isVisible() && scrollZoomBar.isVisible())
-    {
-        const auto& abnd = actionPanel.getBounds();
-        const auto& sbnd = scrollZoomBar.getBounds();
-        const auto  ac   = getTheme().accent;
-
-        // Outer frame rect — kMargin inset on left/right, spanning actionPanel
-        // top to scrollZoomBar bottom.  Must match resized() exactly.
-        const int kFrameInset = 4;
-        const int kFrameX     = kMargin;
-        const int kFrameW     = getWidth() - kMargin * 2;
-        const juce::Rectangle<float> outerF (
-            (float) kFrameX,   (float) abnd.getY() - kFrameInset,
-            (float) kFrameW,   (float) (sbnd.getBottom() - abnd.getY() + kFrameInset * 2));
-
-        // 1. Outer gradient fill
-        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
-                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
-        g.setGradientFill (outerGrad);
-        g.fillRoundedRectangle (outerF, 4.0f);
-
-        // 2. Outer accent border
-        g.setColour (ac.withAlpha (0.20f));
-        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.0f);
-
-        // 3. Inner screen
-        const auto screenF = outerF.reduced (4.0f);
-        g.setColour (getTheme().darkBar.darker (0.55f));
-        g.fillRoundedRectangle (screenF, 2.0f);
-
-        // 4. Scanlines every 2px
-        g.setColour (juce::Colours::black.withAlpha (0.18f));
-        for (int y = juce::roundToInt (screenF.getY()); y < juce::roundToInt (screenF.getBottom()); y += 2)
-            g.drawHorizontalLine (y, screenF.getX(), screenF.getRight());
-
-        // 5. Phosphor glow at top
-        juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, screenF.getY(),
-                                    juce::Colours::transparentBlack, 0.f, screenF.getY() + 20.f, false);
-        g.setGradientFill (glow);
-        g.fillRoundedRectangle (screenF, 2.0f);
-
-        // 6. Inner accent border
-        g.setColour (ac.withAlpha (0.12f));
-        g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
-
-        // 7. Subtle divider between action bar and slice lane
-        const auto& lbnd = sliceLane.getBounds();
-        g.setColour (ac.withAlpha (0.08f));
-        g.drawHorizontalLine (lbnd.getY(),
-                              screenF.getX() + 4.f, screenF.getRight() - 4.f);
-    }
 }
 
 void DysektEditor::resized()
@@ -350,6 +298,7 @@ void DysektEditor::resized()
     // 2. Dual LCD row — LCD1 | CtrlFrame | LCD2
     {
         auto lcdRow = area.removeFromTop (kLcdRowH).reduced (kMargin, 6);
+        lcdRow.removeFromBottom (6);  // extra clearance — keeps knobs off the content edge
 
         // Left LCD — slice data
         const int lcdW = (lcdRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
@@ -367,10 +316,13 @@ void DysektEditor::resized()
         sliceWaveformLcd.setBounds (lcdRow);
     }
 
-    // 2b. Reserve the action panel height — it becomes the TOP of the LCD frame.
-    auto actionArea = area.removeFromTop (kActionH);
+    // 2b. Action panel — directly below LCDs
+    actionPanel.setBounds (area.removeFromTop (kActionH).reduced (kMargin, 0));
 
-    // 4. Slice control bar — bottom (outside frame)
+    // 3. Slice lane
+    sliceLane.setBounds (area.removeFromTop (kSliceLaneH).reduced (kMargin, 0));
+
+    // 4. Slice control bar — bottom
     sliceControlBar.setBounds (area.removeFromBottom (kSliceCtrlH));
 
     // 5. Browser panel — above slice ctrl (if open)
@@ -381,53 +333,18 @@ void DysektEditor::resized()
     if (mixerOpen)
         mixerPanel.setBounds (area.removeFromBottom (kMixerPanelH).reduced (kMargin, 0));
 
-    area.removeFromBottom (4);  // bottom gap
+    // 7. (Action panel now placed directly below LCDs — see above)
 
-    // ── LCD frame outer rect ─────────────────────────────────────────────────
-    // The full outer rect spans actionArea.top → area.bottom, kMargin inset
-    // on left/right.  paint() draws the frame border over this rect.
-    // Components sit inside the "screen" — reduced by 4px on all sides —
-    // just like the LCD panels do with b.reduced(4).
-    const int kFrameInset = 4;  // matches LCD b.reduced(4)
-    const int kFrameX     = kMargin;
-    const int kFrameW     = getWidth() - kMargin * 2;
+    area.removeFromBottom (4);  // gap
 
-    // Full outer frame rect (used by paint() — computed identically there)
-    const int frameTop    = actionArea.getY();
-    const int frameBot    = area.getBottom();
+    // 8. Scrollbar
+    scrollZoomBar.setBounds (area.removeFromBottom (kScrollbarH).reduced (kMargin, 0));
 
-    // Inner screen rect — components live here
-    const int screenX     = kFrameX  + kFrameInset;
-    const int screenW     = kFrameW  - kFrameInset * 2;
-    const int screenTop   = frameTop + kFrameInset;
-    const int screenBot   = frameBot - kFrameInset;
-    const int screenH     = screenBot - screenTop;
+    // 9. Oscilloscope is never shown — don't allocate space; waveform fills everything
+    oscilloscopeView.setVisible (false);
 
-    // Scrollbar — bottom of screen
-    {
-        auto r = juce::Rectangle<int> (screenX, screenBot - kScrollbarH, screenW, kScrollbarH);
-        scrollZoomBar.setBounds (r);
-    }
-
-    // Action panel — top of screen
-    {
-        auto r = juce::Rectangle<int> (screenX, screenTop, screenW, kActionH);
-        actionPanel.setBounds (r);
-    }
-
-    // Slice lane — just below action panel
-    {
-        int y = screenTop + kActionH;
-        auto r = juce::Rectangle<int> (screenX, y, screenW, kSliceLaneH);
-        sliceLane.setBounds (r);
-    }
-
-    // Waveform — fills remaining space between slice lane and scrollbar
-    {
-        int y  = screenTop + kActionH + kSliceLaneH;
-        int h  = screenBot - kScrollbarH - y;
-        waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
-    }
+    // 10. Waveform — remaining space
+    waveformView.setBounds (area.reduced (kMargin, 0));
 
     // ShortcutsPanel covers the whole editor as an overlay
     if (shortcutsPanel.isVisible())
@@ -550,7 +467,7 @@ void DysektEditor::timerCallback()
     if (laneNeedsRepaint)     sliceLane.repaint();
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
 
-    // oscilloscopeView removed — waveform view replaces it
+    oscilloscopeView.repaint();
 
     // v8: refresh both LCD panels
     sliceLcd.repaintLcd();
