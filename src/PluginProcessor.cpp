@@ -753,49 +753,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
             break;
         }
 
-        case CmdSetSliceLockAll:
-        {
-            int idx = cmd.intParam1;
-            if (idx >= 0 && idx < sliceManager.getNumSlices())
-            {
-                auto& s = sliceManager.getSlice (idx);
-                const bool locking = (cmd.floatParam1 > 0.5f);
-
-                if (locking)
-                {
-                    // Snapshot every global param value into the slice before locking,
-                    // so locked values match what was displayed — same logic as CmdToggleLock.
-                    s.bpm               = bpmParam->load();
-                    s.pitchSemitones    = pitchParam->load();
-                    s.algorithm         = (int) algoParam->load();
-                    s.attackSec         = attackParam->load()      / 1000.0f;
-                    s.decaySec          = decayParam->load()       / 1000.0f;
-                    s.sustainLevel      = sustainParam->load()     / 100.0f;
-                    s.releaseSec        = releaseParam->load()     / 1000.0f;
-                    s.muteGroup         = (int) muteGroupParam->load();
-                    s.loopMode          = (int) loopParam->load();
-                    s.stretchEnabled    = stretchParam->load()     > 0.5f;
-                    s.releaseTail       = releaseTailParam->load() > 0.5f;
-                    s.reverse           = reverseParam->load()     > 0.5f;
-                    s.oneShot           = oneShotParam->load()     > 0.5f;
-                    s.centsDetune       = centsDetuneParam->load();
-                    s.tonalityHz        = tonalityParam->load();
-                    s.formantSemitones  = formantParam->load();
-                    s.formantComp       = formantCompParam->load() > 0.5f;
-                    s.grainMode         = (int) grainModeParam->load();
-                    s.volume            = masterVolParam->load();
-                    s.pan               = panParam->load();
-                    s.filterCutoff      = filterCutoffParam->load();
-                    s.filterRes         = filterResParam->load();
-                    s.lockMask          = kValidLockMask;
-                }
-                else
-                {
-                    s.lockMask = 0;
-                }
-            }
-            break;
-        }
+        case CmdSetSliceParam:
         {
             int sel = sliceManager.selectedSlice;
             if (sel >= 0 && sel < sliceManager.getNumSlices())
@@ -856,30 +814,57 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 end = juce::jlimit (start + 1, juce::jmax (start + 1, maxLen), end);
                 if (end - start < 64)
                     end = juce::jmin (maxLen, start + 64);
-                int oldEnd = s.endSample;  // save before updating
+                int oldStart = s.startSample;  // save before updating
+                int oldEnd   = s.endSample;    // save before updating
                 s.startSample = start;
-                s.endSample = end;
+                s.endSample   = end;
 
-                // Link mode: if end moved, push the adjacent slice's start
-                if (slicesLinked.load (std::memory_order_relaxed) && end != oldEnd)
+                if (slicesLinked.load (std::memory_order_relaxed))
                 {
-                    // Find the slice whose startSample was closest to oldEnd
-                    int bestNi = -1, bestDist = 256;
                     const int numSl = sliceManager.getNumSlices();
-                    for (int ni = 0; ni < numSl; ++ni)
+
+                    // ── End moved: push the NEXT slice's start to match ──────
+                    // BeatMaker 3: "moving the end locator of one slice automatically
+                    // adjusts the starting point of the following slice"
+                    if (end != oldEnd)
                     {
-                        if (ni == idx) continue;
-                        auto& ns = sliceManager.getSlice (ni);
-                        if (! ns.active) continue;
-                        int dist = std::abs (ns.startSample - oldEnd);
-                        if (dist < bestDist) { bestDist = dist; bestNi = ni; }
+                        int bestNi = -1, bestDist = 256;
+                        for (int ni = 0; ni < numSl; ++ni)
+                        {
+                            if (ni == idx) continue;
+                            auto& ns = sliceManager.getSlice (ni);
+                            if (! ns.active) continue;
+                            int dist = std::abs (ns.startSample - oldEnd);
+                            if (dist < bestDist) { bestDist = dist; bestNi = ni; }
+                        }
+                        if (bestNi >= 0)
+                        {
+                            auto& ns = sliceManager.getSlice (bestNi);
+                            if (ns.endSample - end >= 64)
+                                ns.startSample = end;
+                        }
                     }
-                    if (bestNi >= 0)
+
+                    // ── Start moved: push the PREVIOUS slice's end to match ──
+                    // Symmetric: dragging the start of slice N keeps the shared
+                    // boundary with slice N-1 locked together.
+                    if (start != oldStart)
                     {
-                        auto& ns = sliceManager.getSlice (bestNi);
-                        // Only push if the neighbour would remain >= 64 samples wide
-                        if (ns.endSample - end >= 64)
-                            ns.startSample = end;
+                        int bestNi = -1, bestDist = 256;
+                        for (int ni = 0; ni < numSl; ++ni)
+                        {
+                            if (ni == idx) continue;
+                            auto& ns = sliceManager.getSlice (ni);
+                            if (! ns.active) continue;
+                            int dist = std::abs (ns.endSample - oldStart);
+                            if (dist < bestDist) { bestDist = dist; bestNi = ni; }
+                        }
+                        if (bestNi >= 0)
+                        {
+                            auto& ns = sliceManager.getSlice (bestNi);
+                            if (start - ns.startSample >= 64)
+                                ns.endSample = start;
+                        }
                     }
                 }
 
