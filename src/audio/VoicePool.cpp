@@ -158,7 +158,9 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     v.velocity  = p.velocity / 127.0f;
 
     v.startSample = s.startSample;
-    v.endSample   = s.endSample;
+    // Marker model: derive end from the next slice's start (or buffer end).
+    const int sliceEnd = sm.getEndForSlice (sliceIdx, sample.getNumFrames());
+    v.endSample   = sliceEnd;
 
     // Resolve parameters via inheritance
     float attack   = sm.resolveParam (sliceIdx, kLockAttack,   s.attackSec,    p.globalAttackSec);
@@ -177,7 +179,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
                                  s.reverse ? 1.0f : 0.0f,
                                  p.globalReverse ? 1.0f : 0.0f) > 0.5f;
     v.direction = rev ? -1 : 1;
-    v.position  = rev ? (s.endSample - 1) : s.startSample;
+    v.position  = rev ? (sliceEnd - 1) : s.startSample;
 
     v.outputBus = (int) sm.resolveParam (sliceIdx, kLockOutputBus, (float) s.outputBus, 0.0f);
 
@@ -253,7 +255,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
             v.bungeeActive = true;
             v.speed = 1.0;
             v.bungeeSpeed = rev ? -(double) speedRatio : (double) speedRatio;
-            v.bungeeSrcPos = rev ? (s.endSample - 1) : s.startSample;
+            v.bungeeSrcPos = rev ? (sliceEnd - 1) : s.startSample;
 
             initBungee (v, pitch, sampleRate, hopAdj);
         }
@@ -264,7 +266,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
             v.speed = 1.0;
             v.stretchTimeRatio = speedRatio;
             v.stretchPitchSemis = pitch;
-            v.stretchSrcPos = rev ? (s.endSample - 1) : s.startSample;
+            v.stretchSrcPos = rev ? (sliceEnd - 1) : s.startSample;
 
             initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
         }
@@ -278,7 +280,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
             v.speed = 1.0;
             v.stretchTimeRatio = 1.0f;
             v.stretchPitchSemis = pitch;
-            v.stretchSrcPos = rev ? (s.endSample - 1) : s.startSample;
+            v.stretchSrcPos = rev ? (sliceEnd - 1) : s.startSample;
 
             initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
         }
@@ -288,7 +290,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
             v.bungeeActive = true;
             v.speed = 1.0;
             v.bungeeSpeed = rev ? -1.0 : 1.0;
-            v.bungeeSrcPos = rev ? (s.endSample - 1) : s.startSample;
+            v.bungeeSrcPos = rev ? (sliceEnd - 1) : s.startSample;
 
             initBungee (v, pitch, sampleRate, hopAdj);
         }

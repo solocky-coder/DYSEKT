@@ -2,83 +2,62 @@
 #include <algorithm>
 #include <cmath>
 
+// =============================================================================
+//  Constructor
+// =============================================================================
+
 SliceManager::SliceManager()
 {
     midiMap.fill (-1);
 }
 
-SliceManager::OverlapResult SliceManager::validateNoOverlap (int sliceIdx, int start, int end) const
+// =============================================================================
+//  getEndForSlice  — the central derived-end query
+// =============================================================================
+
+int SliceManager::getEndForSlice (int idx, int totalFrames) const noexcept
 {
-    OverlapResult result;
-    result.adjustedStart = start;
-    result.adjustedEnd   = end;
+    if (idx < 0 || idx >= numSlices)
+        return totalFrames;
 
-    // Snap boundaries to any existing slice edge within kSnapTolerance samples.
-    for (int i = 0; i < numSlices; ++i)
-    {
-        if (i == sliceIdx) continue;
-        const auto& s = slices[(size_t) i];
-        if (! s.active) continue;
+    // The end of slice N is the start of slice N+1.
+    // Slices are kept sorted by startSample (sortByStart is called whenever
+    // the array is modified), so slices[idx+1].startSample is always correct.
+    if (idx + 1 < numSlices && slices[(size_t)(idx + 1)].active)
+        return slices[(size_t)(idx + 1)].startSample;
 
-        // Snap start toward this slice's end boundary
-        if (std::abs (result.adjustedStart - s.endSample) <= kSnapTolerance)
-            result.adjustedStart = s.endSample;
-
-        // Snap end toward this slice's start boundary
-        if (std::abs (result.adjustedEnd - s.startSample) <= kSnapTolerance)
-            result.adjustedEnd = s.startSample;
-    }
-
-    // Detect overlap: [adjustedStart, adjustedEnd) intersects [s.start, s.end)?
-    for (int i = 0; i < numSlices; ++i)
-    {
-        if (i == sliceIdx) continue;
-        const auto& s = slices[(size_t) i];
-        if (! s.active) continue;
-
-        if (result.adjustedStart < s.endSample && result.adjustedEnd > s.startSample)
-        {
-            result.overlaps      = true;
-            result.conflictSlice = i;
-            break;
-        }
-    }
-
-    return result;
+    return totalFrames;
 }
 
-int SliceManager::createSlice (int start, int end)
+// =============================================================================
+//  sortByStart  — keep slices ordered by startSample
+// =============================================================================
+
+void SliceManager::sortByStart()
 {
-    if (numSlices >= kMaxSlices)
-        return -1;
-
-    // Enforce minimum 64 samples
-    if (std::abs (end - start) < 64)
-        end = start + 64;
-
-    // Ensure start < end
-    if (start > end)
-        std::swap (start, end);
-
-    // Snap to adjacent slice boundaries within kSnapTolerance samples.
-    // This silently closes any tiny gap caused by imprecise mouse placement.
-    auto snap = validateNoOverlap (-1, start, end);
-    if (! snap.overlaps)
+    // Insertion sort — stable, in-place, fast for small N (≤128).
+    for (int i = 1; i < numSlices; ++i)
     {
-        start = snap.adjustedStart;
-        end   = snap.adjustedEnd;
+        Slice key = slices[(size_t) i];
+        int j = i - 1;
+        while (j >= 0 && slices[(size_t) j].startSample > key.startSample)
+        {
+            slices[(size_t)(j + 1)] = slices[(size_t) j];
+            --j;
+        }
+        slices[(size_t)(j + 1)] = key;
     }
+}
 
-    int idx = numSlices;
-    auto& s = slices[idx];
+// =============================================================================
+//  assignDefaults / assignColour
+// =============================================================================
 
-    s.active      = true;
-    s.startSample = start;
-    s.endSample   = end;
-    s.midiNote    = std::min (rootNote.load() + idx, 127);
-    s.lockMask    = 0;
-
-    // Default override values
+void SliceManager::assignDefaults (Slice& s, int idx)
+{
+    s.active         = true;
+    s.midiNote       = std::min (rootNote.load() + idx, 127);
+    s.lockMask       = 0;
     s.bpm            = 120.0f;
     s.pitchSemitones = 0.0f;
     s.algorithm      = 0;
@@ -88,46 +67,177 @@ int SliceManager::createSlice (int start, int end)
     s.releaseSec     = 0.02f;
     s.muteGroup      = 1;
     s.loopMode       = 0;
+}
 
-    // Assign colour from palette
+void SliceManager::assignColour (Slice& s, int idx)
+{
     const auto* p = palette.load (std::memory_order_relaxed);
     s.colour = p ? p[idx % 16] : juce::Colour (0xFF4D8C99);
-
-    numSlices++;
-    rebuildMidiMap();
-    return idx;
 }
+
+// =============================================================================
+//  insertMarker  — the primary ADD-mode entry point
+// =============================================================================
+
+int SliceManager::insertMarker (int markerPos, int totalFrames)
+{
+    if (numSlices >= kMaxSlices)
+        return -1;
+
+    markerPos = juce::jlimit (0, totalFrames, markerPos);
+
+    // Reject if within kSnapTolerance of any existing boundary.
+    for (int i = 0; i < numSlices; ++i)
+    {
+        if (! slices[(size_t) i].active) continue;
+        if (std::abs (slices[(size_t) i].startSample - markerPos) < kSnapTolerance)
+            return -1;
+        int end = getEndForSlice (i, totalFrames);
+        if (std::abs (end - markerPos) < kSnapTolerance)
+            return -1;
+    }
+
+    // Find which slice currently owns this position.
+    // The new marker splits that slice into [its start .. markerPos) and
+    // [markerPos .. its end).  The left half keeps the original slice's
+    // parameters; the right half gets fresh defaults.
+    int splitIdx = -1;
+    for (int i = 0; i < numSlices; ++i)
+    {
+        const auto& s = slices[(size_t) i];
+        if (! s.active) continue;
+        int end = getEndForSlice (i, totalFrames);
+        if (markerPos > s.startSample && markerPos < end)
+        {
+            splitIdx = i;
+            break;
+        }
+    }
+
+    if (splitIdx < 0)
+    {
+        // markerPos is after all existing slices — append a new tail slice.
+        if (numSlices == 0 || markerPos > getEndForSlice (numSlices - 1, totalFrames))
+        {
+            int newIdx = numSlices;
+            Slice& ns  = slices[(size_t) newIdx];
+            ns             = Slice{};
+            ns.startSample = markerPos;
+            assignDefaults (ns, newIdx);
+            assignColour   (ns, newIdx);
+            ++numSlices;
+            rebuildMidiMap();
+            return newIdx;
+        }
+        return -1;
+    }
+
+    // Minimum-width guard: both halves must be ≥64 samples.
+    int leftLen  = markerPos - slices[(size_t) splitIdx].startSample;
+    int rightLen = getEndForSlice (splitIdx, totalFrames) - markerPos;
+    if (leftLen < 64 || rightLen < 64)
+        return -1;
+
+    // Copy the original slice's parameters for the right-hand new slice.
+    Slice rightSlice       = slices[(size_t) splitIdx]; // copy all params
+    rightSlice.startSample = markerPos;
+    rightSlice.midiNote    = std::min (rootNote.load() + numSlices, 127);
+    assignColour (rightSlice, numSlices);
+
+    // Append to end of array, then sort to put it in the correct position.
+    slices[(size_t) numSlices] = rightSlice;
+    ++numSlices;
+
+    sortByStart();
+    rebuildMidiMap();
+
+    // Return the index of the slice that now starts at markerPos.
+    for (int i = 0; i < numSlices; ++i)
+        if (slices[(size_t) i].startSample == markerPos)
+            return i;
+
+    return -1;
+}
+
+// =============================================================================
+//  deleteSlice
+// =============================================================================
 
 void SliceManager::deleteSlice (int idx)
 {
     if (idx < 0 || idx >= numSlices)
         return;
 
-    // Shift all slices after idx down by one, preserving each slice's MIDI note
+    // Shift all slices after idx down by one.
     for (int i = idx; i < numSlices - 1; ++i)
-        slices[i] = slices[i + 1];
+        slices[(size_t) i] = slices[(size_t)(i + 1)];
 
-    // Deactivate last
-    slices[numSlices - 1].active = false;
-    numSlices--;
+    slices[(size_t)(numSlices - 1)].active = false;
+    --numSlices;
 
-    // Fix selected slice
+    // Fix selected slice index.
     if (selectedSlice >= numSlices)
-        selectedSlice = std::max (0, numSlices - 1);
+        selectedSlice.store (std::max (0, numSlices - 1));
     if (numSlices == 0)
-        selectedSlice = -1;
+        selectedSlice.store (-1);
 
     rebuildMidiMap();
 }
+
+// =============================================================================
+//  createSlice  — legacy compat wrapper (LazyChopEngine, CmdSplitSlice, etc.)
+// =============================================================================
+
+int SliceManager::createSlice (int start, int end)
+{
+    if (numSlices >= kMaxSlices)
+        return -1;
+
+    if (start > end) std::swap (start, end);
+
+    // We treat `start` as a new marker position.
+    // If a slice already starts exactly here, return that index.
+    for (int i = 0; i < numSlices; ++i)
+        if (slices[(size_t) i].active && slices[(size_t) i].startSample == start)
+            return i;
+
+    // Append a new slice at `start`.  Its end will be derived automatically
+    // as the next slice's startSample once the array is sorted.
+    int newIdx = numSlices;
+    Slice& ns  = slices[(size_t) newIdx];
+    ns             = Slice{};
+    ns.startSample = start;
+    assignDefaults (ns, newIdx);
+    assignColour   (ns, newIdx);
+    ++numSlices;
+
+    sortByStart();
+    rebuildMidiMap();
+
+    // Find and return the index of the slice that now starts at `start`.
+    for (int i = 0; i < numSlices; ++i)
+        if (slices[(size_t) i].startSample == start)
+            return i;
+
+    return newIdx; // fallback
+}
+
+// =============================================================================
+//  clearAll
+// =============================================================================
 
 void SliceManager::clearAll()
 {
     numSlices = 0;
     for (auto& s : slices)
         s.active = false;
-    selectedSlice = -1;
+    selectedSlice.store (-1);
     rebuildMidiMap();
 }
+
+// =============================================================================
+//  rebuildMidiMap
+// =============================================================================
 
 void SliceManager::rebuildMidiMap()
 {
@@ -137,38 +247,51 @@ void SliceManager::rebuildMidiMap()
 
     for (int i = 0; i < numSlices; ++i)
     {
-        if (slices[i].active)
+        if (slices[(size_t) i].active)
         {
-            int note = slices[i].midiNote;
+            int note = slices[(size_t) i].midiNote;
             if (note >= 0 && note < 128)
             {
-                if (midiMap[note] < 0)
-                    midiMap[note] = i;
-                midiMapMulti[note].push_back (i);
+                if (midiMap[(size_t) note] < 0)
+                    midiMap[(size_t) note] = i;
+                midiMapMulti[(size_t) note].push_back (i);
             }
         }
     }
 }
 
+// =============================================================================
+//  sortByStart (public, for use after bulk state restore)
+// =============================================================================
+// Already defined above as a private helper; the public declaration in the
+// header makes it available to PluginProcessor::setStateInformation().
+
+// =============================================================================
+//  MIDI map queries
+// =============================================================================
+
 int SliceManager::midiNoteToSlice (int note) const
 {
-    if (note < 0 || note >= 128)
-        return -1;
-    return midiMap[note];
+    if (note < 0 || note >= 128) return -1;
+    return midiMap[(size_t) note];
 }
 
 const std::vector<int>& SliceManager::midiNoteToSlices (int note) const
 {
     static const std::vector<int> empty;
-    if (note < 0 || note >= 128)
-        return empty;
-    return midiMapMulti[note];
+    if (note < 0 || note >= 128) return empty;
+    return midiMapMulti[(size_t) note];
 }
 
-float SliceManager::resolveParam (int sliceIdx, LockBit lockBit, float sliceValue, float globalDefault) const
+// =============================================================================
+//  resolveParam
+// =============================================================================
+
+float SliceManager::resolveParam (int sliceIdx, LockBit lockBit,
+                                   float sliceValue, float globalDefault) const
 {
     if (sliceIdx < 0 || sliceIdx >= numSlices)
         return globalDefault;
 
-    return (slices[sliceIdx].lockMask & lockBit) ? sliceValue : globalDefault;
+    return (slices[(size_t) sliceIdx].lockMask & lockBit) ? sliceValue : globalDefault;
 }

@@ -25,15 +25,17 @@ enum LockBit : uint32_t
     kLockLoop          = 262144,
     kLockOneShot       = 524288,    // bit 19
     kLockCentsDetune   = 1048576,   // bit 20
-    kLockPan           = 2097152,   // bit 21  ← NEW
-    kLockFilter        = 4194304,   // bit 22  ← NEW (locks cutoff + res together)
+    kLockPan           = 2097152,   // bit 21
+    kLockFilter        = 4194304,   // bit 22
 };
 
 struct Slice
 {
     bool     active         = false;
     int      startSample    = 0;
-    int      endSample      = 0;
+    // endSample REMOVED — in the marker model, end is always derived:
+    //   sliceManager.getEndForSlice(idx, totalFrames)
+    //   = slices[idx+1].startSample  (or totalFrames for the last slice)
     int      midiNote       = 36;
     float    bpm            = 120.0f;
     float    pitchSemitones = 0.0f;
@@ -55,8 +57,6 @@ struct Slice
     int      outputBus      = 0;
     bool     oneShot        = false;
     float    centsDetune    = 0.0f;     // fine pitch: -100..+100 cents
-
-    // ── v17 additions ─────────────────────────────────────────────────────────
     float    pan            = 0.0f;     // stereo pan: -1 (L) .. 0 (C) .. +1 (R)
     float    filterCutoff   = 20000.0f; // low-pass cutoff Hz: 20..20000
     float    filterRes      = 0.0f;     // resonance: 0..1
