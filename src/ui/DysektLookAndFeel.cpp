@@ -107,11 +107,10 @@ void DysektLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectan
         return;
     }
 
-    if (isHighlighted && isActive)
-    {
-        g.setColour (getTheme().buttonHover);
-        g.fillRect (area);
-    }
+    // Always fill the full row background first — this prevents any icon drawable
+    // or OS compositing artifact from bleeding through the untouched area.
+    g.setColour (isHighlighted && isActive ? getTheme().buttonHover : getTheme().darkBar);
+    g.fillRect (area);
 
     // Tick indicator: draw a small filled rect (no unicode glyphs that may render as random symbols)
     const int tickZoneW = (int) (16 * sMenuScale);

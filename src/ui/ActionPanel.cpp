@@ -9,8 +9,8 @@
 ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
-    for (auto* btn : { &addSliceBtn, &lazyChopBtn,
-                       &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
+    for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn,
+                       &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -28,9 +28,18 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         processor.pushCommand (cmd); repaint();
     };
 
-    // dupBtn (Copy) removed per Fix #3 — function entirely removed
-    // splitBtn (Auto Chop) removed per Fix #3 — function entirely removed
-    // deleteBtn (Del) removed per Fix #4 — function moved to right-click on slice lane
+    dupBtn.onClick = [this] {
+        DysektProcessor::Command cmd; cmd.type = DysektProcessor::CmdDuplicateSlice; cmd.intParam1 = -1;
+        processor.pushCommand (cmd); repaint();
+    };
+
+    splitBtn.onClick   = [this] { toggleAutoChop(); };
+
+    deleteBtn.onClick = [this] {
+        const auto& ui = processor.getUiSliceSnapshot();
+        if (ui.selectedSlice >= 0)
+        { DysektProcessor::Command cmd; cmd.type = DysektProcessor::CmdDeleteSlice; cmd.intParam1 = ui.selectedSlice; processor.pushCommand (cmd); }
+    };
 
     trimBtn.onClick = [this] { toggleTrimMode(); };
 
@@ -59,6 +68,9 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     addSliceBtn.setButtonText ("ADD SLICE");
     lazyChopBtn.setButtonText ("MIDI SLICE");
+    dupBtn.setTooltip      ("Duplicate Slice (D)");
+    splitBtn.setTooltip    ("Auto Chop (C)");
+    deleteBtn.setTooltip   ("Delete Slice (Del)");
     trimBtn.setTooltip     ("Trim - crop sample to a selected region");
     snapBtn.setTooltip     ("Snap to Zero-Crossing (Z)");
 
@@ -90,9 +102,19 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
 
 void ActionPanel::toggleAutoChop()
 {
-    // Auto Chop removed per Fix #3 — function entirely removed
-    // This method is kept to avoid breaking call sites in PluginEditor key handler;
-    // callers should be updated to remove 'C' key binding as well.
+    if (autoChopPanel != nullptr)
+    {
+        if (auto* parent = autoChopPanel->getParentComponent())
+            parent->removeChildComponent (autoChopPanel.get());
+        autoChopPanel.reset(); return;
+    }
+    autoChopPanel = std::make_unique<AutoChopPanel> (processor, waveformView);
+    if (auto* editor = waveformView.getParentComponent())
+    {
+        auto wfBounds = waveformView.getBoundsInParent();
+        autoChopPanel->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34, wfBounds.getWidth(), 34);
+        editor->addAndMakeVisible (*autoChopPanel);
+    }
 }
 
 void ActionPanel::toggleTrimMode()
@@ -128,32 +150,36 @@ void ActionPanel::resized()
 {
     const int gap   = 5;
     const int h     = getHeight();
-    const int thinW = 30;   // snap, MIDI select icon buttons
-    const int trimW = 42;
+    const int thinW = 36;   // snap, MIDI select, and shortcuts buttons
+    const int thinTotal = thinW * 3 + gap * 2;
+    const int trimW = 40;   // TRIM button
+    const int availW = getWidth() - thinTotal - trimW - gap * 2;
+    const int numMain = 5;
+    const int btnW  = (availW - gap * (numMain - 1)) / numMain;
+    int x = 0;
 
-    // Lay out right-to-left so icon buttons always sit flush at the right edge,
-    // preventing overflow regardless of panel width.
-    int right = getWidth();
+    addSliceBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
+    lazyChopBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
+    splitBtn.setBounds    (x, 0, btnW, h); x += btnW + gap;
+    dupBtn.setBounds      (x, 0, btnW, h); x += btnW + gap;
+    deleteBtn.setBounds   (x, 0, btnW, h); x += btnW + gap;
 
-    midiSelectBtn.setBounds (right - thinW, 0, thinW, h); right -= thinW + gap;
-    snapBtn.setBounds       (right - thinW, 0, thinW, h); right -= thinW + gap;
-    trimBtn.setBounds       (right - trimW, 0, trimW, h); right -= trimW + gap;
-
-    // ADD SLICE and MIDI SLICE split the remaining width equally
-    const int remaining = right;
-    const int btnW      = (remaining - gap) / 2;
-    addSliceBtn.setBounds (0,          0, btnW, h);
-    lazyChopBtn.setBounds (btnW + gap, 0, btnW, h);
+    trimBtn.setBounds       (x, 0, trimW, h); x += trimW + gap;
+    snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
+    midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
+    shortcutsBtn.setBounds  (x, 0, thinW, h);
 
     shortcutsBtn.setVisible (false);
-    browserBtn.setVisible   (false);
-    waveBtn.setVisible      (false);
+
+    // browserBtn/waveBtn/chromaticBtn moved to HeaderBar — hide them
+    browserBtn.setVisible (false);
+    waveBtn.setVisible    (false);
     chromaticBtn.setVisible (false);
 }
 
 void ActionPanel::paint (juce::Graphics& g)
 {
-    for (auto* btn : { &addSliceBtn, &lazyChopBtn })
+    for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn, &deleteBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
         btn->setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
@@ -161,6 +187,7 @@ void ActionPanel::paint (juce::Graphics& g)
     }
     updateMidiButtonAppearance (processor.midiSelectsSlice.load());
     updateSnapButtonAppearance (processor.snapToZeroCrossing.load());
+    // FIL/WA/CH toggle state managed by HeaderBar
 
     if (waveformView.isSliceDrawModeActive())
     { g.setColour (getTheme().accent.withAlpha (0.25f)); g.fillRect (addSliceBtn.getBounds()); }

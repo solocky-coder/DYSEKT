@@ -27,7 +27,12 @@ SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
     this->setInterceptsMouseClicks (true, true);
     this->setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
 }
-void SliceControlBar::resized() {}
+void SliceControlBar::resized()
+{
+    // cells are populated during paint(); trigger a paint now so hit-testing
+    // works immediately on the first mouse event without waiting for an external repaint.
+    repaint();
+}
 
 // =============================================================================
 //  drawLockIcon  (unchanged)
@@ -819,9 +824,10 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             return;
         }
 
-        // Boolean toggle
+        // Boolean toggle — directly flip the value, no popup
         if (cell.isBoolean)
         {
+            if (e.mods.isRightButtonDown()) return; // right-click does nothing for boolean cells
             int sIdx = ui.selectedSlice;
             if (sIdx >= 0 && sIdx < ui.numSlices)
             {
@@ -830,35 +836,47 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                 bool currentVal  = false;
                 using F = DysektProcessor;
                 if      (cell.fieldId == F::FieldStretchEnabled) currentVal = sliceLocked ? sl.stretchEnabled : (processor.apvts.getRawParameterValue (ParamIds::defaultStretchEnabled)->load() > 0.5f);
-                else if (cell.fieldId == F::FieldFormantComp)   currentVal = sliceLocked ? sl.formantComp    : (processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load()    > 0.5f);
-                else if (cell.fieldId == F::FieldReleaseTail)   currentVal = sliceLocked ? sl.releaseTail    : (processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load()    > 0.5f);
-                else if (cell.fieldId == F::FieldReverse)       currentVal = sliceLocked ? sl.reverse        : (processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load()        > 0.5f);
-                else if (cell.fieldId == F::FieldOneShot)       currentVal = sliceLocked ? sl.oneShot        : (processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load()        > 0.5f);
+                else if (cell.fieldId == F::FieldFormantComp)    currentVal = sliceLocked ? sl.formantComp    : (processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load()    > 0.5f);
+                else if (cell.fieldId == F::FieldReleaseTail)    currentVal = sliceLocked ? sl.releaseTail    : (processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load()    > 0.5f);
+                else if (cell.fieldId == F::FieldReverse)        currentVal = sliceLocked ? sl.reverse        : (processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load()        > 0.5f);
+                else if (cell.fieldId == F::FieldOneShot)        currentVal = sliceLocked ? sl.oneShot        : (processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load()        > 0.5f);
+
                 DysektProcessor::Command cmd;
-                cmd.type = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1 = cell.fieldId; cmd.floatParam1 = currentVal ? 0.f : 1.f;
-                processor.pushCommand (cmd); repaint();
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = cell.fieldId;
+                cmd.floatParam1 = currentVal ? 0.0f : 1.0f;  // flip
+                processor.pushCommand (cmd);
+                repaint();
             }
             return;
         }
 
-        // Choice cycle
+        // Choice — click to cycle through options directly
         if (cell.isChoice)
         {
+            if (e.mods.isRightButtonDown()) return; // right-click does nothing for choice cells
             int sIdx = ui.selectedSlice;
             if (sIdx >= 0 && sIdx < ui.numSlices)
             {
                 const auto& sl = ui.slices[(size_t) sIdx];
                 int current = 0;
+                int maxVal  = (int) cell.maxVal;
                 using F = DysektProcessor;
-                if      (cell.fieldId == F::FieldAlgorithm) current = (sl.lockMask & kLockAlgorithm) ? sl.algorithm : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
-                else if (cell.fieldId == F::FieldGrainMode) current = (sl.lockMask & kLockGrainMode) ? sl.grainMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
-                else if (cell.fieldId == F::FieldLoop)      current = (sl.lockMask & kLockLoop)      ? sl.loopMode  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
-                int next = (current + 1) > (int) cell.maxVal ? 0 : current + 1;
+
+                if      (cell.fieldId == F::FieldAlgorithm)
+                    current = (sl.lockMask & kLockAlgorithm) ? sl.algorithm : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
+                else if (cell.fieldId == F::FieldGrainMode)
+                    current = (sl.lockMask & kLockGrainMode) ? sl.grainMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
+                else if (cell.fieldId == F::FieldLoop)
+                    current = (sl.lockMask & kLockLoop) ? sl.loopMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
+
+                const int next = (current >= maxVal) ? 0 : current + 1;
                 DysektProcessor::Command cmd;
-                cmd.type = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1 = cell.fieldId; cmd.floatParam1 = (float) next;
-                processor.pushCommand (cmd); repaint();
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = cell.fieldId;
+                cmd.floatParam1 = (float) next;
+                processor.pushCommand (cmd);
+                repaint();
             }
             return;
         }
