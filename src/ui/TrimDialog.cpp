@@ -75,11 +75,32 @@ void TrimDialog::onCancel()
         parent->removeChildComponent (this);
 }
 
-// Minimal stub: resolves the linker error; expand later to show an interactive dialog.
-void TrimDialog::show (const juce::String& /*fileName*/, double /*durationSecs*/,
-                       juce::Component* /*parent*/,
+void TrimDialog::show (const juce::String& fileName, double durationSecs,
+                       juce::Component* parent,
                        std::function<void (Result)> callback)
 {
-    if (callback)
-        callback (Result{});
+    // Build message: file name + duration
+    const int    totalSec = (int) durationSecs;
+    const int    mins     = totalSec / 60;
+    const int    secs     = totalSec % 60;
+    juce::String dur      = juce::String::formatted ("%d:%02d", mins, secs);
+    juce::String msg      = fileName + "  (" + dur + ")\n\nDo you want to trim this sample before loading?";
+
+    auto* box       = new juce::AlertWindow ("Trim Sample", msg, juce::MessageBoxIconType::QuestionIcon, parent);
+    auto* rememberBtn = new juce::ToggleButton ("Remember my choice");
+    rememberBtn->setToggleState (false, juce::dontSendNotification);
+    box->addButton ("Trim",      1, juce::KeyPress (juce::KeyPress::returnKey));
+    box->addButton ("Load Full", 2);
+    box->addCustomComponent (rememberBtn);   // AlertWindow owns lifetime
+
+    box->enterModalState (true,
+        juce::ModalCallbackFunction::create (
+            [box, rememberBtn, cb = std::move (callback)] (int result) mutable
+            {
+                Result r;
+                r.trim     = (result == 1);
+                r.remember = rememberBtn->getToggleState();
+                if (cb) cb (r);
+            }),
+        true);  // deleteWhenDismissed = true
 }

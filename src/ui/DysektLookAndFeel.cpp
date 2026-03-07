@@ -100,6 +100,10 @@ void DysektLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectan
                                                const juce::String& text, const juce::String& /*shortcutText*/,
                                                const juce::Drawable* /*icon*/, const juce::Colour* /*textColour*/)
 {
+    // Fill full row background first — prevents any icon bleed-through from paintOverChildren
+    g.setColour (getTheme().darkBar);
+    g.fillRect (area);
+
     if (isSeparator)
     {
         g.setColour (getTheme().separator);

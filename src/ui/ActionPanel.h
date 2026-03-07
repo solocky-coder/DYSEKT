@@ -5,7 +5,6 @@
 class DysektProcessor;
 class WaveformView;
 class AutoChopPanel;
-class TrimDialog;
 
 class ActionPanel : public juce::Component
 {
@@ -22,7 +21,6 @@ public:
     std::function<void()> onShortcutsToggle;
 
     // Callbacks wired up by DysektEditor
-
     std::function<void()> onBrowserToggle;
     std::function<void()> onWaveToggle;
     std::function<void()> onChromaticToggle;
@@ -30,6 +28,9 @@ public:
     void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
     void setWaveActive       (bool v) { waveActive       = v; repaint(); }
     void setChromaticActive  (bool v) { chromaticActive  = v; repaint(); }
+
+    // Callback wired by PluginEditor
+    std::function<void()> onTrimToggle;
 
 private:
     DysektProcessor& processor;
@@ -41,23 +42,22 @@ private:
 
     void updateToggleBtn (juce::TextButton& btn, bool active);
     void updateMidiButtonAppearance (bool active);
-    void updateSnapButtonAppearance (bool active);
     void toggleTrimMode();
 
     juce::TextButton addSliceBtn    { "ADD"  };
     juce::TextButton lazyChopBtn    { "LAZY" };
-    juce::TextButton dupBtn         { "COPY" };
-    juce::TextButton splitBtn       { "AUTO" };
-    juce::TextButton deleteBtn      { "DEL"  };
     juce::TextButton trimBtn        { "TRIM" };
-    juce::TextButton snapBtn        { "" };
-    juce::TextButton midiSelectBtn  { "" };
-    juce::TextButton shortcutsBtn   { "?" };
+    juce::TextButton midiSelectBtn  { ""     };
+    juce::TextButton shortcutsBtn   { "?"    };
 
+    // Kept as members for state sync with HeaderBar — not visible in action panel
     juce::TextButton browserBtn    { "FILES" };
     juce::TextButton waveBtn       { "WAVE"  };
     juce::TextButton chromaticBtn  { "CHRO"  };
 
+    // snapBtn removed — snap-to-zero-crossing is hardcoded always-on
+    // dupBtn / splitBtn / deleteBtn removed in earlier fixes
+
     std::unique_ptr<AutoChopPanel> autoChopPanel;
-    std::unique_ptr<TrimDialog>    trimDialog;
+    // Trim is fully managed by PluginEditor — no trimDialog here
 };
