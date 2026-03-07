@@ -7,7 +7,7 @@ static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LC
 static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
-static constexpr int kActionH    = 34;
+static constexpr int kActionH    = 22;
 static constexpr int kMixerPanelH   = 210;
 static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
 
@@ -91,12 +91,46 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     {
         processor.applyTrimToCurrentSample (s, e);
         trimSession.reset();
+        trimDialog.reset();
     };
     waveformView.onTrimCancelled = [this]
     {
         trimSession.reset();
-        // The original (non-trimmed) snapshot is already in sampleData since
-        // we loaded the full file before entering trim mode.
+        trimDialog.reset();
+    };
+
+    // TRIM button path: ActionPanel delegates here so PluginEditor owns
+    // trim lifecycle, enterTrimMode, and TrimDialog placement.
+    actionPanel.onTrimToggle = [this]
+    {
+        if (trimDialog != nullptr)
+        {
+            // Second press = cancel
+            if (auto* p = trimDialog->getParentComponent())
+                p->removeChildComponent (trimDialog.get());
+            trimDialog.reset();
+            waveformView.setTrimMode (false);
+            repaint();
+            return;
+        }
+
+        if (processor.sampleData.getSnapshot() == nullptr)
+            return;
+
+        auto snap = processor.sampleData.getSnapshot();
+        const int totalFrames = snap->buffer.getNumSamples();
+
+        // Initialise markers at full extent so user drags inward
+        waveformView.enterTrimMode (0, totalFrames);
+
+        trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+        auto wfBounds = waveformView.getBoundsInParent();
+        trimDialog->setBounds (wfBounds.getX(),
+                               wfBounds.getBottom() - 34,
+                               wfBounds.getWidth(), 34);
+        addAndMakeVisible (*trimDialog);
+        trimDialog->toFront (false);
+        repaint();
     };
 
     // FIL / WA / CH now live in headerBar — wire their callbacks there
@@ -473,7 +507,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
         { DysektProcessor::Command c; c.type = DysektProcessor::CmdDeleteSlice; c.intParam1 = ui.selectedSlice; processor.pushCommand (c); }
         return true;
     }
-    if (code == 'Z') { processor.snapToZeroCrossing.store (! processor.snapToZeroCrossing.load()); repaint(); return true; }
+    // 'Z' snap shortcut removed — snap-to-zero always on
     if (code == 'F') { processor.midiSelectsSlice.store  (! processor.midiSelectsSlice.load());   repaint(); return true; }
 
     if (code == juce::KeyPress::rightKey || (code == juce::KeyPress::tabKey && ! mods.isShiftDown()))
@@ -540,6 +574,18 @@ void DysektEditor::timerCallback()
             trimSession->active = true;
             const int totalFrames = snap->buffer.getNumSamples();
             waveformView.enterTrimMode (0, totalFrames);
+
+            // Show the trim bar overlay
+            if (trimDialog == nullptr)
+            {
+                trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+                auto wfBounds = waveformView.getBoundsInParent();
+                trimDialog->setBounds (wfBounds.getX(),
+                                       wfBounds.getBottom() - 34,
+                                       wfBounds.getWidth(), 34);
+                addAndMakeVisible (*trimDialog);
+                trimDialog->toFront (false);
+            }
         }
     }
 
@@ -573,7 +619,7 @@ void DysektEditor::ensureDefaultThemes()
         if (! f.existsAsFile()) f.replaceWithText (t.toThemeFile());
     };
     write ("dark",  ThemeData::darkTheme());
-    write ("light", ThemeData::lightTheme());
+    write ("shell", ThemeData::shellTheme());
     write ("lazy",  ThemeData::lazyTheme());
     write ("snow",  ThemeData::snowTheme());
     write ("ghost", ThemeData::ghostTheme());
@@ -588,7 +634,7 @@ juce::StringArray DysektEditor::getAvailableThemes()
         auto t = ThemeData::fromThemeFile (f.loadFileAsString());
         if (t.name.isNotEmpty()) names.add (t.name);
     }
-    if (names.isEmpty()) { names.add ("dark"); names.add ("light"); }
+    if (names.isEmpty()) { names.add ("dark"); names.add ("shell"); }
     return names;
 }
 
@@ -605,7 +651,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
             repaint(); return;
         }
     }
-    if      (themeName == "light") setTheme (ThemeData::lightTheme());
+    if      (themeName == "shell") setTheme (ThemeData::shellTheme());
     else if (themeName == "lazy")  setTheme (ThemeData::lazyTheme());
     else if (themeName == "snow")  setTheme (ThemeData::snowTheme());
     else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
