@@ -9,8 +9,13 @@
 ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
+<<<<<<< HEAD
     for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn,
                        &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
+=======
+    for (auto* btn : { &addSliceBtn, &lazyChopBtn,
+                       &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
+>>>>>>> parent of 896e4e7 (UI UDATES)
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -26,6 +31,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         DysektProcessor::Command cmd;
         cmd.type = processor.lazyChop.isActive() ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
         processor.pushCommand (cmd); repaint();
+<<<<<<< HEAD
     };
 
     dupBtn.onClick = [this] {
@@ -39,7 +45,13 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         const auto& ui = processor.getUiSliceSnapshot();
         if (ui.selectedSlice >= 0)
         { DysektProcessor::Command cmd; cmd.type = DysektProcessor::CmdDeleteSlice; cmd.intParam1 = ui.selectedSlice; processor.pushCommand (cmd); }
+=======
+>>>>>>> parent of 896e4e7 (UI UDATES)
     };
+
+    // dupBtn (Copy) removed per Fix #3 — function entirely removed
+    // splitBtn (Auto Chop) removed per Fix #3 — function entirely removed
+    // deleteBtn (Del) removed per Fix #4 — function moved to right-click on slice lane
 
     trimBtn.onClick = [this] { toggleTrimMode(); };
 
@@ -68,9 +80,12 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     addSliceBtn.setButtonText ("ADD SLICE");
     lazyChopBtn.setButtonText ("MIDI SLICE");
+<<<<<<< HEAD
     dupBtn.setTooltip      ("Duplicate Slice (D)");
     splitBtn.setTooltip    ("Auto Chop (C)");
     deleteBtn.setTooltip   ("Delete Slice (Del)");
+=======
+>>>>>>> parent of 896e4e7 (UI UDATES)
     trimBtn.setTooltip     ("Trim - crop sample to a selected region");
     snapBtn.setTooltip     ("Snap to Zero-Crossing (Z)");
 
@@ -102,6 +117,7 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
 
 void ActionPanel::toggleAutoChop()
 {
+<<<<<<< HEAD
     if (autoChopPanel != nullptr)
     {
         if (auto* parent = autoChopPanel->getParentComponent())
@@ -115,6 +131,11 @@ void ActionPanel::toggleAutoChop()
         autoChopPanel->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34, wfBounds.getWidth(), 34);
         editor->addAndMakeVisible (*autoChopPanel);
     }
+=======
+    // Auto Chop removed per Fix #3 — function entirely removed
+    // This method is kept to avoid breaking call sites in PluginEditor key handler;
+    // callers should be updated to remove 'C' key binding as well.
+>>>>>>> parent of 896e4e7 (UI UDATES)
 }
 
 void ActionPanel::toggleTrimMode()
@@ -150,6 +171,7 @@ void ActionPanel::resized()
 {
     const int gap   = 5;
     const int h     = getHeight();
+<<<<<<< HEAD
     const int thinW = 36;   // snap, MIDI select, and shortcuts buttons
     const int thinTotal = thinW * 3 + gap * 2;
     const int trimW = 40;   // TRIM button
@@ -168,6 +190,24 @@ void ActionPanel::resized()
     snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
     midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
     shortcutsBtn.setBounds  (x, 0, thinW, h);
+=======
+    const int thinW = 30;   // snap, MIDI select icon buttons
+    const int trimW = 42;
+
+    // Lay out right-to-left so icon buttons always sit flush at the right edge,
+    // preventing overflow regardless of panel width.
+    int right = getWidth();
+
+    midiSelectBtn.setBounds (right - thinW, 0, thinW, h); right -= thinW + gap;
+    snapBtn.setBounds       (right - thinW, 0, thinW, h); right -= thinW + gap;
+    trimBtn.setBounds       (right - trimW, 0, trimW, h); right -= trimW + gap;
+
+    // ADD SLICE and MIDI SLICE split the remaining width equally
+    const int remaining = right;
+    const int btnW      = (remaining - gap) / 2;
+    addSliceBtn.setBounds (0,          0, btnW, h);
+    lazyChopBtn.setBounds (btnW + gap, 0, btnW, h);
+>>>>>>> parent of 896e4e7 (UI UDATES)
 
     shortcutsBtn.setVisible (false);
 
@@ -187,7 +227,10 @@ void ActionPanel::paint (juce::Graphics& g)
     }
     updateMidiButtonAppearance (processor.midiSelectsSlice.load());
     updateSnapButtonAppearance (processor.snapToZeroCrossing.load());
+<<<<<<< HEAD
     // FIL/WA/CH toggle state managed by HeaderBar
+=======
+>>>>>>> parent of 896e4e7 (UI UDATES)
 
     if (waveformView.isSliceDrawModeActive())
     { g.setColour (getTheme().accent.withAlpha (0.25f)); g.fillRect (addSliceBtn.getBounds()); }

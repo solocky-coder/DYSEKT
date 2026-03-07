@@ -266,10 +266,26 @@ void DysektProcessor::loadFileAsync (const juce::File& file)
 // ─────────────────────────────────────────────────────────────────────────────
 void DysektProcessor::applyTrimToCurrentSample (int trimStart, int trimEnd)
 {
-    const int total = sampleData.getBuffer().getNumSamples();
+    // Get a snapshot of the current sample so we can crop on the message thread.
+    auto snap = sampleData.getSnapshot();
+    if (snap == nullptr)
+        return;
+
+    const int total = snap->buffer.getNumSamples();
     trimStart = juce::jlimit (0, juce::jmax (0, total - 1), trimStart);
     trimEnd   = juce::jlimit (trimStart + 1, total, trimEnd);
 
+    // Crop the audio buffer on the message thread (safe — not real-time).
+    auto trimmed = SampleData::createTrimmed (*snap, trimStart, trimEnd);
+    if (trimmed == nullptr)
+        return;
+
+    // Post as completedLoadData — audio thread will install it next block.
+    auto* old = completedLoadData.exchange (trimmed.release(), std::memory_order_acq_rel);
+    delete old;
+    latestLoadKind.store ((int) LoadKindReplace, std::memory_order_release);
+
+    // Also clamp slice markers via command (offsets them into the new buffer).
     trimRegionStart.store (trimStart, std::memory_order_relaxed);
     trimRegionEnd  .store (trimEnd,   std::memory_order_relaxed);
 
@@ -386,11 +402,19 @@ void DysektProcessor::publishUiSliceSnapshot()
         if (sel >= 0 && sel < snap.numSlices && total > 0)
         {
             const auto& sl = snap.slices[(size_t) sel];
-            sliceStartParam->store ((float) sl.startSample / (float) total,
-                                    std::memory_order_relaxed);
-            sliceEndParam->store   ((float) sliceManager.getEndForSlice (sel, total) / (float) total,
-                                    std::memory_order_relaxed);
+            const float newStartNorm = (float) sl.startSample / (float) total;
+            const float newEndNorm   = (float) sliceManager.getEndForSlice (sel, total) / (float) total;
+            sliceStartParam->store (newStartNorm, std::memory_order_relaxed);
+            sliceEndParam->store   (newEndNorm,   std::memory_order_relaxed);
+            // If selection just changed, the physical MIDI knob is at the old
+            // slice's position.  Flag pickup mode so we ignore the stale value
+            // until the knob physically crosses the new slice's value.
+            const int prevSynced = paramsSyncedForSlice.load (std::memory_order_relaxed);
+            if (prevSynced != sel)
+                paramNeedsPickup.store (true, std::memory_order_relaxed);
             paramsSyncedForSlice.store (sel, std::memory_order_relaxed);
+            lastPublishedStart.store (newStartNorm, std::memory_order_relaxed);
+            lastPublishedEnd.store   (newEndNorm,   std::memory_order_relaxed);
         }
     }
 }
@@ -660,7 +684,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 psp.sampleRate     = currentSampleRate;
                 psp.sample         = &sampleData;
                 lazyChop.start (sampleData.getNumFrames(), sliceManager, psp,
-                                true /*snap always on*/, &sampleData.getBuffer());
+                                snapToZeroCrossing.load(), &sampleData.getBuffer());
             }
             break;
 
@@ -864,7 +888,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
                 sliceManager.deleteSlice (sel);
 
-                bool doSnap = sampleData.isLoaded(); // snap always on
+                bool doSnap = snapToZeroCrossing.load() && sampleData.isLoaded();
                 int firstNew = -1;
                 for (int i = 0; i < count; ++i)
                 {
@@ -997,29 +1021,16 @@ void DysektProcessor::handleCommand (const Command& cmd)
             break;
 
         case CmdApplyTrim:
-            // 1. Physically crop the audio buffer to [trimStart, trimEnd)
-            // 2. Re-offset all slice start positions relative to the new origin
-            // 3. Clamp any out-of-range slices so nothing references dead audio
+            // Clamp all slice start/end markers to the new trim region so no
+            // slice can reference audio outside the trimmed bounds.
             {
                 const int tStart = cmd.intParam1;
                 const int tEnd   = cmd.intParam2;
-
-                auto snap = sampleData.getSnapshot();
-                if (snap != nullptr)
-                {
-                    auto trimmed = SampleData::createTrimmed (*snap, tStart, tEnd);
-                    if (trimmed != nullptr)
-                        sampleData.applyDecodedSample (std::move (trimmed));
-                }
-
-                const int newLen = tEnd - tStart;
                 const int n      = sliceManager.getNumSlices();
                 for (int i = 0; i < n; ++i)
                 {
                     auto& sl = sliceManager.getSlice (i);
-                    // Re-origin: subtract trim start, then clamp inside new buffer
-                    sl.startSample = juce::jlimit (0, juce::jmax (0, newLen - 1),
-                                                   sl.startSample - tStart);
+                    sl.startSample = juce::jlimit (tStart, tEnd - 1, sl.startSample);
                 }
                 sliceManager.sortByStart();
             }
@@ -1384,18 +1395,52 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             const int newEnd   = juce::roundToInt (sliceEndParam->load   (std::memory_order_relaxed) * (float) total);
 
             const int  slCurEnd     = sliceManager.getEndForSlice (sel, total);
-            const bool startChanged = (newStart != sl.startSample);
-            const bool endChanged   = (newEnd   != slCurEnd);
 
-            if ((startChanged || endChanged) && newStart < newEnd)
+            // --- Pickup-mode MIDI takeover ---
+            // After a slice selection change the physical knob is at the old
+            // slice's position.  We only start tracking the knob once it has
+            // crossed (come within kPickupEps of) the new slice's actual value.
+            static constexpr float kPickupEps = 0.005f;  // ~0.5% of full range
+            if (paramNeedsPickup.load (std::memory_order_relaxed))
             {
-                Command cmd;
-                cmd.type         = CmdSetSliceBounds;
-                cmd.intParam1    = sel;
-                cmd.intParam2    = newStart;
-                cmd.positions[0] = newEnd;
-                cmd.numPositions = 1;
-                pushCommand (cmd);
+                const float pubStart = lastPublishedStart.load (std::memory_order_relaxed);
+                const float pubEnd   = lastPublishedEnd.load   (std::memory_order_relaxed);
+                const float curS = sliceStartParam->load (std::memory_order_relaxed);
+                const float curE = sliceEndParam->load   (std::memory_order_relaxed);
+                // Pickup achieved when host value is within eps of published (actual) value
+                if (std::abs (curS - pubStart) <= kPickupEps &&
+                    std::abs (curE - pubEnd)   <= kPickupEps)
+                {
+                    paramNeedsPickup.store (false, std::memory_order_relaxed);
+                }
+                else
+                {
+                    // Knob hasn't reached the slice yet — restore published values
+                    // so the host display stays correct while we wait for pickup.
+                    sliceStartParam->store (pubStart, std::memory_order_relaxed);
+                    sliceEndParam->store   (pubEnd,   std::memory_order_relaxed);
+                }
+            }
+            else
+            {
+                // Normal operation: detect genuine host/automation changes
+                const float pubStart = lastPublishedStart.load (std::memory_order_relaxed);
+                const float pubEnd   = lastPublishedEnd.load   (std::memory_order_relaxed);
+                static constexpr float kEps = 1.0f / 65536.0f;
+                const float curS = sliceStartParam->load (std::memory_order_relaxed);
+                const float curE = sliceEndParam->load   (std::memory_order_relaxed);
+                const bool hostWroteStart = (std::abs (curS - pubStart) > kEps);
+                const bool hostWroteEnd   = (std::abs (curE - pubEnd)   > kEps);
+                if ((hostWroteStart || hostWroteEnd) && newStart < newEnd)
+                {
+                    Command cmd;
+                    cmd.type         = CmdSetSliceBounds;
+                    cmd.intParam1    = sel;
+                    cmd.intParam2    = newStart;
+                    cmd.positions[0] = newEnd;
+                    cmd.numPositions = 1;
+                    pushCommand (cmd);
+                }
             }
         }
     }
