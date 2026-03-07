@@ -7,7 +7,7 @@ static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LC
 static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
-static constexpr int kActionH    = 26;
+static constexpr int kActionH    = 22;
 static constexpr int kMixerPanelH   = 210;
 static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
 
@@ -473,7 +473,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
         { DysektProcessor::Command c; c.type = DysektProcessor::CmdDeleteSlice; c.intParam1 = ui.selectedSlice; processor.pushCommand (c); }
         return true;
     }
-    if (code == 'Z') { processor.snapToZeroCrossing.store (! processor.snapToZeroCrossing.load()); repaint(); return true; }
+    // 'Z' snap shortcut removed — snap-to-zero always on
     if (code == 'F') { processor.midiSelectsSlice.store  (! processor.midiSelectsSlice.load());   repaint(); return true; }
 
     if (code == juce::KeyPress::rightKey || (code == juce::KeyPress::tabKey && ! mods.isShiftDown()))
