@@ -386,11 +386,13 @@ void DysektProcessor::publishUiSliceSnapshot()
         if (sel >= 0 && sel < snap.numSlices && total > 0)
         {
             const auto& sl = snap.slices[(size_t) sel];
-            sliceStartParam->store ((float) sl.startSample / (float) total,
-                                    std::memory_order_relaxed);
-            sliceEndParam->store   ((float) sliceManager.getEndForSlice (sel, total) / (float) total,
-                                    std::memory_order_relaxed);
+            const float newStartNorm = (float) sl.startSample / (float) total;
+            const float newEndNorm   = (float) sliceManager.getEndForSlice (sel, total) / (float) total;
+            sliceStartParam->store (newStartNorm, std::memory_order_relaxed);
+            sliceEndParam->store   (newEndNorm,   std::memory_order_relaxed);
             paramsSyncedForSlice.store (sel, std::memory_order_relaxed);
+            lastPublishedStart.store (newStartNorm, std::memory_order_relaxed);
+            lastPublishedEnd.store   (newEndNorm,   std::memory_order_relaxed);
         }
     }
 }
@@ -1371,10 +1373,15 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             const int newEnd   = juce::roundToInt (sliceEndParam->load   (std::memory_order_relaxed) * (float) total);
 
             const int  slCurEnd     = sliceManager.getEndForSlice (sel, total);
-            const bool startChanged = (newStart != sl.startSample);
-            const bool endChanged   = (newEnd   != slCurEnd);
+            static constexpr float kEps = 1.0f / 65536.0f;
+            const float pubStart = lastPublishedStart.load (std::memory_order_relaxed);
+            const float pubEnd   = lastPublishedEnd.load   (std::memory_order_relaxed);
+            const float curStartNorm = sliceStartParam->load (std::memory_order_relaxed);
+            const float curEndNorm   = sliceEndParam->load   (std::memory_order_relaxed);
+            const bool hostWroteStart = (std::abs (curStartNorm - pubStart) > kEps);
+            const bool hostWroteEnd   = (std::abs (curEndNorm   - pubEnd)   > kEps);
 
-            if ((startChanged || endChanged) && newStart < newEnd)
+            if ((hostWroteStart || hostWroteEnd) && newStart < newEnd)
             {
                 Command cmd;
                 cmd.type         = CmdSetSliceBounds;

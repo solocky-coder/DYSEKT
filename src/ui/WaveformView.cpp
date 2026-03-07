@@ -131,6 +131,7 @@ void WaveformView::paint (juce::Graphics& g)
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
         drawPlaybackCursors (g);
+        if (trimMode) paintTrimOverlay (g);
         paintViewStateActive = false;
     }
     else
@@ -615,6 +616,19 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     if (sampleSnap == nullptr)
         return;
 
+    // Trim mode: intercept clicks for trim marker drag
+    if (trimMode)
+    {
+        static constexpr int kTrimMarkerHitTolerance = 6;
+        int inX  = sampleToPixel (trimInPoint);
+        int outX = sampleToPixel (trimOutPoint);
+        if (std::abs (e.x - inX) <= kTrimMarkerHitTolerance)
+            { dragMode = DragTrimIn;  return; }
+        if (std::abs (e.x - outX) <= kTrimMarkerHitTolerance)
+            { dragMode = DragTrimOut; return; }
+        return;  // all other trim-mode clicks are no-ops
+    }
+
     // Middle-mouse drag: scroll+zoom (like ScrollZoomBar)
     if (e.mods.isMiddleButtonDown())
     {
@@ -742,6 +756,26 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
 
 void WaveformView::mouseDrag (const juce::MouseEvent& e)
 {
+    if (dragMode == DragTrimIn || dragMode == DragTrimOut)
+    {
+        static constexpr int kMinTrimRegionSamples = 64;
+        auto sn = processor.sampleData.getSnapshot();
+        int totalFrames = sn ? sn->buffer.getNumSamples() : 1;
+        int newPos = juce::jlimit (0, totalFrames, pixelToSample (e.x));
+        if (dragMode == DragTrimIn)
+        {
+            newPos = juce::jlimit (0, trimOutPoint - kMinTrimRegionSamples, newPos);
+            trimInPoint = newPos;
+        }
+        else
+        {
+            newPos = juce::jlimit (trimInPoint + kMinTrimRegionSamples, totalFrames, newPos);
+            trimOutPoint = newPos;
+        }
+        repaint();
+        return;
+    }
+
     syncAltStateFromMods (e.mods);
 
     auto sampleSnap = processor.sampleData.getSnapshot();
@@ -824,6 +858,13 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
 
 void WaveformView::mouseUp (const juce::MouseEvent& e)
 {
+    if (dragMode == DragTrimIn || dragMode == DragTrimOut)
+    {
+        dragMode = None;
+        repaint();
+        return;
+    }
+
     syncAltStateFromMods (e.mods);
 
     auto sampleSnap = processor.sampleData.getSnapshot();
@@ -1022,4 +1063,36 @@ void WaveformView::setTrimMode (bool active)
         dragMode = None;
     }
     repaint();
+}
+
+// ── paintTrimOverlay ──────────────────────────────────────────────────────────
+void WaveformView::paintTrimOverlay (juce::Graphics& g)
+{
+    const int w = getWidth();
+    const int h = getHeight();
+
+    int inX  = sampleToPixel (trimInPoint);
+    int outX = sampleToPixel (trimOutPoint);
+
+    // Shade regions outside trim window
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
+    g.fillRect (0, 0, inX,      h);
+    g.fillRect (outX, 0, w - outX, h);
+
+    // IN marker — cyan, right-pointing triangle
+    g.setColour (juce::Colour (0xFF00FFFF));
+    g.drawVerticalLine (inX, 0.0f, (float) h);
+    juce::Path tri;
+    tri.addTriangle ((float) inX, 4.f, (float) (inX + 8), 10.f, (float) inX, 16.f);
+    g.fillPath (tri);
+    g.setFont (DysektLookAndFeel::makeFont (9.0f));
+    g.drawText ("IN",  inX + 2,  2, 24, 12, juce::Justification::left);
+
+    // OUT marker — orange, left-pointing triangle
+    g.setColour (juce::Colour (0xFFFF8C00));
+    g.drawVerticalLine (outX, 0.0f, (float) h);
+    juce::Path tri2;
+    tri2.addTriangle ((float) outX, 4.f, (float) (outX - 8), 10.f, (float) outX, 16.f);
+    g.fillPath (tri2);
+    g.drawText ("OUT", outX - 28, 2, 28, 12, juce::Justification::right);
 }

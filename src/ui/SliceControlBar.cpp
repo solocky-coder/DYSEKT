@@ -293,6 +293,7 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos
 // =============================================================================
 void SliceControlBar::paint (juce::Graphics& g)
 {
+    using F = DysektProcessor;
     g.fillAll (getTheme().darkBar);
     cells.clear();
 
@@ -703,6 +704,7 @@ void SliceControlBar::paint (juce::Graphics& g)
 // =============================================================================
 void SliceControlBar::mouseDown (const juce::MouseEvent& e)
 {
+    using F = DysektProcessor;
     if (textEditor != nullptr) textEditor.reset();
     activeDragCell = -1;
     auto pos = e.getPosition();
@@ -884,6 +886,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
 // =============================================================================
 void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
 {
+    using F = DysektProcessor;
     if (activeDragCell < 0 || activeDragCell >= (int) cells.size()) return;
     const auto& cell = cells[(size_t) activeDragCell];
     if (! cell.isKnob) return;
@@ -1037,6 +1040,7 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
 // =============================================================================
 void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
 {
+    using F = DysektProcessor;
     auto pos = e.getPosition();
     const auto& ui = processor.getUiSliceSnapshot();
 
@@ -1084,6 +1088,7 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
 // =============================================================================
 void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
 {
+    using F = DysektProcessor;
     textEditor = std::make_unique<juce::TextEditor>();
     addAndMakeVisible (*textEditor);
     textEditor->setBounds (cell.x + kParamCellTextX, cell.y + 14,

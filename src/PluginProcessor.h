@@ -227,7 +227,9 @@ public:
     std::atomic<int> liveDragBoundsStart { 0 };
     std::atomic<int> liveDragBoundsEnd   { 0 };
     std::atomic<int> liveDragSliceIdx    { -1 };
-    std::atomic<int> paramsSyncedForSlice { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
+    std::atomic<int>   paramsSyncedForSlice { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
+    std::atomic<float> lastPublishedStart   { -1.f }; // last value written by publishUiSliceSnapshot
+    std::atomic<float> lastPublishedEnd     { -1.f }; // used to ignore echo from automation poll
 
     // Shift-preview request (-2 = idle, -1 = stop, >= 0 = start at position)
     std::atomic<int> shiftPreviewRequest { -2 };
