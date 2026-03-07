@@ -29,11 +29,8 @@ public:
     void setWaveActive       (bool v) { waveActive       = v; repaint(); }
     void setChromaticActive  (bool v) { chromaticActive  = v; repaint(); }
 
-    // Callbacks wired by PluginEditor
+    // Callback wired by PluginEditor
     std::function<void()> onTrimToggle;
-    std::function<void()> onBrowserToggle;
-    std::function<void()> onWaveToggle;
-    std::function<void()> onChromaticToggle;
 
 private:
     DysektProcessor& processor;
