@@ -29,6 +29,12 @@ public:
     void setWaveActive       (bool v) { waveActive       = v; repaint(); }
     void setChromaticActive  (bool v) { chromaticActive  = v; repaint(); }
 
+    // Callbacks wired by PluginEditor
+    std::function<void()> onTrimToggle;
+    std::function<void()> onBrowserToggle;
+    std::function<void()> onWaveToggle;
+    std::function<void()> onChromaticToggle;
+
 private:
     DysektProcessor& processor;
     WaveformView&    waveformView;
@@ -57,5 +63,4 @@ private:
 
     std::unique_ptr<AutoChopPanel> autoChopPanel;
     // Trim is fully managed by PluginEditor — no trimDialog here
-    std::function<void()> onTrimToggle;  // wired by PluginEditor
 };
