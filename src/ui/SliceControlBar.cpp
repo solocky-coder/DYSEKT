@@ -762,7 +762,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             activeDragCell = i; dragStartY = pos.y;
 
             // Activate live drag for slice boundary knobs
-            if (cell.fieldId == F::FieldSliceStart || cell.fieldId == F::FieldSliceEnd)
+            if (cell.fieldId == DysektProcessor::FieldSliceStart || cell.fieldId == DysektProcessor::FieldSliceEnd)
             {
                 int liveSel = ui.selectedSlice;
                 if (liveSel >= 0 && liveSel < ui.numSlices)
