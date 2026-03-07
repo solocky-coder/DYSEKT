@@ -179,6 +179,7 @@ int DysektEditor::computeTotalHeight() const
     return h;
 }
 
+
 void DysektEditor::toggleBrowserPanel()
 {
     browserOpen = ! browserOpen;
@@ -618,7 +619,6 @@ void DysektEditor::ensureDefaultThemes()
         if (! f.existsAsFile()) f.replaceWithText (t.toThemeFile());
     };
     write ("dark",  ThemeData::darkTheme());
-    write ("light", ThemeData::lightTheme());
     write ("shell", ThemeData::shellTheme());
     write ("lazy",  ThemeData::lazyTheme());
     write ("snow",  ThemeData::snowTheme());
@@ -634,7 +634,7 @@ juce::StringArray DysektEditor::getAvailableThemes()
         auto t = ThemeData::fromThemeFile (f.loadFileAsString());
         if (t.name.isNotEmpty()) names.add (t.name);
     }
-    if (names.isEmpty()) { names.add ("dark"); names.add ("light"); }
+    if (names.isEmpty()) { names.add ("dark"); names.add ("shell"); }
     return names;
 }
 
@@ -651,8 +651,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
             repaint(); return;
         }
     }
-    if      (themeName == "light") setTheme (ThemeData::lightTheme());
-    else if (themeName == "shell") setTheme (ThemeData::shellTheme());
+    if      (themeName == "shell") setTheme (ThemeData::shellTheme());
     else if (themeName == "lazy")  setTheme (ThemeData::lazyTheme());
     else if (themeName == "snow")  setTheme (ThemeData::snowTheme());
     else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
