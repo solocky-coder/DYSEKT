@@ -70,6 +70,7 @@ private:
     bool mixerOpen   = false;
 
     std::unique_ptr<TrimSession> trimSession;
+    std::unique_ptr<TrimDialog>  trimDialog;
 
     DysektLookAndFeel lnf;
 

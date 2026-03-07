@@ -91,12 +91,12 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     {
         processor.applyTrimToCurrentSample (s, e);
         trimSession.reset();
+        trimDialog.reset();
     };
     waveformView.onTrimCancelled = [this]
     {
         trimSession.reset();
-        // The original (non-trimmed) snapshot is already in sampleData since
-        // we loaded the full file before entering trim mode.
+        trimDialog.reset();
     };
 
     // FIL / WA / CH now live in headerBar — wire their callbacks there
@@ -540,6 +540,18 @@ void DysektEditor::timerCallback()
             trimSession->active = true;
             const int totalFrames = snap->buffer.getNumSamples();
             waveformView.enterTrimMode (0, totalFrames);
+
+            // Show the trim bar overlay
+            if (trimDialog == nullptr)
+            {
+                trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+                auto wfBounds = waveformView.getBoundsInParent();
+                trimDialog->setBounds (wfBounds.getX(),
+                                       wfBounds.getBottom() - 34,
+                                       wfBounds.getWidth(), 34);
+                addAndMakeVisible (*trimDialog);
+                trimDialog->toFront (false);
+            }
         }
     }
 
