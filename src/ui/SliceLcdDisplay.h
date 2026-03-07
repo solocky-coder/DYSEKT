@@ -3,30 +3,25 @@
 
 class DysektProcessor;
 
-class SliceLcdDisplay : public juce::Component,
-                         private juce::ScrollBar::Listener
+class SliceLcdDisplay : public juce::Component
 {
 public:
     explicit SliceLcdDisplay (DysektProcessor& p);
 
     // Height the component requests — used by PluginEditor for layout
-    static constexpr int kPreferredHeight = 114;  // 7 visible rows × 14px + padding
+    static constexpr int kPreferredHeight = 90;
 
     void paint    (juce::Graphics& g) override;
+    void resized  ()                  override {}
 
     void mouseWheelMove (const juce::MouseEvent&,
                          const juce::MouseWheelDetails& w) override;
 
     void repaintLcd();
-    void resized() override;
-    void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override;
 
 private:
     // ── Layout constants ──────────────────────────────────────────────────────
-    static constexpr int kVisibleRows   = 7;   // rows shown without scrolling
-    static constexpr int kTotalRows     = 10;  // total rows including scroll
-    static constexpr int kRowH          = 14;  // fixed row height in pixels
-    static constexpr int kScrollW       = 8;   // scrollbar strip width
+    static constexpr int kRows         = 7;   // number of content rows
     static constexpr int kLeftPad      = 6;
     static constexpr int kLabelW       = 46;
     static constexpr int kScanlineAlpha = 28;
@@ -61,26 +56,12 @@ private:
         int          muteGroup    = 0;
         float        filterCutoff = 20000.0f;
         float        filterRes    = 0.0f;
-        // Lock state
-        bool         sliceLocked      = false;
-        // Extended — scroll rows 7-9
-        bool         stretchEnabled   = false;
-        float        tonalityHz       = 0.0f;
-        float        formantSemitones = 0.0f;
-        bool         formantComp      = false;
-        int          grainMode        = 0;
-        bool         releaseTail      = false;
-        int          outputBus        = 0;
-        float        bpm              = 120.0f;
     };
 
     DisplayData data;
 
     // ── Scroll state ──────────────────────────────────────────────────────────
-    juce::ScrollBar scrollBar { true };  // vertical scrollbar
-    int scrollOffsetPx = 0;              // pixels scrolled from top
-
-    void updateScrollBar();              // sync scrollBar range/position to content
+    int scrollOffsetPx = 0;   // pixels scrolled from top
 
     // ── Draw helpers ──────────────────────────────────────────────────────────
     void buildDisplayData();

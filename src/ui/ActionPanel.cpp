@@ -1,5 +1,6 @@
 #include "ActionPanel.h"
 #include "AutoChopPanel.h"
+#include "TrimDialog.h"
 #include "DysektLookAndFeel.h"
 #include "WaveformView.h"
 #include "../PluginProcessor.h"
@@ -8,8 +9,8 @@
 ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
-    for (auto* btn : { &addSliceBtn, &lazyChopBtn,
-                       &trimBtn, &midiSelectBtn, &shortcutsBtn })
+    for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn,
+                       &deleteBtn, &trimBtn, &snapBtn, &midiSelectBtn, &shortcutsBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -17,22 +18,27 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
-    // snapBtn removed — snap-to-zero-crossing is now always active (hardcoded)
     // FIL/WA/CH buttons moved to HeaderBar — keep members for state sync only
 
     addSliceBtn.onClick = [this] { waveformView.setSliceDrawMode (! waveformView.isSliceDrawModeActive()); repaint(); };
 
     lazyChopBtn.onClick = [this] {
-        const bool wasActive = processor.lazyChop.isActive();
         DysektProcessor::Command cmd;
-        cmd.type = wasActive ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
-        processor.pushCommand (cmd);
+        cmd.type = processor.lazyChop.isActive() ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
+        processor.pushCommand (cmd); repaint();
+    };
 
-        // MIDI FOLLOW auto-on: enabling MIDI Slice automatically turns on MIDI Follow
-        if (! wasActive)
-            processor.midiSelectsSlice.store (true);
+    dupBtn.onClick = [this] {
+        DysektProcessor::Command cmd; cmd.type = DysektProcessor::CmdDuplicateSlice; cmd.intParam1 = -1;
+        processor.pushCommand (cmd); repaint();
+    };
 
-        repaint();
+    splitBtn.onClick   = [this] { toggleAutoChop(); };
+
+    deleteBtn.onClick = [this] {
+        const auto& ui = processor.getUiSliceSnapshot();
+        if (ui.selectedSlice >= 0)
+        { DysektProcessor::Command cmd; cmd.type = DysektProcessor::CmdDeleteSlice; cmd.intParam1 = ui.selectedSlice; processor.pushCommand (cmd); }
     };
 
     trimBtn.onClick = [this] { toggleTrimMode(); };
@@ -40,11 +46,18 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
     shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");
 
+    snapBtn.onClick = [this] {
+        bool ns = ! processor.snapToZeroCrossing.load();
+        processor.snapToZeroCrossing.store (ns);
+        updateSnapButtonAppearance (ns); repaint();
+    };
+
     midiSelectBtn.onClick = [this] {
         bool ns = ! processor.midiSelectsSlice.load();
         processor.midiSelectsSlice.store (ns);
         updateMidiButtonAppearance (ns); repaint();
     };
+
 
     browserBtn.onClick    = [this] { browserActive    = ! browserActive;    if (onBrowserToggle)    onBrowserToggle();    updateToggleBtn (browserBtn,    browserActive); };
     waveBtn.onClick       = [this] { waveActive       = ! waveActive;       if (onWaveToggle)       onWaveToggle();       updateToggleBtn (waveBtn,       waveActive); };
@@ -54,15 +67,19 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     lazyChopBtn.setTooltip ("MIDI Slice — chop by incoming MIDI notes (L)");
 
     addSliceBtn.setButtonText ("ADD SLICE");
-    // lazyChopBtn label intentionally empty — PLAY/STOP icon drawn in paintOverChildren
-    lazyChopBtn.setButtonText ("");
+    lazyChopBtn.setButtonText ("MIDI SLICE");
+    dupBtn.setTooltip      ("Duplicate Slice (D)");
+    splitBtn.setTooltip    ("Auto Chop (C)");
+    deleteBtn.setTooltip   ("Delete Slice (Del)");
     trimBtn.setTooltip     ("Trim - crop sample to a selected region");
+    snapBtn.setTooltip     ("Snap to Zero-Crossing (Z)");
 
     browserBtn.setTooltip  ("Toggle File Browser");
     waveBtn.setTooltip     ("Toggle Soft Waveform");
     chromaticBtn.setTooltip ("Chromatic Mode - play selected slice across full keyboard");
 
     updateMidiButtonAppearance (false);
+    updateSnapButtonAppearance (false);
 }
 
 ActionPanel::~ActionPanel() = default;
@@ -85,60 +102,102 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
 
 void ActionPanel::toggleAutoChop()
 {
-    // Auto Chop removed per Fix #3 — kept to avoid breaking PluginEditor key handler
+    if (autoChopPanel != nullptr)
+    {
+        if (auto* parent = autoChopPanel->getParentComponent())
+            parent->removeChildComponent (autoChopPanel.get());
+        autoChopPanel.reset(); return;
+    }
+    autoChopPanel = std::make_unique<AutoChopPanel> (processor, waveformView);
+    if (auto* editor = waveformView.getParentComponent())
+    {
+        auto wfBounds = waveformView.getBoundsInParent();
+        autoChopPanel->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34, wfBounds.getWidth(), 34);
+        editor->addAndMakeVisible (*autoChopPanel);
+    }
 }
 
 void ActionPanel::toggleTrimMode()
 {
-    // Trim mode lifecycle is owned entirely by PluginEditor.
-    // ActionPanel just fires the callback so the editor can handle
-    // enterTrimMode(), TrimDialog placement, and onTrimApplied wiring.
-    if (onTrimToggle)
-        onTrimToggle();
+    // Close trim dialog if already open
+    if (trimDialog != nullptr)
+    {
+        if (auto* parent = trimDialog->getParentComponent())
+            parent->removeChildComponent (trimDialog.get());
+        trimDialog.reset();
+        waveformView.setTrimMode (false);
+        repaint();
+        return;
+    }
+
+    // Check that a sample is loaded
+    if (processor.sampleData.getSnapshot() == nullptr)
+        return;
+
+    auto* editor = waveformView.getParentComponent();
+    if (editor == nullptr)
+        return;
+
+    waveformView.setTrimMode (true);
+    trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+    auto wfBounds = waveformView.getBoundsInParent();
+    trimDialog->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34, wfBounds.getWidth(), 34);
+    editor->addAndMakeVisible (*trimDialog);
+    repaint();
 }
 
 void ActionPanel::resized()
 {
     const int gap   = 5;
     const int h     = getHeight();
-    const int thinW = 30;   // MIDI select icon button
-    const int trimW = 42;
+    const int thinW = 36;   // snap, MIDI select, and shortcuts buttons
+    const int thinTotal = thinW * 3 + gap * 2;
+    const int trimW = 40;   // TRIM button
+    const int availW = getWidth() - thinTotal - trimW - gap * 2;
+    const int numMain = 5;
+    const int btnW  = (availW - gap * (numMain - 1)) / numMain;
+    int x = 0;
 
-    int right = getWidth();
+    addSliceBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
+    lazyChopBtn.setBounds (x, 0, btnW, h); x += btnW + gap;
+    splitBtn.setBounds    (x, 0, btnW, h); x += btnW + gap;
+    dupBtn.setBounds      (x, 0, btnW, h); x += btnW + gap;
+    deleteBtn.setBounds   (x, 0, btnW, h); x += btnW + gap;
 
-    midiSelectBtn.setBounds (right - thinW, 0, thinW, h); right -= thinW + gap;
-    trimBtn.setBounds       (right - trimW, 0, trimW, h); right -= trimW + gap;
-
-    // ADD SLICE and MIDI SLICE split the remaining width equally
-    const int btnW = (right - gap) / 2;
-    addSliceBtn.setBounds (0,          0, btnW, h);
-    lazyChopBtn.setBounds (btnW + gap, 0, btnW, h);
+    trimBtn.setBounds       (x, 0, trimW, h); x += trimW + gap;
+    snapBtn.setBounds       (x, 0, thinW, h); x += thinW + gap;
+    midiSelectBtn.setBounds (x, 0, thinW, h); x += thinW + gap;
+    shortcutsBtn.setBounds  (x, 0, thinW, h);
 
     shortcutsBtn.setVisible (false);
-    browserBtn.setVisible   (false);
-    waveBtn.setVisible      (false);
+
+    // browserBtn/waveBtn/chromaticBtn moved to HeaderBar — hide them
+    browserBtn.setVisible (false);
+    waveBtn.setVisible    (false);
     chromaticBtn.setVisible (false);
 }
 
 void ActionPanel::paint (juce::Graphics& g)
 {
-    for (auto* btn : { &addSliceBtn, &lazyChopBtn })
+    for (auto* btn : { &addSliceBtn, &lazyChopBtn, &dupBtn, &splitBtn, &deleteBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
         btn->setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
     updateMidiButtonAppearance (processor.midiSelectsSlice.load());
+    updateSnapButtonAppearance (processor.snapToZeroCrossing.load());
+    // FIL/WA/CH toggle state managed by HeaderBar
 
     if (waveformView.isSliceDrawModeActive())
     { g.setColour (getTheme().accent.withAlpha (0.25f)); g.fillRect (addSliceBtn.getBounds()); }
 
     if (processor.lazyChop.isActive())
-    {
-        g.setColour (juce::Colours::red.withAlpha (0.25f));
-        g.fillRect (lazyChopBtn.getBounds());
-    }
+    { lazyChopBtn.setButtonText ("STOP"); g.setColour (juce::Colours::red.withAlpha (0.25f)); g.fillRect (lazyChopBtn.getBounds()); }
+    else
+    { lazyChopBtn.setButtonText ("MIDI SLICE"); }
 
+    // TRIM button — highlight when trim mode is active
     const bool trimActive = waveformView.isTrimModeActive();
     trimBtn.setColour (juce::TextButton::buttonColourId,
                        trimActive ? getTheme().accent.withAlpha (0.2f) : getTheme().button);
@@ -159,103 +218,72 @@ void ActionPanel::updateMidiButtonAppearance (bool active)
     midiSelectBtn.setColour (juce::TextButton::buttonColourId,  bg);
 }
 
-// snapBtn removed — updateSnapButtonAppearance no longer needed
+void ActionPanel::updateSnapButtonAppearance (bool active)
+{
+    auto col = active ? getTheme().accent : getTheme().foreground;
+    auto bg  = active ? getTheme().accent.withAlpha (0.2f) : getTheme().button;
+    snapBtn.setColour (juce::TextButton::textColourOnId,  col);
+    snapBtn.setColour (juce::TextButton::textColourOffId, col);
+    snapBtn.setColour (juce::TextButton::buttonColourId,  bg);
+}
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // ── PLAY / STOP icon for lazyChopBtn ─────────────────────────────────
+    // Draw 5-pin DIN MIDI connector icon for midiSelectBtn (Halion-style)
     {
-        const bool lazyActive = processor.lazyChop.isActive();
-        auto b   = lazyChopBtn.getBounds().toFloat();
-        float cx = b.getCentreX();
-        float cy = b.getCentreY();
+        bool active = processor.midiSelectsSlice.load();
+        auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
+        g.setColour (col);
 
-        if (lazyActive)
-        {
-            // STOP: solid red square
-            const float sq = 7.0f;
-            g.setColour (juce::Colours::red.withAlpha (0.9f));
-            g.fillRect (juce::Rectangle<float> (cx - sq * 0.5f, cy - sq * 0.5f, sq, sq));
-        }
-        else
-        {
-            // PLAY: solid green right-pointing triangle
-            const float tw = 9.0f;
-            const float th = 10.0f;
-            juce::Path tri;
-            tri.addTriangle (cx - tw * 0.4f, cy - th * 0.5f,
-                             cx - tw * 0.4f, cy + th * 0.5f,
-                             cx + tw * 0.6f, cy);
-            g.setColour (juce::Colours::limegreen.withAlpha (0.9f));
-            g.fillPath (tri);
-        }
+        auto b   = midiSelectBtn.getBounds().toFloat();
+        float cx = b.getCentreX();
+        float cy = b.getCentreY() + 1.0f;
+
+        // Outer circle (connector body)
+        const float outerR = 8.5f;
+        g.drawEllipse (cx - outerR, cy - outerR, outerR * 2, outerR * 2, 1.2f);
+
+        // Flat edge on bottom (D-shell cutoff)
+        g.setColour (active ? getTheme().accent.withAlpha(0.0f) : getTheme().button);
+        g.fillRect  (cx - outerR - 1, cy + 4.5f, outerR * 2 + 2, outerR);
+        g.setColour (col);
+        g.drawLine  (cx - outerR, cy + 4.5f, cx + outerR, cy + 4.5f, 1.2f);
+
+        // 5 pins arranged in a semicircle (top arc)
+        // Pin layout: 2 top row, 3 bottom row (standard DIN-5 arrangement)
+        struct Pin { float x, y; };
+        const float pinR = 1.4f;
+        const float arcR = 5.0f;
+        // Standard MIDI DIN-5: 3 pins on top arc, 2 on lower arc
+        Pin pins[] = {
+            { cx - arcR * 0.95f, cy - arcR * 0.31f },   // pin 1 (left)
+            { cx + arcR * 0.95f, cy - arcR * 0.31f },   // pin 2 (right)
+            { cx,                cy - arcR          },   // pin 3 (top centre)
+            { cx - arcR * 0.59f, cy + arcR * 0.81f },   // pin 4 (bottom left)
+            { cx + arcR * 0.59f, cy + arcR * 0.81f },   // pin 5 (bottom right)
+        };
+        for (auto& pin : pins)
+            g.fillEllipse (pin.x - pinR, pin.y - pinR, pinR * 2, pinR * 2);
     }
 
-    // ── 5-pin DIN MIDI connector icon for midiSelectBtn ──────────────────
-    // Drawn entirely as filled/stroked paths — no background erase tricks,
-    // so the full icon is always visible regardless of active state.
+    // Draw zero-crossing icon for snapBtn
     {
-        bool  active = processor.midiSelectsSlice.load();
-        auto  col    = active ? getTheme().accent : getTheme().foreground.withAlpha (0.85f);
-
-        auto  bRect  = midiSelectBtn.getBounds();
-        g.saveState();
-        g.reduceClipRegion (bRect);
-
-        float cx = bRect.getCentreX();
-        float cy = bRect.getCentreY();
-
-        // Scale so the full icon fits within the button with 3px margin each side
-        const float maxR   = juce::jmin (bRect.getWidth(), bRect.getHeight()) * 0.5f - 3.0f;
-        const float scale  = maxR / 8.5f;   // 8.5f is the natural outerR
-
-        const float outerR = 8.5f * scale;
-        const float arcR   = 5.0f * scale;
-        const float pinR   = 1.4f * scale;
-
-        // Full outer circle — drawn as a complete ellipse (no erase needed)
+        bool active = processor.snapToZeroCrossing.load();
+        auto col = active ? getTheme().accent : getTheme().foreground.withAlpha (0.75f);
         g.setColour (col);
-        g.drawEllipse (cx - outerR, cy - outerR, outerR * 2.0f, outerR * 2.0f, 1.2f);
 
-        // D-shell flat bottom: draw the chord line, then fill the lower segment
-        // using the button background colour via a filled path (no raw fillRect erase)
-        const float flatY = cy + outerR * 0.53f;   // chord cuts at ~53% radius down
+        auto b   = snapBtn.getBounds();
+        float cx = (float) b.getCentreX();
+        float cy = (float) b.getCentreY();
 
-        // Filled pie/segment below chord — masks the lower arc cleanly
-        {
-            juce::Path mask;
-            mask.startNewSubPath (cx - outerR - 1.0f, flatY);
-            mask.lineTo          (cx + outerR + 1.0f, flatY);
-            mask.lineTo          (cx + outerR + 1.0f, cy + outerR + 1.0f);
-            mask.lineTo          (cx - outerR - 1.0f, cy + outerR + 1.0f);
-            mask.closeSubPath();
-            // Fill with button bg to erase the lower arc of the circle
-            g.setColour (active ? getTheme().accent.withAlpha (0.2f) : getTheme().button);
-            g.fillPath  (mask);
-        }
+        // Horizontal zero line
+        g.drawLine (cx - 9.0f, cy, cx + 9.0f, cy, 1.0f);
 
-        // Flat chord line
-        g.setColour (col);
-        g.drawLine (cx - outerR, flatY, cx + outerR, flatY, 1.2f);
-
-        // 5 pins in standard DIN-5 arrangement (all in upper half)
-        struct Pin { float x, y; };
-        const float pinCY = cy - outerR * 0.12f;  // centre the pin cluster slightly above mid
-        Pin pins[] = {
-            { cx - arcR * 0.95f, pinCY - arcR * 0.31f },
-            { cx + arcR * 0.95f, pinCY - arcR * 0.31f },
-            { cx,                pinCY - arcR           },
-            { cx - arcR * 0.59f, pinCY + arcR * 0.81f },
-            { cx + arcR * 0.59f, pinCY + arcR * 0.81f },
-        };
-        g.setColour (col);
-        for (auto& pin : pins)
-        {
-            // Only draw pins that are above the flat line
-            if (pin.y - pinR < flatY)
-                g.fillEllipse (pin.x - pinR, pin.y - pinR, pinR * 2.0f, pinR * 2.0f);
-        }
-
-        g.restoreState();
+        // Sine wave crossing through the zero line
+        juce::Path wave;
+        wave.startNewSubPath (cx - 9.0f, cy);
+        wave.cubicTo (cx - 5.0f, cy,        cx - 5.0f, cy - 6.5f, cx,        cy);
+        wave.cubicTo (cx + 5.0f, cy,        cx + 5.0f, cy + 6.5f, cx + 9.0f, cy);
+        g.strokePath (wave, juce::PathStrokeType (1.5f));
     }
 }

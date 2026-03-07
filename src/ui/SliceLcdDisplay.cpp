@@ -33,8 +33,8 @@ namespace LcdColours
         p.noDataCol  = ac.withAlpha (0.15f).overlaidWith (bg);
         p.border     = ac.withAlpha (0.12f).overlaidWith (bg);
         p.flagOn     = ac;
-        p.flagOff    = ac.withAlpha (0.45f);          // dim but visible
-        p.flagBg     = bg.brighter (0.25f);           // visible pill outline against screen bg
+        p.flagOff    = ac.withAlpha (0.12f).overlaidWith (bg);
+        p.flagBg     = bg.darker (0.3f);
         return p;
     }
 }
@@ -89,19 +89,6 @@ SliceLcdDisplay::SliceLcdDisplay (DysektProcessor& p)
     : processor (p)
 {
     setOpaque (true);
-
-    // ── Scrollbar setup ───────────────────────────────────────────────────────
-    scrollBar.setAutoHide (false);
-    scrollBar.addListener (this);
-    // Style to match LCD phosphor theme
-    scrollBar.setColour (juce::ScrollBar::backgroundColourId,
-                         juce::Colour (0xFF000000).withAlpha (0.0f));  // transparent bg
-    scrollBar.setColour (juce::ScrollBar::thumbColourId,
-                         getTheme().accent.withAlpha (0.55f));
-    scrollBar.setColour (juce::ScrollBar::trackColourId,
-                         getTheme().darkBar.darker (0.3f));
-    addAndMakeVisible (scrollBar);
-    updateScrollBar();
 }
 
 // ── Data building ──────────────────────────────────────────────────────────────
@@ -130,9 +117,7 @@ void SliceLcdDisplay::buildDisplayData()
     const auto& sl   = snap.slices[(size_t) snap.selectedSlice];
     data.midiNote    = sl.midiNote;
     data.startSample = sl.startSample;
-    // Marker model: end derived from next slice's start (or sampleNumFrames).
-    data.endSample   = processor.sliceManager.getEndForSlice (
-                           snap.selectedSlice, snap.sampleNumFrames);
+    data.endSample   = sl.endSample;
     data.volume      = sl.volume;
     data.pan         = sl.pan;
     data.pitchSemitones = sl.pitchSemitones;
@@ -146,72 +131,30 @@ void SliceLcdDisplay::buildDisplayData()
     data.loopMode    = sl.loopMode;
     data.oneShot     = sl.oneShot;
     data.muteGroup   = sl.muteGroup;
-    data.filterCutoff    = sl.filterCutoff;
-    data.filterRes       = sl.filterRes;
-    data.sliceLocked     = (sl.lockMask == 0xFFFFFFFFu);
-    // Extended fields for scroll rows 7-9
-    data.stretchEnabled  = sl.stretchEnabled;
-    data.tonalityHz      = sl.tonalityHz;
-    data.formantSemitones = sl.formantSemitones;
-    data.formantComp     = sl.formantComp;
-    data.grainMode       = sl.grainMode;
-    data.releaseTail     = sl.releaseTail;
-    data.outputBus       = sl.outputBus;
-    data.bpm             = sl.bpm;
+    data.filterCutoff = sl.filterCutoff;
+    data.filterRes   = sl.filterRes;
 }
 
 // ── Repaint trigger ────────────────────────────────────────────────────────────
 
 void SliceLcdDisplay::repaintLcd()
 {
-    updateScrollBar();
-    repaint();
-}
-
-// ── Scrollbar helpers ─────────────────────────────────────────────────────────
-void SliceLcdDisplay::updateScrollBar()
-{
-    const auto screen = getLocalBounds().reduced (4);
-    const int contentH = kTotalRows * kRowH;
-    const int visibleH = kVisibleRows * kRowH;
-
-    scrollBar.setRangeLimits (0.0, contentH);
-    scrollBar.setCurrentRange (scrollOffsetPx, visibleH);
-    scrollBar.setVisible (contentH > visibleH);
-}
-
-void SliceLcdDisplay::scrollBarMoved (juce::ScrollBar*, double newRangeStart)
-{
-    const int contentH = kTotalRows * kRowH;
-    const int visibleH = kVisibleRows * kRowH;
-    const int maxScroll = juce::jmax (0, contentH - visibleH);
-    scrollOffsetPx = juce::jlimit (0, maxScroll, (int) newRangeStart);
     repaint();
 }
 
 void SliceLcdDisplay::mouseWheelMove (const juce::MouseEvent&,
                                        const juce::MouseWheelDetails& w)
 {
-    const int contentH  = kTotalRows * kRowH;
-    const int visibleH  = kVisibleRows * kRowH;
+    auto b = getLocalBounds().reduced (4);
+    const int rowH      = (b.getHeight() - 8) / kRows;
+    const int contentH  = kRows * rowH;
+    const int visibleH  = b.getHeight() - 8;
     const int maxScroll = juce::jmax (0, contentH - visibleH);
 
     scrollOffsetPx = juce::jlimit (0, maxScroll,
-        scrollOffsetPx - juce::roundToInt (w.deltaY * (float) kRowH * 3.0f));
+        scrollOffsetPx - juce::roundToInt (w.deltaY * (float) rowH * 2.5f));
 
-    scrollBar.setCurrentRange (scrollOffsetPx, visibleH);
     repaint();
-}
-
-// ── Resized ────────────────────────────────────────────────────────────────────
-
-void SliceLcdDisplay::resized()
-{
-    auto screen = getLocalBounds().reduced (4);
-    // Scrollbar: thin strip on right edge of inner screen
-    scrollBar.setBounds (screen.getRight() - kScrollW, screen.getY() + 1,
-                         kScrollW, screen.getHeight() - 2);
-    updateScrollBar();
 }
 
 // ── Paint ──────────────────────────────────────────────────────────────────────
@@ -253,14 +196,14 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const int rowH = kRowH;
+    const int rowH = (b.getHeight() - 8) / kRows;
     int y = b.getY() + 4 + row * rowH - scrollOffsetPx;
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
 
-    const juce::Font labelFont = DysektLookAndFeel::makeFont (11.0f, true);
-    const juce::Font valueFont = DysektLookAndFeel::makeFont (12.0f);
+    const juce::Font labelFont = DysektLookAndFeel::makeFont (10.0f, true);
+    const juce::Font valueFont = DysektLookAndFeel::makeFont (11.0f);
 
     if (highlight)
     {
@@ -292,9 +235,9 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const int rowH    = kRowH;
+    const int rowH    = (b.getHeight() - 8) / kRows;
     const int y       = b.getY() + 4 + row * rowH - scrollOffsetPx;
-    const juce::Font  f = DysektLookAndFeel::makeFont (11.5f);
+    const juce::Font  f = DysektLookAndFeel::makeFont (10.5f);
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
@@ -333,52 +276,48 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
                     juce::Justification::centredLeft, false);
     }
 
-    // ── Right item — left-aligned from the right-column start ────────────────
-    // Use 52% split so right column has enough room and never overflows.
-    const int rightX  = b.getX() + (b.getWidth() * 52 / 100);
-    const int rightW  = b.getRight() - rightX - kLeftPad - 42 - kScrollW; // leave space for flag column + scrollbar
+    // ── Right item — centred in the right half ────────────────────────────────
+    const int rightX  = b.getX() + halfW;
+    const int rightW  = halfW - kLeftPad;
 
     const int rColonPos = rightStr.indexOfChar (':');
     if (rColonPos > 0)
     {
+        // measure combined string, then centre the pair as a unit
+        const int totalW = f.getStringWidth (rightStr);
+        const int startX = rightX + (rightW - totalW) / 2;
         juce::String rlbl = rightStr.substring (0, rColonPos + 1);
         juce::String rval = rightStr.substring (rColonPos + 1);
-        const int rlblW = f.getStringWidth (rlbl);
 
         g.setColour (highlight ? pal.highlight : pal.labelCol);
-        g.drawText (rlbl, rightX, y, rlblW + 2, rowH,
+        g.drawText (rlbl, startX, y, f.getStringWidth (rlbl) + 2, rowH,
                     juce::Justification::centredLeft, false);
         g.setColour (highlight ? pal.highlight : pal.phosphor);
-        g.drawText (rval, rightX + rlblW + 2, y,
-                    rightW - rlblW - 2, rowH,
+        g.drawText (rval, startX + f.getStringWidth (rlbl) + 2, y,
+                    totalW - f.getStringWidth (rlbl), rowH,
                     juce::Justification::centredLeft, false);
     }
     else
     {
         g.setColour (highlight ? pal.highlight : pal.phosphor);
         g.drawText (rightStr, rightX, y, rightW, rowH,
-                    juce::Justification::centredLeft, false);
+                    juce::Justification::centred, false);
     }
 }
 
-void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
+void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
 {
-    // ── Flags drawn as a VERTICAL column on the RIGHT edge of the screen ──────
-    // Greyed out when inactive, full phosphor when active.
     const auto pal = LcdColours::fromTheme();
-    auto screen = getLocalBounds().reduced (4);
+    auto b = getLocalBounds().reduced (4);
+    const int rowH = (b.getHeight() - 8) / kRows;
+    int y  = b.getY() + 4 + row * rowH - scrollOffsetPx;
+    int x  = b.getX() + kLeftPad;
+    int pad = 3;
 
-    const juce::Font flagFont = DysektLookAndFeel::makeFont (8.5f, true);
-    const int pad    = 3;
-    const int flagW  = 34;   // fixed pill width
-    const int flagH  = 12;   // pill height
-    const int flagGap = 3;   // gap between pills
-    const int numFlags = 4;
-    const int totalFlagsH = numFlags * flagH + (numFlags - 1) * flagGap;
+    // Skip if fully outside the visible screen area
+    if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
 
-    // Centre the vertical stack in the screen height
-    int fy = screen.getY() + (screen.getHeight() - totalFlagsH) / 2;
-    const int fx = screen.getRight() - flagW - 4;  // right-edge inset
+    const juce::Font flagFont = DysektLookAndFeel::makeFont (9.0f, true);
 
     struct Flag { juce::String text; bool on; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
@@ -392,26 +331,19 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     g.setFont (flagFont);
     for (auto& f : flags)
     {
-        juce::Rectangle<int> box (fx, fy, flagW, flagH);
+        int fw = flagFont.getStringWidth (f.text) + pad * 2 + 4;
+        juce::Rectangle<int> box (x, y + 1, fw, rowH - 3);
 
-        // Background: dark when off, faint phosphor when on
         g.setColour (f.on ? pal.phosphor.withAlpha (0.15f) : pal.flagBg);
-        g.fillRoundedRectangle (box.toFloat(), 2.0f);
-
-        // Border: very dim when off, full when on
+        g.fillRoundedRectangle (box.toFloat(), 1.5f);
         g.setColour (f.on ? pal.flagOn : pal.flagOff);
-        g.drawRoundedRectangle (box.toFloat(), 2.0f, 1.0f);
-
-        // Text: dim when off, bright when on
+        g.drawRoundedRectangle (box.toFloat(), 1.5f, 1.0f);
         g.setColour (f.on ? pal.flagOn : pal.flagOff);
-        g.drawText (f.text, box.getX() + pad, box.getY(),
-                    box.getWidth() - pad * 2, box.getHeight(),
+        g.drawText (f.text, box.getX() + pad, box.getY(), box.getWidth() - pad * 2, box.getHeight(),
                     juce::Justification::centred, false);
-
-        fy += flagH + flagGap;
+        x += fw + 5;
     }
 
-    // Filter badge below flags (only when active)
     if (data.filterCutoff < 19000.0f)
     {
         juce::String fStr;
@@ -420,15 +352,10 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
         else
             fStr = "FLT:" + juce::String (juce::roundToInt (data.filterCutoff)) + "Hz";
 
-        juce::Rectangle<int> fbox (fx, fy + flagGap, flagW, flagH);
-        g.setColour (pal.phosphor.withAlpha (0.15f));
-        g.fillRoundedRectangle (fbox.toFloat(), 2.0f);
-        g.setColour (pal.flagOn);
-        g.drawRoundedRectangle (fbox.toFloat(), 2.0f, 1.0f);
-        g.setColour (pal.flagOn);
-        g.drawText (fStr, fbox.getX() + pad, fbox.getY(),
-                    fbox.getWidth() - pad * 2, fbox.getHeight(),
-                    juce::Justification::centred, false);
+        g.setColour (pal.phosphor);
+        g.setFont (flagFont);
+        g.drawText (fStr, b.getRight() - 80, y, 70, rowH,
+                    juce::Justification::centredRight, false);
     }
 }
 
@@ -483,12 +410,10 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
 
     // ── Clip all row drawing to the inner screen — prevents bleed on scroll ───
     auto screen = getLocalBounds().reduced (4);
-    // Clip to screen minus scrollbar strip on the right
-    auto clipScreen = screen.withTrimmedRight (kScrollW + 1);
     g.saveState();
-    g.reduceClipRegion (clipScreen);
+    g.reduceClipRegion (screen);
 
-    // ── Row 0:  Header — centred: "SL xx / xx  SAMPLENAME" ──────────────────
+    // ── Row 0:  Header — Slice index / total + filename ───────────────────────
     {
         juce::String sliceStr = "SL "
             + juce::String (data.sliceIndex + 1).paddedLeft ('0', 2)
@@ -496,52 +421,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
             + juce::String (data.numSlices).paddedLeft ('0', 2);
 
         juce::String nameStr = data.sampleName.toUpperCase().substring (0, 18);
-
-        // Draw centred header: measure label+value as one unit, centre in screen
-        auto   screen    = getLocalBounds().reduced (4);
-        auto   pal       = LcdColours::fromTheme();
-        const int rowH   = kRowH;
-        const int y      = screen.getY() + 4 + 0 * rowH - scrollOffsetPx;
-
-        // Highlight background
-        g.setColour (pal.phosphor.withAlpha (0.10f));
-        g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
-
-        const juce::Font lblF = DysektLookAndFeel::makeFont (11.0f, true);
-        const juce::Font valF = DysektLookAndFeel::makeFont (12.0f);
-        const int lblW = lblF.getStringWidth (sliceStr);
-        const int gap  = 8;
-        const int valW = valF.getStringWidth (nameStr);
-        const int totalW = lblW + gap + valW;
-        const int startX = screen.getX() + (screen.getWidth() - totalW) / 2;
-
-        g.setFont (lblF);
-        g.setColour (pal.highlight);
-        g.drawText (sliceStr, startX, y, lblW + 2, rowH,
-                    juce::Justification::centredLeft, false);
-
-        g.setFont (valF);
-        g.setColour (pal.highlight);
-        g.drawText (nameStr, startX + lblW + gap, y, valW + 2, rowH,
-                    juce::Justification::centredLeft, false);
-
-        // Lock badge: small pill on the far right when slice is locked
-        if (data.sliceLocked)
-        {
-            const juce::Font lkF = DysektLookAndFeel::makeFont (8.0f, true);
-            const juce::String lkStr = "LOCK";
-            const int lkW = lkF.getStringWidth (lkStr) + 6;
-            const int lkX = screen.getRight() - lkW - 6;
-            const int lkY = y + 1;
-            const int lkH = rowH - 3;
-            g.setColour (pal.phosphor.withAlpha (0.25f));
-            g.fillRoundedRectangle ((float) lkX, (float) lkY, (float) lkW, (float) lkH, 2.0f);
-            g.setColour (pal.highlight);
-            g.drawRoundedRectangle ((float) lkX, (float) lkY, (float) lkW, (float) lkH, 2.0f, 1.0f);
-            g.setFont (lkF);
-            g.setColour (pal.highlight);
-            g.drawText (lkStr, lkX + 3, lkY, lkW - 6, lkH, juce::Justification::centred, false);
-        }
+        drawRow (g, 0, sliceStr, nameStr, true);
     }
 
     // ── Row 1:  NOTE:Cx(nnn)  |  ROOT:Cx ─────────────────────────────────────
@@ -598,80 +478,36 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 6, adsrLeft, adsrRight);
     }
 
-    // ── Row 7:  FMNT:+x.xst  |  TONAL:xxxxHz ────────────────────────────────
-    {
-        const float fmnt = data.formantSemitones;
-        juce::String fmntStr  = juce::String ("FMNT:") + (fmnt >= 0.0f ? "+" : "")
-                              + juce::String (fmnt, 1) + "st";
-        juce::String tonalStr = "TONAL:" + (data.tonalityHz < 1.0f
-                              ? juce::String ("OFF")
-                              : juce::String (juce::roundToInt (data.tonalityHz)) + "Hz");
-        drawRowPair (g, 7, fmntStr, tonalStr);
-    }
-
-    // ── Row 8:  GRAIN:xxxxx  |  FRES:x.xx ───────────────────────────────────
-    {
-        juce::String grainStr;
-        switch (data.grainMode)
-        {
-            case 0:  grainStr = "GRAIN:FAST";   break;
-            case 1:  grainStr = "GRAIN:NORMAL"; break;
-            case 2:  grainStr = "GRAIN:SMOOTH"; break;
-            default: grainStr = "GRAIN:?";      break;
-        }
-        juce::String fresStr = "FRES:" + juce::String (data.filterRes, 2);
-        drawRowPair (g, 8, grainStr, fresStr);
-    }
-
-    // ── Row 9:  OUT:xx  |  BPM:xxx.xx  +  toggle flags ───────────────────────
-    {
-        juce::String outStr = "OUT:" + juce::String (data.outputBus + 1);
-        juce::String bpmStr = "BPM:" + juce::String (data.bpm, 1);
-        drawRowPair (g, 9, outStr, bpmStr);
-    }
-
-    // ── Row 9 right-side toggle flags (STRETCH / TAIL / FMNT C) ──────────────
-    // Drawn inline as small text badges after BPM on row 9
-    {
-        const auto pal2 = LcdColours::fromTheme();
-        auto b2 = getLocalBounds().reduced (4);
-        const int rowH2  = kRowH;
-        const int y9     = b2.getY() + 4 + 9 * rowH2 - scrollOffsetPx;
-        if (y9 < b2.getBottom() - 4 && y9 + rowH2 > b2.getY() + 4)
-        {
-            const juce::Font flagFont2 = DysektLookAndFeel::makeFont (8.5f, true);
-            const int pad2 = 3;
-            const int fh   = rowH2 - 4;
-            int fx2 = b2.getX() + b2.getWidth() / 4;  // start after left column
-
-            struct TFlag { juce::String text; bool on; };
-            TFlag tflags[] = {
-                { "STR", data.stretchEnabled },
-                { "TAIL", data.releaseTail  },
-                { "FMC", data.formantComp   },
-            };
-            g.setFont (flagFont2);
-            for (auto& tf : tflags)
-            {
-                int fw2 = flagFont2.getStringWidth (tf.text) + pad2 * 2 + 4;
-                juce::Rectangle<int> box2 (fx2, y9 + 2, fw2, fh);
-                g.setColour (tf.on ? pal2.phosphor.withAlpha (0.15f) : pal2.flagBg);
-                g.fillRoundedRectangle (box2.toFloat(), 1.5f);
-                g.setColour (tf.on ? pal2.flagOn : pal2.flagOff);
-                g.drawRoundedRectangle (box2.toFloat(), 1.5f, 1.0f);
-                g.setColour (tf.on ? pal2.flagOn : pal2.flagOff);
-                g.drawText (tf.text, box2.getX() + pad2, box2.getY(),
-                            box2.getWidth() - pad2 * 2, box2.getHeight(),
-                            juce::Justification::centred, false);
-                fx2 += fw2 + 4;
-            }
-        }
-    }
-
-    // ── Floating flags — right-edge vertical column (always visible) ──────────
+    // ── Floating flags — drawn over the bottom edge of row 6 ─────────────────
     drawFlagsRow (g, 6);
 
     g.restoreState();  // end clip region
 
-    // Real ScrollBar widget handles scroll indication — no unicode arrows needed
+    // ── Scroll indicator — right edge, only when scrolled ─────────────────────
+    {
+        const int rowH      = (screen.getHeight() - 8) / kRows;
+        const int contentH  = kRows * rowH;
+        const int visibleH  = screen.getHeight() - 8;
+
+        if (contentH > visibleH && scrollOffsetPx > 0)
+        {
+            // Faint down-arrow at bottom-right to signal more content
+            const auto ac = getTheme().accent;
+            g.setColour (ac.withAlpha (0.45f));
+            g.setFont (DysektLookAndFeel::makeFont (9.0f));
+            g.drawText (juce::CharPointer_UTF8 ("\xe2\x96\xbc"),  // ▼
+                        screen.getRight() - 14, screen.getBottom() - 14, 12, 12,
+                        juce::Justification::centred, false);
+        }
+
+        if (scrollOffsetPx > 0)
+        {
+            const auto ac = getTheme().accent;
+            g.setColour (ac.withAlpha (0.45f));
+            g.setFont (DysektLookAndFeel::makeFont (9.0f));
+            g.drawText (juce::CharPointer_UTF8 ("\xe2\x96\xb2"),  // ▲
+                        screen.getRight() - 14, screen.getY() + 2, 12, 12,
+                        juce::Justification::centred, false);
+        }
+    }
 }

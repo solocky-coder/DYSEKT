@@ -16,23 +16,18 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     browser.setLookAndFeel (&smallLAF);
     addAndMakeVisible (browser);
 
-    // ── Audio preview setup ───────────────────────────────────────────────────
-    // Device manager is intentionally NOT initialised here — opening an audio
-    // device inside a plugin constructor conflicts with the DAW's audio thread
-    // and causes the waveform view to jump on any UI interaction.
-    // It is opened lazily in startPreview() and closed in stopPreview().
+    // ── Audio device setup ────────────────────────────────────────────────────
     formatManager.registerBasicFormats();
+    deviceManager.initialiseWithDefaultDevices (0, 2);
+    deviceManager.addAudioCallback (&sourcePlayer);
     sourcePlayer.setSource (&transport);
     transport.addChangeListener (this);
 
-    // Apply theme colours now (and again whenever theme changes via refreshTheme())
-    refreshTheme();
-
     // ── Play/Stop button ──────────────────────────────────────────────────────
     playStopBtn.setColour (juce::TextButton::buttonColourId,
-                           getTheme().accent.withAlpha (0.35f));
+                           juce::Colour (0xFF1A6B3A));
     playStopBtn.setColour (juce::TextButton::textColourOffId,
-                           getTheme().foreground);
+                           juce::Colours::white);
     playStopBtn.onClick = [this]
     {
         if (transport.isPlaying())
@@ -48,9 +43,9 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     volumeSlider.setRange (0.0, 1.0);
     volumeSlider.setValue (0.8);
     volumeSlider.setColour (juce::Slider::thumbColourId,
-                            getTheme().accent);
+                            juce::Colour (0xFF4AABFF));
     volumeSlider.setColour (juce::Slider::trackColourId,
-                            getTheme().accent.withAlpha (0.25f));
+                            juce::Colour (0xFF2A4060));
     volumeSlider.onValueChange = [this]
     {
         transport.setGain ((float) volumeSlider.getValue());
@@ -60,69 +55,10 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
 
     // ── File name label ───────────────────────────────────────────────────────
     fileNameLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
-    fileNameLabel.setColour (juce::Label::textColourId, getTheme().accent);
-    fileNameLabel.setColour (juce::Label::backgroundColourId, juce::Colour (0x00000000));
+    fileNameLabel.setColour (juce::Label::textColourId,
+                             juce::Colours::white.withAlpha (0.7f));
     fileNameLabel.setMinimumHorizontalScale (0.5f);
-    fileNameLabel.setEditable (false, false, false);  // read-only: never editable
     addChildComponent (fileNameLabel);
-
-    // Make the FileBrowserComponent's built-in filename TextEditor and path bar
-    // read-only with black background — walk ALL descendants recursively.
-    auto enforceReadOnly = [this]
-    {
-        std::function<void(juce::Component*)> walk = [&](juce::Component* comp)
-        {
-            if (auto* te = dynamic_cast<juce::TextEditor*> (comp))
-            {
-                te->setReadOnly (true);
-                te->setCaretVisible (false);
-                te->setMouseCursor (juce::MouseCursor::NormalCursor);
-                te->setColour (juce::TextEditor::backgroundColourId,    juce::Colour (0xFF000000));
-                te->setColour (juce::TextEditor::outlineColourId,       getTheme().separator);
-                te->setColour (juce::TextEditor::focusedOutlineColourId, getTheme().accent.withAlpha (0.5f));
-                te->setColour (juce::TextEditor::textColourId,          getTheme().accent);
-            }
-            if (auto* lb = dynamic_cast<juce::Label*> (comp))
-            {
-                lb->setEditable (false, false, false);
-                lb->setColour (juce::Label::backgroundColourId, juce::Colour (0xFF000000));
-                lb->setColour (juce::Label::textColourId,       getTheme().accent);
-            }
-            for (int i = 0; i < comp->getNumChildComponents(); ++i)
-                walk (comp->getChildComponent (i));
-        };
-        walk (&browser);
-    };
-
-    juce::Timer::callAfterDelay (100,  [enforceReadOnly] { enforceReadOnly(); });
-    juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });  // catch lazy-init children
-}
-
-void FileBrowserPanel::refreshTheme()
-{
-    const auto& t = getTheme();
-
-    // ── SmallListLookAndFeel ─────────────────────────────────────────────────
-    smallLAF.refreshTheme();
-
-    // ── Play/Stop button ─────────────────────────────────────────────────────
-    const bool playing = transport.isPlaying();
-    playStopBtn.setColour (juce::TextButton::buttonColourId,
-                           t.accent.withAlpha (playing ? 0.55f : 0.25f));
-    playStopBtn.setColour (juce::TextButton::textColourOffId, t.foreground);
-
-    // ── Volume slider ────────────────────────────────────────────────────────
-    volumeSlider.setColour (juce::Slider::thumbColourId,  t.accent);
-    volumeSlider.setColour (juce::Slider::trackColourId,  t.accent.withAlpha (0.25f));
-    volumeSlider.setColour (juce::Slider::backgroundColourId, t.darkBar.darker (0.2f));
-
-    // ── File name label ──────────────────────────────────────────────────────
-    fileNameLabel.setColour (juce::Label::textColourId,        t.accent);
-    fileNameLabel.setColour (juce::Label::backgroundColourId,  juce::Colour (0x00000000));
-
-    // Force browser to re-render with new colours
-    browser.repaint();
-    repaint();
 }
 
 FileBrowserPanel::~FileBrowserPanel()
@@ -133,8 +69,7 @@ FileBrowserPanel::~FileBrowserPanel()
     transport.setSource (nullptr);
     readerSource.reset();
     sourcePlayer.setSource (nullptr);
-    if (deviceManager.getCurrentAudioDevice() != nullptr)
-        deviceManager.removeAudioCallback (&sourcePlayer);
+    deviceManager.removeAudioCallback (&sourcePlayer);
     browser.removeListener (this);
     ioThread.stopThread (2000);
 }
@@ -165,16 +100,44 @@ void FileBrowserPanel::resized()
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xFF000000));  // true black per design
+    g.fillAll (juce::Colour (0xFF050608));
 
     if (previewVisible)
     {
+        // Draw a slightly raised bar behind the preview controls
         auto bar = getLocalBounds().removeFromBottom (kBarH);
-        g.setColour (juce::Colour (0xFF0A0A0A));
+        g.setColour (juce::Colour (0xFF040507));
         g.fillRect (bar);
-        g.setColour (getTheme().separator);
+        g.setColour (juce::Colour (0xFF0C1018));
         g.drawLine ((float) bar.getX(), (float) bar.getY(),
                     (float) bar.getRight(), (float) bar.getY(), 1.0f);
+
+        // Draw PLAY (green triangle) or STOP (red square) icon over the button
+        if (playStopBtn.isVisible())
+        {
+            const bool playing = transport.isPlaying();
+            auto b = playStopBtn.getBounds().toFloat();
+            float cx = b.getCentreX();
+            float cy = b.getCentreY();
+            const float sz = juce::jmin (b.getWidth(), b.getHeight()) * 0.36f;
+
+            if (playing)
+            {
+                // Red square = STOP
+                g.setColour (juce::Colours::red.brighter (0.3f));
+                g.fillRect (juce::Rectangle<float> (cx - sz, cy - sz, sz * 2.0f, sz * 2.0f));
+            }
+            else
+            {
+                // Green right-pointing triangle = PLAY
+                juce::Path tri;
+                tri.addTriangle (cx - sz * 0.7f, cy - sz,
+                                 cx - sz * 0.7f, cy + sz,
+                                 cx + sz,        cy);
+                g.setColour (juce::Colours::limegreen.brighter (0.2f));
+                g.fillPath (tri);
+            }
+        }
     }
 }
 
@@ -184,24 +147,24 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
 {
     if (! f.existsAsFile()) return;
 
+    // Show the preview bar if not already visible
     const bool wasVisible = previewVisible;
     previewFile    = f;
     previewVisible = true;
 
     fileNameLabel.setText (f.getFileName(), juce::dontSendNotification);
-
-    // Stop any current preview and update button — but do NOT auto-start.
-    // Auto-play on single click caused the deviceManager to conflict with
-    // the DAW audio thread, making the waveform view jump on slice clicks.
-    stopPreview();
     updatePlayButton();
 
     playStopBtn.setVisible   (true);
     volumeSlider.setVisible  (true);
     fileNameLabel.setVisible (true);
 
+    // Auto-start preview on single click
+    stopPreview();
+    startPreview (f);
+
     if (! wasVisible)
-        resized();
+        resized();    // re-layout to make room for bar
 
     repaint();
 }
@@ -240,14 +203,6 @@ void FileBrowserPanel::startPreview (const juce::File& f)
 {
     if (! f.existsAsFile()) return;
 
-    // Open the audio device lazily on first use — never during constructor
-    // so we don't conflict with the DAW's audio thread at load time.
-    if (deviceManager.getCurrentAudioDevice() == nullptr)
-    {
-        deviceManager.initialise (0, 2, nullptr, true, {}, nullptr);
-        deviceManager.addAudioCallback (&sourcePlayer);
-    }
-
     transport.stop();
     transport.setSource (nullptr);
     readerSource.reset();
@@ -256,7 +211,8 @@ void FileBrowserPanel::startPreview (const juce::File& f)
     if (reader == nullptr) return;
 
     readerSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
-    transport.setSource (readerSource.get(), 0, nullptr, reader->sampleRate);
+    transport.setSource (readerSource.get(), 0, nullptr,
+                         reader->sampleRate);
     transport.setGain ((float) volumeSlider.getValue());
     transport.setPosition (0.0);
     transport.start();
@@ -271,19 +227,20 @@ void FileBrowserPanel::stopPreview()
     updatePlayButton();
 }
 
+
 void FileBrowserPanel::updatePlayButton()
 {
     if (transport.isPlaying())
     {
-        playStopBtn.setButtonText ("STOP");
+        playStopBtn.setButtonText ("");
         playStopBtn.setColour (juce::TextButton::buttonColourId,
-                               getTheme().accent.withAlpha (0.55f));
+                               juce::Colour (0xFF8B1A1A));
     }
     else
     {
-        playStopBtn.setButtonText ("PLAY");
+        playStopBtn.setButtonText ("");
         playStopBtn.setColour (juce::TextButton::buttonColourId,
-                               getTheme().accent.withAlpha (0.25f));
+                               juce::Colour (0xFF1A6B3A));
     }
 }
 
