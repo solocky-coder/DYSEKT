@@ -234,7 +234,7 @@ void SliceControlBar::drawMidiLearnCell (juce::Graphics& g, int x, int y,
 // =============================================================================
 //  showMidiLearnMenu
 // =============================================================================
-void SliceControlBar::showMidiLearnMenu (int fieldId)
+void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> /*screenPos*/)
 {
     const bool mapped = processor.midiLearn.isMapped (fieldId);
     juce::PopupMenu menu;
@@ -720,7 +720,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
         // MIDI Learn boundary button
         if (cell.isMidiLearnBtn)
         {
-            if (e.mods.isRightButtonDown()) showMidiLearnMenu (cell.fieldId);
+            if (e.mods.isRightButtonDown()) showMidiLearnMenu (cell.fieldId, getScreenPosition());
             else
             {
                 if (processor.midiLearn.getArmedSlot() == cell.fieldId)
@@ -735,7 +735,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
         // Knob right-click → MIDI Learn menu
         if (cell.isKnob && e.mods.isRightButtonDown())
         {
-            showMidiLearnMenu (cell.fieldId); return;
+            showMidiLearnMenu (cell.fieldId, getScreenPosition()); return;
         }
 
         if (cell.isSetBpm) { showSetBpmPopup(); return; }
