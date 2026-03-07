@@ -3,25 +3,30 @@
 
 class DysektProcessor;
 
-class SliceLcdDisplay : public juce::Component
+class SliceLcdDisplay : public juce::Component,
+                         private juce::ScrollBar::Listener
 {
 public:
     explicit SliceLcdDisplay (DysektProcessor& p);
 
     // Height the component requests — used by PluginEditor for layout
-    static constexpr int kPreferredHeight = 90;
+    static constexpr int kPreferredHeight = 114;  // 7 visible rows × 14px + padding
 
     void paint    (juce::Graphics& g) override;
-    void resized  ()                  override {}
 
     void mouseWheelMove (const juce::MouseEvent&,
                          const juce::MouseWheelDetails& w) override;
 
     void repaintLcd();
+    void resized() override;
+    void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override;
 
 private:
     // ── Layout constants ──────────────────────────────────────────────────────
-    static constexpr int kRows         = 10;  // number of content rows (7 visible + 3 scroll)
+    static constexpr int kVisibleRows   = 7;   // rows shown without scrolling
+    static constexpr int kTotalRows     = 10;  // total rows including scroll
+    static constexpr int kRowH          = 14;  // fixed row height in pixels
+    static constexpr int kScrollW       = 8;   // scrollbar strip width
     static constexpr int kLeftPad      = 6;
     static constexpr int kLabelW       = 46;
     static constexpr int kScanlineAlpha = 28;
@@ -72,7 +77,10 @@ private:
     DisplayData data;
 
     // ── Scroll state ──────────────────────────────────────────────────────────
-    int scrollOffsetPx = 0;   // pixels scrolled from top
+    juce::ScrollBar scrollBar { true };  // vertical scrollbar
+    int scrollOffsetPx = 0;              // pixels scrolled from top
+
+    void updateScrollBar();              // sync scrollBar range/position to content
 
     // ── Draw helpers ──────────────────────────────────────────────────────────
     void buildDisplayData();

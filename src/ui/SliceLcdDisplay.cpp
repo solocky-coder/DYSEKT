@@ -89,6 +89,19 @@ SliceLcdDisplay::SliceLcdDisplay (DysektProcessor& p)
     : processor (p)
 {
     setOpaque (true);
+
+    // ── Scrollbar setup ───────────────────────────────────────────────────────
+    scrollBar.setAutoHide (false);
+    scrollBar.addListener (this);
+    // Style to match LCD phosphor theme
+    scrollBar.setColour (juce::ScrollBar::backgroundColourId,
+                         juce::Colour (0xFF000000).withAlpha (0.0f));  // transparent bg
+    scrollBar.setColour (juce::ScrollBar::thumbColourId,
+                         getTheme().accent.withAlpha (0.55f));
+    scrollBar.setColour (juce::ScrollBar::trackColourId,
+                         getTheme().darkBar.darker (0.3f));
+    addAndMakeVisible (scrollBar);
+    updateScrollBar();
 }
 
 // ── Data building ──────────────────────────────────────────────────────────────
@@ -151,22 +164,54 @@ void SliceLcdDisplay::buildDisplayData()
 
 void SliceLcdDisplay::repaintLcd()
 {
+    updateScrollBar();
+    repaint();
+}
+
+// ── Scrollbar helpers ─────────────────────────────────────────────────────────
+void SliceLcdDisplay::updateScrollBar()
+{
+    const auto screen = getLocalBounds().reduced (4);
+    const int contentH = kTotalRows * kRowH;
+    const int visibleH = kVisibleRows * kRowH;
+
+    scrollBar.setRangeLimits (0.0, contentH);
+    scrollBar.setCurrentRange (scrollOffsetPx, visibleH);
+    scrollBar.setVisible (contentH > visibleH);
+}
+
+void SliceLcdDisplay::scrollBarMoved (juce::ScrollBar*, double newRangeStart)
+{
+    const int contentH = kTotalRows * kRowH;
+    const int visibleH = kVisibleRows * kRowH;
+    const int maxScroll = juce::jmax (0, contentH - visibleH);
+    scrollOffsetPx = juce::jlimit (0, maxScroll, (int) newRangeStart);
     repaint();
 }
 
 void SliceLcdDisplay::mouseWheelMove (const juce::MouseEvent&,
                                        const juce::MouseWheelDetails& w)
 {
-    auto b = getLocalBounds().reduced (4);
-    const int rowH      = (b.getHeight() - 8) / kRows;
-    const int contentH  = kRows * rowH;
-    const int visibleH  = b.getHeight() - 8;
+    const int contentH  = kTotalRows * kRowH;
+    const int visibleH  = kVisibleRows * kRowH;
     const int maxScroll = juce::jmax (0, contentH - visibleH);
 
     scrollOffsetPx = juce::jlimit (0, maxScroll,
-        scrollOffsetPx - juce::roundToInt (w.deltaY * (float) rowH * 2.5f));
+        scrollOffsetPx - juce::roundToInt (w.deltaY * (float) kRowH * 3.0f));
 
+    scrollBar.setCurrentRange (scrollOffsetPx, visibleH);
     repaint();
+}
+
+// ── Resized ────────────────────────────────────────────────────────────────────
+
+void SliceLcdDisplay::resized()
+{
+    auto screen = getLocalBounds().reduced (4);
+    // Scrollbar: thin strip on right edge of inner screen
+    scrollBar.setBounds (screen.getRight() - kScrollW, screen.getY() + 1,
+                         kScrollW, screen.getHeight() - 2);
+    updateScrollBar();
 }
 
 // ── Paint ──────────────────────────────────────────────────────────────────────
@@ -208,14 +253,14 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const int rowH = (b.getHeight() - 8) / kRows;
+    const int rowH = kRowH;
     int y = b.getY() + 4 + row * rowH - scrollOffsetPx;
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
 
-    const juce::Font labelFont = DysektLookAndFeel::makeFont (10.0f, true);
-    const juce::Font valueFont = DysektLookAndFeel::makeFont (11.0f);
+    const juce::Font labelFont = DysektLookAndFeel::makeFont (11.0f, true);
+    const juce::Font valueFont = DysektLookAndFeel::makeFont (12.0f);
 
     if (highlight)
     {
@@ -247,9 +292,9 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const int rowH    = (b.getHeight() - 8) / kRows;
+    const int rowH    = kRowH;
     const int y       = b.getY() + 4 + row * rowH - scrollOffsetPx;
-    const juce::Font  f = DysektLookAndFeel::makeFont (10.5f);
+    const juce::Font  f = DysektLookAndFeel::makeFont (11.5f);
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
@@ -291,7 +336,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
     // ── Right item — left-aligned from the right-column start ────────────────
     // Use 52% split so right column has enough room and never overflows.
     const int rightX  = b.getX() + (b.getWidth() * 52 / 100);
-    const int rightW  = b.getRight() - rightX - kLeftPad - 42; // leave space for flag column
+    const int rightW  = b.getRight() - rightX - kLeftPad - 42 - kScrollW; // leave space for flag column + scrollbar
 
     const int rColonPos = rightStr.indexOfChar (':');
     if (rColonPos > 0)
@@ -438,8 +483,10 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
 
     // ── Clip all row drawing to the inner screen — prevents bleed on scroll ───
     auto screen = getLocalBounds().reduced (4);
+    // Clip to screen minus scrollbar strip on the right
+    auto clipScreen = screen.withTrimmedRight (kScrollW + 1);
     g.saveState();
-    g.reduceClipRegion (screen);
+    g.reduceClipRegion (clipScreen);
 
     // ── Row 0:  Header — centred: "SL xx / xx  SAMPLENAME" ──────────────────
     {
@@ -453,15 +500,15 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         // Draw centred header: measure label+value as one unit, centre in screen
         auto   screen    = getLocalBounds().reduced (4);
         auto   pal       = LcdColours::fromTheme();
-        const int rowH   = (screen.getHeight() - 8) / kRows;
+        const int rowH   = kRowH;
         const int y      = screen.getY() + 4 + 0 * rowH - scrollOffsetPx;
 
         // Highlight background
         g.setColour (pal.phosphor.withAlpha (0.10f));
         g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
 
-        const juce::Font lblF = DysektLookAndFeel::makeFont (10.0f, true);
-        const juce::Font valF = DysektLookAndFeel::makeFont (11.0f);
+        const juce::Font lblF = DysektLookAndFeel::makeFont (11.0f, true);
+        const juce::Font valF = DysektLookAndFeel::makeFont (12.0f);
         const int lblW = lblF.getStringWidth (sliceStr);
         const int gap  = 8;
         const int valW = valF.getStringWidth (nameStr);
@@ -588,7 +635,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
     {
         const auto pal2 = LcdColours::fromTheme();
         auto b2 = getLocalBounds().reduced (4);
-        const int rowH2  = (b2.getHeight() - 8) / kRows;
+        const int rowH2  = kRowH;
         const int y9     = b2.getY() + 4 + 9 * rowH2 - scrollOffsetPx;
         if (y9 < b2.getBottom() - 4 && y9 + rowH2 > b2.getY() + 4)
         {
@@ -626,31 +673,5 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
 
     g.restoreState();  // end clip region
 
-    // ── Scroll indicator — right edge, only when scrolled ─────────────────────
-    {
-        const int rowH      = (screen.getHeight() - 8) / kRows;
-        const int contentH  = kRows * rowH;
-        const int visibleH  = screen.getHeight() - 8;
-
-        const auto ac = getTheme().accent;
-        g.setFont (DysektLookAndFeel::makeFont (9.0f));
-
-        // ▼  more content below
-        if (contentH > visibleH && scrollOffsetPx < contentH - visibleH)
-        {
-            g.setColour (ac.withAlpha (0.55f));
-            g.drawText (juce::CharPointer_UTF8 ("\xe2\x96\xbc"),  // ▼
-                        screen.getRight() - 14, screen.getBottom() - 14, 12, 12,
-                        juce::Justification::centred, false);
-        }
-
-        // ▲  content above (scrolled down)
-        if (scrollOffsetPx > 0)
-        {
-            g.setColour (ac.withAlpha (0.55f));
-            g.drawText (juce::CharPointer_UTF8 ("\xe2\x96\xb2"),  // ▲
-                        screen.getRight() - 14, screen.getY() + 2, 12, 12,
-                        juce::Justification::centred, false);
-        }
-    }
+    // Real ScrollBar widget handles scroll indication — no unicode arrows needed
 }
