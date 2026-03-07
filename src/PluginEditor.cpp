@@ -99,6 +99,40 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         trimDialog.reset();
     };
 
+    // TRIM button path: ActionPanel delegates here so PluginEditor owns
+    // trim lifecycle, enterTrimMode, and TrimDialog placement.
+    actionPanel.onTrimToggle = [this]
+    {
+        if (trimDialog != nullptr)
+        {
+            // Second press = cancel
+            if (auto* p = trimDialog->getParentComponent())
+                p->removeChildComponent (trimDialog.get());
+            trimDialog.reset();
+            waveformView.setTrimMode (false);
+            repaint();
+            return;
+        }
+
+        if (processor.sampleData.getSnapshot() == nullptr)
+            return;
+
+        auto snap = processor.sampleData.getSnapshot();
+        const int totalFrames = snap->buffer.getNumSamples();
+
+        // Initialise markers at full extent so user drags inward
+        waveformView.enterTrimMode (0, totalFrames);
+
+        trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+        auto wfBounds = waveformView.getBoundsInParent();
+        trimDialog->setBounds (wfBounds.getX(),
+                               wfBounds.getBottom() - 34,
+                               wfBounds.getWidth(), 34);
+        addAndMakeVisible (*trimDialog);
+        trimDialog->toFront (false);
+        repaint();
+    };
+
     // FIL / WA / CH now live in headerBar — wire their callbacks there
     headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
     headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
@@ -144,7 +178,6 @@ int DysektEditor::computeTotalHeight() const
 
     return h;
 }
-
 
 void DysektEditor::toggleBrowserPanel()
 {
@@ -586,6 +619,7 @@ void DysektEditor::ensureDefaultThemes()
     };
     write ("dark",  ThemeData::darkTheme());
     write ("light", ThemeData::lightTheme());
+    write ("shell", ThemeData::shellTheme());
     write ("lazy",  ThemeData::lazyTheme());
     write ("snow",  ThemeData::snowTheme());
     write ("ghost", ThemeData::ghostTheme());
@@ -618,6 +652,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
         }
     }
     if      (themeName == "light") setTheme (ThemeData::lightTheme());
+    else if (themeName == "shell") setTheme (ThemeData::shellTheme());
     else if (themeName == "lazy")  setTheme (ThemeData::lazyTheme());
     else if (themeName == "snow")  setTheme (ThemeData::snowTheme());
     else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
