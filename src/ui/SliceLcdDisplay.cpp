@@ -278,48 +278,52 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
                     juce::Justification::centredLeft, false);
     }
 
-    // ── Right item — centred in the right half ────────────────────────────────
-    const int rightX  = b.getX() + halfW;
-    const int rightW  = halfW - kLeftPad;
+    // ── Right item — left-aligned from the right-column start ────────────────
+    // Use 52% split so right column has enough room and never overflows.
+    const int rightX  = b.getX() + (b.getWidth() * 52 / 100);
+    const int rightW  = b.getRight() - rightX - kLeftPad - 42; // leave space for flag column
 
     const int rColonPos = rightStr.indexOfChar (':');
     if (rColonPos > 0)
     {
-        // measure combined string, then centre the pair as a unit
-        const int totalW = f.getStringWidth (rightStr);
-        const int startX = rightX + (rightW - totalW) / 2;
         juce::String rlbl = rightStr.substring (0, rColonPos + 1);
         juce::String rval = rightStr.substring (rColonPos + 1);
+        const int rlblW = f.getStringWidth (rlbl);
 
         g.setColour (highlight ? pal.highlight : pal.labelCol);
-        g.drawText (rlbl, startX, y, f.getStringWidth (rlbl) + 2, rowH,
+        g.drawText (rlbl, rightX, y, rlblW + 2, rowH,
                     juce::Justification::centredLeft, false);
         g.setColour (highlight ? pal.highlight : pal.phosphor);
-        g.drawText (rval, startX + f.getStringWidth (rlbl) + 2, y,
-                    totalW - f.getStringWidth (rlbl), rowH,
+        g.drawText (rval, rightX + rlblW + 2, y,
+                    rightW - rlblW - 2, rowH,
                     juce::Justification::centredLeft, false);
     }
     else
     {
         g.setColour (highlight ? pal.highlight : pal.phosphor);
         g.drawText (rightStr, rightX, y, rightW, rowH,
-                    juce::Justification::centred, false);
+                    juce::Justification::centredLeft, false);
     }
 }
 
-void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
+void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
 {
+    // ── Flags drawn as a VERTICAL column on the RIGHT edge of the screen ──────
+    // Greyed out when inactive, full phosphor when active.
     const auto pal = LcdColours::fromTheme();
-    auto b = getLocalBounds().reduced (4);
-    const int rowH = (b.getHeight() - 8) / kRows;
-    int y  = b.getY() + 4 + row * rowH - scrollOffsetPx;
-    int x  = b.getX() + kLeftPad;
-    int pad = 3;
+    auto screen = getLocalBounds().reduced (4);
 
-    // Skip if fully outside the visible screen area
-    if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
+    const juce::Font flagFont = DysektLookAndFeel::makeFont (8.5f, true);
+    const int pad    = 3;
+    const int flagW  = 34;   // fixed pill width
+    const int flagH  = 12;   // pill height
+    const int flagGap = 3;   // gap between pills
+    const int numFlags = 4;
+    const int totalFlagsH = numFlags * flagH + (numFlags - 1) * flagGap;
 
-    const juce::Font flagFont = DysektLookAndFeel::makeFont (9.0f, true);
+    // Centre the vertical stack in the screen height
+    int fy = screen.getY() + (screen.getHeight() - totalFlagsH) / 2;
+    const int fx = screen.getRight() - flagW - 4;  // right-edge inset
 
     struct Flag { juce::String text; bool on; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
@@ -333,19 +337,26 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
     g.setFont (flagFont);
     for (auto& f : flags)
     {
-        int fw = flagFont.getStringWidth (f.text) + pad * 2 + 4;
-        juce::Rectangle<int> box (x, y + 1, fw, rowH - 3);
+        juce::Rectangle<int> box (fx, fy, flagW, flagH);
 
+        // Background: dark when off, faint phosphor when on
         g.setColour (f.on ? pal.phosphor.withAlpha (0.15f) : pal.flagBg);
-        g.fillRoundedRectangle (box.toFloat(), 1.5f);
+        g.fillRoundedRectangle (box.toFloat(), 2.0f);
+
+        // Border: very dim when off, full when on
         g.setColour (f.on ? pal.flagOn : pal.flagOff);
-        g.drawRoundedRectangle (box.toFloat(), 1.5f, 1.0f);
+        g.drawRoundedRectangle (box.toFloat(), 2.0f, 1.0f);
+
+        // Text: dim when off, bright when on
         g.setColour (f.on ? pal.flagOn : pal.flagOff);
-        g.drawText (f.text, box.getX() + pad, box.getY(), box.getWidth() - pad * 2, box.getHeight(),
+        g.drawText (f.text, box.getX() + pad, box.getY(),
+                    box.getWidth() - pad * 2, box.getHeight(),
                     juce::Justification::centred, false);
-        x += fw + 5;
+
+        fy += flagH + flagGap;
     }
 
+    // Filter badge below flags (only when active)
     if (data.filterCutoff < 19000.0f)
     {
         juce::String fStr;
@@ -354,10 +365,15 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int row)
         else
             fStr = "FLT:" + juce::String (juce::roundToInt (data.filterCutoff)) + "Hz";
 
-        g.setColour (pal.phosphor);
-        g.setFont (flagFont);
-        g.drawText (fStr, b.getRight() - 80, y, 70, rowH,
-                    juce::Justification::centredRight, false);
+        juce::Rectangle<int> fbox (fx, fy + flagGap, flagW, flagH);
+        g.setColour (pal.phosphor.withAlpha (0.15f));
+        g.fillRoundedRectangle (fbox.toFloat(), 2.0f);
+        g.setColour (pal.flagOn);
+        g.drawRoundedRectangle (fbox.toFloat(), 2.0f, 1.0f);
+        g.setColour (pal.flagOn);
+        g.drawText (fStr, fbox.getX() + pad, fbox.getY(),
+                    fbox.getWidth() - pad * 2, fbox.getHeight(),
+                    juce::Justification::centred, false);
     }
 }
 
@@ -415,7 +431,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
     g.saveState();
     g.reduceClipRegion (screen);
 
-    // ── Row 0:  Header — Slice index / total + filename ───────────────────────
+    // ── Row 0:  Header — centred: "SL xx / xx  SAMPLENAME" ──────────────────
     {
         juce::String sliceStr = "SL "
             + juce::String (data.sliceIndex + 1).paddedLeft ('0', 2)
@@ -423,7 +439,34 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
             + juce::String (data.numSlices).paddedLeft ('0', 2);
 
         juce::String nameStr = data.sampleName.toUpperCase().substring (0, 18);
-        drawRow (g, 0, sliceStr, nameStr, true);
+
+        // Draw centred header: measure label+value as one unit, centre in screen
+        auto   screen    = getLocalBounds().reduced (4);
+        auto   pal       = LcdColours::fromTheme();
+        const int rowH   = (screen.getHeight() - 8) / kRows;
+        const int y      = screen.getY() + 4 + 0 * rowH - scrollOffsetPx;
+
+        // Highlight background
+        g.setColour (pal.phosphor.withAlpha (0.10f));
+        g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
+
+        const juce::Font lblF = DysektLookAndFeel::makeFont (10.0f, true);
+        const juce::Font valF = DysektLookAndFeel::makeFont (11.0f);
+        const int lblW = lblF.getStringWidth (sliceStr);
+        const int gap  = 8;
+        const int valW = valF.getStringWidth (nameStr);
+        const int totalW = lblW + gap + valW;
+        const int startX = screen.getX() + (screen.getWidth() - totalW) / 2;
+
+        g.setFont (lblF);
+        g.setColour (pal.highlight);
+        g.drawText (sliceStr, startX, y, lblW + 2, rowH,
+                    juce::Justification::centredLeft, false);
+
+        g.setFont (valF);
+        g.setColour (pal.highlight);
+        g.drawText (nameStr, startX + lblW + gap, y, valW + 2, rowH,
+                    juce::Justification::centredLeft, false);
     }
 
     // ── Row 1:  NOTE:Cx(nnn)  |  ROOT:Cx ─────────────────────────────────────
