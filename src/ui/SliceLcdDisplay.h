@@ -56,6 +56,8 @@ private:
         int          muteGroup    = 0;
         float        filterCutoff = 20000.0f;
         float        filterRes    = 0.0f;
+        // Lock state
+        bool         sliceLocked      = false;
         // Extended — scroll rows 7-9
         bool         stretchEnabled   = false;
         float        tonalityHz       = 0.0f;

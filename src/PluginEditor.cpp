@@ -91,12 +91,12 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     {
         processor.applyTrimToCurrentSample (s, e);
         trimSession.reset();
-        trimDialog.reset();
     };
     waveformView.onTrimCancelled = [this]
     {
         trimSession.reset();
-        trimDialog.reset();
+        // The original (non-trimmed) snapshot is already in sampleData since
+        // we loaded the full file before entering trim mode.
     };
 
     // FIL / WA / CH now live in headerBar — wire their callbacks there
@@ -540,18 +540,6 @@ void DysektEditor::timerCallback()
             trimSession->active = true;
             const int totalFrames = snap->buffer.getNumSamples();
             waveformView.enterTrimMode (0, totalFrames);
-
-            // Show the trim bar overlay
-            if (trimDialog == nullptr)
-            {
-                trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
-                auto wfBounds = waveformView.getBoundsInParent();
-                trimDialog->setBounds (wfBounds.getX(),
-                                       wfBounds.getBottom() - 34,
-                                       wfBounds.getWidth(), 34);
-                addAndMakeVisible (*trimDialog);
-                trimDialog->toFront (false);
-            }
         }
     }
 
@@ -613,6 +601,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
         {
             setTheme (t);
             processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+            browserPanel.refreshTheme();
             saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
             repaint(); return;
         }
@@ -624,6 +613,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
     else if (themeName == "hack")  setTheme (ThemeData::hackTheme());
     else                           setTheme (ThemeData::darkTheme());
     processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+    browserPanel.refreshTheme();
     saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
     repaint();
 }

@@ -170,23 +170,45 @@ void SliceLane::paint (juce::Graphics& g)
         g.drawText (label, cl.x, 0, labelW, h, juce::Justification::centredLeft);
     }
 
-    // ── Lock icons: draw a small solid rect in the top-right of fully-locked slices ──
+    // ── Lock icons: padlock shape in the top-right of fully-locked slices ────
     for (int i = 0; i < visibleCount; ++i)
     {
         const auto& si = visibleSlices[(size_t) i];
         const auto& sl = ui.slices[(size_t) si.idx];
         if (sl.lockMask != 0xFFFFFFFFu) continue;  // not fully locked
 
-        const int iconSz = 5;
-        const int iconX  = si.x2 - iconSz - 2;
-        const int iconY  = 2;
-        if (iconX < si.x1 + 4) continue;  // slice too narrow to show icon
+        // Padlock: body (4x4) + shackle arc (3px wide, 3px tall above body)
+        const int bodyW  = 6;
+        const int bodyH  = 5;
+        const int shackleW = 4;
+        const int totalH = bodyH + 3;   // shackle adds 3px above
 
-        g.setColour (getTheme().lockActive.withAlpha (0.9f));
-        g.fillRect (iconX, iconY, iconSz, iconSz);
-        // Small shackle hint (top bar)
-        g.setColour (getTheme().lockActive);
-        g.drawRect (iconX, iconY, iconSz, iconSz, 1);
+        const int iconX  = si.x2 - bodyW - 3;
+        const int iconY  = 2;
+        if (iconX < si.x1 + 6) continue;  // slice too narrow
+        if (iconY + totalH > h - 1) continue;
+
+        const auto lockCol = getTheme().accent.withAlpha (0.90f);
+        g.setColour (lockCol);
+
+        // Shackle: two vertical lines + arc-like top bar
+        const int shackleX = iconX + (bodyW - shackleW) / 2;
+        const int shackleY = iconY;
+        // Left upright
+        g.drawVerticalLine   (shackleX,           (float) shackleY + 1, (float) shackleY + 3);
+        // Right upright
+        g.drawVerticalLine   (shackleX + shackleW, (float) shackleY + 1, (float) shackleY + 3);
+        // Top bar (horizontal line connecting the two uprights)
+        g.drawHorizontalLine (shackleY,            (float) shackleX, (float) (shackleX + shackleW + 1));
+
+        // Body: filled rounded rect
+        const int bodyY = iconY + 3;
+        g.fillRoundedRectangle ((float) iconX, (float) bodyY,
+                                (float) bodyW, (float) bodyH, 1.0f);
+        // Keyhole dot
+        g.setColour (getTheme().darkBar.withAlpha (0.7f));
+        g.fillEllipse ((float) (iconX + bodyW / 2 - 1),
+                       (float) (bodyY + bodyH / 2 - 1), 2.0f, 2.0f);
     }
 
     // Bottom separator line

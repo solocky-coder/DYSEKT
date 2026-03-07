@@ -25,6 +25,9 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     sourcePlayer.setSource (&transport);
     transport.addChangeListener (this);
 
+    // Apply theme colours now (and again whenever theme changes via refreshTheme())
+    refreshTheme();
+
     // ── Play/Stop button ──────────────────────────────────────────────────────
     playStopBtn.setColour (juce::TextButton::buttonColourId,
                            getTheme().accent.withAlpha (0.35f));
@@ -93,6 +96,33 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
 
     juce::Timer::callAfterDelay (100,  [enforceReadOnly] { enforceReadOnly(); });
     juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });  // catch lazy-init children
+}
+
+void FileBrowserPanel::refreshTheme()
+{
+    const auto& t = getTheme();
+
+    // ── SmallListLookAndFeel ─────────────────────────────────────────────────
+    smallLAF.refreshTheme();
+
+    // ── Play/Stop button ─────────────────────────────────────────────────────
+    const bool playing = transport.isPlaying();
+    playStopBtn.setColour (juce::TextButton::buttonColourId,
+                           t.accent.withAlpha (playing ? 0.55f : 0.25f));
+    playStopBtn.setColour (juce::TextButton::textColourOffId, t.foreground);
+
+    // ── Volume slider ────────────────────────────────────────────────────────
+    volumeSlider.setColour (juce::Slider::thumbColourId,  t.accent);
+    volumeSlider.setColour (juce::Slider::trackColourId,  t.accent.withAlpha (0.25f));
+    volumeSlider.setColour (juce::Slider::backgroundColourId, t.darkBar.darker (0.2f));
+
+    // ── File name label ──────────────────────────────────────────────────────
+    fileNameLabel.setColour (juce::Label::textColourId,        t.accent);
+    fileNameLabel.setColour (juce::Label::backgroundColourId,  juce::Colour (0x00000000));
+
+    // Force browser to re-render with new colours
+    browser.repaint();
+    repaint();
 }
 
 FileBrowserPanel::~FileBrowserPanel()

@@ -135,6 +135,7 @@ void SliceLcdDisplay::buildDisplayData()
     data.muteGroup   = sl.muteGroup;
     data.filterCutoff    = sl.filterCutoff;
     data.filterRes       = sl.filterRes;
+    data.sliceLocked     = (sl.lockMask == 0xFFFFFFFFu);
     // Extended fields for scroll rows 7-9
     data.stretchEnabled  = sl.stretchEnabled;
     data.tonalityHz      = sl.tonalityHz;
@@ -476,6 +477,24 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         g.setColour (pal.highlight);
         g.drawText (nameStr, startX + lblW + gap, y, valW + 2, rowH,
                     juce::Justification::centredLeft, false);
+
+        // Lock badge: small pill on the far right when slice is locked
+        if (data.sliceLocked)
+        {
+            const juce::Font lkF = DysektLookAndFeel::makeFont (8.0f, true);
+            const juce::String lkStr = "LOCK";
+            const int lkW = lkF.getStringWidth (lkStr) + 6;
+            const int lkX = screen.getRight() - lkW - 6;
+            const int lkY = y + 1;
+            const int lkH = rowH - 3;
+            g.setColour (pal.phosphor.withAlpha (0.25f));
+            g.fillRoundedRectangle ((float) lkX, (float) lkY, (float) lkW, (float) lkH, 2.0f);
+            g.setColour (pal.highlight);
+            g.drawRoundedRectangle ((float) lkX, (float) lkY, (float) lkW, (float) lkH, 2.0f, 1.0f);
+            g.setFont (lkF);
+            g.setColour (pal.highlight);
+            g.drawText (lkStr, lkX + 3, lkY, lkW - 6, lkH, juce::Justification::centred, false);
+        }
     }
 
     // ── Row 1:  NOTE:Cx(nnn)  |  ROOT:Cx ─────────────────────────────────────

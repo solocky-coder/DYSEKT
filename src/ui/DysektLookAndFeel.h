@@ -27,6 +27,14 @@ public:
     static void setMenuScale (float s) { sMenuScale = s; }
     static float getMenuScale() { return sMenuScale; }
 
+    void drawComboBox (juce::Graphics&, int width, int height, bool isButtonDown,
+                       int buttonX, int buttonY, int buttonW, int buttonH,
+                       juce::ComboBox&) override;
+    juce::Font getComboBoxFont (juce::ComboBox&) override;
+    void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
+    void drawPopupMenuUpDownArrow (juce::Graphics&, int width, int height,
+                                   bool isScrollUpArrow) override;
+
     void drawTooltip (juce::Graphics&, const juce::String& text, int width, int height) override;
     juce::Rectangle<int> getTooltipBounds (const juce::String& text, juce::Point<int> screenPos,
                                            juce::Rectangle<int> parentArea) override;

@@ -154,6 +154,72 @@ juce::Font DysektLookAndFeel::getPopupMenuFont()
     return makeFont (15.0f * sMenuScale);
 }
 
+// ── ComboBox ─────────────────────────────────────────────────────────────────
+// Override to prevent LookAndFeel_V4 from rendering unicode arrow glyph (▾)
+// which IBM Plex Sans doesn't contain, causing it to appear as random symbols.
+
+void DysektLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
+                                       bool /*isButtonDown*/, int buttonX, int /*buttonY*/,
+                                       int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box)
+{
+    const auto& t = getTheme();
+
+    // Background
+    g.setColour (t.button);
+    g.fillRect (0, 0, width, height);
+
+    // Border
+    g.setColour (box.hasKeyboardFocus (false) ? t.accent.withAlpha (0.5f) : t.separator);
+    g.drawRect (0, 0, width, height, 1);
+
+    // Dropdown arrow: two short diagonal lines forming a ˅ shape — no unicode
+    const int arrowCX = buttonX + (width - buttonX) / 2;
+    const int arrowCY = height / 2;
+    const int arrowHalf = (int) (4 * sMenuScale);
+    g.setColour (t.foreground.withAlpha (0.7f));
+    g.drawLine ((float) (arrowCX - arrowHalf), (float) (arrowCY - 2),
+                (float) arrowCX,               (float) (arrowCY + 2), 1.5f);
+    g.drawLine ((float) arrowCX,               (float) (arrowCY + 2),
+                (float) (arrowCX + arrowHalf), (float) (arrowCY - 2), 1.5f);
+}
+
+juce::Font DysektLookAndFeel::getComboBoxFont (juce::ComboBox&)
+{
+    return makeFont (12.0f * sMenuScale);
+}
+
+void DysektLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
+{
+    label.setBounds (1, 1, box.getWidth() - 28, box.getHeight() - 2);
+    label.setFont (getComboBoxFont (box));
+    label.setColour (juce::Label::textColourId, getTheme().foreground);
+    label.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+}
+
+// Scroll arrows in popup menus — draw simple filled triangles, no unicode
+void DysektLookAndFeel::drawPopupMenuUpDownArrow (juce::Graphics& g, int width, int height,
+                                                   bool isScrollUpArrow)
+{
+    g.setColour (getTheme().foreground.withAlpha (0.6f));
+    const float cx = (float) width * 0.5f;
+    const float cy = (float) height * 0.5f;
+    const float sz = 4.0f;
+    juce::Path arrow;
+    if (isScrollUpArrow)
+    {
+        arrow.addTriangle (cx - sz, cy + sz * 0.5f,
+                           cx + sz, cy + sz * 0.5f,
+                           cx,      cy - sz * 0.5f);
+    }
+    else
+    {
+        arrow.addTriangle (cx - sz, cy - sz * 0.5f,
+                           cx + sz, cy - sz * 0.5f,
+                           cx,      cy + sz * 0.5f);
+    }
+    g.fillPath (arrow);
+}
+
 void DysektLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height)
 {
     g.fillAll (getTheme().darkBar.brighter (0.1f));
