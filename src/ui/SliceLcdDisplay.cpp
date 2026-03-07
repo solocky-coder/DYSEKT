@@ -33,8 +33,8 @@ namespace LcdColours
         p.noDataCol  = ac.withAlpha (0.15f).overlaidWith (bg);
         p.border     = ac.withAlpha (0.12f).overlaidWith (bg);
         p.flagOn     = ac;
-        p.flagOff    = ac.withAlpha (0.12f).overlaidWith (bg);
-        p.flagBg     = bg.darker (0.3f);
+        p.flagOff    = ac.withAlpha (0.45f);          // dim but visible
+        p.flagBg     = bg.brighter (0.25f);           // visible pill outline against screen bg
         return p;
     }
 }
@@ -133,8 +133,17 @@ void SliceLcdDisplay::buildDisplayData()
     data.loopMode    = sl.loopMode;
     data.oneShot     = sl.oneShot;
     data.muteGroup   = sl.muteGroup;
-    data.filterCutoff = sl.filterCutoff;
-    data.filterRes   = sl.filterRes;
+    data.filterCutoff    = sl.filterCutoff;
+    data.filterRes       = sl.filterRes;
+    // Extended fields for scroll rows 7-9
+    data.stretchEnabled  = sl.stretchEnabled;
+    data.tonalityHz      = sl.tonalityHz;
+    data.formantSemitones = sl.formantSemitones;
+    data.formantComp     = sl.formantComp;
+    data.grainMode       = sl.grainMode;
+    data.releaseTail     = sl.releaseTail;
+    data.outputBus       = sl.outputBus;
+    data.bpm             = sl.bpm;
 }
 
 // ── Repaint trigger ────────────────────────────────────────────────────────────
@@ -523,7 +532,77 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 6, adsrLeft, adsrRight);
     }
 
-    // ── Floating flags — drawn over the bottom edge of row 6 ─────────────────
+    // ── Row 7:  FMNT:+x.xst  |  TONAL:xxxxHz ────────────────────────────────
+    {
+        const float fmnt = data.formantSemitones;
+        juce::String fmntStr  = juce::String ("FMNT:") + (fmnt >= 0.0f ? "+" : "")
+                              + juce::String (fmnt, 1) + "st";
+        juce::String tonalStr = "TONAL:" + (data.tonalityHz < 1.0f
+                              ? juce::String ("OFF")
+                              : juce::String (juce::roundToInt (data.tonalityHz)) + "Hz");
+        drawRowPair (g, 7, fmntStr, tonalStr);
+    }
+
+    // ── Row 8:  GRAIN:xxxxx  |  FRES:x.xx ───────────────────────────────────
+    {
+        juce::String grainStr;
+        switch (data.grainMode)
+        {
+            case 0:  grainStr = "GRAIN:FAST";   break;
+            case 1:  grainStr = "GRAIN:NORMAL"; break;
+            case 2:  grainStr = "GRAIN:SMOOTH"; break;
+            default: grainStr = "GRAIN:?";      break;
+        }
+        juce::String fresStr = "FRES:" + juce::String (data.filterRes, 2);
+        drawRowPair (g, 8, grainStr, fresStr);
+    }
+
+    // ── Row 9:  OUT:xx  |  BPM:xxx.xx  +  toggle flags ───────────────────────
+    {
+        juce::String outStr = "OUT:" + juce::String (data.outputBus + 1);
+        juce::String bpmStr = "BPM:" + juce::String (data.bpm, 1);
+        drawRowPair (g, 9, outStr, bpmStr);
+    }
+
+    // ── Row 9 right-side toggle flags (STRETCH / TAIL / FMNT C) ──────────────
+    // Drawn inline as small text badges after BPM on row 9
+    {
+        const auto pal2 = LcdColours::fromTheme();
+        auto b2 = getLocalBounds().reduced (4);
+        const int rowH2  = (b2.getHeight() - 8) / kRows;
+        const int y9     = b2.getY() + 4 + 9 * rowH2 - scrollOffsetPx;
+        if (y9 < b2.getBottom() - 4 && y9 + rowH2 > b2.getY() + 4)
+        {
+            const juce::Font flagFont2 = DysektLookAndFeel::makeFont (8.5f, true);
+            const int pad2 = 3;
+            const int fh   = rowH2 - 4;
+            int fx2 = b2.getX() + b2.getWidth() / 4;  // start after left column
+
+            struct TFlag { juce::String text; bool on; };
+            TFlag tflags[] = {
+                { "STR", data.stretchEnabled },
+                { "TAIL", data.releaseTail  },
+                { "FMC", data.formantComp   },
+            };
+            g.setFont (flagFont2);
+            for (auto& tf : tflags)
+            {
+                int fw2 = flagFont2.getStringWidth (tf.text) + pad2 * 2 + 4;
+                juce::Rectangle<int> box2 (fx2, y9 + 2, fw2, fh);
+                g.setColour (tf.on ? pal2.phosphor.withAlpha (0.15f) : pal2.flagBg);
+                g.fillRoundedRectangle (box2.toFloat(), 1.5f);
+                g.setColour (tf.on ? pal2.flagOn : pal2.flagOff);
+                g.drawRoundedRectangle (box2.toFloat(), 1.5f, 1.0f);
+                g.setColour (tf.on ? pal2.flagOn : pal2.flagOff);
+                g.drawText (tf.text, box2.getX() + pad2, box2.getY(),
+                            box2.getWidth() - pad2 * 2, box2.getHeight(),
+                            juce::Justification::centred, false);
+                fx2 += fw2 + 4;
+            }
+        }
+    }
+
+    // ── Floating flags — right-edge vertical column (always visible) ──────────
     drawFlagsRow (g, 6);
 
     g.restoreState();  // end clip region
@@ -534,22 +613,22 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         const int contentH  = kRows * rowH;
         const int visibleH  = screen.getHeight() - 8;
 
-        if (contentH > visibleH && scrollOffsetPx > 0)
+        const auto ac = getTheme().accent;
+        g.setFont (DysektLookAndFeel::makeFont (9.0f));
+
+        // ▼  more content below
+        if (contentH > visibleH && scrollOffsetPx < contentH - visibleH)
         {
-            // Faint down-arrow at bottom-right to signal more content
-            const auto ac = getTheme().accent;
-            g.setColour (ac.withAlpha (0.45f));
-            g.setFont (DysektLookAndFeel::makeFont (9.0f));
+            g.setColour (ac.withAlpha (0.55f));
             g.drawText (juce::CharPointer_UTF8 ("\xe2\x96\xbc"),  // ▼
                         screen.getRight() - 14, screen.getBottom() - 14, 12, 12,
                         juce::Justification::centred, false);
         }
 
+        // ▲  content above (scrolled down)
         if (scrollOffsetPx > 0)
         {
-            const auto ac = getTheme().accent;
-            g.setColour (ac.withAlpha (0.45f));
-            g.setFont (DysektLookAndFeel::makeFont (9.0f));
+            g.setColour (ac.withAlpha (0.55f));
             g.drawText (juce::CharPointer_UTF8 ("\xe2\x96\xb2"),  // ▲
                         screen.getRight() - 14, screen.getY() + 2, 12, 12,
                         juce::Justification::centred, false);

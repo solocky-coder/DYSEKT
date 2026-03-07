@@ -21,7 +21,7 @@ public:
 
 private:
     // ── Layout constants ──────────────────────────────────────────────────────
-    static constexpr int kRows         = 7;   // number of content rows
+    static constexpr int kRows         = 10;  // number of content rows (7 visible + 3 scroll)
     static constexpr int kLeftPad      = 6;
     static constexpr int kLabelW       = 46;
     static constexpr int kScanlineAlpha = 28;
@@ -56,6 +56,15 @@ private:
         int          muteGroup    = 0;
         float        filterCutoff = 20000.0f;
         float        filterRes    = 0.0f;
+        // Extended — scroll rows 7-9
+        bool         stretchEnabled   = false;
+        float        tonalityHz       = 0.0f;
+        float        formantSemitones = 0.0f;
+        bool         formantComp      = false;
+        int          grainMode        = 0;
+        bool         releaseTail      = false;
+        int          outputBus        = 0;
+        float        bpm              = 120.0f;
     };
 
     DisplayData data;
