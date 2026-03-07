@@ -1,6 +1,5 @@
 #include "ActionPanel.h"
 #include "AutoChopPanel.h"
-#include "TrimDialog.h"
 #include "DysektLookAndFeel.h"
 #include "WaveformView.h"
 #include "../PluginProcessor.h"
@@ -91,29 +90,11 @@ void ActionPanel::toggleAutoChop()
 
 void ActionPanel::toggleTrimMode()
 {
-    if (trimDialog != nullptr)
-    {
-        if (auto* parent = trimDialog->getParentComponent())
-            parent->removeChildComponent (trimDialog.get());
-        trimDialog.reset();
-        waveformView.setTrimMode (false);
-        repaint();
-        return;
-    }
-
-    if (processor.sampleData.getSnapshot() == nullptr)
-        return;
-
-    auto* editor = waveformView.getParentComponent();
-    if (editor == nullptr)
-        return;
-
-    waveformView.setTrimMode (true);
-    trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
-    auto wfBounds = waveformView.getBoundsInParent();
-    trimDialog->setBounds (wfBounds.getX(), wfBounds.getBottom() - 34, wfBounds.getWidth(), 34);
-    editor->addAndMakeVisible (*trimDialog);
-    repaint();
+    // Trim mode lifecycle is owned entirely by PluginEditor.
+    // ActionPanel just fires the callback so the editor can handle
+    // enterTrimMode(), TrimDialog placement, and onTrimApplied wiring.
+    if (onTrimToggle)
+        onTrimToggle();
 }
 
 void ActionPanel::resized()

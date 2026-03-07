@@ -1060,7 +1060,9 @@ void WaveformView::setTrimMode (bool active)
     trimMode = active;
     if (! active)
     {
-        dragMode = None;
+        dragMode     = None;
+        trimInPoint  = 0;
+        trimOutPoint = 0;
     }
     repaint();
 }

@@ -997,16 +997,29 @@ void DysektProcessor::handleCommand (const Command& cmd)
             break;
 
         case CmdApplyTrim:
-            // Clamp all slice start/end markers to the new trim region so no
-            // slice can reference audio outside the trimmed bounds.
+            // 1. Physically crop the audio buffer to [trimStart, trimEnd)
+            // 2. Re-offset all slice start positions relative to the new origin
+            // 3. Clamp any out-of-range slices so nothing references dead audio
             {
                 const int tStart = cmd.intParam1;
                 const int tEnd   = cmd.intParam2;
+
+                auto snap = sampleData.getSnapshot();
+                if (snap != nullptr)
+                {
+                    auto trimmed = SampleData::createTrimmed (*snap, tStart, tEnd);
+                    if (trimmed != nullptr)
+                        sampleData.applyDecodedSample (std::move (trimmed));
+                }
+
+                const int newLen = tEnd - tStart;
                 const int n      = sliceManager.getNumSlices();
                 for (int i = 0; i < n; ++i)
                 {
                     auto& sl = sliceManager.getSlice (i);
-                    sl.startSample = juce::jlimit (tStart, tEnd - 1, sl.startSample);
+                    // Re-origin: subtract trim start, then clamp inside new buffer
+                    sl.startSample = juce::jlimit (0, juce::jmax (0, newLen - 1),
+                                                   sl.startSample - tStart);
                 }
                 sliceManager.sortByStart();
             }

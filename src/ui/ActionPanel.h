@@ -5,7 +5,6 @@
 class DysektProcessor;
 class WaveformView;
 class AutoChopPanel;
-class TrimDialog;
 
 class ActionPanel : public juce::Component
 {
@@ -57,5 +56,6 @@ private:
     // dupBtn / splitBtn / deleteBtn removed in earlier fixes
 
     std::unique_ptr<AutoChopPanel> autoChopPanel;
-    std::unique_ptr<TrimDialog>    trimDialog;
+    // Trim is fully managed by PluginEditor — no trimDialog here
+    std::function<void()> onTrimToggle;  // wired by PluginEditor
 };
