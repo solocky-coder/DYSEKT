@@ -22,8 +22,17 @@ constexpr float kKnobEnd   = juce::MathConstants<float>::pi * 2.75f;
 constexpr int kKnobCellPadRight = 14;  // generous pad — prevents font-metric vs render discrepancies clipping labels
 }
 
-SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p) {}
-void SliceControlBar::resized() {}
+SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
+{
+    this->setInterceptsMouseClicks (true, true);
+    this->setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+}
+void SliceControlBar::resized()
+{
+    // cells are populated during paint(); trigger a paint now so hit-testing
+    // works immediately on the first mouse event without waiting for an external repaint.
+    repaint();
+}
 
 // =============================================================================
 //  drawLockIcon  (unchanged)
@@ -310,8 +319,8 @@ void SliceControlBar::paint (juce::Graphics& g)
     if (idx < 0 || idx >= numSlices)
     {
         g.setFont (DysektLookAndFeel::makeFont (15.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.35f));
-        g.drawText ("No slice selected", 8, 24, 220, 18, juce::Justification::centredLeft);
+        g.setColour (juce::Colours::white);
+        // g.drawText ("No slice selected", 8, 24, 220, 18, juce::Justification::centredLeft);
         return;
     }
 
@@ -337,20 +346,7 @@ void SliceControlBar::paint (juce::Graphics& g)
     int cw;
     using F = DysektProcessor;
 
-    // ── Row 1 right: slice info (sample range only — no time length) ─────────
-    {
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (getTheme().accent.withAlpha (0.7f));
-        g.drawText ("SLICE " + juce::String (idx + 1),
-                    8, row1y + 2, rightEdge - 8, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeFont (14.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.5f));
-        // Sample range only — no time display per request
-        // Marker model: derive end from next slice's start.
-        const int displayEnd = processor.sliceManager.getEndForSlice (ui.selectedSlice, ui.sampleNumFrames);
-        g.drawText (juce::String (s.startSample) + " â " + juce::String (displayEnd),
-                    8, row1y + 15, rightEdge - 8, 14, juce::Justification::right);
-    }
+    // ── Slice info removed — displayed in LCD panel (redundant here) ────────────
 
     // =========================================================================
     //  ROW 1: Toggle buttons (ALGO, STRETCH, 1SHOT, TAIL, REV, LOOP) + START + END + LINK
@@ -451,11 +447,9 @@ void SliceControlBar::paint (juce::Graphics& g)
 
     // END knob (row 1)
     {
-        // Marker model: END knob shows/edits the next slice's startSample.
-        const int sliceEndSample = processor.sliceManager.getEndForSlice (ui.selectedSlice, ui.sampleNumFrames);
         float endNorm = (ui.sampleNumFrames > 0)
-            ? (float) sliceEndSample / (float) juce::jmax (1, ui.sampleNumFrames) : 1.f;
-        drawKnobCell (g, x, row1y, "END", juce::String (sliceEndSample),
+            ? (float) s.endSample / (float) juce::jmax (1, ui.sampleNumFrames) : 1.f;
+        drawKnobCell (g, x, row1y, "END", juce::String (s.endSample),
                       endNorm, false, 0, F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
         cells.back().isMidiLearnable = true;
         x += cw + 6;
@@ -756,6 +750,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             DysektProcessor::Command gc; gc.type = DysektProcessor::CmdBeginGesture;
             processor.pushCommand (gc);
             activeDragCell = i; dragStartY = pos.y;
+            activeCellSnapshot = cell;  // snapshot before cells.clear() on next paint
 
             // Notify host of gesture start for APVTS-backed params (enables Quick Controls / MIDI Learn)
             {
@@ -792,9 +787,8 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                 int liveSel = ui.selectedSlice;
                 if (liveSel >= 0 && liveSel < ui.numSlices)
                 {
-                    const int initEnd = processor.sliceManager.getEndForSlice (liveSel, ui.sampleNumFrames);
                     processor.liveDragBoundsStart.store (ui.slices[(size_t) liveSel].startSample, std::memory_order_relaxed);
-                    processor.liveDragBoundsEnd.store   (initEnd, std::memory_order_relaxed);
+                    processor.liveDragBoundsEnd.store   (ui.slices[(size_t) liveSel].endSample,   std::memory_order_relaxed);
                     processor.liveDragSliceIdx.store    (liveSel, std::memory_order_release);
                 }
             }
@@ -817,10 +811,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                     case F::FieldRelease:     dragStartValue = (sl.lockMask & kLockRelease)     ? sl.releaseSec           : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f; break;
                     case F::FieldMuteGroup:   dragStartValue = (float)((sl.lockMask & kLockMuteGroup)  ? sl.muteGroup  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load());   break;
                     case F::FieldSliceStart:  dragStartValue = (float) sl.startSample; break;
-                    case F::FieldSliceEnd:
-                        dragStartValue = (float) processor.sliceManager.getEndForSlice (
-                            ui.selectedSlice, ui.sampleNumFrames);
-                        break;
+                    case F::FieldSliceEnd:    dragStartValue = (float) sl.endSample;   break;
                     case F::FieldMidiNote:    dragStartValue = (float) sl.midiNote;              break;
                     case F::FieldVolume:      dragStartValue = (sl.lockMask & kLockVolume)      ? sl.volume               : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();            break;
                     case F::FieldOutputBus:   dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
@@ -833,9 +824,10 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             return;
         }
 
-        // Boolean toggle
+        // Boolean toggle — directly flip the value, no popup
         if (cell.isBoolean)
         {
+            if (e.mods.isRightButtonDown()) return; // right-click does nothing for boolean cells
             int sIdx = ui.selectedSlice;
             if (sIdx >= 0 && sIdx < ui.numSlices)
             {
@@ -844,35 +836,47 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                 bool currentVal  = false;
                 using F = DysektProcessor;
                 if      (cell.fieldId == F::FieldStretchEnabled) currentVal = sliceLocked ? sl.stretchEnabled : (processor.apvts.getRawParameterValue (ParamIds::defaultStretchEnabled)->load() > 0.5f);
-                else if (cell.fieldId == F::FieldFormantComp)   currentVal = sliceLocked ? sl.formantComp    : (processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load()    > 0.5f);
-                else if (cell.fieldId == F::FieldReleaseTail)   currentVal = sliceLocked ? sl.releaseTail    : (processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load()    > 0.5f);
-                else if (cell.fieldId == F::FieldReverse)       currentVal = sliceLocked ? sl.reverse        : (processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load()        > 0.5f);
-                else if (cell.fieldId == F::FieldOneShot)       currentVal = sliceLocked ? sl.oneShot        : (processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load()        > 0.5f);
+                else if (cell.fieldId == F::FieldFormantComp)    currentVal = sliceLocked ? sl.formantComp    : (processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load()    > 0.5f);
+                else if (cell.fieldId == F::FieldReleaseTail)    currentVal = sliceLocked ? sl.releaseTail    : (processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load()    > 0.5f);
+                else if (cell.fieldId == F::FieldReverse)        currentVal = sliceLocked ? sl.reverse        : (processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load()        > 0.5f);
+                else if (cell.fieldId == F::FieldOneShot)        currentVal = sliceLocked ? sl.oneShot        : (processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load()        > 0.5f);
+
                 DysektProcessor::Command cmd;
-                cmd.type = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1 = cell.fieldId; cmd.floatParam1 = currentVal ? 0.f : 1.f;
-                processor.pushCommand (cmd); repaint();
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = cell.fieldId;
+                cmd.floatParam1 = currentVal ? 0.0f : 1.0f;  // flip
+                processor.pushCommand (cmd);
+                repaint();
             }
             return;
         }
 
-        // Choice cycle
+        // Choice — click to cycle through options directly
         if (cell.isChoice)
         {
+            if (e.mods.isRightButtonDown()) return; // right-click does nothing for choice cells
             int sIdx = ui.selectedSlice;
             if (sIdx >= 0 && sIdx < ui.numSlices)
             {
                 const auto& sl = ui.slices[(size_t) sIdx];
                 int current = 0;
+                int maxVal  = (int) cell.maxVal;
                 using F = DysektProcessor;
-                if      (cell.fieldId == F::FieldAlgorithm) current = (sl.lockMask & kLockAlgorithm) ? sl.algorithm : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
-                else if (cell.fieldId == F::FieldGrainMode) current = (sl.lockMask & kLockGrainMode) ? sl.grainMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
-                else if (cell.fieldId == F::FieldLoop)      current = (sl.lockMask & kLockLoop)      ? sl.loopMode  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
-                int next = (current + 1) > (int) cell.maxVal ? 0 : current + 1;
+
+                if      (cell.fieldId == F::FieldAlgorithm)
+                    current = (sl.lockMask & kLockAlgorithm) ? sl.algorithm : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
+                else if (cell.fieldId == F::FieldGrainMode)
+                    current = (sl.lockMask & kLockGrainMode) ? sl.grainMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
+                else if (cell.fieldId == F::FieldLoop)
+                    current = (sl.lockMask & kLockLoop) ? sl.loopMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
+
+                const int next = (current >= maxVal) ? 0 : current + 1;
                 DysektProcessor::Command cmd;
-                cmd.type = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1 = cell.fieldId; cmd.floatParam1 = (float) next;
-                processor.pushCommand (cmd); repaint();
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = cell.fieldId;
+                cmd.floatParam1 = (float) next;
+                processor.pushCommand (cmd);
+                repaint();
             }
             return;
         }
@@ -884,8 +888,11 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
 // =============================================================================
 void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
 {
-    if (activeDragCell < 0 || activeDragCell >= (int) cells.size()) return;
-    const auto& cell = cells[(size_t) activeDragCell];
+    if (activeDragCell < 0) return;
+
+    // Use the snapshot taken at mouseDown — cells[] may have been cleared and
+    // rebuilt by paint() between mouseDown and this mouseDrag event.
+    const auto& cell = activeCellSnapshot;
     if (! cell.isKnob) return;
 
     float deltaY = (float) (dragStartY - e.y);
@@ -905,18 +912,15 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
             const auto& sl = ui2.slices[(size_t) liveSel];
             int delta = (int) (deltaY * sensitivity);
 
-            // Marker model: derive current slice end from next slice's start.
-            const int liveSliceEnd = processor.sliceManager.getEndForSlice (liveSel, ui2.sampleNumFrames);
             if (cell.fieldId == F::FieldSliceStart)
             {
-                int newStart = juce::jlimit (0, liveSliceEnd - 64,
+                int newStart = juce::jlimit (0, sl.endSample - 64,
                                              (int) dragStartValue + delta);
-                processor.liveDragBoundsStart.store (newStart,      std::memory_order_relaxed);
-                processor.liveDragBoundsEnd.store   (liveSliceEnd,  std::memory_order_relaxed);
+                processor.liveDragBoundsStart.store (newStart,       std::memory_order_relaxed);
+                processor.liveDragBoundsEnd.store   (sl.endSample,   std::memory_order_relaxed);
             }
             else
             {
-                // END knob drag: move the next slice's start boundary.
                 int newEnd = juce::jlimit (sl.startSample + 64, ui2.sampleNumFrames,
                                            (int) dragStartValue + delta);
                 processor.liveDragBoundsStart.store (sl.startSample, std::memory_order_relaxed);
@@ -977,9 +981,9 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
 {
     using F = DysektProcessor;
 
-    if (activeDragCell >= 0 && activeDragCell < (int) cells.size())
+    if (activeDragCell >= 0)
     {
-        const auto& cell = cells[(size_t) activeDragCell];
+        const auto& cell = activeCellSnapshot;  // use snapshot, not cells[] which may be stale
 
         // Commit slice boundary drags
         if (cell.fieldId == F::FieldSliceStart || cell.fieldId == F::FieldSliceEnd)

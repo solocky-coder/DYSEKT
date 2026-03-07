@@ -140,14 +140,26 @@ int LazyChopEngine::onNote (int note, VoicePool& voicePool, SliceManager& sliceM
         return -1;
     }
 
-    // First unassigned note — start playback from beginning
+    // First unassigned note — start playback from beginning and immediately
+    // commit a slice marker at position 0 so the UI shows slice 1 right away.
     if (! playing)
     {
         startPreview (voicePool, 0);
-        chopPos = 0;
+        playing  = true;
         lastNote = note;
-        playing = true;
-        return -1;
+        chopPos  = 0;
+
+        // Insert the first marker so slice 1 is visible immediately.
+        // Its end will be determined by the next note (marker model: end = next
+        // marker's start, so nothing more needed here).
+        int firstIdx = sliceMgr.createSlice (0, sliceMgr.getEndForSlice (0, sampleLength));
+        if (firstIdx >= 0)
+        {
+            auto& s = sliceMgr.getSlice (firstIdx);
+            s.midiNote = note;
+            sliceMgr.rebuildMidiMap();
+        }
+        return firstIdx;
     }
 
     // Re-press same note: re-audition from current start point
@@ -192,15 +204,20 @@ int LazyChopEngine::onNote (int note, VoicePool& voicePool, SliceManager& sliceM
         chopPos = 0;
     }
 
-    // Create slice from chopPos to playhead (min 64 samples)
+    // Insert a marker at the playhead, splitting the current open-ended slice.
+    // The left half (chopPos..playhead) already has its note from when it was
+    // first created; the right half (playhead onward) gets the new note.
     if (playhead - chopPos >= 64)
     {
-        int newIdx = sliceMgr.createSlice (chopPos, playhead);
+        // insertMarker splits the slice that owns `playhead` into two.
+        // The right-hand slice is the new one; assign this note to it.
+        int newIdx = sliceMgr.insertMarker (playhead, sampleLength);
         if (newIdx >= 0)
         {
             auto& s = sliceMgr.getSlice (newIdx);
-            s.midiNote = nextMidiNote;
-            nextMidiNote = std::min (nextMidiNote + 1, 127);
+            s.midiNote = note;
+            nextMidiNote = std::max (nextMidiNote, note + 1);
+            nextMidiNote = std::min (nextMidiNote, 127);
             sliceMgr.rebuildMidiMap();
             resultIdx = newIdx;
         }

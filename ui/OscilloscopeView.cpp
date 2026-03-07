@@ -48,8 +48,7 @@ void OscilloscopeView::paint (juce::Graphics& g)
     if (sel >= 0 && sel < ui.numSlices)
     {
         startSample = ui.slices[(size_t) sel].startSample;
-        // Marker model: end derived from next slice's start (or totalFrames).
-        endSample   = processor.sliceManager.getEndForSlice (sel, totalFrames);
+        endSample   = ui.slices[(size_t) sel].endSample;
     }
     startSample = juce::jlimit (0, totalFrames - 1, startSample);
     endSample   = juce::jlimit (startSample + 1, totalFrames, endSample);

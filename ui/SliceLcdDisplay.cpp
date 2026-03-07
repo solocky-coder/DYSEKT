@@ -117,9 +117,7 @@ void SliceLcdDisplay::buildDisplayData()
     const auto& sl   = snap.slices[(size_t) snap.selectedSlice];
     data.midiNote    = sl.midiNote;
     data.startSample = sl.startSample;
-    // Marker model: end derived from next slice's start (or sampleNumFrames).
-    data.endSample   = processor.sliceManager.getEndForSlice (
-                           snap.selectedSlice, snap.sampleNumFrames);
+    data.endSample   = sl.endSample;
     data.volume      = sl.volume;
     data.pan         = sl.pan;
     data.pitchSemitones = sl.pitchSemitones;

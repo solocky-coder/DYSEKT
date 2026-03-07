@@ -187,8 +187,9 @@ void AutoChopPanel::updatePreview()
     int modeId = juce::jlimit (1, 3, modeCombo.getSelectedId());
     auto mode  = static_cast<AudioAnalysis::SensitivityMode> (modeId - 1);
 
+    const int acpEnd = processor.sliceManager.getEndForSlice (sel, sampleSnap->buffer.getNumSamples());
     auto positions = AudioAnalysis::detectTransientsHybrid (
-        sampleSnap->buffer, s.startSample, s.endSample, mode, sens, processor.getSampleRate());
+        sampleSnap->buffer, s.startSample, acpEnd, mode, sens, processor.getSampleRate());
 
     if (processor.snapToZeroCrossing.load())
     {

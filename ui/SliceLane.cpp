@@ -43,8 +43,7 @@ void SliceLane::paint (juce::Graphics& g)
         const auto& s = ui.slices[(size_t) i];
         if (! s.active) continue;
         int startSample = s.startSample;
-        // Marker model: derive end from next slice's start.
-        int endSample = processor.sliceManager.getEndForSlice (i, numFrames);
+        int endSample = s.endSample;
         if (hasPreview && i == previewIdx)
         {
             startSample = previewStart;
@@ -219,8 +218,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
         if (! s.active) continue;
 
         int x1 = (int) ((float) (s.startSample - visStart) / visLen * w);
-        const int slaneEnd = processor.sliceManager.getEndForSlice (i, numFrames);
-        int x2 = (int) ((float) (slaneEnd - visStart) / visLen * w);
+        int x2 = (int) ((float) (s.endSample - visStart) / visLen * w);
 
         if (e.x >= x1 && e.x < x2)
             overlapping.push_back (i);
