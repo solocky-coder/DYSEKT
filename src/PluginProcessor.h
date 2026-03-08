@@ -170,6 +170,12 @@ public:
 
     void loadFileAsync      (const juce::File& file);
     void loadDefaultSampleIfNeeded();   // loads Empty.wav on first launch
+
+    // ADSR param pointers — read by SliceWaveformLcd for envelope display
+    std::atomic<float>* attackParam       { nullptr };
+    std::atomic<float>* decayParam        { nullptr };
+    std::atomic<float>* sustainParam      { nullptr };
+    std::atomic<float>* releaseParam      { nullptr };
     void loadSoundFontAsync (const juce::File& file);
     void relinkFileAsync    (const juce::File& file);
     void applyTrimToCurrentSample (int trimStart, int trimEnd);
@@ -353,10 +359,7 @@ private:
     std::atomic<float>* bpmParam          { nullptr };
     std::atomic<float>* pitchParam        { nullptr };
     std::atomic<float>* algoParam         { nullptr };
-    std::atomic<float>* attackParam       { nullptr };
-    std::atomic<float>* decayParam        { nullptr };
-    std::atomic<float>* sustainParam      { nullptr };
-    std::atomic<float>* releaseParam      { nullptr };
+
     std::atomic<float>* muteGroupParam    { nullptr };
     std::atomic<float>* stretchParam      { nullptr };
     std::atomic<float>* tonalityParam     { nullptr };
