@@ -99,20 +99,22 @@ void ActionPanel::toggleTrimMode()
 
 void ActionPanel::resized()
 {
-    const int gap   = 5;
-    const int h     = getHeight();
-    const int thinW = 30;   // MIDI select icon button
-    const int trimW = 42;
+    const int gap    = 4;
+    const int h      = getHeight();
+    const int thinW  = 30;   // MIDI select icon button (hard right)
+    const int trimW  = 42;   // TRIM fixed width
+    const int addW   = 80;   // ADD SLICE natural width
+    const int midiW  = 34;   // MIDI SLICE natural width (icon only)
 
+    // MIDI icon hard right, then TRIM, then ADD SLICE and MIDI SLICE left-aligned
     int right = getWidth();
+    midiSelectBtn.setBounds (right - thinW, 0, thinW, h);
+    right -= thinW + gap;
+    trimBtn.setBounds (right - trimW, 0, trimW, h);
 
-    midiSelectBtn.setBounds (right - thinW, 0, thinW, h); right -= thinW + gap;
-    trimBtn.setBounds       (right - trimW, 0, trimW, h); right -= trimW + gap;
-
-    // ADD SLICE and MIDI SLICE split the remaining width equally
-    const int btnW = (right - gap) / 2;
-    addSliceBtn.setBounds (0,          0, btnW, h);
-    lazyChopBtn.setBounds (btnW + gap, 0, btnW, h);
+    // ADD SLICE and MIDI SLICE left-aligned with natural widths
+    addSliceBtn.setBounds (0,            0, addW, h);
+    lazyChopBtn.setBounds (addW + gap,   0, midiW, h);
 
     shortcutsBtn.setVisible (false);
     browserBtn.setVisible   (false);

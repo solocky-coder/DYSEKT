@@ -149,6 +149,10 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     ensureDefaultThemes();
     loadUserSettings();
 
+    // Load default sample (Empty.wav) if no DAW preset has already provided one
+    if (processor.sampleData.getSnapshot() == nullptr)
+        processor.loadDefaultSampleIfNeeded();
+
     float apvtsScale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
     if (apvtsScale == 1.0f && savedScale > 0.0f && savedScale != apvtsScale)
     {
@@ -666,6 +670,7 @@ void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)
 {
     auto file = getUserSettingsFile();
     file.getParentDirectory().createDirectory();
+
     file.replaceWithText ("uiScale: " + juce::String (scale, 2)
                         + "\ntheme: " + themeName
                         + "\nwaveStyle: " + (softWave ? "soft" : "hard") + "\n");
@@ -701,6 +706,8 @@ void DysektEditor::loadUserSettings()
     // Sync chromatic button with processor state (restored from project)
     actionPanel.setChromaticActive (processor.chromaticMode.load());
     headerBar.setChromaticActive (processor.chromaticMode.load());
+
+
 }
 
 // =============================================================================
