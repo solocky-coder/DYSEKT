@@ -84,6 +84,7 @@ public:
         CmdSetRootNote,
         CmdApplyTrim,
         CmdSetSliceLockAll,  // intParam1 = slice index, floatParam1 = 1.0 lock all / 0.0 unlock all
+        CmdSetSliceColour,   // intParam1 = slice index, intParam2 = ARGB colour
     };
 
     // ── Load kind ────────────────────────────────────────────────────────────

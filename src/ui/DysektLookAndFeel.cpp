@@ -250,3 +250,41 @@ juce::Rectangle<int> DysektLookAndFeel::getTooltipBounds (const juce::String& te
 
     return { x, y, w, h };
 }
+
+
+// ── drawScrollbar  — sharp-cornered modern style ─────────────────────────────
+void DysektLookAndFeel::drawScrollbar (juce::Graphics& g,
+                                       juce::ScrollBar& scrollbar,
+                                       int x, int y, int width, int height,
+                                       bool isScrollbarVertical,
+                                       int thumbStartPosition,
+                                       int thumbSize,
+                                       bool /*isMouseOver*/,
+                                       bool /*isMouseDown*/)
+{
+    const auto& t = ThemeData::current();
+
+    // Track
+    g.setColour (t.darkBar.darker (0.35f));
+    g.fillRect (x, y, width, height);
+
+    // Track border
+    g.setColour (t.separator);
+    g.drawRect (x, y, width, height, 1);
+
+    // Thumb — no rounding
+    if (thumbSize > 0)
+    {
+        juce::Rectangle<int> thumb;
+        if (isScrollbarVertical)
+            thumb = { x + 1, y + thumbStartPosition, width - 2, thumbSize };
+        else
+            thumb = { x + thumbStartPosition, y + 1, thumbSize, height - 2 };
+
+        g.setColour (t.accent.withAlpha (0.55f));
+        g.fillRect (thumb);
+
+        g.setColour (t.accent.withAlpha (0.25f));
+        g.drawRect (thumb, 1);
+    }
+}

@@ -319,6 +319,27 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
             const bool lockS = (s.lockMask & kLockSustain) != 0;
             const bool lockR = (s.lockMask & kLockRelease) != 0;
 
+            // 16-colour palette
+            static const struct { const char* name; juce::uint32 argb; } kPal[] = {
+                { "Cyan",    0xFF00C8FF }, { "Green",   0xFF00FF87 },
+                { "Yellow",  0xFFFFE800 }, { "Orange",  0xFFFF6B00 },
+                { "Red",     0xFFFF2D55 }, { "Pink",    0xFFFF2D9A },
+                { "Violet",  0xFFB44FFF }, { "Blue",    0xFF4A80FF },
+                { "Sky",     0xFF00BFFF }, { "Mint",    0xFF00FFD0 },
+                { "Lime",    0xFFA8FF3E }, { "Gold",    0xFFFFD700 },
+                { "Coral",   0xFFFF7F50 }, { "Magenta", 0xFFFF00FF },
+                { "White",   0xFFE8E8E8 }, { "Silver",  0xFF888888 },
+            };
+
+            juce::PopupMenu colourSub;
+            juce::Colour curCol = ui.slices[(size_t) targetSlice].colour;
+            for (int ci = 0; ci < 16; ++ci)
+            {
+                juce::Colour c ((juce::uint32) kPal[ci].argb);
+                colourSub.addColouredItem (20 + ci, kPal[ci].name, c,
+                                           true, c.toDisplayString (false) == curCol.toDisplayString (false));
+            }
+
             juce::PopupMenu adsrSub;
             adsrSub.addItem (10, "Lock Attack",  true, lockA);
             adsrSub.addItem (11, "Lock Decay",   true, lockD);
@@ -327,6 +348,8 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
 
             juce::PopupMenu menu;
             menu.addItem (1, "Delete Slice");
+            menu.addSeparator();
+            menu.addSubMenu ("Slice Colour", colourSub);
             menu.addSeparator();
             menu.addItem (2, lockLabel, true, allLocked);
             menu.addSubMenu ("ADSR Lock", adsrSub);
@@ -368,6 +391,21 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                     else if (result == 11) toggleLock (kLockDecay);
                     else if (result == 12) toggleLock (kLockSustain);
                     else if (result == 13) toggleLock (kLockRelease);
+                    else if (result >= 20 && result < 36)
+                    {
+                        // Set slice colour
+                        static const juce::uint32 kPalARGB[] = {
+                            0xFF00C8FF, 0xFF00FF87, 0xFFFFE800, 0xFFFF6B00,
+                            0xFFFF2D55, 0xFFFF2D9A, 0xFFB44FFF, 0xFF4A80FF,
+                            0xFF00BFFF, 0xFF00FFD0, 0xFFA8FF3E, 0xFFFFD700,
+                            0xFFFF7F50, 0xFFFF00FF, 0xFFE8E8E8, 0xFF888888,
+                        };
+                        DysektProcessor::Command cmd;
+                        cmd.type      = DysektProcessor::CmdSetSliceColour;
+                        cmd.intParam1 = targetSlice;
+                        cmd.intParam2 = (int) kPalARGB[result - 20];
+                        processor.pushCommand (cmd);
+                    }
                     repaint();
                 });
         }

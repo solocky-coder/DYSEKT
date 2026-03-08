@@ -794,6 +794,17 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     end = juce::jmin (maxLen, start + 64);
                 const int totalF = sampleData.getBuffer().getNumSamples();
                 int oldEnd = sliceManager.getEndForSlice (idx, totalF);
+                // Clamp start against the PREVIOUS slice to prevent overlap.
+                // Slices are sorted by startSample, so slices[idx-1].startSample
+                // is the hard floor for this slice's start.
+                if (idx > 0)
+                {
+                    const int prevStart = sliceManager.getSlice (idx - 1).startSample;
+                    start = juce::jmax (start, prevStart + 64);
+                    // Keep end consistent
+                    end = juce::jmax (end, start + 64);
+                    end = juce::jmin (end, maxLen);
+                }
                 s.startSample = start;
                 // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
@@ -993,6 +1004,14 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 juce::jlimit (-1, juce::jmax (-1, sliceManager.getNumSlices() - 1), cmd.intParam1),
                 std::memory_order_relaxed);
             break;
+
+        case CmdSetSliceColour:
+        {
+            int idx = cmd.intParam1;
+            if (idx >= 0 && idx < sliceManager.getNumSlices())
+                sliceManager.getSlice (idx).colour = juce::Colour ((juce::uint32) (unsigned) cmd.intParam2);
+            break;
+        }
 
         case CmdSetRootNote:
             sliceManager.rootNote.store (juce::jlimit (0, 127, cmd.intParam1),

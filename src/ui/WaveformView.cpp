@@ -230,6 +230,16 @@ void WaveformView::paintTransientMarkers (juce::Graphics& g)
 
 void WaveformView::drawWaveform (juce::Graphics& g)
 {
+    // Use the selected slice's palette colour as the waveform colour.
+    // Falls back to theme waveform colour when no slice is selected.
+    juce::Colour waveformColour = getTheme().waveform;
+    {
+        const auto& ui  = processor.getUiSliceSnapshot();
+        const int   sel = ui.selectedSlice;
+        if (sel >= 0 && sel < ui.numSlices && ui.slices[(size_t) sel].active)
+            waveformColour = ui.slices[(size_t) sel].colour;
+    }
+
     const int   cy    = getHeight() / 2;
     const float scale = (float) getHeight() * UILayout::waveformVerticalScale;
 
@@ -266,7 +276,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         // ── HARD MODE (original flat-fill rendering) ──────────────────────────
         if (samplesPerPixel < 1.0f)
         {
-            g.setColour (getTheme().waveform.withAlpha (0.9f));
+            g.setColour (waveformColour.withAlpha (0.9f));
             juce::Path path;
             bool started = false;
             for (int px = 0; px < numPeaks; ++px)
@@ -294,7 +304,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         }
         else
         {
-            g.setColour (getTheme().waveform);
+            g.setColour (waveformColour);
             g.fillPath (fillPath);
 
             if (samplesPerPixel < 8.0f)
@@ -314,7 +324,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
     else
     {
         // ── SOFT MODE (TAL-style: gradient fill + bright outline stroke) ──────
-        const juce::Colour waveCol  = getTheme().waveform;
+        const juce::Colour waveCol  = waveformColour;
         const juce::Colour bgCol    = getTheme().waveformBg;
         const int h = getHeight();
 
@@ -514,6 +524,14 @@ void WaveformView::drawSlices (juce::Graphics& g)
             g.setColour (s.colour.withAlpha (0.30f));
             g.drawVerticalLine (x1, 0.0f, (float) getHeight());
             g.drawVerticalLine (x2 - 1, 0.0f, (float) getHeight());
+        }
+
+        // ── Colour accent bar at BOTTOM of waveform ───────────────────────
+        {
+            const int H = getHeight();
+            const int barH = (i == sel) ? 3 : 1;
+            g.setColour (s.colour.withAlpha ((i == sel) ? 0.90f : 0.45f));
+            g.fillRect (x1, H - barH, x2 - x1, barH);
         }
     }
 }
@@ -1060,7 +1078,9 @@ void WaveformView::setTrimMode (bool active)
     trimMode = active;
     if (! active)
     {
-        dragMode = None;
+        dragMode     = None;
+        trimInPoint  = 0;
+        trimOutPoint = 0;
     }
     repaint();
 }

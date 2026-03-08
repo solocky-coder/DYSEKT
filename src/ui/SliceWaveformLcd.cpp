@@ -106,7 +106,9 @@ void SliceWaveformLcd::buildDisplayData()
 
 void SliceWaveformLcd::buildEnvelopeNodes()
 {
-    // Read per-slice ADSR values if a slice is selected; fall back to global params.
+    // Mirror SCB logic exactly: unlocked fields read from global APVTS (same units),
+    // locked fields read from per-slice values.
+    // APVTS params: Attack 0-1000ms, Decay 0-5000ms, Sustain 0-100%, Release 0-5000ms
     float attackMs  = processor.attackParam  ? processor.attackParam ->load() : 5.0f;
     float decayMs   = processor.decayParam   ? processor.decayParam  ->load() : 100.0f;
     float sustainPc = processor.sustainParam ? processor.sustainParam->load() : 100.0f;
@@ -116,11 +118,11 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
     {
         const auto& s = processor.sliceManager.getSlice (sel);
-        // Always use per-slice values — these are set by commitNodes() or CmdSetSliceParam
-        attackMs  = s.attackSec   * 1000.0f;
-        decayMs   = s.decaySec    * 1000.0f;
-        sustainPc = s.sustainLevel * 100.0f;
-        releaseMs = s.releaseSec  * 1000.0f;
+        // Per-field: if locked use slice value, otherwise use global APVTS value above
+        if (s.lockMask & kLockAttack)  attackMs  = s.attackSec    * 1000.0f;
+        if (s.lockMask & kLockDecay)   decayMs   = s.decaySec     * 1000.0f;
+        if (s.lockMask & kLockSustain) sustainPc = s.sustainLevel  * 100.0f;
+        if (s.lockMask & kLockRelease) releaseMs = s.releaseSec   * 1000.0f;
     }
 
     // Fixed per-segment X budgets (must match commitNodes exactly):

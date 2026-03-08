@@ -926,7 +926,23 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
     float newNative;
     if (isAdsr || isBpm)
     {
+        // Sensitivity in display units per pixel:
+        //   Attack:  2 ms/px  (range 0-1000ms → 500px full sweep)
+        //   Decay:   10 ms/px (range 0-5000ms → 500px full sweep)
+        //   Release: 10 ms/px
+        //   Sustain: 0.5 %/px (range 0-100% → 200px full sweep)
+        //   BPM:     2 bpm/px
+        // Shift = fine mode (÷10)
+        float sensitivity = 1.0f;
+        if      (cell.fieldId == F::FieldAttack)  sensitivity = 2.0f;
+        else if (cell.fieldId == F::FieldDecay)   sensitivity = 10.0f;
+        else if (cell.fieldId == F::FieldRelease) sensitivity = 10.0f;
+        else if (cell.fieldId == F::FieldSustain) sensitivity = 0.5f;
+        else if (cell.fieldId == F::FieldBpm)     sensitivity = 2.0f;
+        if (e.mods.isShiftDown()) sensitivity *= 0.1f;
+
         float ds = dragStartValue, dmin = cell.minVal, dmax = cell.maxVal;
+        // Convert to display units
         if (cell.fieldId == F::FieldAttack  ||
             cell.fieldId == F::FieldDecay   ||
             cell.fieldId == F::FieldRelease)
@@ -934,8 +950,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
         else if (cell.fieldId == F::FieldSustain)
         { ds *= 100.f; dmin *= 100.f; dmax *= 100.f; }
 
-        float snap = e.mods.isShiftDown() ? 5.f : 1.f;
-        float dv   = juce::jlimit (dmin, dmax, std::round ((ds + deltaY * 0.25f) / snap) * snap);
+        float dv = juce::jlimit (dmin, dmax, ds + deltaY * sensitivity);
 
         if (cell.fieldId == F::FieldAttack  ||
             cell.fieldId == F::FieldDecay   ||
@@ -951,6 +966,22 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
         newNative = UIHelpers::computeDragValue (dragStartValue, deltaY,
                                                  cell.minVal, cell.maxVal,
                                                  e.mods.isShiftDown());
+    }
+
+    // Per-field lock: if this specific ADSR field is locked, block the knob drag
+    {
+        const auto& snap2 = processor.getUiSliceSnapshot();
+        if (snap2.selectedSlice >= 0 && snap2.selectedSlice < snap2.numSlices)
+        {
+            const auto& sl2 = snap2.slices[(size_t) snap2.selectedSlice];
+            uint32_t fieldLockBit = 0;
+            if      (cell.fieldId == F::FieldAttack)  fieldLockBit = kLockAttack;
+            else if (cell.fieldId == F::FieldDecay)   fieldLockBit = kLockDecay;
+            else if (cell.fieldId == F::FieldSustain) fieldLockBit = kLockSustain;
+            else if (cell.fieldId == F::FieldRelease) fieldLockBit = kLockRelease;
+            if (fieldLockBit != 0 && (sl2.lockMask & fieldLockBit) != 0)
+                return;  // field locked — knob drag blocked
+        }
     }
 
     DysektProcessor::Command cmd;
