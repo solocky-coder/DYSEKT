@@ -2,6 +2,7 @@
 #include "DysektLookAndFeel.h"
 #include "WaveformView.h"
 #include "../PluginProcessor.h"
+#include "../audio/Slice.h"
 #include <algorithm>
 #include <array>
 

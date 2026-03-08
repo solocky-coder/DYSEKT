@@ -292,6 +292,22 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
 {
     if (dragRole == NodeRole::None || screenArea.isEmpty()) return;
 
+    // Block drag if this field is locked on the selected slice
+    {
+        uint32_t fieldBit = 0;
+        if      (dragRole == NodeRole::Attack)  fieldBit = kLockAttack;
+        else if (dragRole == NodeRole::Decay)   fieldBit = kLockDecay;
+        else if (dragRole == NodeRole::Sustain) fieldBit = kLockSustain;
+        else if (dragRole == NodeRole::Release) fieldBit = kLockRelease;
+        if (fieldBit != 0)
+        {
+            const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+            if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
+                if (processor.sliceManager.getSlice (sel).lockMask & fieldBit)
+                    return;   // locked — refuse drag
+        }
+    }
+
     const float W  = screenArea.getWidth();
     const float H  = screenArea.getHeight();
     const float ox = screenArea.getX();
@@ -576,7 +592,7 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
             // Padlock icon above label  (tiny — 5px body)
             {
                 const float px = cx;
-                const float py = cy - r - 12.0f;
+                const float py = cy - r - 10.0f;   // sits just above ring
                 // shackle arc
                 juce::Path shackle;
                 shackle.addCentredArc (px, py - 2.5f, 2.5f, 2.5f, 0.0f,
@@ -591,20 +607,20 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
                 g.drawRoundedRectangle (px - 3.0f, py, 6.0f, 5.0f, 1.0f, 0.8f);
             }
 
-            // Label below padlock
+            // Label BELOW node (always inside frame)
             g.setFont (DysektLookAndFeel::makeFont (hov ? 9.5f : 8.0f, true));
             g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.85f));
             g.drawText (juce::String (node.label),
-                        juce::Rectangle<float> (cx - 12.0f, cy - r - 24.0f, 24.0f, 10.0f),
+                        juce::Rectangle<float> (cx - 12.0f, cy + r + 2.0f, 24.0f, 10.0f),
                         juce::Justification::centred, false);
 
-            // Hover tooltip: value + lock hint
+            // Hover tooltip below label
             if (hov)
             {
                 g.setFont (DysektLookAndFeel::makeFont (7.5f));
                 g.setColour (node.colour.withAlpha (0.75f));
                 g.drawText ("right-click to unlock",
-                            juce::Rectangle<float> (cx - 40.0f, cy + r + 4.0f, 80.0f, 10.0f),
+                            juce::Rectangle<float> (cx - 40.0f, cy + r + 14.0f, 80.0f, 10.0f),
                             juce::Justification::centred, false);
             }
         }
@@ -619,11 +635,11 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
             g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.80f));
             g.fillEllipse (cx - dr, cy - dr, dr * 2.0f, dr * 2.0f);
 
-            // Label above
+            // Label BELOW node (always inside frame)
             g.setFont (DysektLookAndFeel::makeFont (hov ? 9.5f : 8.0f, true));
             g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.70f));
             g.drawText (juce::String (node.label),
-                        juce::Rectangle<float> (cx - 12.0f, cy - r - 14.0f, 24.0f, 12.0f),
+                        juce::Rectangle<float> (cx - 12.0f, cy + r + 2.0f, 24.0f, 12.0f),
                         juce::Justification::centred, false);
 
             if (hov)
@@ -631,7 +647,7 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
                 g.setFont (DysektLookAndFeel::makeFont (7.5f));
                 g.setColour (node.colour.withAlpha (0.60f));
                 g.drawText ("right-click to lock",
-                            juce::Rectangle<float> (cx - 40.0f, cy + r + 4.0f, 80.0f, 10.0f),
+                            juce::Rectangle<float> (cx - 40.0f, cy + r + 14.0f, 80.0f, 10.0f),
                             juce::Justification::centred, false);
             }
         }
