@@ -968,22 +968,6 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
                                                  e.mods.isShiftDown());
     }
 
-    // Per-field lock: if this specific ADSR field is locked, block the knob drag
-    {
-        const auto& snap2 = processor.getUiSliceSnapshot();
-        if (snap2.selectedSlice >= 0 && snap2.selectedSlice < snap2.numSlices)
-        {
-            const auto& sl2 = snap2.slices[(size_t) snap2.selectedSlice];
-            uint32_t fieldLockBit = 0;
-            if      (cell.fieldId == F::FieldAttack)  fieldLockBit = kLockAttack;
-            else if (cell.fieldId == F::FieldDecay)   fieldLockBit = kLockDecay;
-            else if (cell.fieldId == F::FieldSustain) fieldLockBit = kLockSustain;
-            else if (cell.fieldId == F::FieldRelease) fieldLockBit = kLockRelease;
-            if (fieldLockBit != 0 && (sl2.lockMask & fieldLockBit) != 0)
-                return;  // field locked — knob drag blocked
-        }
-    }
-
     DysektProcessor::Command cmd;
     cmd.type = F::CmdSetSliceParam;
     cmd.intParam1 = cell.fieldId; cmd.floatParam1 = newNative;

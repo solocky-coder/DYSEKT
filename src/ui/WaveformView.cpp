@@ -230,15 +230,8 @@ void WaveformView::paintTransientMarkers (juce::Graphics& g)
 
 void WaveformView::drawWaveform (juce::Graphics& g)
 {
-    // Use the selected slice's palette colour as the waveform colour.
-    // Falls back to theme waveform colour when no slice is selected.
+    // Waveform always uses the theme colour — slice colour only on accent bar.
     juce::Colour waveformColour = getTheme().waveform;
-    {
-        const auto& ui  = processor.getUiSliceSnapshot();
-        const int   sel = ui.selectedSlice;
-        if (sel >= 0 && sel < ui.numSlices && ui.slices[(size_t) sel].active)
-            waveformColour = ui.slices[(size_t) sel].colour;
-    }
 
     const int   cy    = getHeight() / 2;
     const float scale = (float) getHeight() * UILayout::waveformVerticalScale;

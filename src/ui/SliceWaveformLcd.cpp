@@ -294,22 +294,6 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
 {
     if (dragRole == NodeRole::None || screenArea.isEmpty()) return;
 
-    // Block drag if this field is locked on the selected slice
-    {
-        uint32_t fieldBit = 0;
-        if      (dragRole == NodeRole::Attack)  fieldBit = kLockAttack;
-        else if (dragRole == NodeRole::Decay)   fieldBit = kLockDecay;
-        else if (dragRole == NodeRole::Sustain) fieldBit = kLockSustain;
-        else if (dragRole == NodeRole::Release) fieldBit = kLockRelease;
-        if (fieldBit != 0)
-        {
-            const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
-            if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
-                if (processor.sliceManager.getSlice (sel).lockMask & fieldBit)
-                    return;   // locked — refuse drag
-        }
-    }
-
     const float W  = screenArea.getWidth();
     const float H  = screenArea.getHeight();
     const float ox = screenArea.getX();
@@ -444,21 +428,29 @@ void SliceWaveformLcd::drawWaveform (juce::Graphics& g, const juce::Rectangle<fl
     }
     fill.closeSubPath();
 
-    g.setColour (lcd2Phosphor().withAlpha (0.12f));
+    // Use selected slice colour for waveform rendering
+    juce::Colour sliceCol = lcd2Phosphor();  // default = theme accent
+    {
+        const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+        if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
+            sliceCol = processor.sliceManager.getSlice (sel).colour;
+    }
+
+    g.setColour (sliceCol.withAlpha (0.12f));
     g.fillPath (fill);
 
     juce::PathStrokeType glow (2.5f);
-    g.setColour (lcd2Phosphor().withAlpha (0.22f));
+    g.setColour (sliceCol.withAlpha (0.22f));
     g.strokePath (lineTop, glow);
     g.strokePath (lineBot, glow);
 
     juce::PathStrokeType sharp (1.1f);
-    g.setColour (lcd2Phosphor().withAlpha (0.85f));
+    g.setColour (sliceCol.withAlpha (0.85f));
     g.strokePath (lineTop, sharp);
     g.strokePath (lineBot, sharp);
 
     // Slice boundary markers
-    g.setColour (lcd2Phosphor().withAlpha (0.50f));
+    g.setColour (sliceCol.withAlpha (0.50f));
     g.drawVerticalLine (juce::roundToInt (area.getX() + 1),      area.getY(), area.getBottom());
     g.drawVerticalLine (juce::roundToInt (area.getRight() - 1),  area.getY(), area.getBottom());
 }
