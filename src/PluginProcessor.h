@@ -202,6 +202,13 @@ public:
         return peak;
     }
 
+// ADD THESE GETTERS -- BEGIN
+    std::atomic<float>* getAttackParam()  const { return attackParam; }
+    std::atomic<float>* getDecayParam()   const { return decayParam; }
+    std::atomic<float>* getSustainParam() const { return sustainParam; }
+    std::atomic<float>* getReleaseParam() const { return releaseParam; }
+// ADD THESE GETTERS -- END
+
     // =========================================================================
     // Public subsystem members (accessed directly by UI)
     // =========================================================================
