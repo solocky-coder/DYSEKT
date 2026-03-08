@@ -169,6 +169,7 @@ public:
     void pushCommand (Command cmd);
 
     void loadFileAsync      (const juce::File& file);
+    void loadDefaultSampleIfNeeded();   // loads Empty.wav on first launch
     void loadSoundFontAsync (const juce::File& file);
     void relinkFileAsync    (const juce::File& file);
     void applyTrimToCurrentSample (int trimStart, int trimEnd);
@@ -227,10 +228,7 @@ public:
     std::atomic<int> liveDragBoundsStart { 0 };
     std::atomic<int> liveDragBoundsEnd   { 0 };
     std::atomic<int> liveDragSliceIdx    { -1 };
-    std::atomic<int>   paramsSyncedForSlice { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
-    std::atomic<float> lastPublishedStart   { -1.f }; // last value written by publishUiSliceSnapshot
-    std::atomic<float> lastPublishedEnd     { -1.f }; // pickup-mode: ignore until knob crosses real value
-    std::atomic<bool>  paramNeedsPickup     { false }; // true after slice switch until knob reaches slice value
+    std::atomic<int> paramsSyncedForSlice { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
 
     // Shift-preview request (-2 = idle, -1 = stop, >= 0 = start at position)
     std::atomic<int> shiftPreviewRequest { -2 };
@@ -272,7 +270,6 @@ private:
     // Private helpers
     // =========================================================================
     void requestSampleLoad (const juce::File& file, LoadKind kind);
-    void loadDefaultSampleIfNeeded();   // loads Empty.wav on first launch
     void clearVoicesBeforeSampleSwap();
     void clampSlicesToSampleBounds();
     void handleCommand (const Command& cmd);
