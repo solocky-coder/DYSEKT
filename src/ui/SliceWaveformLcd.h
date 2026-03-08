@@ -3,12 +3,17 @@
 
 class DysektProcessor;
 
-/**  Second LCD panel: renders only the selected slice's portion of the audio
- *   as a mini waveform so you can inspect the transient shape and tail without
- *   looking at the full waveform view.
+/**  Second LCD panel: renders the selected slice waveform with an interactive
+ *   ADSR envelope overlay.  Each envelope node is a draggable handle; moving
+ *   it updates the corresponding parameter via apvts in real time.
  *
- *   Displayed alongside SliceLcdDisplay in a horizontal row, with the control
- *   frame (icons + knobs) sitting between the two LCDs.
+ *   Node layout:
+ *     P0  (fixed)  — silence at slice start
+ *     P1  Attack   — drag X (time) + Y (peak level)   colour: Toxic Lime
+ *     P2  Decay    — drag X (time) + Y (sustain level) colour: Radioactive Yellow
+ *     P3  Release  — drag X (release-start time)       colour: Molten Orange
+ *     P4  (fixed)  — silence at slice end
+ *     SH  Sustain  — mid-plateau Y handle              colour: Ice Blue
  *
  *   Dimensions match SliceLcdDisplay::kPreferredHeight.
  *   Call repaintLcd() from the editor's timerCallback() at ~30 Hz.
@@ -18,8 +23,12 @@ class SliceWaveformLcd : public juce::Component
 public:
     explicit SliceWaveformLcd (DysektProcessor& p);
 
-    void paint  (juce::Graphics& g) override;
-    void resized() override;
+    void paint    (juce::Graphics& g) override;
+    void resized  () override;
+    void mouseMove    (const juce::MouseEvent& e) override;
+    void mouseDown    (const juce::MouseEvent& e) override;
+    void mouseDrag    (const juce::MouseEvent& e) override;
+    void mouseUp      (const juce::MouseEvent& e) override;
 
     /** Call periodically from the UI timer to refresh the display. */
     void repaintLcd();
@@ -45,26 +54,64 @@ private:
         int          algorithm      { 0 };
         double       sampleRate     { 44100.0 };
         juce::String sampleName;
-
-        // Waveform thumbnail data (built from processor audio buffer)
-        juce::Array<float> peaks;   // peak amplitudes, one per pixel column
+        juce::Array<float> peaks;
     };
 
-    void buildDisplayData();
+    // ── ADSR envelope node ────────────────────────────────────────────────────
+    enum class NodeRole { None, Attack, Decay, Sustain, Release };
+
+    struct EnvNode
+    {
+        float      xn { 0.0f };   // normalised 0-1 across component width
+        float      yn { 0.0f };   // normalised 0-1 (0=top/loud 1=bottom/silent)
+        NodeRole   role { NodeRole::None };
+        juce::Colour colour;
+        const char*  label { nullptr };
+    };
+
+    void  buildDisplayData();
+    void  buildEnvelopeNodes();            // read params → nodes[]
+    void  commitNodes();                   // nodes[] → write params
+    float envAt (float xn) const;         // interpolated Y at position xn
+
     void drawBackground  (juce::Graphics& g);
     void drawWaveform    (juce::Graphics& g, const juce::Rectangle<float>& area);
-    void drawOverlay     (juce::Graphics& g, const juce::Rectangle<float>& area);
+    void drawEnvelope    (juce::Graphics& g, const juce::Rectangle<float>& area);
+    void drawNodes       (juce::Graphics& g, const juce::Rectangle<float>& area);
     void drawNoData      (juce::Graphics& g);
+    void drawSegmentLabel(juce::Graphics& g, float x0, float y0,
+                          float x1, float y1, const char* text,
+                          juce::Colour col, const juce::Rectangle<float>& area);
+
+    NodeRole hitTest (juce::Point<float> pos) const;
 
     static juce::String midiNoteName (int note);
-    static juce::String formatMs     (float secs);
-    static juce::String formatAlgo   (int algo);
-    static juce::String formatPan    (float pan);
+    static juce::String formatMs     (float ms);
 
     DysektProcessor& processor;
     DisplayData      data;
 
-    // Teal palette — matches the main LCD colours
+    // ── Envelope state ────────────────────────────────────────────────────────
+    // Five control points (normalised).
+    // P0 = (0,1) fixed  P1=attack  P2=decay  SH=sustain  P3=release  P4=(1,1) fixed
+    struct {
+        float ax  { 0.07f };   // attack peak X
+        float ay  { 0.10f };   // attack peak Y  (near 0 = loud peak)
+        float dx  { 0.25f };   // decay end X
+        float sy  { 0.30f };   // sustain Y level
+        float rx  { 0.82f };   // release start X
+    } env;
+
+    // Cache of computed nodes (rebuilt each paint + mouse event)
+    juce::Array<EnvNode> envNodes;    // P1..P3 + sustain handle
+
+    NodeRole dragRole   { NodeRole::None };
+    NodeRole hovRole    { NodeRole::None };
+    float    dragStartX { 0.0f };
+
+    // Content area cached in resized() / used for hit testing
+    juce::Rectangle<float> screenArea;
+
     static const juce::Colour kBg;
     static const juce::Colour kBezel;
     static const juce::Colour kPhosphor;
@@ -72,8 +119,10 @@ private:
     static const juce::Colour kBright;
     static const juce::Colour kLabel;
 
-    static constexpr int kScanlineAlpha = 18;
-    static constexpr int kLeftPad       = 8;
+    static constexpr int   kScanlineAlpha = 18;
+    static constexpr int   kLeftPad       = 8;
+    static constexpr float kNodeR         = 4.5f;
+    static constexpr float kHitR          = 10.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SliceWaveformLcd)
 };

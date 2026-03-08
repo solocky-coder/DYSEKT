@@ -1,24 +1,45 @@
 #include "SliceWaveformLcd.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include "../params/ParamIds.h"
 
 // ── Theme-derived colours ─────────────────────────────────────────────────────
-// Called once per paint() — all colours come from getTheme() so they
-// update automatically when the user switches theme.
 static juce::Colour lcd2Bg()       { return getTheme().darkBar.darker (0.55f); }
-static juce::Colour lcd2Bezel()    { return lcd2Bg().brighter (0.12f); }
 static juce::Colour lcd2Phosphor() { return getTheme().accent; }
 static juce::Colour lcd2Dim()      { return getTheme().accent.withAlpha (0.15f).overlaidWith (lcd2Bg()); }
 static juce::Colour lcd2Bright()   { return getTheme().accent.brighter (0.45f); }
-static juce::Colour lcd2Label()    { return getTheme().accent.withAlpha (0.55f); }
 
-// Keep the static const members as aliases so the .h declarations compile
 const juce::Colour SliceWaveformLcd::kBg       { 0xFF050F0E };
 const juce::Colour SliceWaveformLcd::kBezel    { 0xFF0D1E1C };
 const juce::Colour SliceWaveformLcd::kPhosphor { 0xFF2AFFD0 };
 const juce::Colour SliceWaveformLcd::kDim      { 0xFF0A2A22 };
 const juce::Colour SliceWaveformLcd::kBright   { 0xFF8AFFF0 };
 const juce::Colour SliceWaveformLcd::kLabel    { 0xFF1A7060 };
+
+// Toxic Candy node colours (match ThemeData palette)
+static const juce::Colour kColAttack  { 0xFF00FF87 };   // Toxic Lime
+static const juce::Colour kColDecay   { 0xFFFFE800 };   // Radioactive Yellow
+static const juce::Colour kColSustain { 0xFF00C8FF };   // Ice Blue
+static const juce::Colour kColRelease { 0xFFFF6B00 };   // Molten Orange
+
+// ── Constructor ───────────────────────────────────────────────────────────────
+
+SliceWaveformLcd::SliceWaveformLcd (DysektProcessor& p)
+    : processor (p)
+{
+    setOpaque (true);
+    setMouseCursor (juce::MouseCursor::NormalCursor);
+}
+
+void SliceWaveformLcd::resized()
+{
+    screenArea = getLocalBounds().reduced (4).toFloat();
+}
+
+void SliceWaveformLcd::repaintLcd()
+{
+    repaint();
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -29,39 +50,10 @@ juce::String SliceWaveformLcd::midiNoteName (int note)
     return juce::String (names[note % 12]) + juce::String (note / 12 - 2);
 }
 
-juce::String SliceWaveformLcd::formatMs (float secs)
+juce::String SliceWaveformLcd::formatMs (float ms)
 {
-    float ms = secs * 1000.0f;
     if (ms < 1000.0f) return juce::String (juce::roundToInt (ms)) + "ms";
     return juce::String (ms / 1000.0f, 2) + "s";
-}
-
-juce::String SliceWaveformLcd::formatAlgo (int algo)
-{
-    switch (algo) { case 0: return "TIME"; case 1: return "GRAN"; case 2: return "SPEC"; }
-    return "----";
-}
-
-juce::String SliceWaveformLcd::formatPan (float pan)
-{
-    if (std::abs (pan) < 0.01f) return "C";
-    if (pan < 0.0f) return "L" + juce::String (juce::roundToInt (-pan * 100.0f));
-    return "R" + juce::String (juce::roundToInt (pan * 100.0f));
-}
-
-// ── Constructor ───────────────────────────────────────────────────────────────
-
-SliceWaveformLcd::SliceWaveformLcd (DysektProcessor& p)
-    : processor (p)
-{
-    setOpaque (true);
-}
-
-void SliceWaveformLcd::resized() {}
-
-void SliceWaveformLcd::repaintLcd()
-{
-    repaint();
 }
 
 // ── Data building ─────────────────────────────────────────────────────────────
@@ -84,29 +76,23 @@ void SliceWaveformLcd::buildDisplayData()
     data.hasSlice    = true;
     data.sliceIndex  = snap.selectedSlice;
 
-    const auto& sl       = snap.slices[(size_t) snap.selectedSlice];
-    data.startSample     = sl.startSample;
-    // Marker model: end derived from next slice's start (or totalFrames).
-    data.endSample       = processor.sliceManager.getEndForSlice (
-                               snap.selectedSlice, data.totalFrames);
-    data.midiNote        = sl.midiNote;
-    data.volume          = sl.volume;
-    data.pan             = sl.pan;
-    data.pitchSemitones  = sl.pitchSemitones;
-    data.algorithm       = sl.algorithm;
+    const auto& sl      = snap.slices[(size_t) snap.selectedSlice];
+    data.startSample    = sl.startSample;
+    data.endSample      = processor.sliceManager.getEndForSlice (
+                              snap.selectedSlice, data.totalFrames);
+    data.midiNote       = sl.midiNote;
+    data.volume         = sl.volume;
+    data.pan            = sl.pan;
+    data.pitchSemitones = sl.pitchSemitones;
+    data.algorithm      = sl.algorithm;
 
-    // Build waveform peak array from the processor's audio thumbnail.
-    // We ask for one peak per pixel column (computed at paint time — stored
-    // at a nominal width of 256 so we can scale later).
-    const int kPeaks = 256;
+    const int kPeaks  = 256;
     data.peaks.clearQuick();
     data.peaks.insertMultiple (-1, 0.0f, kPeaks);
 
     const int sliceLen = data.endSample - data.startSample;
     if (sliceLen <= 0) return;
 
-    // Try to read from processor's audio thumbnail data if available.
-    // We sample the waveform at evenly-spaced positions across the slice.
     for (int i = 0; i < kPeaks; i++)
     {
         const float t   = (float) i / (float) kPeaks;
@@ -115,14 +101,204 @@ void SliceWaveformLcd::buildDisplayData()
     }
 }
 
-// ── Draw helpers ──────────────────────────────────────────────────────────────
+// ── Envelope: read params → normalised nodes ──────────────────────────────────
+
+void SliceWaveformLcd::buildEnvelopeNodes()
+{
+    // Read raw param values
+    const float attackMs  = processor.attackParam  ? processor.attackParam ->load() : 5.0f;
+    const float decayMs   = processor.decayParam   ? processor.decayParam  ->load() : 100.0f;
+    const float sustainPc = processor.sustainParam ? processor.sustainParam->load() : 100.0f;
+    const float releaseMs = processor.releaseParam ? processor.releaseParam->load() : 20.0f;
+
+    // Map to X positions across the waveform (total budget = 1.0)
+    // Attack  [0   → ax]
+    // Decay   [ax  → dx]
+    // Sustain [dx  → rx]  (plateau)
+    // Release [rx  → 1.0]
+    const float totalMs = attackMs + decayMs + 200.0f + releaseMs;  // 200ms budget for sustain plateau
+    const float scale   = (totalMs > 0.0f) ? 1.0f / totalMs : 1.0f;
+
+    env.ax = juce::jlimit (0.04f, 0.30f, attackMs  * scale);
+    env.dx = juce::jlimit (env.ax + 0.04f, 0.70f, (attackMs + decayMs) * scale);
+    env.rx = juce::jlimit (env.dx + 0.04f, 0.95f, (attackMs + decayMs + 200.0f) * scale);
+    env.sy = juce::jlimit (0.05f, 0.95f, 1.0f - (sustainPc / 100.0f));  // flip: 0=top=loud
+    env.ay = 0.08f;  // attack peak always near top (full amplitude)
+
+    // Rebuild node list
+    envNodes.clear();
+
+    EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
+    a.colour = kColAttack;  a.label = "A"; envNodes.add (a);
+
+    EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
+    d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
+
+    // Sustain handle: mid of plateau
+    EnvNode s;
+    s.xn = (env.dx + env.rx) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
+    s.colour = kColSustain; s.label = "S"; envNodes.add (s);
+
+    EnvNode r; r.xn = env.rx; r.yn = env.sy; r.role = NodeRole::Release;
+    r.colour = kColRelease; r.label = "R"; envNodes.add (r);
+}
+
+// Write normalised nodes back to ADSR params ──────────────────────────────────
+
+void SliceWaveformLcd::commitNodes()
+{
+    // Inverse-map X positions to milliseconds
+    const float totalMs = 1500.0f;   // same budget used in buildEnvelopeNodes
+
+    const float attackMs  = juce::jlimit (0.0f, 1000.0f, env.ax * totalMs);
+    const float decayMs   = juce::jlimit (0.0f, 5000.0f, (env.dx - env.ax) * totalMs);
+    const float sustainPc = juce::jlimit (0.0f, 100.0f,  (1.0f - env.sy) * 100.0f);
+    const float releaseMs = juce::jlimit (0.0f, 5000.0f, (1.0f - env.rx) * totalMs);
+
+    auto setParam = [&] (const juce::String& id, float val)
+    {
+        if (auto* p = processor.apvts.getParameter (id))
+        {
+            const float norm = p->convertTo0to1 (val);
+            p->setValueNotifyingHost (norm);
+        }
+    };
+
+    setParam (ParamIds::defaultAttack,  attackMs);
+    setParam (ParamIds::defaultDecay,   decayMs);
+    setParam (ParamIds::defaultSustain, sustainPc);
+    setParam (ParamIds::defaultRelease, releaseMs);
+}
+
+// Envelope Y at normalised X (linear interpolation between nodes) ─────────────
+
+float SliceWaveformLcd::envAt (float xn) const
+{
+    // Polyline: P0(0,1) → P1(ax,ay) → P2(dx,sy) → P3(rx,sy) → P4(1,1)
+    struct Pt { float x, y; };
+    const Pt pts[] = {
+        { 0.0f,   1.0f   },
+        { env.ax, env.ay },
+        { env.dx, env.sy },
+        { env.rx, env.sy },
+        { 1.0f,   1.0f   }
+    };
+    constexpr int N = 5;
+
+    for (int i = 0; i < N - 1; ++i)
+    {
+        if (xn >= pts[i].x && xn <= pts[i+1].x)
+        {
+            const float span = pts[i+1].x - pts[i].x;
+            const float t    = (span > 0.0f) ? (xn - pts[i].x) / span : 0.0f;
+            return pts[i].y + t * (pts[i+1].y - pts[i].y);
+        }
+    }
+    return 1.0f;
+}
+
+// ── Hit testing ───────────────────────────────────────────────────────────────
+
+SliceWaveformLcd::NodeRole SliceWaveformLcd::hitTest (juce::Point<float> pos) const
+{
+    if (screenArea.isEmpty()) return NodeRole::None;
+
+    const float W = screenArea.getWidth();
+    const float H = screenArea.getHeight();
+    const float ox = screenArea.getX();
+    const float oy = screenArea.getY();
+
+    NodeRole best = NodeRole::None;
+    float    bestD2 = kHitR * kHitR;
+
+    for (const auto& n : envNodes)
+    {
+        const float nx = ox + n.xn * W;
+        const float ny = oy + n.yn * H;
+        const float dx = pos.x - nx;
+        const float dy = pos.y - ny;
+        const float d2 = dx*dx + dy*dy;
+        if (d2 < bestD2) { bestD2 = d2; best = n.role; }
+    }
+    return best;
+}
+
+// ── Mouse ─────────────────────────────────────────────────────────────────────
+
+void SliceWaveformLcd::mouseMove (const juce::MouseEvent& e)
+{
+    const auto newHov = hitTest (e.position);
+    if (newHov != hovRole)
+    {
+        hovRole = newHov;
+        setMouseCursor (hovRole != NodeRole::None
+                        ? juce::MouseCursor::PointingHandCursor
+                        : juce::MouseCursor::NormalCursor);
+        repaint();
+    }
+}
+
+void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
+{
+    dragRole = hitTest (e.position);
+}
+
+void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
+{
+    if (dragRole == NodeRole::None || screenArea.isEmpty()) return;
+
+    const float W  = screenArea.getWidth();
+    const float H  = screenArea.getHeight();
+    const float ox = screenArea.getX();
+    const float oy = screenArea.getY();
+
+    const float xn = juce::jlimit (0.01f, 0.99f, (e.position.x - ox) / W);
+    const float yn = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
+
+    switch (dragRole)
+    {
+        case NodeRole::Attack:
+            env.ax = juce::jlimit (0.02f, env.dx - 0.04f, xn);
+            env.ay = yn;
+            break;
+
+        case NodeRole::Decay:
+            env.dx = juce::jlimit (env.ax + 0.04f, env.rx - 0.04f, xn);
+            env.sy = yn;
+            break;
+
+        case NodeRole::Sustain:
+            env.sy = yn;
+            break;
+
+        case NodeRole::Release:
+            env.rx = juce::jlimit (env.dx + 0.04f, 0.97f, xn);
+            break;
+
+        default: break;
+    }
+
+    // Rebuild node positions from updated env state
+    buildEnvelopeNodes();
+
+    // Push to params (throttled — every drag event is fine, APVTS is cheap)
+    commitNodes();
+
+    repaint();
+}
+
+void SliceWaveformLcd::mouseUp (const juce::MouseEvent&)
+{
+    dragRole = NodeRole::None;
+}
+
+// ── Draw ──────────────────────────────────────────────────────────────────────
 
 void SliceWaveformLcd::drawBackground (juce::Graphics& g)
 {
     const auto ac = getTheme().accent;
     auto b = getLocalBounds();
 
-    // ── Outer frame — matches DualLcdControlFrame style ────────────────────
     juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
                                      juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
     g.setGradientFill (outerGrad);
@@ -130,7 +306,6 @@ void SliceWaveformLcd::drawBackground (juce::Graphics& g)
     g.setColour (ac.withAlpha (0.20f));
     g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
-    // ── Inner screen ────────────────────────────────────────────────────────
     auto screen = b.reduced (4);
     g.setColour (lcd2Bg());
     g.fillRoundedRectangle (screen.toFloat(), 2.0f);
@@ -152,112 +327,188 @@ void SliceWaveformLcd::drawWaveform (juce::Graphics& g, const juce::Rectangle<fl
 {
     if (data.peaks.isEmpty()) return;
 
-    const float cx = area.getCentreX();
     const float cy = area.getCentreY();
     const float W  = area.getWidth();
     const float H  = area.getHeight();
     const int   n  = data.peaks.size();
 
-    // Centre line
-    g.setColour (lcd2Phosphor().withAlpha (0.08f));
+    // Grid
+    g.setColour (lcd2Phosphor().withAlpha (0.06f));
     g.drawHorizontalLine (juce::roundToInt (cy), area.getX(), area.getRight());
 
-    // Grid lines at ±50% amplitude
-    g.setColour (lcd2Dim().withAlpha (0.5f));
-    g.drawHorizontalLine (juce::roundToInt (cy - H * 0.25f), area.getX(), area.getRight());
-    g.drawHorizontalLine (juce::roundToInt (cy + H * 0.25f), area.getX(), area.getRight());
-
-    // Build fill + line paths
+    // Build waveform paths — amplitude modulated by envelope shape
     juce::Path fill, lineTop, lineBot;
     bool first = true;
 
     for (int i = 0; i < n; i++)
     {
-        const float x   = area.getX() + (float) i / (float) n * W;
-        const float amp = juce::jlimit (0.0f, 1.0f, data.peaks[i]) * (H * 0.45f);
+        const float xn    = (float) i / (float) n;
+        const float x     = area.getX() + xn * W;
+        const float eGain = 1.0f - envAt (xn);   // 0=silence 1=full
+        const float amp   = juce::jlimit (0.0f, 1.0f, data.peaks[i]) * (H * 0.45f) * eGain;
 
         const float yT = cy - amp;
         const float yB = cy + amp;
 
-        if (first) { lineTop.startNewSubPath (x, yT); lineBot.startNewSubPath (x, yB); first = false; }
-        else       { lineTop.lineTo (x, yT); lineBot.lineTo (x, yB); }
+        if (first)
+        {
+            lineTop.startNewSubPath (x, yT);
+            lineBot.startNewSubPath (x, yB);
+            first = false;
+        }
+        else
+        {
+            lineTop.lineTo (x, yT);
+            lineBot.lineTo (x, yB);
+        }
     }
 
-    // Close fill between top and bottom lines
     fill = lineTop;
     for (int i = n - 1; i >= 0; i--)
     {
-        const float x   = area.getX() + (float) i / (float) n * W;
-        const float amp = juce::jlimit (0.0f, 1.0f, data.peaks[i]) * (H * 0.45f);
+        const float xn    = (float) i / (float) n;
+        const float x     = area.getX() + xn * W;
+        const float eGain = 1.0f - envAt (xn);
+        const float amp   = juce::jlimit (0.0f, 1.0f, data.peaks[i]) * (H * 0.45f) * eGain;
         fill.lineTo (x, cy + amp);
     }
     fill.closeSubPath();
 
-    // Draw fill
-    g.setColour (lcd2Phosphor().withAlpha (0.10f));
+    g.setColour (lcd2Phosphor().withAlpha (0.12f));
     g.fillPath (fill);
 
-    // Draw glow strokes
-    juce::PathStrokeType stroke (1.3f, juce::PathStrokeType::mitered);
-    g.setColour (lcd2Phosphor().withAlpha (0.30f));
-    g.strokePath (lineTop, stroke);
-    g.strokePath (lineBot, stroke);
+    juce::PathStrokeType glow (2.5f);
+    g.setColour (lcd2Phosphor().withAlpha (0.22f));
+    g.strokePath (lineTop, glow);
+    g.strokePath (lineBot, glow);
 
-    // Bright strokes on top
-    g.setColour (lcd2Phosphor().withAlpha (0.80f));
-    juce::PathStrokeType brightStroke (1.1f, juce::PathStrokeType::mitered);
-    g.strokePath (lineTop, brightStroke);
-    g.strokePath (lineBot, brightStroke);
+    juce::PathStrokeType sharp (1.1f);
+    g.setColour (lcd2Phosphor().withAlpha (0.85f));
+    g.strokePath (lineTop, sharp);
+    g.strokePath (lineBot, sharp);
 
-    // Start / end markers
-    g.setColour (lcd2Phosphor().withAlpha (0.60f));
-    g.drawVerticalLine (juce::roundToInt (area.getX() + 1), area.getY(), area.getBottom());
-    g.drawVerticalLine (juce::roundToInt (area.getRight() - 1), area.getY(), area.getBottom());
+    // Slice boundary markers
+    g.setColour (lcd2Phosphor().withAlpha (0.50f));
+    g.drawVerticalLine (juce::roundToInt (area.getX() + 1),      area.getY(), area.getBottom());
+    g.drawVerticalLine (juce::roundToInt (area.getRight() - 1),  area.getY(), area.getBottom());
 }
 
-void SliceWaveformLcd::drawOverlay (juce::Graphics& g, const juce::Rectangle<float>& area)
+void SliceWaveformLcd::drawSegmentLabel (juce::Graphics& g,
+                                          float x0, float y0,
+                                          float x1, float y1,
+                                          const char* text,
+                                          juce::Colour col,
+                                          const juce::Rectangle<float>& area)
 {
-    const juce::Font noteFont  = DysektLookAndFeel::makeFont (22.0f);
-    const juce::Font smallFont = DysektLookAndFeel::makeFont (9.0f);
-    const juce::Font hdrFont   = DysektLookAndFeel::makeFont (8.0f, true);
+    const float mx = area.getX() + ((x0 + x1) * 0.5f) * area.getWidth();
+    const float my = area.getY() + ((y0 + y1) * 0.5f) * area.getHeight() - 9.0f;
+    g.setFont (DysektLookAndFeel::makeFont (8.0f));
+    g.setColour (col.withAlpha (0.40f));
+    g.drawText (juce::String (text),
+                juce::Rectangle<float> (mx - 30.0f, my - 6.0f, 60.0f, 12.0f),
+                juce::Justification::centred, false);
+}
 
-    // ── Sample name + index — top ─────────────────────────────────────────────
-/*
+void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<float>& area)
+{
+    const float W  = area.getWidth();
+    const float H  = area.getHeight();
+    const float ox = area.getX();
+    const float oy = area.getY();
+
+    auto px = [&] (float xn) { return ox + xn * W; };
+    auto py = [&] (float yn) { return oy + yn * H; };
+
+    // ── Filled envelope region ────────────────────────────────────────────────
+    juce::Path envFill;
+    envFill.startNewSubPath (px (0.0f), py (1.0f));
+    envFill.lineTo (px (0.0f),   py (1.0f));
+    envFill.lineTo (px (env.ax), py (env.ay));
+    envFill.lineTo (px (env.dx), py (env.sy));
+    envFill.lineTo (px (env.rx), py (env.sy));
+    envFill.lineTo (px (1.0f),   py (1.0f));
+    envFill.closeSubPath();
+
+    juce::ColourGradient fillGrad (kColDecay.withAlpha (0.08f), 0, oy,
+                                    kColDecay.withAlpha (0.00f), 0, oy + H, false);
+    g.setGradientFill (fillGrad);
+    g.fillPath (envFill);
+
+    // ── Envelope polyline ─────────────────────────────────────────────────────
+    juce::Path envLine;
+    envLine.startNewSubPath (px (0.0f),   py (1.0f));
+    envLine.lineTo          (px (env.ax), py (env.ay));
+    envLine.lineTo          (px (env.dx), py (env.sy));
+    envLine.lineTo          (px (env.rx), py (env.sy));
+    envLine.lineTo          (px (1.0f),   py (1.0f));
+
+    // Glow pass
+    juce::PathStrokeType glowStroke (2.5f);
+    g.setColour (juce::Colours::white.withAlpha (0.07f));
+    g.strokePath (envLine, glowStroke);
+
+    // Main line (dashed via path flattening)
+    juce::Path dashedLine;
     {
-        juce::String idxStr = juce::String (data.sliceIndex + 1).paddedLeft ('0', 2)
-                            + "/" + juce::String (data.numSlices).paddedLeft ('0', 2);
-        juce::String nm     = data.sampleName.toUpperCase().substring (0, 20);
-
-        g.setFont (hdrFont);
-        g.setColour (lcd2Bright().withAlpha (0.85f));
-        g.drawText (nm,
-                    juce::Rectangle<float> (area.getX() + kLeftPad, area.getY() + 2,
-                                            area.getWidth() * 0.75f, 14.0f),
-                    juce::Justification::centredLeft, false);
-
-        g.setColour (lcd2Phosphor().withAlpha (0.55f));
-        g.drawText (idxStr,
-                    juce::Rectangle<float> (area.getX(), area.getY() + 2,
-                                            area.getWidth() - kLeftPad, 14.0f),
-                    juce::Justification::centredRight, false);
+        juce::PathStrokeType stroke (1.0f);
+        float dashes[] = { 3.0f, 5.0f };
+        stroke.createDashedStroke (dashedLine, envLine, dashes, 2);
     }
-*/
+    g.setColour (juce::Colours::white.withAlpha (0.20f));
+    g.fillPath (dashedLine);
 
-    // ── MIDI note — bottom right ───────────────────────────────────────────────
-/*
+    // Sustain plateau highlighted
+    juce::Path susLine;
+    susLine.startNewSubPath (px (env.dx), py (env.sy));
+    susLine.lineTo          (px (env.rx), py (env.sy));
+    g.setColour (kColSustain.withAlpha (0.35f));
+    g.strokePath (susLine, juce::PathStrokeType (1.0f));
+
+    // ── Segment labels ────────────────────────────────────────────────────────
+    drawSegmentLabel (g, 0.0f, 1.0f, env.ax, env.ay, "FADE IN",  kColAttack,  area);
+    drawSegmentLabel (g, env.ax, env.ay, env.dx, env.sy, "DECAY", kColDecay,   area);
+    drawSegmentLabel (g, env.rx, env.sy, 1.0f, 1.0f, "FADE OUT", kColRelease, area);
+}
+
+void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float>& area)
+{
+    const float W  = area.getWidth();
+    const float H  = area.getHeight();
+    const float ox = area.getX();
+    const float oy = area.getY();
+
+    for (const auto& node : envNodes)
     {
-        g.setFont (noteFont);
-        g.setColour (lcd2Bright().withAlpha (0.92f));
-        g.drawText (midiNoteName (data.midiNote),
-                    juce::Rectangle<float> (area.getRight() - 70.0f,
-                                            area.getBottom() - 46,
-                                            60.0f, 28.0f),
-                    juce::Justification::centredRight, false);
+        const float cx = ox + node.xn * W;
+        const float cy = oy + node.yn * H;
+        const bool  hov = (node.role == hovRole || node.role == dragRole);
+        const float r   = hov ? kNodeR + 2.5f : kNodeR;
+
+        // Glow ring
+        g.setColour (node.colour.withAlpha (hov ? 0.55f : 0.25f));
+        g.drawEllipse (cx - r, cy - r, r * 2, r * 2, hov ? 1.5f : 1.0f);
+
+        // Inner dot
+        const float dr = hov ? 3.0f : 2.5f;
+        g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.80f));
+        g.fillEllipse (cx - dr, cy - dr, dr * 2, dr * 2);
+
+        // Label above
+        g.setFont (DysektLookAndFeel::makeFont (hov ? 9.5f : 8.0f, true));
+        g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.70f));
+        g.drawText (juce::String (node.label),
+                    juce::Rectangle<float> (cx - 12.0f, cy - r - 14.0f, 24.0f, 12.0f),
+                    juce::Justification::centred, false);
+
+        // Tick line down to envelope (for vertical nodes)
+        if (node.role != NodeRole::Sustain)
+        {
+            g.setColour (node.colour.withAlpha (0.18f));
+            g.drawVerticalLine (juce::roundToInt (cx),
+                                cy + r,
+                                oy + H);
+        }
     }
-*/
-
-
-    // Stats row removed — all params shown in the left LCD panel
 }
 
 void SliceWaveformLcd::drawNoData (juce::Graphics& g)
@@ -269,7 +520,7 @@ void SliceWaveformLcd::drawNoData (juce::Graphics& g)
     if (! data.hasSample)
         g.drawText ("-- NO SAMPLE LOADED --", b, juce::Justification::centred);
     else
-        g.drawText ("-- SELECT A SLICE --", b, juce::Justification::centred);
+        g.drawText ("-- SELECT A SLICE --",   b, juce::Justification::centred);
 }
 
 // ── Paint ─────────────────────────────────────────────────────────────────────
@@ -285,10 +536,14 @@ void SliceWaveformLcd::paint (juce::Graphics& g)
         return;
     }
 
-    // Content area (inside the bezel)
-    auto screen = getLocalBounds().reduced (4).toFloat();
+    // Rebuild envelope nodes from current param values (unless mid-drag)
+    if (dragRole == NodeRole::None)
+        buildEnvelopeNodes();
 
-    // Waveform occupies the full inner area; overlay drawn on top
-    drawWaveform (g, screen.reduced (2.0f));
-    drawOverlay  (g, screen.reduced (4.0f, 6.0f));
+    const auto area = getLocalBounds().reduced (4).toFloat().reduced (2.0f);
+    screenArea = area;
+
+    drawWaveform (g, area);
+    drawEnvelope (g, area);
+    drawNodes    (g, area);
 }
