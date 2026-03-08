@@ -4,7 +4,7 @@
 static constexpr int kBaseW      = 1130;
 static constexpr int kLogoH      = 52;    // single combined header bar
 static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LCD row + padding
-static constexpr int kSliceLaneH = 30;
+static constexpr int kSliceLaneH = 36;   // 30 body + 6 ADSR dot strip
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 22;

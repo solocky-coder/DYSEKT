@@ -28,6 +28,12 @@ void SliceLane::paint (juce::Graphics& g)
     int w   = getWidth();
     int h   = getHeight();
 
+    // Top 30px = slice body strip; bottom 6px = ADSR lock dot strip
+    static constexpr int kBodyH = 30;
+    static constexpr int kDotZoneH = 6;
+    const int bodyH = juce::jmin (h, kBodyH);
+    const int dotZoneY = bodyH;   // dot strip starts right below body
+
     int previewIdx = -1, previewStart = 0, previewEnd = 0;
     const bool hasPreview = waveformView != nullptr
         && waveformView->getActiveSlicePreview (previewIdx, previewStart, previewEnd);
@@ -57,7 +63,7 @@ void SliceLane::paint (juce::Graphics& g)
     // Opacity steps for non-selected slices (5-step cycle, same hue per slice)
     static constexpr float kOpacity[5] = { 0.11f, 0.19f, 0.27f, 0.19f, 0.11f };
 
-    const int Y1 = 1, Y2 = h - 1;
+    const int Y1 = 1, Y2 = bodyH - 1;
 
     // ── Pass 1: fills ─────────────────────────────────────────────────────────
     for (int i = 0; i < visCount; ++i)
@@ -95,9 +101,9 @@ void SliceLane::paint (juce::Graphics& g)
 
         if (si.selected)
         {
-            // Bright 2px top bar (inset 1px from dividers)
+            // Bright 2px bottom bar (inset 1px from dividers)
             g.setColour (si.col.withAlpha (0.95f));
-            g.fillRect (si.x1 + 1, Y1, sw - 2, 2);
+            g.fillRect (si.x1 + 1, Y2 - 2, sw - 2, 2);
 
             // 4-sided border inset by 1px from each divider
             g.setColour (si.col.withAlpha (0.70f));
@@ -112,9 +118,9 @@ void SliceLane::paint (juce::Graphics& g)
         }
         else
         {
-            // Hairline top tick at full colour brightness (inset 1px)
+            // Hairline bottom tick at full colour brightness (inset 1px)
             g.setColour (si.col.withAlpha (0.50f));
-            g.fillRect (si.x1 + 1, Y1, sw - 2, 1);
+            g.fillRect (si.x1 + 1, Y2 - 1, sw - 2, 1);
         }
     }
 
@@ -174,25 +180,84 @@ void SliceLane::paint (juce::Graphics& g)
             if (vis[(size_t) i].idx == cl.sliceIdx) { col = vis[(size_t) i].col; break; }
 
         g.setColour (isSel ? col.withAlpha (1.0f) : col.withAlpha (0.70f));
-        g.drawText (label, cl.x, 0, labelW, h, juce::Justification::centredLeft);
+        g.drawText (label, cl.x, 0, labelW, bodyH, juce::Justification::centredLeft);
     }
 
-    // ── Lock icons ────────────────────────────────────────────────────────────
+    // ── ADSR lock dot strip — separate 6px zone BELOW the slice body ─────────
+    // Each slice gets its own dot-zone column directly beneath it.
+    // Filled dot = field locked.  Hollow outline = free.  Padlock = all locked.
+    // Dot colours: A=#00FF87  D=#FFE800  S=#00C8FF  R=#FF6B00
+
+    static const juce::Colour kDotA { 0xFF00FF87 };
+    static const juce::Colour kDotD { 0xFFFFE800 };
+    static const juce::Colour kDotS { 0xFF00C8FF };
+    static const juce::Colour kDotR { 0xFFFF6B00 };
+    static const uint32_t     kAdsrBits[4] = { kLockAttack, kLockDecay,
+                                                kLockSustain, kLockRelease };
+    static const juce::Colour kAdsrCols[4] = { kDotA, kDotD, kDotS, kDotR };
+
+    // Dot strip background (slightly darker than body)
+    g.setColour (getTheme().darkBar.darker (0.20f));
+    g.fillRect (0, dotZoneY, w, kDotZoneH);
+
+    // Top separator line between body and dot zone
+    g.setColour (getTheme().separator.withAlpha (0.60f));
+    g.drawHorizontalLine (dotZoneY, 0.0f, (float) w);
+
+    // Dot geometry: 4 dots spaced 5px centre-to-centre, each 2×2px square
+    static constexpr int kDotSz  = 2;   // square side
+    static constexpr int kDotGap = 5;   // centre-to-centre
+    const int dotRowY = dotZoneY + kDotZoneH / 2 - kDotSz / 2;  // vertically centred
+
     for (int i = 0; i < visCount; ++i)
     {
         const auto& si = vis[(size_t) i];
         const auto& sl = ui.slices[(size_t) si.idx];
-        if (sl.lockMask != 0xFFFFFFFFu) continue;
+        const int sw = si.x2 - si.x1;
 
-        const int iconSz = 5;
-        const int iconX  = si.x2 - iconSz - 3;
-        const int iconY  = 2;
-        if (iconX < si.x1 + 4) continue;
+        const uint32_t anyMask = kLockAttack | kLockDecay | kLockSustain | kLockRelease;
+        const bool anyLocked = (sl.lockMask & anyMask) != 0;
+        if (! anyLocked) continue;
 
-        g.setColour (getTheme().lockActive.withAlpha (0.9f));
-        g.fillRect (iconX, iconY, iconSz, iconSz);
-        g.setColour (getTheme().lockActive);
-        g.drawRect (iconX, iconY, iconSz, iconSz, 1);
+        const bool allLocked = (sl.lockMask == 0xFFFFFFFFu);
+        const float alpha    = si.selected ? 0.95f : 0.70f;
+
+        if (allLocked || sw < 26)
+        {
+            // All-locked or too narrow for 4 dots: single padlock pip centred
+            if (sw < 7) continue;
+            const int px = si.x1 + sw / 2;
+            const int py = dotZoneY + 1;
+            g.setColour (getTheme().lockActive.withAlpha (alpha));
+            g.fillRect (px - 1, py,     2, 2);   // shackle
+            g.fillRect (px - 2, py + 2, 4, 3);   // body
+        }
+        else
+        {
+            // Partial: 4 ADSR dots, centred under slice
+            const int totalW = kDotGap * 3 + kDotSz;
+            if (totalW > sw - 2) continue;
+            const int startX = si.x1 + (sw - totalW) / 2;
+
+            for (int d = 0; d < 4; ++d)
+            {
+                const bool locked = (sl.lockMask & kAdsrBits[d]) != 0;
+                const int  dx     = startX + d * kDotGap;
+                const juce::Colour dc = kAdsrCols[d];
+
+                if (locked)
+                {
+                    g.setColour (dc.withAlpha (alpha));
+                    g.fillRect (dx, dotRowY, kDotSz, kDotSz);
+                }
+                else
+                {
+                    // Very dim hollow dot — shows position without noise
+                    g.setColour (dc.withAlpha (0.15f));
+                    g.drawRect (dx, dotRowY, kDotSz, kDotSz, 1);
+                }
+            }
+        }
     }
 
     // ── Bottom separator ──────────────────────────────────────────────────────

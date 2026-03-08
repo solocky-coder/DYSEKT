@@ -2,6 +2,7 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 #include "../params/ParamIds.h"
+#include "../audio/Slice.h"
 
 // ── Theme-derived colours ─────────────────────────────────────────────────────
 static juce::Colour lcd2Bg()       { return getTheme().darkBar.darker (0.55f); }
@@ -262,7 +263,29 @@ void SliceWaveformLcd::mouseMove (const juce::MouseEvent& e)
 
 void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
 {
-    dragRole = hitTest (e.position);
+    const NodeRole hit = hitTest (e.position);
+
+    if (e.mods.isRightButtonDown())
+    {
+        // Right-click on a node: toggle that ADSR field's lock for the selected slice
+        uint32_t bit = 0;
+        if      (hit == NodeRole::Attack)  bit = kLockAttack;
+        else if (hit == NodeRole::Decay)   bit = kLockDecay;
+        else if (hit == NodeRole::Sustain) bit = kLockSustain;
+        else if (hit == NodeRole::Release) bit = kLockRelease;
+
+        if (bit != 0)
+        {
+            DysektProcessor::Command cmd;
+            cmd.type      = DysektProcessor::CmdToggleLock;
+            cmd.intParam1 = (int) bit;
+            processor.pushCommand (cmd);
+            repaint();
+        }
+        return;   // don't start a drag on right-click
+    }
+
+    dragRole = hit;
 }
 
 void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
@@ -506,36 +529,111 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
     const float ox = area.getX();
     const float oy = area.getY();
 
+    // Read lock state for selected slice
+    uint32_t lockMask = 0;
+    const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+    if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
+        lockMask = processor.sliceManager.getSlice (sel).lockMask;
+
     for (const auto& node : envNodes)
     {
         const float cx = ox + node.xn * W;
         const float cy = oy + node.yn * H;
-        const bool  hov = (node.role == hovRole || node.role == dragRole);
-        const float r   = hov ? kNodeR + 2.5f : kNodeR;
+        const bool  hov    = (node.role == hovRole || node.role == dragRole);
+        const float r      = hov ? kNodeR + 2.5f : kNodeR;
 
-        // Glow ring
-        g.setColour (node.colour.withAlpha (hov ? 0.55f : 0.25f));
-        g.drawEllipse (cx - r, cy - r, r * 2, r * 2, hov ? 1.5f : 1.0f);
+        // Determine if this field is locked
+        uint32_t fieldBit = 0;
+        if      (node.role == NodeRole::Attack)  fieldBit = kLockAttack;
+        else if (node.role == NodeRole::Decay)   fieldBit = kLockDecay;
+        else if (node.role == NodeRole::Sustain) fieldBit = kLockSustain;
+        else if (node.role == NodeRole::Release) fieldBit = kLockRelease;
+        const bool locked = (fieldBit != 0) && ((lockMask & fieldBit) != 0);
 
-        // Inner dot
-        const float dr = hov ? 3.0f : 2.5f;
-        g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.80f));
-        g.fillEllipse (cx - dr, cy - dr, dr * 2, dr * 2);
-
-        // Label above
-        g.setFont (DysektLookAndFeel::makeFont (hov ? 9.5f : 8.0f, true));
-        g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.70f));
-        g.drawText (juce::String (node.label),
-                    juce::Rectangle<float> (cx - 12.0f, cy - r - 14.0f, 24.0f, 12.0f),
-                    juce::Justification::centred, false);
-
-        // Tick line down to envelope (for vertical nodes)
+        // Tick line down to envelope
         if (node.role != NodeRole::Sustain)
         {
-            g.setColour (node.colour.withAlpha (0.18f));
-            g.drawVerticalLine (juce::roundToInt (cx),
-                                cy + r,
-                                oy + H);
+            g.setColour (node.colour.withAlpha (locked ? 0.30f : 0.18f));
+            g.drawVerticalLine (juce::roundToInt (cx), cy + r, oy + H);
+        }
+
+        if (locked)
+        {
+            // ── LOCKED: solid filled ring + glow + padlock pip ────────────────
+            // Outer glow
+            g.setColour (node.colour.withAlpha (hov ? 0.40f : 0.20f));
+            g.drawEllipse (cx - r - 3.0f, cy - r - 3.0f,
+                           (r + 3.0f) * 2.0f, (r + 3.0f) * 2.0f, 1.0f);
+
+            // Filled ring
+            g.setColour (node.colour.withAlpha (hov ? 0.90f : 0.70f));
+            g.fillEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f);
+
+            // White centre dot
+            g.setColour (juce::Colours::white.withAlpha (hov ? 0.95f : 0.75f));
+            g.fillEllipse (cx - 1.8f, cy - 1.8f, 3.6f, 3.6f);
+
+            // Padlock icon above label  (tiny — 5px body)
+            {
+                const float px = cx;
+                const float py = cy - r - 12.0f;
+                // shackle arc
+                juce::Path shackle;
+                shackle.addCentredArc (px, py - 2.5f, 2.5f, 2.5f, 0.0f,
+                                       juce::MathConstants<float>::pi,
+                                       0.0f, true);
+                g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.85f));
+                g.strokePath (shackle, juce::PathStrokeType (1.2f));
+                // body rect
+                g.setColour (node.colour.withAlpha (hov ? 0.70f : 0.50f));
+                g.fillRoundedRectangle (px - 3.0f, py, 6.0f, 5.0f, 1.0f);
+                g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.80f));
+                g.drawRoundedRectangle (px - 3.0f, py, 6.0f, 5.0f, 1.0f, 0.8f);
+            }
+
+            // Label below padlock
+            g.setFont (DysektLookAndFeel::makeFont (hov ? 9.5f : 8.0f, true));
+            g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.85f));
+            g.drawText (juce::String (node.label),
+                        juce::Rectangle<float> (cx - 12.0f, cy - r - 24.0f, 24.0f, 10.0f),
+                        juce::Justification::centred, false);
+
+            // Hover tooltip: value + lock hint
+            if (hov)
+            {
+                g.setFont (DysektLookAndFeel::makeFont (7.5f));
+                g.setColour (node.colour.withAlpha (0.75f));
+                g.drawText ("right-click to unlock",
+                            juce::Rectangle<float> (cx - 40.0f, cy + r + 4.0f, 80.0f, 10.0f),
+                            juce::Justification::centred, false);
+            }
+        }
+        else
+        {
+            // ── UNLOCKED: hollow ring ─────────────────────────────────────────
+            g.setColour (node.colour.withAlpha (hov ? 0.55f : 0.25f));
+            g.drawEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f, hov ? 1.5f : 1.0f);
+
+            // Inner dot
+            const float dr = hov ? 3.0f : 2.5f;
+            g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.80f));
+            g.fillEllipse (cx - dr, cy - dr, dr * 2.0f, dr * 2.0f);
+
+            // Label above
+            g.setFont (DysektLookAndFeel::makeFont (hov ? 9.5f : 8.0f, true));
+            g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.70f));
+            g.drawText (juce::String (node.label),
+                        juce::Rectangle<float> (cx - 12.0f, cy - r - 14.0f, 24.0f, 12.0f),
+                        juce::Justification::centred, false);
+
+            if (hov)
+            {
+                g.setFont (DysektLookAndFeel::makeFont (7.5f));
+                g.setColour (node.colour.withAlpha (0.60f));
+                g.drawText ("right-click to lock",
+                            juce::Rectangle<float> (cx - 40.0f, cy + r + 4.0f, 80.0f, 10.0f),
+                            juce::Justification::centred, false);
+            }
         }
     }
 }
