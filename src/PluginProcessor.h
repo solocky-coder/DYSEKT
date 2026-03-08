@@ -202,13 +202,6 @@ public:
         return peak;
     }
 
-// ADD THESE GETTERS -- BEGIN
-    std::atomic<float>* getAttackParam()  const { return attackParam; }
-    std::atomic<float>* getDecayParam()   const { return decayParam; }
-    std::atomic<float>* getSustainParam() const { return sustainParam; }
-    std::atomic<float>* getReleaseParam() const { return releaseParam; }
-// ADD THESE GETTERS -- END
-
     // =========================================================================
     // Public subsystem members (accessed directly by UI)
     // =========================================================================
@@ -235,7 +228,9 @@ public:
     std::atomic<int> liveDragBoundsStart { 0 };
     std::atomic<int> liveDragBoundsEnd   { 0 };
     std::atomic<int> liveDragSliceIdx    { -1 };
-    std::atomic<int> paramsSyncedForSlice { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
+    std::atomic<int>   paramsSyncedForSlice   { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
+    std::atomic<float> sliceStartPublished    { -1.0f }; // value written when syncing, used to detect real CC moves
+    std::atomic<float> sliceEndPublished      { -1.0f };
 
     // Shift-preview request (-2 = idle, -1 = stop, >= 0 = start at position)
     std::atomic<int> shiftPreviewRequest { -2 };

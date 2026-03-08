@@ -20,6 +20,7 @@ public:
     void repaintLcd();
     void resized() override;
     void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override;
+    void lookAndFeelChanged() override;   // re-apply scrollbar theme colours
 
 private:
     // ── Layout constants ──────────────────────────────────────────────────────

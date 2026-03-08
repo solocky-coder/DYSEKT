@@ -97,6 +97,24 @@ void ActionPanel::toggleTrimMode()
         onTrimToggle();
 }
 
+void ActionPanel::setTrimLocked (bool locked)
+{
+    // While trim is active: disable ADD SLICE and MIDI SLICE.
+    // TRIM button itself stays enabled so user can cancel.
+    // Everything else (browser, wave, chromatic, shortcuts) also locked.
+    addSliceBtn.setEnabled  (! locked);
+    lazyChopBtn.setEnabled  (! locked);
+    midiSelectBtn.setEnabled(! locked);
+
+    // Visual: dim disabled buttons
+    const float alpha = locked ? 0.25f : 1.0f;
+    addSliceBtn.setAlpha  (alpha);
+    lazyChopBtn.setAlpha  (alpha);
+    midiSelectBtn.setAlpha(alpha);
+
+    repaint();
+}
+
 void ActionPanel::resized()
 {
     const int gap    = 4;

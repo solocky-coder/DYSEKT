@@ -93,12 +93,14 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         processor.applyTrimToCurrentSample (s, e);
         trimSession.reset();
         trimDialog.reset();
+        actionPanel.setTrimLocked (false);
         resized();
     };
     waveformView.onTrimCancelled = [this]
     {
         trimSession.reset();
         trimDialog.reset();
+        actionPanel.setTrimLocked (false);
         resized();
     };
 
@@ -113,6 +115,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
                 p->removeChildComponent (trimDialog.get());
             trimDialog.reset();
             waveformView.setTrimMode (false);
+            actionPanel.setTrimLocked (false);
+            resized();
             repaint();
             return;
         }
@@ -129,6 +133,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
         addAndMakeVisible (*trimDialog);
         trimDialog->toFront (false);
+        actionPanel.setTrimLocked (true);  // block ADD SLICE / MIDI SLICE
         resized();   // re-layout: waveform shrinks, trim bar placed below
         repaint();
     };
@@ -590,6 +595,7 @@ void DysektEditor::timerCallback()
                 trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
                 addAndMakeVisible (*trimDialog);
                 trimDialog->toFront (false);
+                actionPanel.setTrimLocked (true);
                 resized();   // re-layout: waveform shrinks, trim bar placed below
             }
         }

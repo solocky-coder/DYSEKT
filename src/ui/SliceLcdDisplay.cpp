@@ -93,14 +93,8 @@ SliceLcdDisplay::SliceLcdDisplay (DysektProcessor& p)
     // ── Scrollbar setup ───────────────────────────────────────────────────────
     scrollBar.setAutoHide (false);
     scrollBar.addListener (this);
-    // Style to match LCD phosphor theme
-    scrollBar.setColour (juce::ScrollBar::backgroundColourId,
-                         juce::Colour (0xFF000000).withAlpha (0.0f));  // transparent bg
-    scrollBar.setColour (juce::ScrollBar::thumbColourId,
-                         getTheme().accent.withAlpha (0.55f));
-    scrollBar.setColour (juce::ScrollBar::trackColourId,
-                         getTheme().darkBar.darker (0.3f));
     addAndMakeVisible (scrollBar);
+    lookAndFeelChanged();   // apply initial theme colours
     updateScrollBar();
 }
 
@@ -471,6 +465,18 @@ void SliceLcdDisplay::drawNoSampleScreen (juce::Graphics& g)
     g.setColour (pal.dim);
     g.drawText ("DROP A FILE OR USE THE BROWSER",
                 b, juce::Justification::centredBottom);
+}
+
+void SliceLcdDisplay::lookAndFeelChanged()
+{
+    // Re-apply scrollbar colours whenever the theme changes
+    scrollBar.setColour (juce::ScrollBar::backgroundColourId,
+                         juce::Colour (0x00000000));   // transparent bg
+    scrollBar.setColour (juce::ScrollBar::thumbColourId,
+                         getTheme().accent.withAlpha (0.60f));
+    scrollBar.setColour (juce::ScrollBar::trackColourId,
+                         getTheme().darkBar.darker (0.4f));
+    scrollBar.repaint();
 }
 
 void SliceLcdDisplay::paint (juce::Graphics& g)

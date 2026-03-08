@@ -32,6 +32,9 @@ public:
     // Callback wired by PluginEditor
     std::function<void()> onTrimToggle;
 
+    /** Lock/unlock all buttons except TRIM while trim mode is active. */
+    void setTrimLocked (bool locked);
+
 private:
     DysektProcessor& processor;
     WaveformView&    waveformView;

@@ -387,10 +387,12 @@ void DysektProcessor::publishUiSliceSnapshot()
         if (sel >= 0 && sel < snap.numSlices && total > 0)
         {
             const auto& sl = snap.slices[(size_t) sel];
-            sliceStartParam->store ((float) sl.startSample / (float) total,
-                                    std::memory_order_relaxed);
-            sliceEndParam->store   ((float) sliceManager.getEndForSlice (sel, total) / (float) total,
-                                    std::memory_order_relaxed);
+            const float pubStart = (float) sl.startSample / (float) total;
+            const float pubEnd   = (float) sliceManager.getEndForSlice (sel, total) / (float) total;
+            sliceStartParam->store (pubStart, std::memory_order_relaxed);
+            sliceEndParam->store   (pubEnd,   std::memory_order_relaxed);
+            sliceStartPublished.store (pubStart, std::memory_order_relaxed);
+            sliceEndPublished.store   (pubEnd,   std::memory_order_relaxed);
             paramsSyncedForSlice.store (sel, std::memory_order_relaxed);
         }
     }
@@ -1396,8 +1398,21 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         {
             const auto sl = sliceManager.getSlice (sel);
 
-            const int newStart = juce::roundToInt (sliceStartParam->load (std::memory_order_relaxed) * (float) total);
-            const int newEnd   = juce::roundToInt (sliceEndParam->load   (std::memory_order_relaxed) * (float) total);
+            const float rawStart = sliceStartParam->load (std::memory_order_relaxed);
+            const float rawEnd   = sliceEndParam->load   (std::memory_order_relaxed);
+
+            // Dead-zone: ignore changes smaller than 2 MIDI CC steps (2/128).
+            // This prevents a physical knob from re-applying its last position
+            // after slice selection changes (the knob-jump bug).
+            const float kDeadZone = 2.0f / 128.0f;
+            const float pubStart  = sliceStartPublished.load (std::memory_order_relaxed);
+            const float pubEnd    = sliceEndPublished.load   (std::memory_order_relaxed);
+            if (std::abs (rawStart - pubStart) < kDeadZone &&
+                std::abs (rawEnd   - pubEnd)   < kDeadZone)
+                goto skipSliceBoundsUpdate;
+
+            const int newStart = juce::roundToInt (rawStart * (float) total);
+            const int newEnd   = juce::roundToInt (rawEnd   * (float) total);
 
             const int  slCurEnd     = sliceManager.getEndForSlice (sel, total);
             const bool startChanged = (newStart != sl.startSample);
@@ -1414,6 +1429,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 pushCommand (cmd);
             }
         }
+        skipSliceBoundsUpdate:;
     }
 
     processMidi (midi);
