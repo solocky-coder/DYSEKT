@@ -105,25 +105,28 @@ void SliceWaveformLcd::buildDisplayData()
 
 void SliceWaveformLcd::buildEnvelopeNodes()
 {
-    // Read raw param values
+    // Read raw param values (getRawParameterValue gives denormalised units)
     const float attackMs  = processor.attackParam  ? processor.attackParam ->load() : 5.0f;
     const float decayMs   = processor.decayParam   ? processor.decayParam  ->load() : 100.0f;
     const float sustainPc = processor.sustainParam ? processor.sustainParam->load() : 100.0f;
     const float releaseMs = processor.releaseParam ? processor.releaseParam->load() : 20.0f;
 
-    // Map to X positions across the waveform (total budget = 1.0)
-    // Attack  [0   → ax]
-    // Decay   [ax  → dx]
-    // Sustain [dx  → rx]  (plateau)
-    // Release [rx  → 1.0]
-    const float totalMs = attackMs + decayMs + 200.0f + releaseMs;  // 200ms budget for sustain plateau
-    const float scale   = (totalMs > 0.0f) ? 1.0f / totalMs : 1.0f;
+    // Fixed per-segment X budgets (must match commitNodes exactly):
+    //   Attack  segment: [0   , kAX ]  — param max 1000 ms
+    //   Decay   segment: [kAX , kDX ]  — param max 5000 ms
+    //   Sustain segment: [kDX , kRX ]  — fixed plateau
+    //   Release segment: [kRX , 1.0 ]  — param max 5000 ms
+    static constexpr float kAX = 0.20f;   // end of attack zone
+    static constexpr float kDX = 0.45f;   // end of decay zone
+    static constexpr float kRX = 0.80f;   // end of sustain zone / start of release
 
-    env.ax = juce::jlimit (0.04f, 0.30f, attackMs  * scale);
-    env.dx = juce::jlimit (env.ax + 0.04f, 0.70f, (attackMs + decayMs) * scale);
-    env.rx = juce::jlimit (env.dx + 0.04f, 0.95f, (attackMs + decayMs + 200.0f) * scale);
-    env.sy = juce::jlimit (0.05f, 0.95f, 1.0f - (sustainPc / 100.0f));  // flip: 0=top=loud
-    env.ay = 0.08f;  // attack peak always near top (full amplitude)
+    env.ax = juce::jlimit (0.02f, kAX - 0.02f,  (attackMs  / 1000.0f) * kAX);
+    env.dx = juce::jlimit (kAX + 0.02f, kDX - 0.02f,
+                            kAX + (decayMs / 5000.0f) * (kDX - kAX));
+    env.rx = juce::jlimit (kDX + 0.02f, kRX - 0.02f,
+                            kDX + 0.5f * (kRX - kDX));   // fixed mid-point, not param-driven
+    env.sy = juce::jlimit (0.05f, 0.95f, 1.0f - (sustainPc / 100.0f));  // 0=top=loud
+    env.ay = 0.08f;  // attack peak always near top
 
     // Rebuild node list
     envNodes.clear();
@@ -147,13 +150,17 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 
 void SliceWaveformLcd::commitNodes()
 {
-    // Inverse-map X positions to milliseconds
-    const float totalMs = 1500.0f;   // same budget used in buildEnvelopeNodes
+    // Inverse-map using the same fixed segment budgets as buildEnvelopeNodes
+    static constexpr float kAX = 0.20f;
+    static constexpr float kDX = 0.45f;
+    static constexpr float kRX = 0.80f;
 
-    const float attackMs  = juce::jlimit (0.0f, 1000.0f, env.ax * totalMs);
-    const float decayMs   = juce::jlimit (0.0f, 5000.0f, (env.dx - env.ax) * totalMs);
+    const float attackMs  = juce::jlimit (0.0f, 1000.0f, (env.ax / kAX) * 1000.0f);
+    const float decayMs   = juce::jlimit (0.0f, 5000.0f,
+                                ((env.dx - kAX) / (kDX - kAX)) * 5000.0f);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,  (1.0f - env.sy) * 100.0f);
-    const float releaseMs = juce::jlimit (0.0f, 5000.0f, (1.0f - env.rx) * totalMs);
+    const float releaseMs = juce::jlimit (0.0f, 5000.0f,
+                                ((1.0f - env.rx) / (1.0f - kRX)) * 5000.0f);
 
     auto setParam = [&] (const juce::String& id, float val)
     {
@@ -274,10 +281,19 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
         env.rx = juce::jlimit (env.dx + 0.04f, 0.97f, xn);
     }
 
-    // Rebuild node positions from updated env state
-    buildEnvelopeNodes();
+    // Update envNodes[] positions from the new env.* values WITHOUT re-reading params
+    // (buildEnvelopeNodes would overwrite env.* from params — wrong during drag)
+    envNodes.clear();
+    EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
+    a.colour = kColAttack; a.label = "A"; envNodes.add (a);
+    EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
+    d.colour = kColDecay;  d.label = "D"; envNodes.add (d);
+    EnvNode s; s.xn = (env.dx + env.rx) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
+    s.colour = kColSustain; s.label = "S"; envNodes.add (s);
+    EnvNode r; r.xn = env.rx; r.yn = env.sy; r.role = NodeRole::Release;
+    r.colour = kColRelease; r.label = "R"; envNodes.add (r);
 
-    // Push to params (throttled — every drag event is fine, APVTS is cheap)
+    // Push to params
     commitNodes();
 
     repaint();
@@ -286,6 +302,8 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
 void SliceWaveformLcd::mouseUp (const juce::MouseEvent&)
 {
     dragRole = NodeRole::None;
+    // Re-sync env.* from params after drag ends (cleans up any float drift)
+    buildEnvelopeNodes();
 }
 
 // ── Draw ──────────────────────────────────────────────────────────────────────
