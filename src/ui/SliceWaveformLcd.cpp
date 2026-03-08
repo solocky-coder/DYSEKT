@@ -105,11 +105,22 @@ void SliceWaveformLcd::buildDisplayData()
 
 void SliceWaveformLcd::buildEnvelopeNodes()
 {
-    // Read raw param values (getRawParameterValue gives denormalised units)
-    const float attackMs  = processor.attackParam  ? processor.attackParam ->load() : 5.0f;
-    const float decayMs   = processor.decayParam   ? processor.decayParam  ->load() : 100.0f;
-    const float sustainPc = processor.sustainParam ? processor.sustainParam->load() : 100.0f;
-    const float releaseMs = processor.releaseParam ? processor.releaseParam->load() : 20.0f;
+    // Read per-slice ADSR values if a slice is selected; fall back to global params.
+    float attackMs  = processor.attackParam  ? processor.attackParam ->load() : 5.0f;
+    float decayMs   = processor.decayParam   ? processor.decayParam  ->load() : 100.0f;
+    float sustainPc = processor.sustainParam ? processor.sustainParam->load() : 100.0f;
+    float releaseMs = processor.releaseParam ? processor.releaseParam->load() : 20.0f;
+
+    const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+    if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
+    {
+        const auto& s = processor.sliceManager.getSlice (sel);
+        // Always use per-slice values — these are set by commitNodes() or CmdSetSliceParam
+        attackMs  = s.attackSec   * 1000.0f;
+        decayMs   = s.decaySec    * 1000.0f;
+        sustainPc = s.sustainLevel * 100.0f;
+        releaseMs = s.releaseSec  * 1000.0f;
+    }
 
     // Fixed per-segment X budgets (must match commitNodes exactly):
     //   Attack  segment: [0   , kAX ]  — param max 1000 ms
@@ -162,19 +173,23 @@ void SliceWaveformLcd::commitNodes()
     const float releaseMs = juce::jlimit (0.0f, 5000.0f,
                                 ((1.0f - env.rx) / (1.0f - kRX)) * 5000.0f);
 
-    auto setParam = [&] (const juce::String& id, float val)
+    // Write to selected slice via CmdSetSliceParam (per-slice, not global)
+    const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+    if (sel < 0 || sel >= processor.sliceManager.getNumSlices()) return;
+
+    auto sendField = [&] (DysektProcessor::FieldType field, float val)
     {
-        if (auto* p = processor.apvts.getParameter (id))
-        {
-            const float norm = p->convertTo0to1 (val);
-            p->setValueNotifyingHost (norm);
-        }
+        DysektProcessor::Command cmd;
+        cmd.type        = DysektProcessor::CmdSetSliceParam;
+        cmd.intParam1   = (int) field;   // CmdSetSliceParam: intParam1=field, floatParam1=val
+        cmd.floatParam1 = val;
+        processor.pushCommand (cmd);
     };
 
-    setParam (ParamIds::defaultAttack,  attackMs);
-    setParam (ParamIds::defaultDecay,   decayMs);
-    setParam (ParamIds::defaultSustain, sustainPc);
-    setParam (ParamIds::defaultRelease, releaseMs);
+    sendField (DysektProcessor::FieldAttack,  attackMs  / 1000.0f);   // seconds
+    sendField (DysektProcessor::FieldDecay,   decayMs   / 1000.0f);
+    sendField (DysektProcessor::FieldSustain, sustainPc / 100.0f);    // 0-1
+    sendField (DysektProcessor::FieldRelease, releaseMs / 1000.0f);
 }
 
 // Envelope Y at normalised X (linear interpolation between nodes) ─────────────
