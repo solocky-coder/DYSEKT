@@ -143,5 +143,254 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     r.colour = kColRelease; r.label = "R"; envNodes.add (r);
 }
 
-// ── The rest of your code: Draw, Mouse, Paint, etc.
-// (no changes required—full file continues here as per your repo.)
+// ── Paint Implementation ──────────────────────────────────────────────────────
+
+void SliceWaveformLcd::paint (juce::Graphics& g)
+{
+    // LCD background with bezel
+    g.setColour (kBezel);
+    g.fillRoundedRectangle (getLocalBounds().toFloat(), 3.0f);
+    
+    g.setColour (kBg);
+    g.fillRoundedRectangle (screenArea, 2.0f);
+    
+    if (!data.hasSample)
+    {
+        // Show "No Sample" message
+        g.setColour (kDim);
+        g.setFont (12.0f);
+        g.drawText ("No Sample", screenArea, juce::Justification::centred);
+        return;
+    }
+    
+    // Draw waveform
+    if (data.peaks.size() > 0)
+    {
+        const float waveHeight = screenArea.getHeight() * 0.6f;
+        const float waveCenterY = screenArea.getCentreY();
+        const float waveWidth = screenArea.getWidth();
+        
+        g.setColour (kPhosphor.withAlpha (0.7f));
+        
+        juce::Path waveformPath;
+        for (int i = 0; i < data.peaks.size(); ++i)
+        {
+            const float x = screenArea.getX() + (i * waveWidth / data.peaks.size());
+            const float peak = data.peaks[i];
+            const float y = waveCenterY - (peak * waveHeight * 0.5f);
+            
+            if (i == 0)
+                waveformPath.startNewSubPath (x, y);
+            else
+                waveformPath.lineTo (x, y);
+        }
+        
+        // Mirror for bottom half
+        for (int i = data.peaks.size() - 1; i >= 0; --i)
+        {
+            const float x = screenArea.getX() + (i * waveWidth / data.peaks.size());
+            const float peak = data.peaks[i];
+            const float y = waveCenterY + (peak * waveHeight * 0.5f);
+            waveformPath.lineTo (x, y);
+        }
+        
+        waveformPath.closeSubPath();
+        g.fillPath (waveformPath);
+    }
+    
+    // Draw envelope curve over waveform
+    if (envNodes.size() >= 4)
+    {
+        buildEnvelopeNodes(); // Update envelope data
+        
+        g.setColour (kBright.withAlpha (0.8f));
+        g.setStrokeType (juce::PathStrokeType (2.0f));
+        
+        juce::Path envPath;
+        const float baseY = screenArea.getBottom() - 10;
+        const float topY = screenArea.getY() + 10;
+        
+        // Start at (0, baseY)
+        envPath.startNewSubPath (screenArea.getX(), baseY);
+        
+        // Attack to peak
+        float attackX = screenArea.getX() + env.ax * screenArea.getWidth();
+        float attackY = topY + env.ay * (baseY - topY);
+        envPath.lineTo (attackX, attackY);
+        
+        // Decay to sustain
+        float decayX = screenArea.getX() + env.dx * screenArea.getWidth();
+        float sustainY = topY + env.sy * (baseY - topY);
+        envPath.lineTo (decayX, sustainY);
+        
+        // Sustain plateau
+        float releaseX = screenArea.getX() + env.rx * screenArea.getWidth();
+        envPath.lineTo (releaseX, sustainY);
+        
+        // Release to end
+        envPath.lineTo (screenArea.getRight(), baseY);
+        
+        g.strokePath (envPath, juce::PathStrokeType (1.5f));
+        
+        // Draw envelope nodes as circles
+        for (const auto& node : envNodes)
+        {
+            float nodeX = screenArea.getX() + node.xn * screenArea.getWidth();
+            float nodeY = topY + node.yn * (baseY - topY);
+            
+            g.setColour (node.colour);
+            g.fillEllipse (nodeX - 4, nodeY - 4, 8, 8);
+            
+            // Draw label
+            g.setColour (kLabel);
+            g.setFont (10.0f);
+            g.drawText (node.label, 
+                       juce::Rectangle<float> (nodeX - 10, nodeY - 20, 20, 15),
+                       juce::Justification::centred);
+        }
+    }
+    
+    // Draw slice info text
+    if (data.hasSlice)
+    {
+        g.setColour (kLabel);
+        g.setFont (10.0f);
+        
+        juce::String infoText = "Slice " + juce::String (data.sliceIndex + 1);
+        if (data.midiNote >= 0)
+            infoText += " | " + midiNoteName (data.midiNote);
+        
+        g.drawText (infoText, 
+                   screenArea.reduced (5, 0),
+                   juce::Justification::topLeft);
+    }
+}
+
+// ── Mouse Interaction ─────────────────────────────────────────────────────────
+
+void SliceWaveformLcd::mouseDown (const juce::MouseEvent& event)
+{
+    if (!data.hasSample || envNodes.isEmpty())
+        return;
+    
+    // Check if clicking near an envelope node
+    const float mx = event.position.x;
+    const float my = event.position.y;
+    
+    draggedNode = nullptr;
+    const float hitRadius = 10.0f;
+    
+    for (auto& node : envNodes)
+    {
+        float nodeX = screenArea.getX() + node.xn * screenArea.getWidth();
+        float nodeY = screenArea.getY() + node.yn * screenArea.getHeight();
+        
+        float dist = std::sqrt ((mx - nodeX) * (mx - nodeX) + (my - nodeY) * (my - nodeY));
+        if (dist <= hitRadius)
+        {
+            draggedNode = &node;
+            dragOffset = event.position - juce::Point<float> (nodeX, nodeY);
+            break;
+        }
+    }
+}
+
+void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& event)
+{
+    if (!draggedNode || !data.hasSample)
+        return;
+    
+    // Calculate new normalized position
+    float newX = (event.position.x - dragOffset.x - screenArea.getX()) / screenArea.getWidth();
+    float newY = (event.position.y - dragOffset.y - screenArea.getY()) / screenArea.getHeight();
+    
+    // Clamp to valid ranges based on node role
+    switch (draggedNode->role)
+    {
+        case NodeRole::Attack:
+            newX = juce::jlimit (0.01f, 0.3f, newX);
+            env.ax = newX;
+            break;
+            
+        case NodeRole::Decay:
+            newX = juce::jlimit (env.ax + 0.01f, 0.7f, newX);
+            env.dx = newX;
+            break;
+            
+        case NodeRole::Sustain:
+            // Sustain only moves vertically
+            newY = juce::jlimit (0.05f, 0.95f, newY);
+            env.sy = newY;
+            break;
+            
+        case NodeRole::Release:
+            newX = juce::jlimit (env.dx + 0.01f, 0.95f, newX);
+            env.rx = newX;
+            break;
+    }
+    
+    // Update the processor parameters based on new envelope shape
+    updateProcessorFromEnvelope();
+    
+    // Rebuild nodes and repaint
+    buildEnvelopeNodes();
+    repaint();
+}
+
+void SliceWaveformLcd::mouseUp (const juce::MouseEvent& event)
+{
+    juce::ignoreUnused (event);
+    draggedNode = nullptr;
+    dragOffset = {};
+}
+
+void SliceWaveformLcd::mouseMove (const juce::MouseEvent& event)
+{
+    // Update cursor based on hover state
+    bool overNode = false;
+    const float mx = event.position.x;
+    const float my = event.position.y;
+    const float hitRadius = 10.0f;
+    
+    for (const auto& node : envNodes)
+    {
+        float nodeX = screenArea.getX() + node.xn * screenArea.getWidth();
+        float nodeY = screenArea.getY() + node.yn * screenArea.getHeight();
+        
+        float dist = std::sqrt ((mx - nodeX) * (mx - nodeX) + (my - nodeY) * (my - nodeY));
+        if (dist <= hitRadius)
+        {
+            overNode = true;
+            break;
+        }
+    }
+    
+    setMouseCursor (overNode ? juce::MouseCursor::PointingHandCursor 
+                              : juce::MouseCursor::NormalCursor);
+}
+
+// ── Helper to update processor from envelope ─────────────────────────────────
+
+void SliceWaveformLcd::updateProcessorFromEnvelope()
+{
+    // Convert normalized envelope positions back to milliseconds
+    const float totalMs = 1000.0f; // Reference total time
+    
+    float attackMs = env.ax * totalMs;
+    float decayMs = (env.dx - env.ax) * totalMs;
+    float sustainPc = (1.0f - env.sy) * 100.0f; // Convert back from inverted Y
+    float releaseMs = (1.0f - env.rx) * totalMs * 0.5f; // Scale appropriately
+    
+    // Update processor parameters if they exist
+    if (auto* param = processor.getAttackParam())
+        param->store (attackMs);
+    
+    if (auto* param = processor.getDecayParam())
+        param->store (decayMs);
+    
+    if (auto* param = processor.getSustainParam())
+        param->store (sustainPc);
+    
+    if (auto* param = processor.getReleaseParam())
+        param->store (releaseMs);
+}
