@@ -1,5 +1,3 @@
-// src/ui/SliceControlBar.cpp
-
 #include "SliceControlBar.h"
 #include "UIHelpers.h"
 #include "DysektLookAndFeel.h"
@@ -373,13 +371,27 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += 42;
     }
 
-    // [snip other knob and param cells... not shown here for brevity, but copy from your known working code]
-    // The rest of this file continues, unchanged, as already provided in your working repo.
+    // PITCH — knob
+    {
+        bool locked = (s.lockMask & kLockPitch) != 0;
+        float pv = locked ? s.pitchSemitones : gPitch;
+        if (repitchStretch)
+        {
+            float daw     = processor.dawBpm.load();
+            float bpmVal  = (s.lockMask & kLockBpm) ? s.bpm : gBpm;
+            float semis   = (daw > 0.f && bpmVal > 0.f)
+                            ? 12.f * std::log2 (daw / bpmVal) : 0.f;
+            pv = (float) std::round (semis);
+        }
+        int pvi = (int) std::round (pv);
+        drawKnobCell (g, x, row1y, "PITCH",
+                      (pvi >= 0 ? "+" : "") + juce::String (pvi) + "st",
+                      toNorm (F::FieldPitch, pv),
+                      locked, kLockPitch, F::FieldPitch, -48.f, 48.f, 0.1f, cw);
+        if (repitchStretch) cells.back().isReadOnly = true;
+        x += cw + 4;
+    }
 
-<<<<<<< HEAD
-    // If you had compilation errors from F, keep using 'using F = DysektProcessor;' as shown above.
-}
-=======
     // TUNE — knob
     {
         float gCents = processor.apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load();
@@ -750,7 +762,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             activeDragCell = i; dragStartY = pos.y;
 
             // Activate live drag for slice boundary knobs
-            if (cell.fieldId == F::FieldSliceStart || cell.fieldId == F::FieldSliceEnd)
+            if (cell.fieldId == DysektProcessor::FieldSliceStart || cell.fieldId == DysektProcessor::FieldSliceEnd)
             {
                 int liveSel = ui.selectedSlice;
                 if (liveSel >= 0 && liveSel < ui.numSlices)
@@ -1123,4 +1135,3 @@ void SliceControlBar::showSetBpmPopup()
             processor.pushCommand (cmd); repaint();
         });
 }
->>>>>>> parent of 896e4e7 (UI UDATES)
