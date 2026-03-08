@@ -24,6 +24,15 @@ public:
                                      const juce::String& sectionName) override;
     juce::Font getPopupMenuFont() override;
 
+    void drawComboBox (juce::Graphics&, int width, int height, bool isButtonDown,
+                       int buttonX, int buttonY, int buttonW, int buttonH,
+                       juce::ComboBox&) override;
+    juce::Font getComboBoxFont (juce::ComboBox&) override;
+    void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
+
+    void drawPopupMenuUpDownArrow (juce::Graphics&, int width, int height,
+                                   bool isScrollUpArrow) override;
+
     static void setMenuScale (float s) { sMenuScale = s; }
     static float getMenuScale() { return sMenuScale; }
 

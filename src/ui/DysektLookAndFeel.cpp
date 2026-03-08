@@ -262,7 +262,7 @@ void DysektLookAndFeel::drawScrollbar (juce::Graphics& g,
                                        bool /*isMouseOver*/,
                                        bool /*isMouseDown*/)
 {
-    const auto& t = ThemeData::current();
+    const auto& t = getTheme();
 
     // Track
     g.setColour (t.darkBar.darker (0.35f));
