@@ -178,7 +178,7 @@ void SliceWaveformLcd::commitNodes()
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
     if (sel < 0 || sel >= processor.sliceManager.getNumSlices()) return;
 
-    auto sendField = [&] (DysektProcessor::FieldType field, float val)
+    auto sendField = [&] (DysektProcessor::SliceParamField field, float val)
     {
         DysektProcessor::Command cmd;
         cmd.type        = DysektProcessor::CmdSetSliceParam;
