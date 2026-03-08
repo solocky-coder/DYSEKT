@@ -8,6 +8,7 @@ static constexpr int kSliceLaneH = 30;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 22;
+static constexpr int kTrimBarH   = 34;   // height of inline trim bar
 static constexpr int kMixerPanelH   = 210;
 static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
 
@@ -92,11 +93,13 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         processor.applyTrimToCurrentSample (s, e);
         trimSession.reset();
         trimDialog.reset();
+        resized();
     };
     waveformView.onTrimCancelled = [this]
     {
         trimSession.reset();
         trimDialog.reset();
+        resized();
     };
 
     // TRIM button path: ActionPanel delegates here so PluginEditor owns
@@ -124,12 +127,9 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         waveformView.enterTrimMode (0, totalFrames);
 
         trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
-        auto wfBounds = waveformView.getBoundsInParent();
-        trimDialog->setBounds (wfBounds.getX(),
-                               wfBounds.getBottom() - 34,
-                               wfBounds.getWidth(), 34);
         addAndMakeVisible (*trimDialog);
         trimDialog->toFront (false);
+        resized();   // re-layout: waveform shrinks, trim bar placed below
         repaint();
     };
 
@@ -461,10 +461,15 @@ void DysektEditor::resized()
     }
 
     // Waveform — fills remaining space between slice lane and scrollbar
+    // Shrinks when trim bar is active so the bar sits below without overlapping.
     {
-        int y  = screenTop + kActionH + kSliceLaneH;
-        int h  = screenBot - kScrollbarH - y;
+        int y      = screenTop + kActionH + kSliceLaneH;
+        int trimH  = (trimDialog != nullptr) ? kTrimBarH : 0;
+        int h      = screenBot - kScrollbarH - trimH - y;
         waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
+
+        if (trimDialog != nullptr)
+            trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
     }
 
     // ShortcutsPanel covers the whole editor as an overlay
@@ -583,12 +588,9 @@ void DysektEditor::timerCallback()
             if (trimDialog == nullptr)
             {
                 trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
-                auto wfBounds = waveformView.getBoundsInParent();
-                trimDialog->setBounds (wfBounds.getX(),
-                                       wfBounds.getBottom() - 34,
-                                       wfBounds.getWidth(), 34);
                 addAndMakeVisible (*trimDialog);
                 trimDialog->toFront (false);
+                resized();   // re-layout: waveform shrinks, trim bar placed below
             }
         }
     }
