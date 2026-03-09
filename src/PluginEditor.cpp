@@ -40,7 +40,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       actionPanel    (p, waveformView),
 
       browserPanel   (p),
-      oscilloscopeView (p),
+      oscilloscopeView (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     setLookAndFeel (&lnf);
