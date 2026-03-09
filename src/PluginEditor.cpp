@@ -9,7 +9,6 @@ static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 22;
 static constexpr int kTrimBarH   = 34;   // height of inline trim bar
-static constexpr int kMixerPanelH   = 210;
 static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
 
 static constexpr int kBrowserH   = 170;
@@ -42,7 +41,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
       browserPanel   (p),
       oscilloscopeView (p),
-      mixerPanel     (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     setLookAndFeel (&lnf);
@@ -69,9 +67,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     // Panels start hidden
     browserPanel.setVisible (false);
     addChildComponent (browserPanel);
-
-    mixerPanel.setVisible (false);
-    addChildComponent (mixerPanel);
     shortcutsPanel.setVisible (false);
     addChildComponent (shortcutsPanel);
     shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
@@ -142,7 +137,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
     headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
     headerBar.onChromaticToggle = [this] { toggleChromatic(); };
-    headerBar.onBodeToggle      = [this] { toggleMixerPanel(); };
     headerBar.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
 
     // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
@@ -183,8 +177,6 @@ int DysektEditor::computeTotalHeight() const
 {
     int h = kBaseHCore;
     if (browserOpen) h += kBrowserH;
-    if (mixerOpen)   h += kMixerPanelH;
-
     return h;
 }
 
@@ -299,13 +291,6 @@ void DysektEditor::toggleChromatic()
     headerBar.setChromaticActive (newVal);
 }
 
-void DysektEditor::toggleMixerPanel()
-{
-    mixerOpen = ! mixerOpen;
-    mixerPanel.setVisible (mixerOpen);
-    setSize (getWidth(), computeTotalHeight());
-    resized();
-}
 
 void DysektEditor::toggleShortcutsPanel()
 {
@@ -419,10 +404,6 @@ void DysektEditor::resized()
     // 5. Browser panel — above slice ctrl (if open)
     if (browserOpen)
         browserPanel.setBounds (area.removeFromBottom (kBrowserH));
-
-    // 6. Mixer panel — above browser (if open)
-    if (mixerOpen)
-        mixerPanel.setBounds (area.removeFromBottom (kMixerPanelH).reduced (kMargin, 0));
 
     area.removeFromBottom (4);  // bottom gap
 
@@ -613,8 +594,6 @@ void DysektEditor::timerCallback()
     // v8: refresh both LCD panels
     sliceLcd.repaintLcd();
     sliceWaveformLcd.repaintLcd();
-
-    if (mixerOpen) mixerPanel.updateFromSnapshot();
 
     headerBar.repaint();
     sliceControlBar.repaint();

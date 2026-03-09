@@ -13,7 +13,6 @@
 
 #include "ui/FileBrowserPanel.h"
 #include "ui/OscilloscopeView.h"
-#include "ui/MixerPanel.h"
 #include "ui/TrimDialog.h"
 #include "TrimSession.h"
 
@@ -42,7 +41,6 @@ public:
     void toggleBrowserPanel();
     void toggleSoftWave();
     void toggleChromatic();
-    void toggleMixerPanel();
 
     void showTrimDialog (const juce::File& file, bool isRelink = false);
     void showTrimMode   (const juce::File& file);
@@ -67,10 +65,8 @@ private:
 
     bool browserOpen = false;
     bool softWave    = false;
-    bool mixerOpen   = false;
 
     std::unique_ptr<TrimSession> trimSession;
-    std::unique_ptr<TrimDialog>  trimDialog;
 
     DysektLookAndFeel lnf;
 
@@ -89,7 +85,6 @@ private:
 
     FileBrowserPanel browserPanel;
     OscilloscopeView oscilloscopeView;
-    MixerPanel       mixerPanel;
     ShortcutsPanel   shortcutsPanel;
 
     juce::TooltipWindow tooltipWindow { this, 500 };

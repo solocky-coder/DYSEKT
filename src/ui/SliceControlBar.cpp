@@ -1,4 +1,5 @@
 #include "SliceControlBar.h"
+#include <cmath>
 #include "UIHelpers.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
@@ -121,6 +122,10 @@ float SliceControlBar::toNorm (int fieldId, float v) const
         case F::FieldMidiNote:    return juce::jlimit (0.f, 1.f, v / 127.f);
         case F::FieldVolume:      return juce::jlimit (0.f, 1.f, (v + 100.f) / 124.f);
         case F::FieldOutputBus:   return juce::jlimit (0.f, 1.f, v / 15.f);
+        case F::FieldPan:         return juce::jlimit (0.f, 1.f, (v + 1.f) * 0.5f);
+        case F::FieldFilterCutoff: return juce::jlimit (0.f, 1.f,
+            (std::log2 (juce::jmax (20.f, v) / 20.f) / std::log2 (20000.f / 20.f)));
+        case F::FieldFilterRes:   return juce::jlimit (0.f, 1.f, v);
         default:                  return 0.5f;
     }
 }
@@ -558,9 +563,12 @@ void SliceControlBar::paint (juce::Graphics& g)
 
     // ── Row 2 ─────────────────────────────────────────────────────────
     x = 8;
+    int adsrGroupX1 = x, adsrGroupX2 = x;   // filled below
+    int mixGroupX1  = x, mixGroupX2  = x;
 
     // ATK — knob (stored seconds, display ms)
     {
+        adsrGroupX1 = x;
         bool locked = (s.lockMask & kLockAttack) != 0;
         float atk   = locked ? s.attackSec : gAttack / 1000.f;
         drawKnobCell (g, x, row2y, "ATK",
@@ -601,6 +609,7 @@ void SliceControlBar::paint (juce::Graphics& g)
                       toNorm (F::FieldRelease, rel),
                       locked, kLockRelease, F::FieldRelease, 0.f, 5.f, 0.001f, cw);
         x += cw + 4;
+        adsrGroupX2 = x - 4;
     }
 
     // TAIL — boolean
@@ -639,6 +648,7 @@ void SliceControlBar::paint (juce::Graphics& g)
 
     // MUTE — knob
     {
+        mixGroupX1 = x;
         bool locked = (s.lockMask & kLockMuteGroup) != 0;
         int mv = locked ? s.muteGroup : gMG;
         drawKnobCell (g, x, row2y, "MUTE",
@@ -660,6 +670,45 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
+    // PAN — knob (-1..+1, display L/C/R)
+    {
+        float gPan  = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
+        bool locked = (s.lockMask & kLockPan) != 0;
+        float pv    = locked ? s.pan : gPan;
+        juce::String panStr = (std::abs (pv) < 0.02f) ? "C"
+                            : (pv < 0.f ? "L" + juce::String ((int)(-pv * 100.f))
+                                        : "R" + juce::String ((int)(pv  * 100.f)));
+        drawKnobCell (g, x, row2y, "PAN", panStr,
+                      toNorm (F::FieldPan, pv),
+                      locked, kLockPan, F::FieldPan, -1.f, 1.f, 0.01f, cw);
+        x += cw + 4;
+    }
+
+    // FCUT — knob (log Hz)
+    {
+        float gCut  = processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load();
+        bool locked = (s.lockMask & kLockFilter) != 0;
+        float cv    = locked ? s.filterCutoff : gCut;
+        juce::String cutStr = cv >= 999.f ? juce::String ((int)(cv / 1000.f)) + "k"
+                                          : juce::String ((int) cv);
+        drawKnobCell (g, x, row2y, "FCUT", cutStr,
+                      toNorm (F::FieldFilterCutoff, cv),
+                      locked, kLockFilter, F::FieldFilterCutoff, 20.f, 20000.f, 1.f, cw);
+        x += cw + 4;
+    }
+
+    // PRES — filter resonance
+    {
+        float gRes  = processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
+        bool locked = (s.lockMask & kLockFilter) != 0;
+        float rv    = locked ? s.filterRes : gRes;
+        drawKnobCell (g, x, row2y, "PRES",
+                      juce::String ((int)(rv * 100.f)) + "%",
+                      toNorm (F::FieldFilterRes, rv),
+                      locked, kLockFilter, F::FieldFilterRes, 0.f, 1.f, 0.01f, cw);
+        x += cw + 4;
+    }
+
     // OUT — knob
     {
         bool locked = (s.lockMask & kLockOutputBus) != 0;
@@ -669,6 +718,7 @@ void SliceControlBar::paint (juce::Graphics& g)
                       toNorm (F::FieldOutputBus, (float) ov),
                       locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f, cw);
         x += cw + 4;
+        mixGroupX2 = x - 4;
     }
 
     // MIDI — knob (always per-slice, lockBit=0)
@@ -677,6 +727,30 @@ void SliceControlBar::paint (juce::Graphics& g)
                       juce::String (s.midiNote),
                       toNorm (F::FieldMidiNote, (float) s.midiNote),
                       true, 0, F::FieldMidiNote, 0.f, 127.f, 1.f, cw);
+    }
+
+    // ── Group bracket labels ───────────────────────────────────────────
+    {
+        const int  gy  = row2y - 1;           // 1px above cells
+        const int  gh  = 32;                  // wraps cells (30px high)
+        const float r  = 2.5f;
+
+        auto drawGroupLabel = [&] (int x1, int x2, const char* label)
+        {
+            juce::Rectangle<float> bracket ((float)x1 - 2, (float)gy,
+                                             (float)(x2 - x1) + 4, (float)gh);
+            g.setColour (getTheme().separator.withAlpha (0.35f));
+            g.drawRoundedRectangle (bracket, r, 0.8f);
+
+            // Label in top-left corner, raised slightly above bracket
+            g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
+            g.setColour (getTheme().foreground.withAlpha (0.38f));
+            g.drawText (label, (int)bracket.getX() + 2, (int)bracket.getY() - 8, 28, 9,
+                        juce::Justification::centredLeft);
+        };
+
+        if (adsrGroupX2 > adsrGroupX1) drawGroupLabel (adsrGroupX1, adsrGroupX2, "ADSR");
+        if (mixGroupX2  > mixGroupX1)  drawGroupLabel (mixGroupX1,  mixGroupX2,  "MIX");
     }
 }
 
@@ -795,6 +869,9 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                     case F::FieldMidiNote:    dragStartValue = (float) sl.midiNote;              break;
                     case F::FieldVolume:      dragStartValue = (sl.lockMask & kLockVolume)      ? sl.volume               : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();            break;
                     case F::FieldOutputBus:   dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
+                    case F::FieldPan:         dragStartValue = (sl.lockMask & kLockPan)    ? sl.pan         : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();          break;
+                    case F::FieldFilterCutoff: dragStartValue = (sl.lockMask & kLockFilter) ? sl.filterCutoff : processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load(); break;
+                    case F::FieldFilterRes:   dragStartValue = (sl.lockMask & kLockFilter) ? sl.filterRes    : processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();    break;
                     default:                  dragStartValue = 0.f; break;
                 }
             }
@@ -1067,6 +1144,9 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
                 case F::FieldMidiNote:    currentVal = (float) sl.midiNote;  break;
                 case F::FieldVolume:      currentVal = (sl.lockMask & kLockVolume)     ? sl.volume    : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();     break;
                 case F::FieldOutputBus:   currentVal = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
+                case F::FieldPan:         currentVal = (sl.lockMask & kLockPan)    ? sl.pan          : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();          break;
+                case F::FieldFilterCutoff: currentVal = (sl.lockMask & kLockFilter) ? sl.filterCutoff : processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load(); break;
+                case F::FieldFilterRes:   currentVal = (sl.lockMask & kLockFilter) ? sl.filterRes    : processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();    break;
                 default: break;
             }
         }
