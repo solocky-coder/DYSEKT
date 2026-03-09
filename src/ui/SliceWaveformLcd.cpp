@@ -679,9 +679,24 @@ void SliceWaveformLcd::paint (juce::Graphics& g)
         return;
     }
 
-    // Rebuild envelope nodes from current param values (unless mid-drag)
+    // Rebuild envelope nodes only when snapshot changes, not during or just after drag.
+    // postCommitGuard delays rebuild so the processor can echo committed values first.
     if (dragRole == NodeRole::None)
-        buildEnvelopeNodes();
+    {
+        if (postCommitGuard > 0)
+        {
+            --postCommitGuard;
+        }
+        else
+        {
+            const int ver = processor.getUiSliceSnapshotVersion();
+            if (ver != lastEnvSnapVer)
+            {
+                buildEnvelopeNodes();
+                lastEnvSnapVer = ver;
+            }
+        }
+    }
 
     const auto area = getLocalBounds().reduced (4).toFloat().reduced (2.0f);
     screenArea = area;

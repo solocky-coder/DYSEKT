@@ -55,7 +55,7 @@ MixerPanel::Cell MixerPanel::hitTest (juce::Point<int> pos) const
     if (pos.y < kHeaderH) return c;          // header — no hit
 
     const auto& snap = processor.getUiSliceSnapshot();
-    const int totalRowsH = snap.numSlices * kRowH + kMasterH;
+    [[maybe_unused]] const int totalRowsH = snap.numSlices * kRowH + kMasterH;
     const int contentTop = kHeaderH;
 
     // Which logical row?

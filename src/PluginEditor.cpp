@@ -468,8 +468,8 @@ void DysektEditor::toggleMixerPanel()
     mixerOpen = ! mixerOpen;
     mixerPanel.setVisible (mixerOpen);
     headerBar.setBodeActive (mixerOpen);
+    setSize (getWidth(), computeTotalHeight());
     resized();
-    repaint();
 }
 
 // ── Key shortcuts ─────────────────────────────────────────────────────────────

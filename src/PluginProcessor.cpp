@@ -1632,6 +1632,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     int savedSelectedSlice = stream.readInt();
 
     midiSelectsSlice.store (stream.readBool());
+    if (version <= 17) stream.readBool();  // v17 had chromaticMode global bool here — discard
     sliceManager.rootNote.store (juce::jlimit (0, 127, stream.readInt()));
 
     // Slice data
