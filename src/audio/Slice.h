@@ -60,6 +60,7 @@ struct Slice
     float    pan            = 0.0f;     // stereo pan: -1 (L) .. 0 (C) .. +1 (R)
     float    filterCutoff   = 20000.0f; // low-pass cutoff Hz: 20..20000
     float    filterRes      = 0.0f;     // resonance: 0..1
+    int      chromaticChannel = 0;     // 0=off, 1-16 = receive chromatic play on this MIDI channel
     int      rrCounter      = 0;        // round-robin playback counter (not saved)
 
     uint32_t lockMask       = 0;

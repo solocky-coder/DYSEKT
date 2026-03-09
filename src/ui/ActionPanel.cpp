@@ -9,7 +9,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
     for (auto* btn : { &addSliceBtn, &lazyChopBtn,
-                       &trimBtn, &midiSelectBtn, &shortcutsBtn })
+                       &trimBtn&shortcutsBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -38,30 +38,13 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     trimBtn.onClick = [this] { toggleTrimMode(); };
 
     shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
-    shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");
-
-    midiSelectBtn.onClick = [this] {
-        bool ns = ! processor.midiSelectsSlice.load();
-        processor.midiSelectsSlice.store (ns);
-        updateMidiButtonAppearance (ns); repaint();
-    };
-
-    browserBtn.onClick    = [this] { browserActive    = ! browserActive;    if (onBrowserToggle)    onBrowserToggle();    updateToggleBtn (browserBtn,    browserActive); };
-    waveBtn.onClick       = [this] { waveActive       = ! waveActive;       if (onWaveToggle)       onWaveToggle();       updateToggleBtn (waveBtn,       waveActive); };
-    chromaticBtn.onClick  = [this] { chromaticActive  = ! chromaticActive;  if (onChromaticToggle)  onChromaticToggle();  updateToggleBtn (chromaticBtn,  chromaticActive); };
-
-    addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
+    shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");    addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
     lazyChopBtn.setTooltip ("MIDI Slice — chop by incoming MIDI notes (L)");
 
     addSliceBtn.setButtonText ("ADD SLICE");
     // lazyChopBtn label intentionally empty — PLAY/STOP icon drawn in paintOverChildren
     lazyChopBtn.setButtonText ("");
     trimBtn.setTooltip     ("Trim - crop sample to a selected region");
-
-    browserBtn.setTooltip  ("Toggle File Browser");
-    waveBtn.setTooltip     ("Toggle Soft Waveform");
-    chromaticBtn.setTooltip ("Chromatic Mode - play selected slice across full keyboard");
-
     updateMidiButtonAppearance (false);
 }
 
@@ -104,14 +87,10 @@ void ActionPanel::setTrimLocked (bool locked)
     // Everything else (browser, wave, chromatic, shortcuts) also locked.
     addSliceBtn.setEnabled  (! locked);
     lazyChopBtn.setEnabled  (! locked);
-    midiSelectBtn.setEnabled(! locked);
-
     // Visual: dim disabled buttons
     const float alpha = locked ? 0.25f : 1.0f;
     addSliceBtn.setAlpha  (alpha);
     lazyChopBtn.setAlpha  (alpha);
-    midiSelectBtn.setAlpha(alpha);
-
     repaint();
 }
 
@@ -125,9 +104,7 @@ void ActionPanel::resized()
     const int midiW  = 34;   // MIDI SLICE natural width (icon only)
 
     // MIDI icon hard right, then TRIM, then ADD SLICE and MIDI SLICE left-aligned
-    int right = getWidth();
-    midiSelectBtn.setBounds (right - thinW, 0, thinW, h);
-    right -= thinW + gap;
+    int right = getWidth();    right -= thinW + gap;
     trimBtn.setBounds (right - trimW, 0, trimW, h);
 
     // ADD SLICE and MIDI SLICE left-aligned with natural widths
@@ -135,9 +112,6 @@ void ActionPanel::resized()
     lazyChopBtn.setBounds (addW + gap,   0, midiW, h);
 
     shortcutsBtn.setVisible (false);
-    browserBtn.setVisible   (false);
-    waveBtn.setVisible      (false);
-    chromaticBtn.setVisible (false);
 }
 
 void ActionPanel::paint (juce::Graphics& g)
@@ -148,8 +122,6 @@ void ActionPanel::paint (juce::Graphics& g)
         btn->setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
-    updateMidiButtonAppearance (processor.midiSelectsSlice.load());
-
     if (waveformView.isSliceDrawModeActive())
     { g.setColour (getTheme().accent.withAlpha (0.25f)); g.fillRect (addSliceBtn.getBounds()); }
 
@@ -170,14 +142,6 @@ void ActionPanel::paint (juce::Graphics& g)
     { g.setColour (getTheme().accent.withAlpha (0.15f)); g.fillRect (trimBtn.getBounds()); }
 }
 
-void ActionPanel::updateMidiButtonAppearance (bool active)
-{
-    auto col = active ? getTheme().accent : getTheme().foreground;
-    auto bg  = active ? getTheme().accent.withAlpha (0.2f) : getTheme().button;
-    midiSelectBtn.setColour (juce::TextButton::textColourOnId,  col);
-    midiSelectBtn.setColour (juce::TextButton::textColourOffId, col);
-    midiSelectBtn.setColour (juce::TextButton::buttonColourId,  bg);
-}
 
 // snapBtn removed — updateSnapButtonAppearance no longer needed
 
@@ -211,71 +175,4 @@ void ActionPanel::paintOverChildren (juce::Graphics& g)
         }
     }
 
-    // ── 5-pin DIN MIDI connector icon for midiSelectBtn ──────────────────
-    // Drawn entirely as filled/stroked paths — no background erase tricks,
-    // so the full icon is always visible regardless of active state.
-    {
-        bool  active = processor.midiSelectsSlice.load();
-        auto  col    = active ? getTheme().accent : getTheme().foreground.withAlpha (0.85f);
-
-        auto  bRect  = midiSelectBtn.getBounds();
-        g.saveState();
-        g.reduceClipRegion (bRect);
-
-        float cx = bRect.getCentreX();
-        float cy = bRect.getCentreY();
-
-        // Scale so the full icon fits within the button with 3px margin each side
-        const float maxR   = juce::jmin (bRect.getWidth(), bRect.getHeight()) * 0.5f - 3.0f;
-        const float scale  = maxR / 8.5f;   // 8.5f is the natural outerR
-
-        const float outerR = 8.5f * scale;
-        const float arcR   = 5.0f * scale;
-        const float pinR   = 1.4f * scale;
-
-        // Full outer circle — drawn as a complete ellipse (no erase needed)
-        g.setColour (col);
-        g.drawEllipse (cx - outerR, cy - outerR, outerR * 2.0f, outerR * 2.0f, 1.2f);
-
-        // D-shell flat bottom: draw the chord line, then fill the lower segment
-        // using the button background colour via a filled path (no raw fillRect erase)
-        const float flatY = cy + outerR * 0.53f;   // chord cuts at ~53% radius down
-
-        // Filled pie/segment below chord — masks the lower arc cleanly
-        {
-            juce::Path mask;
-            mask.startNewSubPath (cx - outerR - 1.0f, flatY);
-            mask.lineTo          (cx + outerR + 1.0f, flatY);
-            mask.lineTo          (cx + outerR + 1.0f, cy + outerR + 1.0f);
-            mask.lineTo          (cx - outerR - 1.0f, cy + outerR + 1.0f);
-            mask.closeSubPath();
-            // Fill with button bg to erase the lower arc of the circle
-            g.setColour (active ? getTheme().accent.withAlpha (0.2f) : getTheme().button);
-            g.fillPath  (mask);
-        }
-
-        // Flat chord line
-        g.setColour (col);
-        g.drawLine (cx - outerR, flatY, cx + outerR, flatY, 1.2f);
-
-        // 5 pins in standard DIN-5 arrangement (all in upper half)
-        struct Pin { float x, y; };
-        const float pinCY = cy - outerR * 0.12f;  // centre the pin cluster slightly above mid
-        Pin pins[] = {
-            { cx - arcR * 0.95f, pinCY - arcR * 0.31f },
-            { cx + arcR * 0.95f, pinCY - arcR * 0.31f },
-            { cx,                pinCY - arcR           },
-            { cx - arcR * 0.59f, pinCY + arcR * 0.81f },
-            { cx + arcR * 0.59f, pinCY + arcR * 0.81f },
-        };
-        g.setColour (col);
-        for (auto& pin : pins)
-        {
-            // Only draw pins that are above the flat line
-            if (pin.y - pinR < flatY)
-                g.fillEllipse (pin.x - pinR, pin.y - pinR, pinR * 2.0f, pinR * 2.0f);
-        }
-
-        g.restoreState();
-    }
 }

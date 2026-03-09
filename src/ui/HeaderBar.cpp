@@ -50,7 +50,7 @@ HeaderBar::HeaderBar (DysektProcessor& p)
     // Wire control frame callbacks → forward to PluginEditor via HeaderBar's lambdas
     controlFrame.onBrowserToggle   = [this] { if (onBrowserToggle)   onBrowserToggle(); };
     controlFrame.onWaveToggle      = [this] { if (onWaveToggle)      onWaveToggle(); };
-    controlFrame.onChromaticToggle = [this] { if (onChromaticToggle) onChromaticToggle(); };
+    controlFrame.onMidiFollowToggle = [this] { if (onMidiFollowToggle) onMidiFollowToggle(); };
     controlFrame.onBodeToggle      = [this] { if (onBodeToggle)      onBodeToggle(); };
     // Note: controlFrame is NOT added as a visible child here —
     // PluginEditor::resized() calls addAndMakeVisible(*headerBar.getControlFrame())
@@ -61,7 +61,7 @@ HeaderBar::HeaderBar (DysektProcessor& p)
 
 void HeaderBar::setBrowserActive   (bool v) { controlFrame.setBrowserActive   (v); }
 void HeaderBar::setWaveActive      (bool v) { controlFrame.setWaveActive      (v); }
-void HeaderBar::setChromaticActive (bool v) { controlFrame.setChromaticActive (v); }
+void HeaderBar::setMidiFollowActive (bool v) { controlFrame.setMidiFollowActive (v); }
 void HeaderBar::setBodeActive      (bool v) { controlFrame.setBodeActive      (v); }
 
 // ── resized ───────────────────────────────────────────────────────────────────

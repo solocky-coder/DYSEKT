@@ -46,13 +46,33 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         }
         g.strokePath (p, juce::PathStrokeType (1.5f));
     }
-    else if (type == 2) // Piano / Chromatic
+    else if (type == 2) // MIDI Follow — note + right arrow
     {
-        for (int k = 0; k < 5; ++k)
-            g.fillRect ((int)(cx - 9 + k*4), (int)(cy2 - 4), 3, 9);
-        g.setColour (active ? accent.darker (0.6f) : fg.withAlpha (0.20f));
-        for (int kb : {0, 1, 3, 4})
-            g.fillRect ((int)(cx - 7 + kb*4), (int)(cy2 - 4), 2, 5);
+        // Musical note notehead
+        const float nhW = 4.5f, nhH = 3.4f;
+        const float nhCX = cx - 3.5f, nhCY = cy2 + 2.0f;
+        juce::Path note;
+        note.addEllipse (nhCX - nhW * 0.5f, nhCY - nhH * 0.5f, nhW, nhH);
+        note.applyTransform (juce::AffineTransform::rotation (-0.35f, nhCX, nhCY));
+        g.fillPath (note);
+        // Stem
+        const float stemX = nhCX + nhW * 0.42f;
+        g.drawLine (stemX, nhCY - 0.5f, stemX, nhCY - 8.5f, 1.2f);
+        // Flag
+        juce::Path flag;
+        flag.startNewSubPath (stemX, nhCY - 8.5f);
+        flag.cubicTo (stemX + 4.5f, nhCY - 7.0f, stemX + 4.0f, nhCY - 5.0f, stemX + 1.5f, nhCY - 4.0f);
+        g.strokePath (flag, juce::PathStrokeType (1.1f));
+        // Arrow
+        const float ax = cx + 3.5f, ay = cy2 + 0.5f;
+        const float aw = 7.0f, ahh = 2.8f, ahd = 3.2f;
+        g.drawLine (ax, ay, ax + aw - ahd, ay, 1.1f);
+        juce::Path head;
+        head.startNewSubPath (ax + aw - ahd, ay - ahh);
+        head.lineTo          (ax + aw,       ay);
+        head.lineTo          (ax + aw - ahd, ay + ahh);
+        head.closeSubPath();
+        g.fillPath (head);
     }
     else // type == 3: Mixer — three vertical faders at different positions
     {
@@ -109,12 +129,12 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
         filIconArea  = { gap,                       btnY, btnSz, btnSz };
         waIconArea   = { gap * 2 + btnSz,           btnY, btnSz, btnSz };
-        chIconArea   = { gap * 3 + btnSz * 2,       btnY, btnSz, btnSz };
+        midiFollowIconArea   = { gap * 3 + btnSz * 2,       btnY, btnSz, btnSz };
         bodeIconArea = { gap * 4 + btnSz * 3,       btnY, btnSz, btnSz };
 
         drawIcon (g, filIconArea .toFloat(), 0, browserActive);
         drawIcon (g, waIconArea  .toFloat(), 1, waveActive);
-        drawIcon (g, chIconArea  .toFloat(), 2, chromaticActive);
+        drawIcon (g, midiFollowIconArea  .toFloat(), 2, midiFollowActive);
         drawIcon (g, bodeIconArea.toFloat(), 3, bodeActive);
     }
 
@@ -208,11 +228,11 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
         if (onWaveToggle) onWaveToggle();
         return;
     }
-    if (chIconArea.contains (pos))
+    if (midiFollowIconArea.contains (pos))
     {
-        chromaticActive = ! chromaticActive;
+        midiFollowActive = ! midiFollowActive;
         repaint();
-        if (onChromaticToggle) onChromaticToggle();
+        if (onMidiFollowToggle) onMidiFollowToggle();
         return;
     }
     if (bodeIconArea.contains (pos))

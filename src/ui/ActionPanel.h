@@ -21,10 +21,6 @@ public:
     std::function<void()> onShortcutsToggle;
 
     // Callbacks wired up by DysektEditor
-    std::function<void()> onBrowserToggle;
-    std::function<void()> onWaveToggle;
-    std::function<void()> onChromaticToggle;
-
     void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
     void setWaveActive       (bool v) { waveActive       = v; repaint(); }
     void setChromaticActive  (bool v) { chromaticActive  = v; repaint(); }
@@ -50,13 +46,9 @@ private:
     juce::TextButton addSliceBtn    { "ADD"  };
     juce::TextButton lazyChopBtn    { "LAZY" };
     juce::TextButton trimBtn        { "TRIM" };
-    juce::TextButton midiSelectBtn  { ""     };
     juce::TextButton shortcutsBtn   { "?"    };
 
     // Kept as members for state sync with HeaderBar — not visible in action panel
-    juce::TextButton browserBtn    { "FILES" };
-    juce::TextButton waveBtn       { "WAVE"  };
-    juce::TextButton chromaticBtn  { "CHRO"  };
 
     // snapBtn removed — snap-to-zero-crossing is hardcoded always-on
     // dupBtn / splitBtn / deleteBtn removed in earlier fixes

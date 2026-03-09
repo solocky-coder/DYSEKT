@@ -55,6 +55,7 @@ public:
         FieldPan,          // 23 - per-slice pan -1..+1
         FieldFilterCutoff, // 24 - per-slice LP filter cutoff Hz
         FieldFilterRes,    // 25 - per-slice LP filter resonance 0..1
+        FieldChromaticChannel, // 26 - per-slice chromatic MIDI channel (0=off, 1-16)
     };
 
     // ── Command types ────────────────────────────────────────────────────────
@@ -228,8 +229,6 @@ public:
 
     std::atomic<bool> snapToZeroCrossing { false };
     std::atomic<bool> midiSelectsSlice   { false };
-    std::atomic<bool> chromaticMode      { false };
-    std::atomic<bool> slicesLinked       { false };
 
     // Live drag bounds (UI -> audio thread, bypasses FIFO for low latency)
     std::atomic<int> liveDragBoundsStart { 0 };
@@ -261,8 +260,6 @@ public:
     juce::String      missingFilePath;
 
     // Peak metering (written in processBlock, read by UI)
-    std::atomic<float> masterPeakL { 0.0f };
-    std::atomic<float> masterPeakR { 0.0f };
 
 private:
     // =========================================================================

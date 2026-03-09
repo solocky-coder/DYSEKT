@@ -492,7 +492,7 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // START / END as knobs + LINK toggle
+    // START / END knobs
     {
         g.setColour (getTheme().separator);
         g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
@@ -525,36 +525,6 @@ void SliceControlBar::paint (juce::Graphics& g)
             x += cw + 4;
         }
 
-        // LINK toggle button
-        {
-            const bool linked = processor.slicesLinked.load (std::memory_order_relaxed);
-            const int btnW = 42, btnH = 32;
-            linkBtnArea = { x, row1y, btnW, btnH };
-
-            g.setColour (linked ? getTheme().accent.withAlpha (0.25f)
-                                : getTheme().darkBar.brighter (0.08f));
-            g.fillRoundedRectangle ((float) x, (float) row1y, (float) btnW, (float) btnH, 3.f);
-
-            g.setColour (linked ? getTheme().accent
-                                : getTheme().foreground.withAlpha (0.22f));
-            g.drawRoundedRectangle ((float) x + 0.5f, (float) row1y + 0.5f,
-                                    (float) btnW - 1.f, (float) btnH - 1.f, 3.f, 1.f);
-
-            g.setFont (DysektLookAndFeel::makeFont (10.0f));
-            g.setColour (linked ? getTheme().accent
-                                : getTheme().foreground.withAlpha (0.35f));
-            g.drawText ("LINK", x, row1y + 2, btnW, 13, juce::Justification::centred);
-
-            g.setFont (DysektLookAndFeel::makeFont (9.0f));
-            g.setColour (linked ? getTheme().foreground.withAlpha (0.7f)
-                                : getTheme().foreground.withAlpha (0.22f));
-            g.drawText (linked ? "ON" : "OFF", x, row1y + 15, btnW, 13, juce::Justification::centred);
-
-            ParamCell lc{};
-            lc.x = x; lc.y = row1y; lc.w = btnW; lc.h = btnH;
-            lc.isLinkBtn = true;
-            cells.push_back (lc);
-        }
     }
 
     // ── Separator ─────────────────────────────────────────────────────
@@ -670,45 +640,6 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // PAN — knob (-1..+1, display L/C/R)
-    {
-        float gPan  = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
-        bool locked = (s.lockMask & kLockPan) != 0;
-        float pv    = locked ? s.pan : gPan;
-        juce::String panStr = (std::abs (pv) < 0.02f) ? "C"
-                            : (pv < 0.f ? "L" + juce::String ((int)(-pv * 100.f))
-                                        : "R" + juce::String ((int)(pv  * 100.f)));
-        drawKnobCell (g, x, row2y, "PAN", panStr,
-                      toNorm (F::FieldPan, pv),
-                      locked, kLockPan, F::FieldPan, -1.f, 1.f, 0.01f, cw);
-        x += cw + 4;
-    }
-
-    // FCUT — knob (log Hz)
-    {
-        float gCut  = processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load();
-        bool locked = (s.lockMask & kLockFilter) != 0;
-        float cv    = locked ? s.filterCutoff : gCut;
-        juce::String cutStr = cv >= 999.f ? juce::String ((int)(cv / 1000.f)) + "k"
-                                          : juce::String ((int) cv);
-        drawKnobCell (g, x, row2y, "FCUT", cutStr,
-                      toNorm (F::FieldFilterCutoff, cv),
-                      locked, kLockFilter, F::FieldFilterCutoff, 20.f, 20000.f, 1.f, cw);
-        x += cw + 4;
-    }
-
-    // PRES — filter resonance
-    {
-        float gRes  = processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
-        bool locked = (s.lockMask & kLockFilter) != 0;
-        float rv    = locked ? s.filterRes : gRes;
-        drawKnobCell (g, x, row2y, "PRES",
-                      juce::String ((int)(rv * 100.f)) + "%",
-                      toNorm (F::FieldFilterRes, rv),
-                      locked, kLockFilter, F::FieldFilterRes, 0.f, 1.f, 0.01f, cw);
-        x += cw + 4;
-    }
-
     // OUT — knob
     {
         bool locked = (s.lockMask & kLockOutputBus) != 0;
@@ -813,14 +744,6 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
         }
 
         if (cell.isSetBpm) { showSetBpmPopup(); return; }
-
-        // LINK toggle
-        if (cell.isLinkBtn)
-        {
-            bool current = processor.slicesLinked.load (std::memory_order_relaxed);
-            processor.slicesLinked.store (! current, std::memory_order_relaxed);
-            repaint(); return;
-        }
 
         if (cell.isReadOnly) return;
 

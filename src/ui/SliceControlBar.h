@@ -29,7 +29,6 @@ private:
         bool isMidiLearnBtn  = false;  // START / END boundary buttons
         bool isKnob          = false;  // numeric rotary
         bool isMidiLearnable = false;  // right-click → Learn menu
-        bool isLinkBtn       = false;  // LINK toggle button
         float knobNorm       = 0.0f;   // 0-1 position for knob arc
     };
 
@@ -81,8 +80,6 @@ private:
     juce::Rectangle<int> rootNoteArea;
     bool draggingRootNote = false;
 
-    // LINK button area
-    juce::Rectangle<int> linkBtnArea;
 
     // Text editor overlay
     std::unique_ptr<juce::TextEditor> textEditor;

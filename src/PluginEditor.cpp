@@ -39,8 +39,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       sliceControlBar(p),
       actionPanel    (p, waveformView),
 
-      browserPanel   (p),
-      oscilloscopeView (p)
+      browserPanel   (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     setLookAndFeel (&lnf);
@@ -61,8 +60,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (scrollZoomBar);
     addAndMakeVisible (sliceControlBar);
     addAndMakeVisible (actionPanel);
-
-    addChildComponent (oscilloscopeView);  // kept in hierarchy but never shown or laid out
 
     // Panels start hidden
     browserPanel.setVisible (false);
@@ -134,17 +131,13 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     };
 
     // FIL / WA / CH now live in headerBar — wire their callbacks there
+    headerBar.onBodeToggle      = [this] { toggleMixerPanel(); };
     headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
     headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
-    headerBar.onChromaticToggle = [this] { toggleChromatic(); };
+    headerBar.onMidiFollowToggle = [this] { toggleMidiFollow(); };
     headerBar.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
 
     // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
-    actionPanel.onBrowserToggle    = nullptr;
-    actionPanel.onWaveToggle       = nullptr;
-    actionPanel.onChromaticToggle  = nullptr;
-    actionPanel.onShortcutsToggle  = nullptr;
-
     ensureDefaultThemes();
     loadUserSettings();
 
@@ -177,6 +170,7 @@ int DysektEditor::computeTotalHeight() const
 {
     int h = kBaseHCore;
     if (browserOpen) h += kBrowserH;
+    if (mixerOpen)     h += kMixerPanelH;
     return h;
 }
 
@@ -283,12 +277,11 @@ void DysektEditor::toggleSoftWave()
     saveUserSettings (scale, getTheme().name);
 }
 
-void DysektEditor::toggleChromatic()
+void DysektEditor::toggleMidiFollow()
 {
-    const bool newVal = ! processor.chromaticMode.load();
-    processor.chromaticMode.store (newVal);
-    actionPanel.setChromaticActive (newVal);
-    headerBar.setChromaticActive (newVal);
+    const bool newVal = ! processor.midiSelectsSlice.load();
+    processor.midiSelectsSlice.store (newVal);
+    headerBar.setMidiFollowActive (newVal);
 }
 
 
@@ -463,6 +456,14 @@ void DysektEditor::resized()
         shortcutsPanel.setBounds (getLocalBounds());
 }
 
+void DysektEditor::toggleMixerPanel()
+{
+    mixerOpen = ! mixerOpen;
+    mixerPanel.setVisible (mixerOpen);
+    resized();
+    repaint();
+}
+
 // ── Key shortcuts ─────────────────────────────────────────────────────────────
 bool DysektEditor::keyPressed (const juce::KeyPress& key)
 {
@@ -503,7 +504,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
         return true;
     }
     // 'Z' snap shortcut removed — snap-to-zero always on
-    if (code == 'F') { processor.midiSelectsSlice.store  (! processor.midiSelectsSlice.load());   repaint(); return true; }
+    if (code == 'F') { toggleMidiFollow(); return true; }
 
     if (code == juce::KeyPress::rightKey || (code == juce::KeyPress::tabKey && ! mods.isShiftDown()))
     {
@@ -588,9 +589,6 @@ void DysektEditor::timerCallback()
     if (waveformNeedsRepaint) waveformView.repaint();
     if (laneNeedsRepaint)     sliceLane.repaint();
     if (rulerNeedsRepaint)    scrollZoomBar.repaint();
-
-    // oscilloscopeView removed — waveform view replaces it
-
     // v8: refresh both LCD panels
     sliceLcd.repaintLcd();
     sliceWaveformLcd.repaintLcd();
@@ -598,6 +596,7 @@ void DysektEditor::timerCallback()
     headerBar.repaint();
     sliceControlBar.repaint();
     if (uiChanged) actionPanel.repaint();
+    if (mixerOpen) mixerPanel.updateFromSnapshot();
 }
 
 // ── Theme helpers (unchanged) ─────────────────────────────────────────────────
@@ -690,10 +689,8 @@ void DysektEditor::loadUserSettings()
     waveformView.setSoftWaveform (softWave);
     actionPanel.setWaveActive (softWave);
 
-    // Sync chromatic button with processor state (restored from project)
-    actionPanel.setChromaticActive (processor.chromaticMode.load());
-    headerBar.setChromaticActive (processor.chromaticMode.load());
-
+    // Sync MIDI follow button with processor state (restored from project)
+    headerBar.setMidiFollowActive (processor.midiSelectsSlice.load());
 
 }
 

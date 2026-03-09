@@ -12,7 +12,7 @@
 #include "ui/ShortcutsPanel.h"
 
 #include "ui/FileBrowserPanel.h"
-#include "ui/OscilloscopeView.h"
+#include "ui/MixerPanel.h"
 #include "ui/TrimDialog.h"
 #include "TrimSession.h"
 
@@ -40,7 +40,7 @@ public:
 
     void toggleBrowserPanel();
     void toggleSoftWave();
-    void toggleChromatic();
+    void toggleMidiFollow();
 
     void showTrimDialog (const juce::File& file, bool isRelink = false);
     void showTrimMode   (const juce::File& file);
@@ -64,6 +64,7 @@ private:
     uint32_t lastUiSnapshotVersion = 0;
 
     bool browserOpen = false;
+    bool mixerOpen   = false;
     bool softWave    = false;
 
     std::unique_ptr<TrimSession> trimSession;
@@ -85,11 +86,12 @@ private:
     ActionPanel     actionPanel;
 
     FileBrowserPanel browserPanel;
-    OscilloscopeView oscilloscopeView;
+    MixerPanel       mixerPanel;
     ShortcutsPanel   shortcutsPanel;
 
     juce::TooltipWindow tooltipWindow { this, 500 };
 
+    void toggleMixerPanel();
     void toggleShortcutsPanel();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektEditor)
