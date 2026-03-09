@@ -39,7 +39,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       sliceControlBar(p),
       actionPanel    (p, waveformView),
 
-      browserPanel   (p)
+      browserPanel   (p),
+      mixerPanel     (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     setLookAndFeel (&lnf);
@@ -170,7 +171,7 @@ int DysektEditor::computeTotalHeight() const
 {
     int h = kBaseHCore;
     if (browserOpen) h += kBrowserH;
-    if (mixerOpen)     h += kMixerPanelH;
+    if (mixerOpen)     h += MixerPanel::kPanelH;
     return h;
 }
 
