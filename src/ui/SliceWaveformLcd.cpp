@@ -193,6 +193,10 @@ void SliceWaveformLcd::commitNodes()
     sendField (DysektProcessor::FieldDecay,   decayMs   / 1000.0f);
     sendField (DysektProcessor::FieldSustain, sustainPc / 100.0f);    // 0-1
     sendField (DysektProcessor::FieldRelease, releaseMs / 1000.0f);
+
+    // Give the processor time to echo the new values before rebuilding
+    postCommitGuard = 6;
+    lastEnvSnapVer  = -1;   // force rebuild once guard expires
 }
 
 // Envelope Y at normalised X (linear interpolation between nodes) ─────────────
@@ -342,8 +346,10 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
 void SliceWaveformLcd::mouseUp (const juce::MouseEvent&)
 {
     dragRole = NodeRole::None;
-    // Re-sync env.* from params after drag ends (cleans up any float drift)
-    buildEnvelopeNodes();
+    // Don't rebuild immediately — processor hasn't echoed the new values yet.
+    // The guard lets a few paints pass before we re-read from the snapshot.
+    postCommitGuard = 6;
+    repaint();
 }
 
 // ── Draw ──────────────────────────────────────────────────────────────────────

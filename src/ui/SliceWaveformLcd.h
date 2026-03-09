@@ -105,9 +105,11 @@ private:
     // Cache of computed nodes (rebuilt each paint + mouse event)
     juce::Array<EnvNode> envNodes;    // P1..P3 + sustain handle
 
-    NodeRole dragRole   { NodeRole::None };
-    NodeRole hovRole    { NodeRole::None };
-    float    dragStartX { 0.0f };
+    NodeRole dragRole        { NodeRole::None };
+    NodeRole hovRole         { NodeRole::None };
+    float    dragStartX     { 0.0f };
+    int      postCommitGuard { 0 };   // frames to skip rebuild after commitNodes()
+    int      lastEnvSnapVer  { -1 };  // snapshot version when env was last built
 
     // Content area cached in resized() / used for hit testing
     juce::Rectangle<float> screenArea;

@@ -65,6 +65,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     // Panels start hidden
     browserPanel.setVisible (false);
     addChildComponent (browserPanel);
+    mixerPanel.setVisible (false);
+    addChildComponent (mixerPanel);
     shortcutsPanel.setVisible (false);
     addChildComponent (shortcutsPanel);
     shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
@@ -395,6 +397,10 @@ void DysektEditor::resized()
     // 4. Slice control bar — bottom (outside frame)
     sliceControlBar.setBounds (area.removeFromBottom (kSliceCtrlH));
 
+    // 4a. Mixer panel — sits above slice ctrl bar (if open)
+    if (mixerOpen)
+        mixerPanel.setBounds (area.removeFromBottom (MixerPanel::kPanelH));
+
     // 5. Browser panel — above slice ctrl (if open)
     if (browserOpen)
         browserPanel.setBounds (area.removeFromBottom (kBrowserH));
@@ -461,6 +467,7 @@ void DysektEditor::toggleMixerPanel()
 {
     mixerOpen = ! mixerOpen;
     mixerPanel.setVisible (mixerOpen);
+    headerBar.setBodeActive (mixerOpen);
     resized();
     repaint();
 }
