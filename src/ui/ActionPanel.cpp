@@ -94,6 +94,12 @@ void ActionPanel::setTrimLocked (bool locked)
     repaint();
 }
 
+void ActionPanel::updateMidiButtonAppearance (bool /*active*/)
+{
+    // midiSelectBtn removed — MIDI Follow is now in HeaderBar icon slot.
+    // This stub satisfies any remaining call sites during transition.
+}
+
 void ActionPanel::resized()
 {
     const int gap    = 4;
