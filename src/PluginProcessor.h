@@ -230,6 +230,11 @@ public:
     std::atomic<bool> snapToZeroCrossing { false };
     std::atomic<bool> midiSelectsSlice   { false };
 
+    // Per-slice peak meters (0..1, decaying, written from audio thread)
+    static constexpr int kMaxMeterSlices = 128;
+    std::array<std::atomic<float>, kMaxMeterSlices> slicePeakL {};
+    std::array<std::atomic<float>, kMaxMeterSlices> slicePeakR {};
+
     // Live drag bounds (UI -> audio thread, bypasses FIFO for low latency)
     std::atomic<int> liveDragBoundsStart { 0 };
     std::atomic<int> liveDragBoundsEnd   { 0 };

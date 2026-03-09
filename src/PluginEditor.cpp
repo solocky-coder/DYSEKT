@@ -600,6 +600,7 @@ void DysektEditor::timerCallback()
     // v8: refresh both LCD panels
     sliceLcd.repaintLcd();
     sliceWaveformLcd.repaintLcd();
+    if (mixerOpen) mixerPanel.repaint();
 
     headerBar.repaint();
     sliceControlBar.repaint();

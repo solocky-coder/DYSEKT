@@ -16,19 +16,21 @@ class MixerPanel : public juce::Component,
 {
 public:
     /** Fixed panel height used by PluginEditor layout. */
-    static constexpr int kPanelH      = 230;
+    static constexpr int kPanelH      = 260;
     /** Height of the column-header row. */
-    static constexpr int kHeaderH     = 24;
+    static constexpr int kHeaderH     = 26;
     /** Height of each slice row. */
-    static constexpr int kRowH        = 30;
+    static constexpr int kRowH        = 38;
     /** Height of the master row at the bottom. */
-    static constexpr int kMasterH     = 34;
+    static constexpr int kMasterH     = 42;
     /** Width of the slice name column. */
-    static constexpr int kNameColW    = 82;
+    static constexpr int kNameColW    = 88;
     /** Width of each knob column. */
     static constexpr int kKnobColW    = 72;
-    /** Number of knob columns. */
+    /** Number of knob columns (GAIN PAN FCUT PRES MUTE CHRO OUT — meter is after). */
     static constexpr int kNumCols     = 7;
+    /** Width of the horizontal peak meter column after OUT. */
+    static constexpr int kMeterColW   = 120;
 
     explicit MixerPanel (DysektProcessor& p);
     ~MixerPanel() override;
@@ -70,6 +72,8 @@ private:
     void drawMuteBadge (juce::Graphics&, int cx, int cy,
                         int muteGroup, bool locked) const;
     void drawChroBadge (juce::Graphics&, int cx, int cy, int channel) const;
+    void drawMeter     (juce::Graphics&, int x, int y, int w, int h,
+                        float peakL, float peakR, juce::Colour tint) const;
 
     juce::String fmtGain (float db)      const;
     juce::String fmtPan  (float pan)     const;

@@ -1,5 +1,6 @@
 #include "MixerPanel.h"
 #include "../PluginProcessor.h"
+static constexpr int kMaxMeterSlices = DysektProcessor::kMaxMeterSlices;
 #include "DysektLookAndFeel.h"
 #include "../audio/Slice.h"
 #include "../params/ParamIds.h"
@@ -239,6 +240,47 @@ void MixerPanel::drawChroBadge (juce::Graphics& g, int cx, int cy, int channel) 
     g.drawText (active ? juce::String (channel) : "-", r.toNearestInt(), juce::Justification::centred);
 }
 
+void MixerPanel::drawMeter (juce::Graphics& g,
+                             int x, int y, int w, int h,
+                             float peakL, float peakR,
+                             juce::Colour tint) const
+{
+    const auto& theme = getTheme();
+
+    // Track background
+    const auto bg = theme.separator.withAlpha (0.20f);
+    g.setColour (bg);
+    g.fillRoundedRectangle ((float)x, (float)y, (float)w, (float)h, 2.0f);
+
+    // Two bars stacked (L top, R bottom) each half height
+    const int bh = (h - 1) / 2;
+
+    auto drawBar = [&] (int by, float pk)
+    {
+        if (pk <= 0.001f) return;
+        // Linear → visual scale: use sqrt for better visual response
+        const float fill = std::sqrt (juce::jlimit (0.0f, 1.0f, pk));
+        const int barW   = juce::roundToInt (fill * (float)(w - 2));
+        if (barW <= 0) return;
+
+        // Colour gradient: tint → yellow → red based on level
+        const juce::Colour col = (fill < 0.6f) ? tint.withAlpha (0.8f)
+                                               : (fill < 0.85f)
+                                                     ? juce::Colours::yellow.withAlpha (0.85f)
+                                                     : juce::Colours::red.withAlpha (0.9f);
+        g.setColour (col);
+        g.fillRoundedRectangle ((float)(x + 1), (float)(y + by),
+                                 (float)barW, (float)bh, 1.5f);
+    };
+
+    drawBar (0,      peakL);
+    drawBar (bh + 1, peakR);
+
+    // Border
+    g.setColour (theme.separator.withAlpha (0.30f));
+    g.drawRoundedRectangle ((float)x, (float)y, (float)w, (float)h, 2.0f, 0.7f);
+}
+
 void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected) const
 {
     const auto& theme = getTheme();
@@ -263,26 +305,31 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     g.setColour (theme.separator.withAlpha (0.35f));
     g.drawHorizontalLine (ry + kRowH - 1, (float) kNameColW * 0.3f, (float) getWidth());
 
-    // ── Slice name column ───────────────────────────────────────────────
-    // Colour dot
+    // ── Slice name column — tinted with slice colour ─────────────────────
     const juce::Colour dot = sl.colour;
-    g.setColour (dot.withAlpha (0.9f));
-    g.fillEllipse (10.f, (float)(ry + kRowH/2 - 4), 8.f, 8.f);
 
-    // Slice number
-    g.setFont (DysektLookAndFeel::makeFont (9.0f));
-    g.setColour (theme.foreground.withAlpha (selected ? 0.75f : 0.50f));
+    // Colour bar on left edge (thicker, more visible than old dot)
+    g.setColour (dot.withAlpha (0.85f));
+    g.fillRect (0, ry, 3, kRowH);
+
+    // Colour tint on name column background
+    g.setColour (dot.withAlpha (0.07f));
+    g.fillRect (3, ry, kNameColW - 4, kRowH);
+
+    // Slice number — larger font, brighter
+    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setColour (dot.withAlpha (selected ? 0.95f : 0.65f));
     g.drawText (juce::String (idx + 1).paddedLeft ('0', 2),
-                22, ry, 28, kRowH, juce::Justification::centredLeft);
+                8, ry, 30, kRowH, juce::Justification::centredLeft);
 
     // Duration
     const double srate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
     const int end = processor.sliceManager.getEndForSlice (idx, snap.sampleNumFrames);
     const double lenSec = (end - sl.startSample) / srate;
-    g.setFont (DysektLookAndFeel::makeFont (7.5f));
-    g.setColour (theme.foreground.withAlpha (0.25f));
+    g.setFont (DysektLookAndFeel::makeFont (8.0f));
+    g.setColour (theme.foreground.withAlpha (0.30f));
     g.drawText (juce::String (lenSec, 2) + "s",
-                50, ry, kNameColW - 52, kRowH, juce::Justification::centredLeft);
+                40, ry, kNameColW - 42, kRowH, juce::Justification::centredLeft);
 
     // ── Knob columns ────────────────────────────────────────────────────
     const int kcy = ry + kRowH / 2;
@@ -298,9 +345,9 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
 
         const int tx = cx + kKnobR + 4;
         const int tw = kKnobColW - (tx - x) - 2;
-        g.setFont (DysektLookAndFeel::makeFont (9.f));
-        g.setColour (locked ? theme.foreground.withAlpha (0.85f)
-                            : theme.foreground.withAlpha (0.35f));
+        g.setFont (DysektLookAndFeel::makeFont (10.f));
+        g.setColour (locked ? theme.foreground.withAlpha (0.90f)
+                            : theme.foreground.withAlpha (0.40f));
         g.drawText (valStr, tx, ry + 1, tw, kRowH - 2, juce::Justification::centredLeft);
     };
 
@@ -344,6 +391,19 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
                                : theme.foreground.withAlpha (0.32f));
         g.drawText (fmtOut (sl.outputBus), cx, ry, kKnobColW - 4, kRowH,
                     juce::Justification::centredLeft);
+    }
+
+    // METER — horizontal peak bar after OUT, tinted with slice colour
+    {
+        const int mx = colX (ColOut) + kKnobColW + 4;
+        const int mw = getWidth() - mx - 6;
+        if (mw > 20)
+        {
+            const int si = idx < kMaxMeterSlices ? idx : 0;
+            const float pkL = processor.slicePeakL[si].load (std::memory_order_relaxed);
+            const float pkR = processor.slicePeakR[si].load (std::memory_order_relaxed);
+            drawMeter (g, mx, ry + 4, mw, kRowH - 8, pkL, pkR, dot);
+        }
     }
 }
 

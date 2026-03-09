@@ -39,6 +39,22 @@ void SliceWaveformLcd::resized()
 
 void SliceWaveformLcd::repaintLcd()
 {
+    if (dragRole == NodeRole::None)
+    {
+        if (postCommitGuard > 0)
+        {
+            --postCommitGuard;
+        }
+        else
+        {
+            const int ver = processor.getUiSliceSnapshotVersion();
+            if (ver != lastEnvSnapVer)
+            {
+                buildEnvelopeNodes();
+                lastEnvSnapVer = ver;
+            }
+        }
+    }
     repaint();
 }
 
@@ -309,20 +325,21 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     if      (dragRole == NodeRole::Attack)
     {
         env.ax = juce::jlimit (0.02f, env.dx - 0.04f, xn);
-        env.ay = yn;
+        env.ay = yn;                          // A: X=time, Y=peak
     }
     else if (dragRole == NodeRole::Decay)
     {
         env.dx = juce::jlimit (env.ax + 0.04f, env.rx - 0.04f, xn);
-        env.sy = yn;
+        // D: X=decay time only — sustain Y unchanged
     }
     else if (dragRole == NodeRole::Sustain)
     {
-        env.sy = yn;
+        env.sy = yn;                          // S: Y=sustain level only
     }
     else if (dragRole == NodeRole::Release)
     {
         env.rx = juce::jlimit (env.dx + 0.04f, 0.97f, xn);
+        // R: X=release time only — sustain Y unchanged
     }
 
     // Update envNodes[] positions from the new env.* values WITHOUT re-reading params
@@ -679,24 +696,8 @@ void SliceWaveformLcd::paint (juce::Graphics& g)
         return;
     }
 
-    // Rebuild envelope nodes only when snapshot changes, not during or just after drag.
-    // postCommitGuard delays rebuild so the processor can echo committed values first.
-    if (dragRole == NodeRole::None)
-    {
-        if (postCommitGuard > 0)
-        {
-            --postCommitGuard;
-        }
-        else
-        {
-            const int ver = processor.getUiSliceSnapshotVersion();
-            if (ver != lastEnvSnapVer)
-            {
-                buildEnvelopeNodes();
-                lastEnvSnapVer = ver;
-            }
-        }
-    }
+    // Nodes are rebuilt in repaintLcd() (timer-driven), not here.
+    // During drag, dragRole != None so mouseDrag maintains envNodes directly.
 
     const auto area = getLocalBounds().reduced (4).toFloat().reduced (2.0f);
     screenArea = area;

@@ -1486,6 +1486,20 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (busL[0]) busL[0][i] = sanitiseSample (sL);
             if (busR[0]) busR[0][i] = sanitiseSample (sR);
         }
+
+        // Per-slice peaks from fast path — scan active voices
+        for (int vi = 0; vi < voicePool.getMaxActiveVoices(); ++vi)
+        {
+            const auto& v = voicePool.getVoice (vi);
+            if (! v.active) continue;
+            const int si = v.sliceIdx;
+            if (si < 0 || si >= kMaxMeterSlices) continue;
+            // Approximate: use voice linear volume as peak proxy
+            // (per-sample decomposition not available in single-out fast path)
+            const float vol = juce::jlimit (0.0f, 1.0f, v.volume);
+            float cur = slicePeakL[si].load (std::memory_order_relaxed);
+            if (vol > cur) slicePeakL[si].store (vol, std::memory_order_relaxed);
+        }
     }
     else
     {
@@ -1502,6 +1516,15 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 if (bus < 0 || bus >= numActiveBuses || busL[bus] == nullptr) bus = 0;
                 if (busL[bus]) busL[bus][i] += vL;
                 if (busR[bus]) busR[bus][i] += vR;
+
+                // Accumulate per-slice peak (max over block)
+                const int si = voicePool.getVoice (vi).sliceIdx;
+                if (si >= 0 && si < kMaxMeterSlices)
+                {
+                    const float pk = std::max (std::abs (vL), std::abs (vR));
+                    float cur = slicePeakL[si].load (std::memory_order_relaxed);
+                    if (pk > cur) slicePeakL[si].store (pk, std::memory_order_relaxed);
+                }
             }
 
             // Always process preview voice (LazyChopEngine) on main bus
@@ -1528,6 +1551,16 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // Pass through MIDI
     // (already in the buffer, no action needed)
+
+    // Decay all slice peak meters toward zero (60 dB/s at typical block sizes)
+    static const float kDecayPerBlock = 0.985f;  // approx 60 dB/s at 512 @ 44100
+    for (int si = 0; si < kMaxMeterSlices; ++si)
+    {
+        float v = slicePeakL[si].load (std::memory_order_relaxed) * kDecayPerBlock;
+        slicePeakL[si].store (v, std::memory_order_relaxed);
+        v = slicePeakR[si].load (std::memory_order_relaxed) * kDecayPerBlock;
+        slicePeakR[si].store (v, std::memory_order_relaxed);
+    }
 }
 
 juce::AudioProcessorEditor* DysektProcessor::createEditor()
