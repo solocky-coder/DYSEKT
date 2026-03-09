@@ -265,7 +265,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
 
     // ── Slice name column ───────────────────────────────────────────────
     // Colour dot
-    const juce::Colour dot = juce::Colour ((uint32_t) sl.colour);
+    const juce::Colour dot = sl.colour;
     g.setColour (dot.withAlpha (0.9f));
     g.fillEllipse (10.f, (float)(ry + kRowH/2 - 4), 8.f, 8.f);
 

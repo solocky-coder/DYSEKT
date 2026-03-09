@@ -9,7 +9,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
     for (auto* btn : { &addSliceBtn, &lazyChopBtn,
-                       &trimBtn&shortcutsBtn })
+                       &trimBtn, &shortcutsBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
