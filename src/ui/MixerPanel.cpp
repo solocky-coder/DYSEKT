@@ -451,17 +451,9 @@ void MixerPanel::paint (juce::Graphics& g)
     const auto& theme = getTheme();
     const auto& snap  = processor.getUiSliceSnapshot();
 
-    // Themed frame — matches other DYSEKT panels (bezel + inner screen)
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour (theme.accent.withAlpha (0.18f));
-    g.drawRoundedRectangle (bounds.reduced (0.5f), 3.0f, 1.0f);
-
-    g.setColour (theme.darkBar);
-    g.fillRoundedRectangle (bounds.reduced (1.0f), 2.5f);
-
-    // Subtle top-line accent like other panels
-    g.setColour (theme.accent.withAlpha (0.22f));
-    g.drawHorizontalLine (1, 6.f, bounds.getRight() - 6.f);
+    // Background fill — outer frame is drawn by PluginEditor::paint()
+    g.setColour (theme.darkBar.darker (0.4f));
+    g.fillRoundedRectangle (getLocalBounds().toFloat(), 2.0f);
 
     // Clip content area
     g.saveState();

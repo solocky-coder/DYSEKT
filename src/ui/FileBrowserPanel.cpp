@@ -25,9 +25,6 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     sourcePlayer.setSource (&transport);
     transport.addChangeListener (this);
 
-    // Apply theme colours now (and again whenever theme changes via refreshTheme())
-    refreshTheme();
-
     // ── Play/Stop button ──────────────────────────────────────────────────────
     playStopBtn.setColour (juce::TextButton::buttonColourId,
                            getTheme().accent.withAlpha (0.35f));
@@ -98,33 +95,6 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });  // catch lazy-init children
 }
 
-void FileBrowserPanel::refreshTheme()
-{
-    const auto& t = getTheme();
-
-    // ── SmallListLookAndFeel ─────────────────────────────────────────────────
-    smallLAF.refreshTheme();
-
-    // ── Play/Stop button ─────────────────────────────────────────────────────
-    const bool playing = transport.isPlaying();
-    playStopBtn.setColour (juce::TextButton::buttonColourId,
-                           t.accent.withAlpha (playing ? 0.55f : 0.25f));
-    playStopBtn.setColour (juce::TextButton::textColourOffId, t.foreground);
-
-    // ── Volume slider ────────────────────────────────────────────────────────
-    volumeSlider.setColour (juce::Slider::thumbColourId,  t.accent);
-    volumeSlider.setColour (juce::Slider::trackColourId,  t.accent.withAlpha (0.25f));
-    volumeSlider.setColour (juce::Slider::backgroundColourId, t.darkBar.darker (0.2f));
-
-    // ── File name label ──────────────────────────────────────────────────────
-    fileNameLabel.setColour (juce::Label::textColourId,        t.accent);
-    fileNameLabel.setColour (juce::Label::backgroundColourId,  juce::Colour (0x00000000));
-
-    // Force browser to re-render with new colours
-    browser.repaint();
-    repaint();
-}
-
 FileBrowserPanel::~FileBrowserPanel()
 {
     browser.setLookAndFeel (nullptr);
@@ -156,7 +126,8 @@ void FileBrowserPanel::resized()
         // Volume slider — fixed width on the right
         volumeSlider.setBounds (bar.removeFromRight (90).reduced (4, 8));
 
-        // (filename label removed — not needed)
+        // File name label fills the rest
+        fileNameLabel.setBounds (bar.reduced (6, 4));
     }
 
     browser.setBounds (bounds);
@@ -164,21 +135,17 @@ void FileBrowserPanel::resized()
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
-    const auto& t = getTheme();
+    // Background fill — outer frame drawn by PluginEditor::paint()
+    g.setColour (getTheme().darkBar.darker (0.4f));
+    g.fillRoundedRectangle (getLocalBounds().toFloat(), 2.0f);
 
-    // Background matching other panels
-    g.fillAll (t.darkBar);
-
-    // 1px themed border (same style as WaveformView / SliceLcdDisplay frames)
-    g.setColour (t.separator);
-    g.drawRect (getLocalBounds(), 1);
-
+    // Preview bar at bottom
     if (previewVisible)
     {
         auto bar = getLocalBounds().removeFromBottom (kBarH);
-        g.setColour (t.darkBar.darker (0.25f));
+        g.setColour (getTheme().darkBar.darker (0.6f));
         g.fillRect (bar);
-        g.setColour (t.separator);
+        g.setColour (getTheme().accent.withAlpha (0.25f));
         g.drawLine ((float) bar.getX(), (float) bar.getY(),
                     (float) bar.getRight(), (float) bar.getY(), 1.0f);
     }
@@ -204,7 +171,7 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
 
     playStopBtn.setVisible   (true);
     volumeSlider.setVisible  (true);
-    // fileNameLabel removed
+    fileNameLabel.setVisible (true);
 
     if (! wasVisible)
         resized();

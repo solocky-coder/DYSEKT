@@ -185,6 +185,7 @@ void DysektEditor::toggleBrowserPanel()
     headerBar.setBrowserActive (browserOpen);
     setSize (getWidth(), computeTotalHeight());
     resized();
+    repaint();   // redraw editor frame for browser panel
 }
 
 // ── Trim workflow ─────────────────────────────────────────────────────────────
@@ -356,6 +357,72 @@ void DysektEditor::paint (juce::Graphics& g)
         g.drawHorizontalLine (lbnd.getY(),
                               screenF.getX() + 4.f, screenF.getRight() - 4.f);
     }
+
+    // ── Mixer frame ───────────────────────────────────────────────────────────
+    if (mixerOpen && mixerPanel.isVisible())
+    {
+        const auto& ac  = getTheme().accent;
+        const juce::Rectangle<float> outerF = mixerPanel.getBounds().toFloat()
+                                                .expanded (3.f, 3.f);
+
+        // Outer gradient fill
+        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
+                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
+        g.setGradientFill (outerGrad);
+        g.fillRoundedRectangle (outerF, 4.0f);
+
+        // Outer accent border
+        g.setColour (ac.withAlpha (0.22f));
+        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.0f);
+
+        // Inner screen background
+        const auto screenF = outerF.reduced (4.0f);
+        g.setColour (getTheme().darkBar.darker (0.4f));
+        g.fillRoundedRectangle (screenF, 2.0f);
+
+        // Phosphor glow at top
+        juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, screenF.getY(),
+                                    juce::Colours::transparentBlack, 0.f, screenF.getY() + 16.f, false);
+        g.setGradientFill (glow);
+        g.fillRoundedRectangle (screenF, 2.0f);
+
+        // Inner border
+        g.setColour (ac.withAlpha (0.13f));
+        g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
+    }
+
+    // ── Browser frame ─────────────────────────────────────────────────────────
+    if (browserOpen && browserPanel.isVisible())
+    {
+        const auto& ac  = getTheme().accent;
+        const juce::Rectangle<float> outerF = browserPanel.getBounds().toFloat()
+                                                .expanded (3.f, 3.f);
+
+        // Outer gradient fill
+        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
+                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
+        g.setGradientFill (outerGrad);
+        g.fillRoundedRectangle (outerF, 4.0f);
+
+        // Outer accent border
+        g.setColour (ac.withAlpha (0.22f));
+        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.0f);
+
+        // Inner screen background
+        const auto screenF = outerF.reduced (4.0f);
+        g.setColour (getTheme().darkBar.darker (0.4f));
+        g.fillRoundedRectangle (screenF, 2.0f);
+
+        // Phosphor glow at top
+        juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, screenF.getY(),
+                                    juce::Colours::transparentBlack, 0.f, screenF.getY() + 16.f, false);
+        g.setGradientFill (glow);
+        g.fillRoundedRectangle (screenF, 2.0f);
+
+        // Inner border
+        g.setColour (ac.withAlpha (0.13f));
+        g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
+    }
 }
 
 void DysektEditor::resized()
@@ -470,6 +537,7 @@ void DysektEditor::toggleMixerPanel()
     headerBar.setBodeActive (mixerOpen);
     setSize (getWidth(), computeTotalHeight());
     resized();
+    repaint();   // redraw editor frame for mixer panel
 }
 
 // ── Key shortcuts ─────────────────────────────────────────────────────────────
