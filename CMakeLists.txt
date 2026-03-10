@@ -110,11 +110,8 @@ target_sources(Dysekt PRIVATE
     src/ui/LogoBar.cpp
     src/ui/KeysPanel.cpp
     src/ui/FileBrowserPanel.cpp
-    src/ui/OscilloscopeView.cpp
     src/ui/SliceLcdDisplay.cpp              
     src/ui/TrimDialog.cpp
-    src/ui/MixerStrip.cpp
-    src/ui/MasterMixerStrip.cpp
     src/ui/MixerPanel.cpp
     src/ui/ShortcutsPanel.cpp
     src/ui/SliceWaveformLcd.cpp
