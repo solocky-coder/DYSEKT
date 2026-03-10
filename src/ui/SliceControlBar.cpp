@@ -485,22 +485,24 @@ void SliceControlBar::paint (juce::Graphics& g)
     {
         bool gOS    = processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load() > 0.5f;
         bool locked = (s.lockMask & kLockOneShot) != 0;
-        bool isOS   = locked ? s.oneShot : gOS;       // true = one-shot, false = hold
+        bool isOS   = locked ? s.oneShot : gOS;   // true = one-shot, false = hold
 
-        const int pillW = 52;
-        const int pillH = 68;   // kSliceCtrlH(72) - 4
-        const int py    = row1y + 2;
+        // Pill dimensions: match row1 cell height (~30px), not full bar
+        const int pillW  = 48;
+        const int pillH  = 28;   // same height as other row1 cells
+        const int py     = row1y + 1;
+        const int totalW = pillW * 2 + 2;  // both pills + 2px gap
 
-        const auto& theme   = getTheme();
-        const auto  accent  = theme.accent;
+        const auto& theme = getTheme();
+        const auto  accent = theme.accent;
 
-        // ONE SHOT pill
+        // ONE SHOT pill (left)
         {
             const bool active = isOS;
             g.setColour (active ? accent.withAlpha (0.22f) : theme.darkBar.withAlpha (0.55f));
             g.fillRoundedRectangle ((float)x, (float)py, (float)pillW, (float)pillH, 3.0f);
             if (active) {
-                g.setColour (accent.withAlpha (0.7f));
+                g.setColour (accent.withAlpha (0.70f));
                 g.drawRoundedRectangle ((float)x + 0.5f, (float)py + 0.5f,
                                         (float)pillW - 1.f, (float)pillH - 1.f, 3.0f, 1.0f);
             }
@@ -509,32 +511,29 @@ void SliceControlBar::paint (juce::Graphics& g)
             g.drawText ("1-SHOT", x, py, pillW, pillH, juce::Justification::centred);
         }
 
-        // HOLD pill
+        // HOLD pill (right)
         {
+            const int rx     = x + pillW + 2;
             const bool active = !isOS;
             g.setColour (active ? accent.withAlpha (0.22f) : theme.darkBar.withAlpha (0.55f));
-            g.fillRoundedRectangle ((float)(x + pillW + 2), (float)py, (float)pillW, (float)pillH, 3.0f);
+            g.fillRoundedRectangle ((float)rx, (float)py, (float)pillW, (float)pillH, 3.0f);
             if (active) {
-                g.setColour (accent.withAlpha (0.7f));
-                g.drawRoundedRectangle ((float)(x + pillW + 2) + 0.5f, (float)py + 0.5f,
+                g.setColour (accent.withAlpha (0.70f));
+                g.drawRoundedRectangle ((float)rx + 0.5f, (float)py + 0.5f,
                                         (float)pillW - 1.f, (float)pillH - 1.f, 3.0f, 1.0f);
             }
             g.setFont (DysektLookAndFeel::makeFont (active ? 8.5f : 8.0f));
             g.setColour (active ? accent : theme.foreground.withAlpha (0.35f));
-            g.drawText ("HOLD", x + pillW + 2, py, pillW, pillH, juce::Justification::centred);
+            g.drawText ("HOLD", rx, py, pillW, pillH, juce::Justification::centred);
         }
 
-        // Register both pill hit-areas as boolean cells pointing to FieldOneShot
-        // Left pill = ONE SHOT (val=1), Right pill = HOLD (val=0)
-        // Store cell metadata so mouseDown can distinguish which was clicked
-        // We reuse the existing boolean path but register the full 2-pill width
-        int dummy = 0;
-        drawParamCell (g, x + pillW * 2 + 100, row1y, "HIDDEN", "", // off-screen — just to register
-                       locked, kLockOneShot, F::FieldOneShot,
-                       0.f, 1.f, 1.f, true, false, dummy);
-        (void) dummy;
+        // Register ONE cell spanning both pills — mouseDown splits by centre X
+        cells.push_back ({ x, py, totalW, pillH,
+                           kLockOneShot, (int)DysektProcessor::FieldOneShot,
+                           0.f, 1.f, 1.f,
+                           /*isBoolean=*/ true, /*isChoice=*/ false });
 
-        x += (pillW * 2 + 2) + 4;
+        x += totalW + 4;
     }
 
     // START / END knobs
