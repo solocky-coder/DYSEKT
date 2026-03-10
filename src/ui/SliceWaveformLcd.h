@@ -54,6 +54,7 @@ private:
         int          algorithm      { 0 };
         double       sampleRate     { 44100.0 };
         juce::String sampleName;
+        bool         isDefault   { false };
         juce::Array<float> peaks;
     };
 

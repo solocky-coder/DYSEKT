@@ -41,7 +41,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");    addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
     lazyChopBtn.setTooltip ("MIDI Slice — chop by incoming MIDI notes (L)");
 
-    addSliceBtn.setButtonText ("ADD SLICE");
+    addSliceBtn.setButtonText ("");   // icon drawn in paintOverChildren
     // lazyChopBtn label intentionally empty — PLAY/STOP icon drawn in paintOverChildren
     lazyChopBtn.setButtonText ("");
     trimBtn.setTooltip     ("Trim - crop sample to a selected region");
@@ -151,8 +151,50 @@ void ActionPanel::paint (juce::Graphics& g)
 
 // snapBtn removed — updateSnapButtonAppearance no longer needed
 
+// ── Icon helpers ─────────────────────────────────────────────────────────────
+static void ap_drawScissors (juce::Graphics& g, float cx, float cy, float sz, juce::Colour col)
+{
+    const float hw = sz * 0.38f; const float hh = sz * 0.22f;
+    g.setColour (col);
+    juce::Path sc;
+    sc.startNewSubPath (cx - hw, cy - hh * 0.2f); sc.lineTo (cx + hw * 0.55f, cy - hh);
+    sc.startNewSubPath (cx - hw, cy + hh * 0.2f); sc.lineTo (cx + hw * 0.55f, cy + hh);
+    g.strokePath (sc, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.fillEllipse (cx - hw * 0.05f, cy - sz * 0.06f, sz * 0.12f, sz * 0.12f);
+}
+static void ap_drawPlus (juce::Graphics& g, float cx, float cy, float sz, juce::Colour col)
+{
+    const float arm = sz * 0.28f; const float thk = sz * 0.08f;
+    g.setColour (col);
+    g.fillRect (cx - thk, cy - arm, thk * 2.f, arm * 2.f);
+    g.fillRect (cx - arm, cy - thk, arm * 2.f, thk * 2.f);
+}
+static void ap_drawPiano (juce::Graphics& g, float cx, float cy, float sz, juce::Colour col)
+{
+    const float kw = sz * 0.11f; const float kh = sz * 0.44f; const float bh = kh * 0.58f;
+    const float startX = cx - kw * 2.5f;
+    g.setColour (col.withAlpha (0.85f));
+    for (int i = 0; i < 5; ++i)
+        g.fillRoundedRectangle (startX + i * (kw + 1.f), cy - kh * 0.5f, kw, kh, 0.8f);
+    g.setColour (col.withAlpha (0.55f));
+    for (int i : { 0, 1, 3 })
+        g.fillRect  (startX + i * (kw + 1.f) + kw * 0.65f, cy - kh * 0.5f, kw * 0.68f, bh);
+}
+
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
+    // ── ADD SLICE icon: Plus + Scissors ──────────────────────────────────
+    {
+        auto b  = addSliceBtn.getBounds().toFloat();
+        const float cx = b.getCentreX();
+        const float cy = b.getCentreY();
+        const float sz = b.getHeight() * 0.72f;
+        const float alpha = addSliceBtn.isEnabled() ? 0.92f : 0.35f;
+        const auto  col = getTheme().accent.withAlpha (alpha);
+        ap_drawPlus     (g, cx - sz * 0.32f, cy, sz, col);
+        ap_drawScissors (g, cx + sz * 0.36f, cy, sz, col);
+    }
+
     // ── PLAY / STOP icon for lazyChopBtn ─────────────────────────────────
     {
         const bool lazyActive = processor.lazyChop.isActive();

@@ -481,15 +481,60 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // 1SHOT — boolean
+    // ONE SHOT / HOLD — two adjacent pill-style toggle cells
     {
-        bool gOS   = processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load() > 0.5f;
+        bool gOS    = processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load() > 0.5f;
         bool locked = (s.lockMask & kLockOneShot) != 0;
-        bool osv    = locked ? s.oneShot : gOS;
-        drawParamCell (g, x, row1y, "1SHOT", osv ? "ON" : "OFF",
+        bool isOS   = locked ? s.oneShot : gOS;       // true = one-shot, false = hold
+
+        const int pillW = 52;
+        const int pillH = kSliceCtrlH - 4;
+        const int py    = row1y + 2;
+
+        const auto& theme   = getTheme();
+        const auto  accent  = theme.accent;
+
+        // ONE SHOT pill
+        {
+            const bool active = isOS;
+            g.setColour (active ? accent.withAlpha (0.22f) : theme.darkBar.withAlpha (0.55f));
+            g.fillRoundedRectangle ((float)x, (float)py, (float)pillW, (float)pillH, 3.0f);
+            if (active) {
+                g.setColour (accent.withAlpha (0.7f));
+                g.drawRoundedRectangle ((float)x + 0.5f, (float)py + 0.5f,
+                                        (float)pillW - 1.f, (float)pillH - 1.f, 3.0f, 1.0f);
+            }
+            g.setFont (DysektLookAndFeel::makeFont (active ? 8.5f : 8.0f));
+            g.setColour (active ? accent : theme.foreground.withAlpha (0.35f));
+            g.drawText ("1-SHOT", x, py, pillW, pillH, juce::Justification::centred);
+        }
+
+        // HOLD pill
+        {
+            const bool active = !isOS;
+            g.setColour (active ? accent.withAlpha (0.22f) : theme.darkBar.withAlpha (0.55f));
+            g.fillRoundedRectangle ((float)(x + pillW + 2), (float)py, (float)pillW, (float)pillH, 3.0f);
+            if (active) {
+                g.setColour (accent.withAlpha (0.7f));
+                g.drawRoundedRectangle ((float)(x + pillW + 2) + 0.5f, (float)py + 0.5f,
+                                        (float)pillW - 1.f, (float)pillH - 1.f, 3.0f, 1.0f);
+            }
+            g.setFont (DysektLookAndFeel::makeFont (active ? 8.5f : 8.0f));
+            g.setColour (active ? accent : theme.foreground.withAlpha (0.35f));
+            g.drawText ("HOLD", x + pillW + 2, py, pillW, pillH, juce::Justification::centred);
+        }
+
+        // Register both pill hit-areas as boolean cells pointing to FieldOneShot
+        // Left pill = ONE SHOT (val=1), Right pill = HOLD (val=0)
+        // Store cell metadata so mouseDown can distinguish which was clicked
+        // We reuse the existing boolean path but register the full 2-pill width
+        int dummy = 0;
+        drawParamCell (g, x + pillW * 2 + 100, row1y, "HIDDEN", "", // off-screen — just to register
                        locked, kLockOneShot, F::FieldOneShot,
-                       0.f, 1.f, 1.f, true, false, cw);
-        x += cw + 4;
+                       0.f, 1.f, 1.f, true, false, dummy);
+        (void) dummy;
+
+        x += (pillW * 2 + 2) + 4;
     }
 
     // START / END knobs
@@ -815,7 +860,17 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                 else if (cell.fieldId == F::FieldFormantComp)   currentVal = sliceLocked ? sl.formantComp    : (processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load()    > 0.5f);
                 else if (cell.fieldId == F::FieldReleaseTail)   currentVal = sliceLocked ? sl.releaseTail    : (processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load()    > 0.5f);
                 else if (cell.fieldId == F::FieldReverse)       currentVal = sliceLocked ? sl.reverse        : (processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load()        > 0.5f);
-                else if (cell.fieldId == F::FieldOneShot)       currentVal = sliceLocked ? sl.oneShot        : (processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load()        > 0.5f);
+                else if (cell.fieldId == F::FieldOneShot)
+                {
+                    // Two-pill: left=ONE SHOT(1), right=HOLD(0) — pick by click X vs cell centre
+                    const bool clickOneShot = (e.x < cell.bounds.getCentreX());
+                    DysektProcessor::Command pCmd;
+                    pCmd.type       = DysektProcessor::CmdSetSliceParam;
+                    pCmd.intParam1  = F::FieldOneShot;
+                    pCmd.floatParam1 = clickOneShot ? 1.f : 0.f;
+                    processor.pushCommand (pCmd); repaint();
+                    return;
+                }
                 DysektProcessor::Command cmd;
                 cmd.type = DysektProcessor::CmdSetSliceParam;
                 cmd.intParam1 = cell.fieldId; cmd.floatParam1 = currentVal ? 0.f : 1.f;
@@ -824,24 +879,78 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             return;
         }
 
-        // Choice cycle
+        // Choice — show PopupMenu for discrete params
         if (cell.isChoice)
         {
             int sIdx = ui.selectedSlice;
-            if (sIdx >= 0 && sIdx < ui.numSlices)
+            if (sIdx < 0 || sIdx >= ui.numSlices) return;
+
+            using F = DysektProcessor;
+            const auto& sl = ui.slices[(size_t) sIdx];
+
+            juce::PopupMenu menu;
+            const int fieldId = cell.fieldId;
+
+            auto addItems = [&] (const juce::StringArray& names, int currentVal)
             {
-                const auto& sl = ui.slices[(size_t) sIdx];
+                for (int i = 0; i < names.size(); ++i)
+                {
+                    const bool ticked = (i == currentVal);
+                    menu.addItem (i + 1, names[i], true, ticked);
+                }
+            };
+
+            if (fieldId == F::FieldAlgorithm)
+            {
+                int cur = (sl.lockMask & kLockAlgorithm) ? sl.algorithm
+                          : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
+                addItems ({ "Standard", "Tonal", "Formant", "Formant Comp", "Grain" }, cur);
+            }
+            else if (fieldId == F::FieldLoop)
+            {
+                int cur = (sl.lockMask & kLockLoop) ? sl.loopMode
+                          : (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
+                addItems ({ "Off", "Loop", "Ping-Pong" }, cur);
+            }
+            else if (fieldId == F::FieldMuteGroup)
+            {
+                int cur = (sl.lockMask & kLockMuteGroup) ? sl.muteGroup
+                          : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load();
+                juce::StringArray names; names.add ("Off");
+                for (int i = 1; i <= 32; ++i) names.add ("Group " + juce::String (i));
+                addItems (names, cur);
+            }
+            else if (fieldId == F::FieldOutputBus)
+            {
+                int cur = (sl.lockMask & kLockOutputBus) ? sl.outputBus : 0;
+                juce::StringArray names; names.add ("Main");
+                for (int i = 1; i <= 15; ++i) names.add ("Aux " + juce::String (i));
+                addItems (names, cur);
+            }
+            else
+            {
+                // Fallback: old-style cycle
                 int current = 0;
-                using F = DysektProcessor;
-                if      (cell.fieldId == F::FieldAlgorithm) current = (sl.lockMask & kLockAlgorithm) ? sl.algorithm : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
-                else if (cell.fieldId == F::FieldGrainMode) current = (sl.lockMask & kLockGrainMode) ? sl.grainMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
-                else if (cell.fieldId == F::FieldLoop)      current = (sl.lockMask & kLockLoop)      ? sl.loopMode  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
+                if (fieldId == F::FieldGrainMode) current = (sl.lockMask & kLockGrainMode) ? sl.grainMode : (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
                 int next = (current + 1) > (int) cell.maxVal ? 0 : current + 1;
                 DysektProcessor::Command cmd;
                 cmd.type = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1 = cell.fieldId; cmd.floatParam1 = (float) next;
+                cmd.intParam1 = fieldId; cmd.floatParam1 = (float) next;
                 processor.pushCommand (cmd); repaint();
+                return;
             }
+
+            menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                [this, fieldId] (int result)
+                {
+                    if (result <= 0) return;
+                    DysektProcessor::Command cmd;
+                    cmd.type = DysektProcessor::CmdSetSliceParam;
+                    cmd.intParam1 = fieldId;
+                    cmd.floatParam1 = (float)(result - 1);
+                    processor.pushCommand (cmd);
+                    repaint();
+                });
             return;
         }
     }

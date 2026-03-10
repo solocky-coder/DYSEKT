@@ -82,7 +82,8 @@ void SliceWaveformLcd::buildDisplayData()
     const auto& snap = processor.getUiSliceSnapshot();
     data.hasSample   = snap.sampleLoaded && ! snap.sampleMissing;
     data.numSlices   = snap.numSlices;
-    data.sampleName  = snap.sampleFileName;
+    data.sampleName  = snap.isDefaultSample ? juce::String() : snap.sampleFileName;
+    data.isDefault   = snap.isDefaultSample;
     data.totalFrames = snap.sampleNumFrames;
     data.sampleRate  = processor.getSampleRate() > 0.0
                            ? processor.getSampleRate() : 44100.0;
@@ -141,22 +142,26 @@ void SliceWaveformLcd::buildEnvelopeNodes()
         if (s.lockMask & kLockRelease) releaseMs = s.releaseSec   * 1000.0f;
     }
 
-    // Fixed per-segment X budgets (must match commitNodes exactly):
-    //   Attack  segment: [0   , kAX ]  — param max 1000 ms
-    //   Decay   segment: [kAX , kDX ]  — param max 5000 ms
-    //   Sustain segment: [kDX , kRX ]  — fixed plateau
-    //   Release segment: [kRX , 1.0 ]  — param max 5000 ms
-    static constexpr float kAX = 0.20f;   // end of attack zone
-    static constexpr float kDX = 0.45f;   // end of decay zone
-    static constexpr float kRX = 0.80f;   // end of sustain zone / start of release
+    // Layout (display-only proportions — must match commitNodes exactly):
+    //   Attack  : [0       .. ax    ]  attack peak always at top
+    //   Decay   : [ax      .. dx    ]  falls from peak to sustain
+    //   Sustain : [dx      .. kSEnd ]  flat plateau (kSEnd is fixed)
+    //   Release : [kSEnd   .. rEnd  ]  falls from sustain to silence
+    //
+    //   A node: (ax,    TOP )  drag right = more attack
+    //   D node: (dx,    sy  )  drag right = more decay
+    //   S node: (mid,   sy  )  drag up/down = sustain level
+    //   R node: (rEnd,  BOT )  drag right = more release tail
+    static constexpr float kAX   = 0.22f;   // max X for attack node
+    static constexpr float kDX   = 0.48f;   // max X for decay node
+    static constexpr float kSEnd = 0.65f;   // fixed end of sustain plateau
+    static constexpr float kRMax = 0.99f;   // max X for release node
 
-    env.ax = juce::jlimit (0.02f, kAX - 0.02f,  (attackMs  / 1000.0f) * kAX);
-    env.dx = juce::jlimit (kAX + 0.02f, kDX - 0.02f,
-                            kAX + (decayMs / 5000.0f) * (kDX - kAX));
-    env.rx = juce::jlimit (kDX + 0.02f, kRX - 0.02f,
-                            kDX + 0.5f * (kRX - kDX));   // fixed mid-point, not param-driven
-    env.sy = juce::jlimit (0.05f, 0.95f, 1.0f - (sustainPc / 100.0f));  // 0=top=loud
-    env.ay = 0.08f;  // attack peak always near top
+    env.ax  = juce::jlimit (0.02f, kAX - 0.02f, (attackMs  / 1000.0f) * kAX);
+    env.dx  = juce::jlimit (env.ax + 0.04f, kDX, env.ax + (decayMs  / 5000.0f) * (kDX - kAX));
+    env.sy  = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f)); // 0=top=loud
+    env.ay  = 0.04f;   // attack peak: always at top — not user-draggable
+    env.rx  = juce::jlimit (kSEnd + 0.02f, kRMax, kSEnd + (releaseMs / 5000.0f) * (kRMax - kSEnd));
 
     // Rebuild node list
     envNodes.clear();
@@ -167,12 +172,13 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
     d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
 
-    // Sustain handle: mid of plateau
+    // Sustain handle: mid of plateau [dx .. kSEnd]
     EnvNode s;
-    s.xn = (env.dx + env.rx) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
+    s.xn = (env.dx + kSEnd) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
     s.colour = kColSustain; s.label = "S"; envNodes.add (s);
 
-    EnvNode r; r.xn = env.rx; r.yn = env.sy; r.role = NodeRole::Release;
+    // Release node: at rEnd (tail end), always at bottom
+    EnvNode r; r.xn = env.rx; r.yn = 0.96f; r.role = NodeRole::Release;
     r.colour = kColRelease; r.label = "R"; envNodes.add (r);
 }
 
@@ -180,17 +186,18 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 
 void SliceWaveformLcd::commitNodes()
 {
-    // Inverse-map using the same fixed segment budgets as buildEnvelopeNodes
-    static constexpr float kAX = 0.20f;
-    static constexpr float kDX = 0.45f;
-    static constexpr float kRX = 0.80f;
+    // Inverse-map (must match buildEnvelopeNodes constants exactly)
+    static constexpr float kAX   = 0.22f;
+    static constexpr float kDX   = 0.48f;
+    static constexpr float kSEnd = 0.65f;
+    static constexpr float kRMax = 0.99f;
 
     const float attackMs  = juce::jlimit (0.0f, 1000.0f, (env.ax / kAX) * 1000.0f);
     const float decayMs   = juce::jlimit (0.0f, 5000.0f,
-                                ((env.dx - kAX) / (kDX - kAX)) * 5000.0f);
+                                ((env.dx - env.ax) / (kDX - kAX)) * 5000.0f);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,  (1.0f - env.sy) * 100.0f);
     const float releaseMs = juce::jlimit (0.0f, 5000.0f,
-                                ((1.0f - env.rx) / (1.0f - kRX)) * 5000.0f);
+                                ((env.rx - kSEnd) / (kRMax - kSEnd)) * 5000.0f);
 
     // Write to selected slice via CmdSetSliceParam (per-slice, not global)
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
@@ -219,14 +226,16 @@ void SliceWaveformLcd::commitNodes()
 
 float SliceWaveformLcd::envAt (float xn) const
 {
-    // Polyline: P0(0,1) → P1(ax,ay) → P2(dx,sy) → P3(rx,sy) → P4(1,1)
+    // Polyline: P0(0,1) → P1(ax,top) → P2(dx,sy) → P3(kSEnd,sy) → P4(rx,1)
+    // kSEnd is the fixed sustain end / release start
+    static constexpr float kSEnd = 0.65f;
     struct Pt { float x, y; };
     const Pt pts[] = {
         { 0.0f,   1.0f   },
-        { env.ax, env.ay },
-        { env.dx, env.sy },
-        { env.rx, env.sy },
-        { 1.0f,   1.0f   }
+        { env.ax, env.ay },   // attack peak (env.ay = 0.04, near top)
+        { env.dx, env.sy },   // end of decay / sustain level
+        { kSEnd,  env.sy },   // fixed end of sustain plateau
+        { env.rx, 1.0f   }    // end of release (silence)
     };
     constexpr int N = 5;
 
@@ -322,36 +331,41 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     const float xn = juce::jlimit (0.01f, 0.99f, (e.position.x - ox) / W);
     const float yn = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
 
-    if      (dragRole == NodeRole::Attack)
+    static constexpr float kAX   = 0.22f;
+    static constexpr float kDX   = 0.48f;
+    static constexpr float kSEnd = 0.65f;
+    static constexpr float kRMax = 0.99f;
+
+    if (dragRole == NodeRole::Attack)
     {
-        env.ax = juce::jlimit (0.02f, env.dx - 0.04f, xn);
-        env.ay = yn;                          // A: X=time, Y=peak
+        // A: X only — peak height is always maximum, no Y drag
+        env.ax = juce::jlimit (0.02f, std::min (kAX - 0.02f, env.dx - 0.04f), xn);
     }
     else if (dragRole == NodeRole::Decay)
     {
-        env.dx = juce::jlimit (env.ax + 0.04f, env.rx - 0.04f, xn);
-        // D: X=decay time only — sustain Y unchanged
+        // D: X only — controls how far decay extends before sustain
+        env.dx = juce::jlimit (env.ax + 0.04f, kDX, xn);
     }
     else if (dragRole == NodeRole::Sustain)
     {
-        env.sy = yn;                          // S: Y=sustain level only
+        // S: Y only — sustain level
+        env.sy = juce::jlimit (0.04f, 0.94f, yn);
     }
     else if (dragRole == NodeRole::Release)
     {
-        env.rx = juce::jlimit (env.dx + 0.04f, 0.97f, xn);
-        // R: X=release time only — sustain Y unchanged
+        // R: X only — drag right = longer release tail
+        env.rx = juce::jlimit (kSEnd + 0.02f, kRMax, xn);
     }
 
-    // Update envNodes[] positions from the new env.* values WITHOUT re-reading params
-    // (buildEnvelopeNodes would overwrite env.* from params — wrong during drag)
+    // Rebuild envNodes[] from updated env.* (no param read during drag)
     envNodes.clear();
     EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
-    a.colour = kColAttack; a.label = "A"; envNodes.add (a);
+    a.colour = kColAttack;  a.label = "A"; envNodes.add (a);
     EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
-    d.colour = kColDecay;  d.label = "D"; envNodes.add (d);
-    EnvNode s; s.xn = (env.dx + env.rx) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
+    d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
+    EnvNode s; s.xn = (env.dx + kSEnd) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
     s.colour = kColSustain; s.label = "S"; envNodes.add (s);
-    EnvNode r; r.xn = env.rx; r.yn = env.sy; r.role = NodeRole::Release;
+    EnvNode r; r.xn = env.rx; r.yn = 0.96f; r.role = NodeRole::Release;
     r.colour = kColRelease; r.label = "R"; envNodes.add (r);
 
     // Push to params
@@ -674,13 +688,25 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
 void SliceWaveformLcd::drawNoData (juce::Graphics& g)
 {
     auto b = getLocalBounds().reduced (4);
-    g.setFont (DysektLookAndFeel::makeFont (10.0f));
-    g.setColour (lcd2Dim().brighter (0.4f));
 
-    if (! data.hasSample)
-        g.drawText ("-- NO SAMPLE LOADED --", b, juce::Justification::centred);
+    if (! data.hasSample || data.isDefault)
+    {
+        // Show "EMPTY" prominently when no real sample is loaded
+        g.setFont (DysektLookAndFeel::makeFont (18.0f, true));
+        g.setColour (lcd2Phosphor().withAlpha (0.18f));
+        g.drawText ("EMPTY", b, juce::Justification::centred);
+
+        g.setFont (DysektLookAndFeel::makeFont (7.5f));
+        g.setColour (lcd2Dim().brighter (0.5f));
+        g.drawText ("drag a sample here or use the browser",
+                    b.removeFromBottom (18), juce::Justification::centred);
+    }
     else
-        g.drawText ("-- SELECT A SLICE --",   b, juce::Justification::centred);
+    {
+        g.setFont (DysektLookAndFeel::makeFont (10.0f));
+        g.setColour (lcd2Dim().brighter (0.4f));
+        g.drawText ("-- SELECT A SLICE --", b, juce::Justification::centred);
+    }
 }
 
 // ── Paint ─────────────────────────────────────────────────────────────────────

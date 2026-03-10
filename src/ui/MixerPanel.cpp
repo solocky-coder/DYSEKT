@@ -245,40 +245,35 @@ void MixerPanel::drawMeter (juce::Graphics& g,
                              float peakL, float peakR,
                              juce::Colour tint) const
 {
-    const auto& theme = getTheme();
+    // Segmented LED-style meter — two rows (L / R)
+    const int segs    = 20;
+    const int segW    = std::max (1, (w - segs) / segs);
+    const int gap     = 1;
+    const int rowH    = (h - gap) / 2;
 
-    // Track background
-    const auto bg = theme.separator.withAlpha (0.20f);
-    g.setColour (bg);
-    g.fillRoundedRectangle ((float)x, (float)y, (float)w, (float)h, 2.0f);
-
-    // Two bars stacked (L top, R bottom) each half height
-    const int bh = (h - 1) / 2;
-
-    auto drawBar = [&] (int by, float pk)
+    auto drawRow = [&] (int ry, float pk)
     {
-        if (pk <= 0.001f) return;
-        // Linear → visual scale: use sqrt for better visual response
+        // Apply perceptual curve (sqrt) then map to segments
         const float fill = std::sqrt (juce::jlimit (0.0f, 1.0f, pk));
-        const int barW   = juce::roundToInt (fill * (float)(w - 2));
-        if (barW <= 0) return;
+        const int litSegs = juce::roundToInt (fill * (float) segs);
 
-        // Colour gradient: tint → yellow → red based on level
-        const juce::Colour col = (fill < 0.6f) ? tint.withAlpha (0.8f)
-                                               : (fill < 0.85f)
-                                                     ? juce::Colours::yellow.withAlpha (0.85f)
-                                                     : juce::Colours::red.withAlpha (0.9f);
-        g.setColour (col);
-        g.fillRoundedRectangle ((float)(x + 1), (float)(y + by),
-                                 (float)barW, (float)bh, 1.5f);
+        for (int i = 0; i < segs; ++i)
+        {
+            const int sx = x + i * (segW + gap);
+            const bool lit = (i < litSegs);
+
+            juce::Colour col;
+            if      (i < 14) col = tint;                              // green zone (0-70%)
+            else if (i < 17) col = juce::Colour (0xFFFFE000);        // yellow zone (70-85%)
+            else             col = juce::Colour (0xFFFF2222);        // red zone (85-100%)
+
+            g.setColour (lit ? col.withAlpha (0.88f) : col.withAlpha (0.10f));
+            g.fillRect (sx, ry, segW, rowH);
+        }
     };
 
-    drawBar (0,      peakL);
-    drawBar (bh + 1, peakR);
-
-    // Border
-    g.setColour (theme.separator.withAlpha (0.30f));
-    g.drawRoundedRectangle ((float)x, (float)y, (float)w, (float)h, 2.0f, 0.7f);
+    drawRow (y,          peakL);
+    drawRow (y + rowH + gap, peakR);
 }
 
 void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected) const
@@ -456,7 +451,17 @@ void MixerPanel::paint (juce::Graphics& g)
     const auto& theme = getTheme();
     const auto& snap  = processor.getUiSliceSnapshot();
 
-    g.fillAll (theme.darkBar);
+    // Themed frame — matches other DYSEKT panels (bezel + inner screen)
+    const auto bounds = getLocalBounds().toFloat();
+    g.setColour (theme.accent.withAlpha (0.18f));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 3.0f, 1.0f);
+
+    g.setColour (theme.darkBar);
+    g.fillRoundedRectangle (bounds.reduced (1.0f), 2.5f);
+
+    // Subtle top-line accent like other panels
+    g.setColour (theme.accent.withAlpha (0.22f));
+    g.drawHorizontalLine (1, 6.f, bounds.getRight() - 6.f);
 
     // Clip content area
     g.saveState();
@@ -469,11 +474,21 @@ void MixerPanel::paint (juce::Graphics& g)
 
     g.restoreState();
 
-    // Column dividers (drawn over everything)
-    g.setColour (theme.separator.withAlpha (0.4f));
+    // Column dividers — use theme accent for a more cohesive look
+    g.setColour (theme.accent.withAlpha (0.12f));
     g.drawVerticalLine (kNameColW - 1, 0.f, (float) getHeight());
     for (int i = 1; i < kNumCols; ++i)
         g.drawVerticalLine (colX ((Col)i) - 1, (float) kHeaderH, (float) getHeight());
+
+    // Meter column separator
+    {
+        const int mx = colX (ColOut) + kKnobColW;
+        g.setColour (theme.accent.withAlpha (0.12f));
+        g.drawVerticalLine (mx + 2, (float) kHeaderH, (float) getHeight());
+        g.setFont (DysektLookAndFeel::makeFont (7.5f));
+        g.setColour (theme.foreground.withAlpha (0.22f));
+        g.drawText ("METER", mx + 6, 0, kMeterColW - 8, kHeaderH, juce::Justification::centredLeft);
+    }
 
     drawHeader (g);
 }

@@ -126,6 +126,7 @@ public:
         bool         sampleMissing      { false };
         int          sampleNumFrames    { 0 };
         juce::String sampleFileName;
+        bool         isDefaultSample   { false };
         bool         midiSelectsSlice   { false };
         bool         snapToZeroCrossing { false };
     };
