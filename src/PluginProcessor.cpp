@@ -1251,6 +1251,31 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.globalFilterCutoff = filterCutoffParam->load();
                 p.globalFilterRes    = filterResParam->load();
 
+                // ── Trim mode or unsliced: play whole sample / trim region chromatically ──
+                // Root = C3 (MIDI 60). Active whenever trim dialog is open, or when
+                // a sample is loaded but has no slices yet.
+                static constexpr int kChromaticDefaultRoot = 60; // C3
+                const int totalFrames = sampleData.getNumFrames();
+                const bool inTrim     = trimModeActive.load (std::memory_order_relaxed);
+                const bool unsliced   = (sliceManager.getNumSlices() == 0);
+
+                if (totalFrames > 0 && (inTrim || unsliced))
+                {
+                    const int sStart = inTrim ? trimRegionStart.load (std::memory_order_relaxed) : 0;
+                    const int sEnd   = inTrim ? trimRegionEnd  .load (std::memory_order_relaxed) : totalFrames;
+                    if (sEnd > sStart)
+                    {
+                        const float semitoneOffset = (float)(note - kChromaticDefaultRoot);
+                        const float savedPitch = p.globalPitch;
+                        p.globalPitch = savedPitch + semitoneOffset;
+
+                        int voiceIdx = voicePool.allocate();
+                        voicePool.startVoiceUnsliced (voiceIdx, p, sStart, sEnd, sampleData);
+                        p.globalPitch = savedPitch;
+                    }
+                }
+                else
+
                 // ── Per-slice chromatic channel routing ────────────────────────
                 // If any slice has chromaticChannel == incoming MIDI channel,
                 // play that slice pitched relative to root note.
@@ -1389,21 +1414,10 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (latestLoadKind.load (std::memory_order_acquire) == (int) LoadKindReplace)
             {
                 sliceManager.clearAll();
-                // Auto-create one slice covering the full sample so it is
-                // immediately playable via MIDI note 36 (C2) without requiring
-                // the user to manually add a slice first.
-                const int totalFrames = sampleData.getNumFrames();
-                if (totalFrames > 0)
-                {
-                    int idx = sliceManager.createSlice (0, totalFrames);
-                    if (idx >= 0)
-                    {
-                        sliceManager.getSlice (idx).midiNote = 36;
-                        sliceManager.rebuildMidiMap();
-                        // Ensure chromatic mode has a valid selected slice
-                        sliceManager.selectedSlice.store (0, std::memory_order_relaxed);
-                    }
-                }
+                // No auto-slice: unsliced chromatic mode handles playback on any MIDI note
+                // (root = C3) until the user manually adds slices via ADD SLICE.
+                // This also ensures the waveform LCD shows "EMPTY" for the default sample.
+                sliceManager.selectedSlice.store (-1, std::memory_order_relaxed);
             }
             else
             {

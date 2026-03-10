@@ -51,6 +51,12 @@ public:
     void startVoice (int voiceIdx, const VoiceStartParams& params,
                      SliceManager& sliceMgr, const SampleData& sample);
 
+    // Unsliced / trim-mode chromatic playback — no SliceManager needed.
+    // Uses global params only; startSample/endSample are explicit bounds.
+    void startVoiceUnsliced (int voiceIdx, const VoiceStartParams& params,
+                              int startSample, int endSample,
+                              const SampleData& sample);
+
     static constexpr float kShortReleaseSec = 0.05f;  // All Notes Off (CC 123): 50ms fade
     static constexpr float kKillReleaseSec  = 0.005f; // All Sound Off (CC 120): 5ms hard kill
 

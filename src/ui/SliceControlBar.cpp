@@ -660,15 +660,15 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // MUTE — knob
+    // MUTE — choice popup
     {
         mixGroupX1 = x;
         bool locked = (s.lockMask & kLockMuteGroup) != 0;
         int mv = locked ? s.muteGroup : gMG;
-        drawKnobCell (g, x, row2y, "MUTE",
-                      juce::String (mv),
-                      toNorm (F::FieldMuteGroup, (float) mv),
-                      locked, kLockMuteGroup, F::FieldMuteGroup, 0.f, 32.f, 1.f, cw);
+        const juce::String muteLabel = (mv == 0) ? juce::String ("OFF") : juce::String (mv);
+        drawParamCell (g, x, row2y, "MUTE", muteLabel,
+                       locked, kLockMuteGroup, F::FieldMuteGroup, 0.f, 32.f, 1.f,
+                       /*isBoolean=*/ false, /*isChoice=*/ true, cw);
         x += cw + 4;
     }
 
@@ -684,14 +684,14 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // OUT — knob
+    // OUT — choice popup
     {
         bool locked = (s.lockMask & kLockOutputBus) != 0;
         int ov      = locked ? s.outputBus : 0;
-        drawKnobCell (g, x, row2y, "OUT",
-                      juce::String (ov + 1),
-                      toNorm (F::FieldOutputBus, (float) ov),
-                      locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f, cw);
+        const juce::String outLabel = (ov == 0) ? juce::String ("MAIN") : ("AUX " + juce::String (ov));
+        drawParamCell (g, x, row2y, "OUT", outLabel,
+                       locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f,
+                       /*isBoolean=*/ false, /*isChoice=*/ true, cw);
         x += cw + 4;
         mixGroupX2 = x - 4;
     }
@@ -939,7 +939,11 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                 return;
             }
 
-            menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+            const auto cellScreenRect = localAreaToGlobal (
+                juce::Rectangle<int> (cell.x, cell.y, cell.w, cell.h));
+            menu.showMenuAsync (juce::PopupMenu::Options()
+                                    .withTargetScreenArea (cellScreenRect)
+                                    .withParentComponent (getTopLevelComponent()),
                 [this, fieldId] (int result)
                 {
                     if (result <= 0) return;

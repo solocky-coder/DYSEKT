@@ -145,6 +145,81 @@ void VoicePool::initBungee (Voice& v, float pitchSemis, double sr, int grainMode
     v.bungeePPFade = 0;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  startVoiceUnsliced — chromatic playback with explicit bounds, no slice needed.
+//  Used for trim-mode and unsliced-sample playback. All params come from globals.
+// ─────────────────────────────────────────────────────────────────────────────
+void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
+                                     int startSample, int endSample,
+                                     const SampleData& sample)
+{
+    auto& v = voices[voiceIdx];
+
+    v.active      = true;
+    v.sliceIdx    = -1;
+    v.midiNote    = p.note;
+    v.velocity    = p.velocity / 127.0f;
+    v.startSample = startSample;
+    v.endSample   = endSample;
+    v.bufferEnd   = sample.getNumFrames();
+    v.muteGroup   = p.globalMuteGroup;
+    v.looping     = false;
+    v.pingPong    = false;
+    v.outputBus   = 0;
+    v.releaseTail = p.globalReleaseTail;
+    v.oneShot     = p.globalOneShot;
+
+    v.direction = p.globalReverse ? -1 : 1;
+    v.position  = p.globalReverse ? (double)(endSample - 1) : (double)startSample;
+
+    v.envelope.noteOn (p.globalAttackSec, p.globalDecaySec,
+                       p.globalSustain, p.globalReleaseSec, sampleRate);
+
+    // Pitch: already baked in as p.globalPitch = basePitch + semitoneOffset
+    const float pitchSt    = p.globalPitch + p.globalCentsDetune / 100.0f;
+    const float pitchRatio = std::pow (2.0f, pitchSt / 12.0f);
+
+    v.volume = dbToLinear (p.globalVolume);
+
+    float panAngle  = (p.globalPan + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
+    v.panL = std::cos (panAngle);
+    v.panR = std::sin (panAngle);
+
+    float w = 2.0f * juce::MathConstants<float>::pi
+              * juce::jlimit (20.0f, 20000.0f, p.globalFilterCutoff) / (float)sampleRate;
+    v.filterCoeff  = juce::jlimit (0.0f, 1.0f, 1.0f - std::exp (-w));
+    v.filterRes    = juce::jlimit (0.0f, 1.0f, p.globalFilterRes);
+    v.filterStateL = 0.0f;
+    v.filterStateR = 0.0f;
+
+    // Algorithm
+    v.stretchActive = false;
+    v.bungeeActive  = false;
+
+    const int algo = p.globalAlgorithm;
+    if (algo == 0)
+    {
+        // Repitch — simple rate change
+        v.speed = (double) pitchRatio;
+    }
+    else if (algo == 1 || algo == 3 || algo == 4)
+    {
+        // Tonal / Formant / Grain — Signalsmith stretch
+        const float tonality = p.globalTonality;
+        const float formant  = p.globalFormant;
+        const bool  fComp    = p.globalFormantComp;
+        initStretcher (v, pitchSt, sampleRate, tonality, formant, fComp, sample);
+    }
+    else if (algo == 2)
+    {
+        // Formant Comp — Bungee
+        initBungee (v, pitchSt, sampleRate, p.globalGrainMode);
+    }
+
+    if (! v.stretchActive && ! v.bungeeActive)
+        v.speed = (double) pitchRatio;
+}
+
 void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
                             SliceManager& sm, const SampleData& sample)
 {
