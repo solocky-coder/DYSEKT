@@ -657,6 +657,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
         case CmdCreateSlice:
             sliceManager.createSlice (cmd.intParam1, cmd.intParam2);
+            autoSliced.store (false, std::memory_order_relaxed);  // user took over
             break;
 
         case CmdDeleteSlice:

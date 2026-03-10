@@ -251,6 +251,7 @@ public:
     std::atomic<int>  trimRegionStart  { 0 };
     std::atomic<int>  trimRegionEnd    { 0 };
     std::atomic<bool> trimModeActive   { false };  // set by editor; CC routes to trim when true
+    std::atomic<bool> autoSliced        { false };  // true after load until user adds own slice
     std::atomic<int> trimInSample    { 0 };
     std::atomic<int> trimOutSample   { 0 };
 

@@ -716,7 +716,8 @@ void SliceWaveformLcd::paint (juce::Graphics& g)
     buildDisplayData();
     drawBackground (g);
 
-    if (! data.hasSample || ! data.hasSlice)
+    // isDefault (Empty.wav) always shows EMPTY — even if an auto-slice exists
+    if (! data.hasSample || ! data.hasSlice || data.isDefault)
     {
         drawNoData (g);
         return;
