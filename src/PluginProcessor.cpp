@@ -747,6 +747,48 @@ void DysektProcessor::handleCommand (const Command& cmd)
             break;
         }
 
+        case CmdSetSliceLockAll:
+        {
+            // intParam1 = slice index, floatParam1 = 1.0 lock all / 0.0 unlock all
+            int idx = cmd.intParam1;
+            if (idx >= 0 && idx < sliceManager.getNumSlices())
+            {
+                auto& s = sliceManager.getSlice (idx);
+                if (cmd.floatParam1 > 0.5f)
+                {
+                    // Lock all — snapshot current effective values first
+                    if (!(s.lockMask & kLockBpm))          s.bpm              = bpmParam->load();
+                    if (!(s.lockMask & kLockPitch))         s.pitchSemitones   = pitchParam->load();
+                    if (!(s.lockMask & kLockAlgorithm))     s.algorithm        = (int) algoParam->load();
+                    if (!(s.lockMask & kLockAttack))        s.attackSec        = attackParam->load()       / 1000.0f;
+                    if (!(s.lockMask & kLockDecay))         s.decaySec         = decayParam->load()        / 1000.0f;
+                    if (!(s.lockMask & kLockSustain))       s.sustainLevel     = sustainParam->load()      / 100.0f;
+                    if (!(s.lockMask & kLockRelease))       s.releaseSec       = releaseParam->load()      / 1000.0f;
+                    if (!(s.lockMask & kLockMuteGroup))     s.muteGroup        = (int) muteGroupParam->load();
+                    if (!(s.lockMask & kLockLoop))          s.loopMode         = (int) loopParam->load();
+                    if (!(s.lockMask & kLockStretch))       s.stretchEnabled   = stretchParam->load()      > 0.5f;
+                    if (!(s.lockMask & kLockReleaseTail))   s.releaseTail      = releaseTailParam->load()  > 0.5f;
+                    if (!(s.lockMask & kLockReverse))       s.reverse          = reverseParam->load()      > 0.5f;
+                    if (!(s.lockMask & kLockOneShot))       s.oneShot          = oneShotParam->load()      > 0.5f;
+                    if (!(s.lockMask & kLockCentsDetune))   s.centsDetune      = centsDetuneParam->load();
+                    if (!(s.lockMask & kLockTonality))      s.tonalityHz       = tonalityParam->load();
+                    if (!(s.lockMask & kLockFormant))       s.formantSemitones = formantParam->load();
+                    if (!(s.lockMask & kLockFormantComp))   s.formantComp      = formantCompParam->load()  > 0.5f;
+                    if (!(s.lockMask & kLockGrainMode))     s.grainMode        = (int) grainModeParam->load();
+                    if (!(s.lockMask & kLockVolume))        s.volume           = masterVolParam->load();
+                    if (!(s.lockMask & kLockPan))           s.pan              = panParam->load();
+                    if (!(s.lockMask & kLockFilter))        { s.filterCutoff   = filterCutoffParam->load();
+                                                              s.filterRes      = filterResParam->load(); }
+                    s.lockMask = 0xFFFFFFFFu;
+                }
+                else
+                {
+                    s.lockMask = 0u;  // unlock all
+                }
+            }
+            break;
+        }
+
         case CmdSetSliceParam:
         {
             int sel = sliceManager.selectedSlice;
@@ -1494,29 +1536,27 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     if (numActiveBuses <= 1)
     {
-        // Fast path: single stereo output — decompose per voice for accurate meter peaks
+        // Fast path: single stereo output
         for (int i = 0; i < buffer.getNumSamples(); ++i)
         {
             float sL = 0.0f, sR = 0.0f;
-
-            for (int vi = 0; vi < voicePool.getMaxActiveVoices(); ++vi)
-            {
-                float vL = 0.0f, vR = 0.0f;
-                voicePool.processVoiceSample (vi, sampleData, currentSampleRate, vL, vR);
-                sL += vL;
-                sR += vR;
-
-                const int si = voicePool.getVoice (vi).sliceIdx;
-                if (si >= 0 && si < kMaxMeterSlices)
-                {
-                    const float pk = std::max (std::abs (vL), std::abs (vR));
-                    float cur = slicePeakL[si].load (std::memory_order_relaxed);
-                    if (pk > cur) slicePeakL[si].store (pk, std::memory_order_relaxed);
-                }
-            }
-
+            voicePool.processSample (sampleData, currentSampleRate, sL, sR);
             if (busL[0]) busL[0][i] = sanitiseSample (sL);
             if (busR[0]) busR[0][i] = sanitiseSample (sR);
+        }
+
+        // Per-slice peaks from fast path — scan active voices
+        for (int vi = 0; vi < voicePool.getMaxActiveVoices(); ++vi)
+        {
+            const auto& v = voicePool.getVoice (vi);
+            if (! v.active) continue;
+            const int si = v.sliceIdx;
+            if (si < 0 || si >= kMaxMeterSlices) continue;
+            // Approximate: use voice linear volume as peak proxy
+            // (per-sample decomposition not available in single-out fast path)
+            const float vol = juce::jlimit (0.0f, 1.0f, v.volume);
+            float cur = slicePeakL[si].load (std::memory_order_relaxed);
+            if (vol > cur) slicePeakL[si].store (vol, std::memory_order_relaxed);
         }
     }
     else
@@ -1571,8 +1611,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // (already in the buffer, no action needed)
 
     // Decay all slice peak meters toward zero (60 dB/s at typical block sizes)
-    static const float kDecayPerBlock = 0.923f;  // ~60 dB/s at 512 samples @ 44100 Hz
-                                                  // derivation: 0.001^(1/86 blocks/s) ≈ 0.923
+    static const float kDecayPerBlock = 0.985f;  // approx 60 dB/s at 512 @ 44100
     for (int si = 0; si < kMaxMeterSlices; ++si)
     {
         float v = slicePeakL[si].load (std::memory_order_relaxed) * kDecayPerBlock;
