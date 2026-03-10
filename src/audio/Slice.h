@@ -27,6 +27,7 @@ enum LockBit : uint32_t
     kLockCentsDetune   = 1048576,   // bit 20
     kLockPan           = 2097152,   // bit 21
     kLockFilter        = 4194304,   // bit 22
+    kLockChromaticChannel = 8388608, // bit 23
 };
 
 struct Slice

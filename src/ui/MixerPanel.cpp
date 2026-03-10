@@ -223,20 +223,23 @@ void MixerPanel::drawHeader (juce::Graphics& g) const
     }
 }
 
-void MixerPanel::drawChroBadge (juce::Graphics& g, int cx, int cy, int channel) const
+void MixerPanel::drawChroBadge (juce::Graphics& g, int cx, int cy, int channel, bool locked) const
 {
     const auto& theme = getTheme();
     const int bw = 18, bh = 16;
     const juce::Rectangle<float> r ((float)(cx - bw/2), (float)(cy - bh/2), (float)bw, (float)bh);
 
     const bool active = (channel > 0);
-    g.setColour (active ? theme.accent.withAlpha (0.15f) : theme.separator.withAlpha (0.3f));
+    g.setColour (active ? (locked ? theme.lockActive.withAlpha (0.15f) : theme.accent.withAlpha (0.15f))
+                        : theme.separator.withAlpha (0.3f));
     g.fillRoundedRectangle (r, 2.5f);
-    g.setColour (active ? theme.accent : theme.foreground.withAlpha (0.25f));
+    g.setColour (active ? (locked ? theme.lockActive : theme.accent)
+                        : (locked ? theme.lockActive.withAlpha (0.5f) : theme.foreground.withAlpha (0.25f)));
     g.drawRoundedRectangle (r, 2.5f, 0.8f);
 
     g.setFont (DysektLookAndFeel::makeFont (8.0f));
-    g.setColour (active ? theme.accent : theme.foreground.withAlpha (0.3f));
+    g.setColour (active ? (locked ? theme.lockActive : theme.accent)
+                        : (locked ? theme.lockActive.withAlpha (0.5f) : theme.foreground.withAlpha (0.3f)));
     g.drawText (active ? juce::String (channel) : "-", r.toNearestInt(), juce::Justification::centred);
 }
 
@@ -371,9 +374,10 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
 
     // CHRO — chromatic MIDI channel badge
     {
+        const bool chromaLocked = (sl.lockMask & kLockChromaticChannel) != 0;
         const int x  = colX (ColChro);
         const int cx = x + kKnobColW / 2;
-        drawChroBadge (g, cx, kcy, sl.chromaticChannel);
+        drawChroBadge (g, cx, kcy, sl.chromaticChannel, chromaLocked);
     }
 
     // OUT
@@ -535,12 +539,24 @@ void MixerPanel::mouseDown (const juce::MouseEvent& e)
         if (!c.isMaster)
         {
             const auto& sl = snap.slices[(size_t) c.row];
-            int next = (sl.chromaticChannel + 1) % 17;
-            DysektProcessor::Command cmd;
-            cmd.type = DysektProcessor::CmdSetSliceParam;
-            cmd.intParam1 = DysektProcessor::FieldChromaticChannel;
-            cmd.floatParam1 = (float) next;
-            processor.pushCommand (cmd);
+            if (e.mods.isRightButtonDown())
+            {
+                // Right-click: toggle chromatic channel lock
+                DysektProcessor::Command cmd;
+                cmd.type      = DysektProcessor::CmdToggleLock;
+                cmd.intParam1 = (int) kLockChromaticChannel;
+                processor.pushCommand (cmd);
+            }
+            else
+            {
+                // Left-click: cycle channel 0→1→...→16→0
+                int next = (sl.chromaticChannel + 1) % 17;
+                DysektProcessor::Command cmd;
+                cmd.type = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1 = DysektProcessor::FieldChromaticChannel;
+                cmd.floatParam1 = (float) next;
+                processor.pushCommand (cmd);
+            }
         }
         repaint(); return;
     }

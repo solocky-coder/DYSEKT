@@ -739,6 +739,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockPan)          s.pan               = panParam->load();
                     else if (bit == kLockFilter)       { s.filterCutoff    = filterCutoffParam->load();
                                                          s.filterRes       = filterResParam->load(); }
+                    else if (bit == kLockChromaticChannel) s.chromaticChannel = 0; // default off
                     // kLockOutputBus: no global default param — slice default (0) is correct
                 }
 
@@ -779,6 +780,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     if (!(s.lockMask & kLockPan))           s.pan              = panParam->load();
                     if (!(s.lockMask & kLockFilter))        { s.filterCutoff   = filterCutoffParam->load();
                                                               s.filterRes      = filterResParam->load(); }
+                    // kLockChromaticChannel: keep current slice value when locking
                     s.lockMask = 0xFFFFFFFFu;
                 }
                 else
@@ -1135,36 +1137,57 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         default: break;
                     }
 
-                    // Slice bounds go through CmdSetSliceBounds (correct undo + Link support)
+                    // Slice start/end CC: route to trim handles when trim mode is active,
+                    // otherwise move the slice boundary as normal.
                     if (outFieldId == FieldSliceStart || outFieldId == FieldSliceEnd)
                     {
                         const int total = sampleData.getNumFrames();
                         if (total > 1)
                         {
-                            auto& sl = sliceManager.getSlice (sel);
-                            Command ccCmd;
-                            ccCmd.type = CmdSetSliceBounds;
-                            ccCmd.intParam1 = sel;
-                            if (outFieldId == FieldSliceStart)
+                            if (trimModeActive.load (std::memory_order_relaxed))
                             {
-                                const int slEnd = sliceManager.getEndForSlice (sel, total);
-                                int newStart = juce::jlimit (0, slEnd - 64,
-                                    (int) (outNorm * (float) total));
-                                ccCmd.intParam2    = newStart;
-                                ccCmd.positions[0] = slEnd;
+                                // ── Trim mode: CC scrubs trim region handles ──
+                                const int curStart = trimRegionStart.load (std::memory_order_relaxed);
+                                const int curEnd   = trimRegionEnd  .load (std::memory_order_relaxed);
+                                if (outFieldId == FieldSliceStart)
+                                {
+                                    int newStart = juce::jlimit (0, curEnd - 64,
+                                        (int) (outNorm * (float) total));
+                                    trimRegionStart.store (newStart, std::memory_order_relaxed);
+                                }
+                                else
+                                {
+                                    int newEnd = juce::jlimit (curStart + 64, total,
+                                        (int) (outNorm * (float) total));
+                                    trimRegionEnd.store (newEnd, std::memory_order_relaxed);
+                                }
+                                // No command needed — WaveformView polls trimRegionStart/End directly
                             }
                             else
                             {
-                                int newEnd = juce::jlimit (sl.startSample + 64, total,
-                                    (int) (outNorm * (float) total));
-                                ccCmd.intParam2    = sl.startSample;
-                                ccCmd.positions[0] = newEnd;
+                                // ── Normal mode: CC moves slice boundary ──
+                                auto& sl = sliceManager.getSlice (sel);
+                                Command ccCmd;
+                                ccCmd.type = CmdSetSliceBounds;
+                                ccCmd.intParam1 = sel;
+                                if (outFieldId == FieldSliceStart)
+                                {
+                                    const int slEnd = sliceManager.getEndForSlice (sel, total);
+                                    int newStart = juce::jlimit (0, slEnd - 64,
+                                        (int) (outNorm * (float) total));
+                                    ccCmd.intParam2    = newStart;
+                                    ccCmd.positions[0] = slEnd;
+                                }
+                                else
+                                {
+                                    int newEnd = juce::jlimit (sl.startSample + 64, total,
+                                        (int) (outNorm * (float) total));
+                                    ccCmd.intParam2    = sl.startSample;
+                                    ccCmd.positions[0] = newEnd;
+                                }
+                                ccCmd.numPositions = 1;
+                                enqueueCoalescedCommand (ccCmd);
                             }
-                            ccCmd.numPositions = 1;
-                            // Route through the coalescing queue — NOT handleCommand directly.
-                            // handleCommand calls rebuildMidiMap() which allocates on the audio
-                            // thread and causes freezes / erratic jumps.
-                            enqueueCoalescedCommand (ccCmd);
                         }
                     }
                     else

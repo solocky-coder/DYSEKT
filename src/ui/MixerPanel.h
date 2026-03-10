@@ -26,7 +26,7 @@ public:
     /** Width of the slice name column. */
     static constexpr int kNameColW    = 88;
     /** Width of each knob column. */
-    static constexpr int kKnobColW    = 72;
+    static constexpr int kKnobColW    = 84;
     /** Number of knob columns (GAIN PAN FCUT PRES MUTE CHRO OUT — meter is after). */
     static constexpr int kNumCols     = 7;
     /** Width of the horizontal peak meter column after OUT. */
@@ -71,7 +71,7 @@ private:
                         bool locked, bool isMaster = false) const;
     void drawMuteBadge (juce::Graphics&, int cx, int cy,
                         int muteGroup, bool locked) const;
-    void drawChroBadge (juce::Graphics&, int cx, int cy, int channel) const;
+    void drawChroBadge (juce::Graphics&, int cx, int cy, int channel, bool locked) const;
     void drawMeter     (juce::Graphics&, int x, int y, int w, int h,
                         float peakL, float peakR, juce::Colour tint) const;
 

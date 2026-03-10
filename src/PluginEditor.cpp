@@ -86,6 +86,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     waveformView.onTrimApplied = [this] (int s, int e)
     {
         processor.applyTrimToCurrentSample (s, e);
+        processor.trimModeActive.store (false, std::memory_order_relaxed);
         trimSession.reset();
         trimDialog.reset();
         actionPanel.setTrimLocked (false);
@@ -93,6 +94,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     };
     waveformView.onTrimCancelled = [this]
     {
+        processor.trimModeActive.store (false, std::memory_order_relaxed);
         trimSession.reset();
         trimDialog.reset();
         actionPanel.setTrimLocked (false);
@@ -110,6 +112,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
                 p->removeChildComponent (trimDialog.get());
             trimDialog.reset();
             waveformView.setTrimMode (false);
+            processor.trimModeActive.store (false, std::memory_order_relaxed);
             actionPanel.setTrimLocked (false);
             resized();
             repaint();
@@ -124,6 +127,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
         // Initialise markers at full extent so user drags inward
         waveformView.enterTrimMode (0, totalFrames);
+        processor.trimModeActive.store (true, std::memory_order_relaxed);  // CC → trim handles
 
         trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
         addAndMakeVisible (*trimDialog);
