@@ -488,7 +488,7 @@ void SliceControlBar::paint (juce::Graphics& g)
         bool isOS   = locked ? s.oneShot : gOS;       // true = one-shot, false = hold
 
         const int pillW = 52;
-        const int pillH = kSliceCtrlH - 4;
+        const int pillH = 68;   // kSliceCtrlH(72) - 4
         const int py    = row1y + 2;
 
         const auto& theme   = getTheme();
@@ -863,7 +863,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                 else if (cell.fieldId == F::FieldOneShot)
                 {
                     // Two-pill: left=ONE SHOT(1), right=HOLD(0) — pick by click X vs cell centre
-                    const bool clickOneShot = (e.x < cell.bounds.getCentreX());
+                    const bool clickOneShot = (e.x < (cell.x + cell.w / 2));
                     DysektProcessor::Command pCmd;
                     pCmd.type       = DysektProcessor::CmdSetSliceParam;
                     pCmd.intParam1  = F::FieldOneShot;
