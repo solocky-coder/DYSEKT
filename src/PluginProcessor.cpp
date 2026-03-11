@@ -390,6 +390,8 @@ void DysektProcessor::publishUiSliceSnapshot()
             snap.slices[(size_t) i].active = false;
     }
 
+    snap.autoSliced = autoSliced.load (std::memory_order_relaxed);
+
     uiSliceSnapshotIndex.store (writeIndex, std::memory_order_release);
     uiSnapshotVersion.fetch_add (1, std::memory_order_release);
     uiSnapshotDirty.store (false, std::memory_order_release);

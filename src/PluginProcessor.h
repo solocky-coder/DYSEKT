@@ -129,6 +129,7 @@ public:
         bool         isDefaultSample   { false };
         bool         midiSelectsSlice   { false };
         bool         snapToZeroCrossing { false };
+        bool         autoSliced          { false };  // true = auto-slice only, treat as unsliced in UI
     };
 
     // ── Oscilloscope ring buffer size ─────────────────────────────────────────

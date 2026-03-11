@@ -280,7 +280,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
     const int maxStart = juce::jmax (0, numFrames - visLen);
     const int visStart = juce::jlimit (0, maxStart, (int) (sc * (float) maxStart));
     int w = getWidth();
-    int num = ui.numSlices;
+    int num = ui.autoSliced ? 0 : ui.numSlices;
 
     // Collect all overlapping slice indices at click position
     std::vector<int> overlapping;
