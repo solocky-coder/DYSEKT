@@ -46,27 +46,27 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         }
         g.strokePath (p, juce::PathStrokeType (1.5f));
     }
-    else if (type == 2) // MIDI Follow — note + right arrow
+    else if (type == 2) // MIDI Follow — note + right arrow, scaled up
     {
         // Musical note notehead
-        const float nhW = 4.5f, nhH = 3.4f;
-        const float nhCX = cx - 3.5f, nhCY = cy2 + 2.0f;
+        const float nhW = 6.0f, nhH = 4.5f;
+        const float nhCX = cx - 4.5f, nhCY = cy2 + 2.5f;
         juce::Path note;
         note.addEllipse (nhCX - nhW * 0.5f, nhCY - nhH * 0.5f, nhW, nhH);
         note.applyTransform (juce::AffineTransform::rotation (-0.35f, nhCX, nhCY));
         g.fillPath (note);
         // Stem
         const float stemX = nhCX + nhW * 0.42f;
-        g.drawLine (stemX, nhCY - 0.5f, stemX, nhCY - 8.5f, 1.2f);
+        g.drawLine (stemX, nhCY - 0.5f, stemX, nhCY - 11.0f, 1.5f);
         // Flag
         juce::Path flag;
-        flag.startNewSubPath (stemX, nhCY - 8.5f);
-        flag.cubicTo (stemX + 4.5f, nhCY - 7.0f, stemX + 4.0f, nhCY - 5.0f, stemX + 1.5f, nhCY - 4.0f);
-        g.strokePath (flag, juce::PathStrokeType (1.1f));
+        flag.startNewSubPath (stemX, nhCY - 11.0f);
+        flag.cubicTo (stemX + 6.0f, nhCY - 9.0f, stemX + 5.5f, nhCY - 6.5f, stemX + 2.0f, nhCY - 5.0f);
+        g.strokePath (flag, juce::PathStrokeType (1.4f));
         // Arrow
-        const float ax = cx + 3.5f, ay = cy2 + 0.5f;
-        const float aw = 7.0f, ahh = 2.8f, ahd = 3.2f;
-        g.drawLine (ax, ay, ax + aw - ahd, ay, 1.1f);
+        const float ax = cx + 4.5f, ay = cy2 + 1.0f;
+        const float aw = 9.0f, ahh = 3.5f, ahd = 4.0f;
+        g.drawLine (ax, ay, ax + aw - ahd, ay, 1.4f);
         juce::Path head;
         head.startNewSubPath (ax + aw - ahd, ay - ahh);
         head.lineTo          (ax + aw,       ay);

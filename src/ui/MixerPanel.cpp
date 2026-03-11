@@ -455,9 +455,35 @@ void MixerPanel::paint (juce::Graphics& g)
     const auto& theme = getTheme();
     const auto& snap  = processor.getUiSliceSnapshot();
 
-    // Background fill — outer frame is drawn by PluginEditor::paint()
-    g.setColour (theme.darkBar.darker (0.4f));
-    g.fillRoundedRectangle (getLocalBounds().toFloat(), 2.0f);
+    // ── LCD-style frame — matches waveform + LCD screen aesthetic ────────────
+    {
+        const auto ac = theme.accent;
+        auto b = getLocalBounds();
+
+        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
+                                         juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+        g.setGradientFill (outerGrad);
+        g.fillRoundedRectangle (b.toFloat(), 4.0f);
+
+        g.setColour (ac.withAlpha (0.20f));
+        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
+
+        auto screen = b.reduced (4);
+        g.setColour (theme.darkBar.darker (0.55f));
+        g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+
+        g.setColour (juce::Colours::black.withAlpha (0.18f));
+        for (int y = screen.getY(); y < screen.getBottom(); y += 2)
+            g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
+
+        juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
+                                    juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
+        g.setGradientFill (glow);
+        g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+
+        g.setColour (ac.withAlpha (0.12f));
+        g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
+    }
 
     // Clip content area
     g.saveState();

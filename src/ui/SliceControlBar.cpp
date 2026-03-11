@@ -266,7 +266,36 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> /*screenP
 // =============================================================================
 void SliceControlBar::paint (juce::Graphics& g)
 {
-    g.fillAll (getTheme().darkBar);
+    // ── LCD-style frame — matches waveform + LCD screen aesthetic ────────────
+    {
+        const auto ac = getTheme().accent;
+        auto b = getLocalBounds();
+
+        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
+                                         juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+        g.setGradientFill (outerGrad);
+        g.fillRoundedRectangle (b.toFloat(), 4.0f);
+
+        g.setColour (ac.withAlpha (0.20f));
+        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
+
+        auto screen = b.reduced (4);
+        g.setColour (getTheme().darkBar.darker (0.55f));
+        g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+
+        g.setColour (juce::Colours::black.withAlpha (0.18f));
+        for (int y = screen.getY(); y < screen.getBottom(); y += 2)
+            g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
+
+        juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
+                                    juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
+        g.setGradientFill (glow);
+        g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+
+        g.setColour (ac.withAlpha (0.12f));
+        g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
+    }
+
     cells.clear();
 
     const auto& ui = processor.getUiSliceSnapshot();
