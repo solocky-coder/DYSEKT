@@ -663,6 +663,14 @@ void DysektEditor::timerCallback()
         }
     }
 
+    // Sync trim handles → processor atomics so MIDI note/CC handler
+    // can read current positions while trim dialog is open.
+    if (processor.trimModeActive.load (std::memory_order_relaxed))
+    {
+        processor.trimRegionStart.store (waveformView.getTrimIn(),  std::memory_order_relaxed);
+        processor.trimRegionEnd  .store (waveformView.getTrimOut(), std::memory_order_relaxed);
+    }
+
     const int targetHz = waveformAnimating ? 60 : 30;
     if (targetHz != timerHz) { startTimerHz (targetHz); timerHz = targetHz; }
 

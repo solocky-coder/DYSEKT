@@ -1415,10 +1415,31 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (latestLoadKind.load (std::memory_order_acquire) == (int) LoadKindReplace)
             {
                 sliceManager.clearAll();
-                // No auto-slice: unsliced chromatic mode handles playback on any MIDI note
-                // (root = C3) until the user manually adds slices via ADD SLICE.
-                // This also ensures the waveform LCD shows "EMPTY" for the default sample.
-                sliceManager.selectedSlice.store (-1, std::memory_order_relaxed);
+                const int totalFrames = sampleData.getNumFrames();
+                const juce::String fname = sampleData.getFileName();
+                const bool isDefault = fname.equalsIgnoreCase ("Empty.wav")
+                                    || fname.equalsIgnoreCase ("DYSEKT_default.wav")
+                                    || fname.isEmpty();
+
+                if (totalFrames > 0 && ! isDefault)
+                {
+                    // Auto-slice: makes sample immediately playable via MIDI note 36.
+                    // autoSliced flag enables whole-sample chromatic play until user slices.
+                    int idx = sliceManager.createSlice (0, totalFrames);
+                    if (idx >= 0)
+                    {
+                        sliceManager.getSlice (idx).midiNote = 36;
+                        sliceManager.rebuildMidiMap();
+                        sliceManager.selectedSlice.store (0, std::memory_order_relaxed);
+                    }
+                    autoSliced.store (true, std::memory_order_relaxed);
+                }
+                else
+                {
+                    // Default sample: no slice, LCD shows EMPTY.
+                    sliceManager.selectedSlice.store (-1, std::memory_order_relaxed);
+                    autoSliced.store (false, std::memory_order_relaxed);
+                }
             }
             else
             {
