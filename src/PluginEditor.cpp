@@ -429,19 +429,20 @@ void DysektEditor::resized()
     // 2b. Reserve the action panel height — it becomes the TOP of the LCD frame.
     auto actionArea = area.removeFromTop (kActionH);
 
+    // Shared width — all frames (waveform, SCB, mixer, browser) align to this.
+    const int kFX = kMargin;
+    const int kFW = getWidth() - kMargin * 2;
+
     // ── Panel slot — always reserved, Kontakt style ─────────────────────────
-    // The slot sits at the very bottom. Only one panel occupies it at a time.
-    // Window height is fixed so this space is always present.
     {
         area.removeFromBottom (4);                              // bottom gap
         auto slot = area.removeFromBottom (kPanelSlotH);
-        area.removeFromBottom (4);                              // top gap
+        area.removeFromBottom (4);                              // gap between slot and SCB
 
         if (mixerOpen)
         {
-            // Mixer centred vertically in slot (it may be shorter than kPanelSlotH)
             const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
-            auto mb = slot.removeFromTop (mh);
+            auto mb = juce::Rectangle<int> (kFX, slot.getY(), kFW, mh);
             mixerFrameRect   = mb.expanded (3, 3);
             browserFrameRect = {};
             mixerPanel.setBounds (mb);
@@ -450,7 +451,7 @@ void DysektEditor::resized()
         else if (browserOpen)
         {
             const int bh = juce::jmin (kBrowserH, kPanelSlotH);
-            auto bb = slot.removeFromTop (bh);
+            auto bb = juce::Rectangle<int> (kFX, slot.getY(), kFW, bh);
             browserFrameRect = bb.expanded (3, 3);
             mixerFrameRect   = {};
             browserPanel.setBounds (bb);
@@ -465,10 +466,13 @@ void DysektEditor::resized()
         }
     }
 
-    // Slice control bar — directly above panel slot
-    sliceControlBar.setBounds (area.removeFromBottom (kSliceCtrlH));
+    // Slice control bar — aligned to waveform frame width
+    {
+        auto scbArea = area.removeFromBottom (kSliceCtrlH);
+        sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, kSliceCtrlH));
+    }
 
-    area.removeFromBottom (4);  // bottom gap
+    area.removeFromBottom (4);  // gap between SCB top and waveform frame bottom
 
     // ── LCD frame outer rect ─────────────────────────────────────────────────
     // The full outer rect spans actionArea.top → area.bottom, kMargin inset
@@ -476,8 +480,8 @@ void DysektEditor::resized()
     // Components sit inside the "screen" — reduced by 4px on all sides —
     // just like the LCD panels do with b.reduced(4).
     const int kFrameInset = 4;  // matches LCD b.reduced(4)
-    const int kFrameX     = kMargin;
-    const int kFrameW     = getWidth() - kMargin * 2;
+    const int kFrameX     = kFX;
+    const int kFrameW     = kFW;
 
     // Full outer frame rect (used by paint() — computed identically there)
     const int frameTop    = actionArea.getY();
