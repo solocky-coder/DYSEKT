@@ -84,15 +84,11 @@ void SliceWaveformLcd::buildDisplayData()
     data.numSlices   = snap.numSlices;
     data.sampleName  = snap.isDefaultSample ? juce::String() : snap.sampleFileName;
     data.isDefault   = snap.isDefaultSample;
-    data.autoSliced  = snap.autoSliced;
     data.totalFrames = snap.sampleNumFrames;
     data.sampleRate  = processor.getSampleRate() > 0.0
                            ? processor.getSampleRate() : 44100.0;
 
-    // autoSliced = engine-only slice; treat as unsliced in UI
-    const bool effectivelyUnsliced = snap.autoSliced;
-    if (! data.hasSample || effectivelyUnsliced
-        || snap.selectedSlice < 0 || snap.selectedSlice >= snap.numSlices)
+    if (! data.hasSample || snap.selectedSlice < 0 || snap.selectedSlice >= snap.numSlices)
         return;
 
     data.hasSlice    = true;
@@ -704,13 +700,6 @@ void SliceWaveformLcd::drawNoData (juce::Graphics& g)
         g.setColour (lcd2Dim().brighter (0.5f));
         g.drawText ("drag a sample here or use the browser",
                     b.removeFromBottom (18), juce::Justification::centred);
-    }
-    else if (data.autoSliced)
-    {
-        // Sample loaded, playing chromatically — no user slices yet
-        g.setFont (DysektLookAndFeel::makeFont (10.0f));
-        g.setColour (lcd2Dim().brighter (0.4f));
-        g.drawText ("-- ADD SLICE TO BEGIN --", b, juce::Justification::centred);
     }
     else
     {

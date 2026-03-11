@@ -424,8 +424,8 @@ void WaveformView::drawWaveform (juce::Graphics& g)
 void WaveformView::drawSlices (juce::Graphics& g)
 {
     const auto& ui = processor.getUiSliceSnapshot();
-    int sel = ui.autoSliced ? -1 : ui.selectedSlice;
-    int num = ui.autoSliced ?  0 : ui.numSlices;
+    int sel = ui.selectedSlice;
+    int num = ui.numSlices;
 
     for (int i = 0; i < num; ++i)
     {
@@ -568,8 +568,8 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
     auto sampleSnap = processor.sampleData.getSnapshot();
     if (sampleSnap == nullptr) return;
     const auto& ui = processor.getUiSliceSnapshot();
-    int sel = ui.autoSliced ? -1 : ui.selectedSlice;
-    int num = ui.autoSliced ?  0 : ui.numSlices;
+    int sel = ui.selectedSlice;
+    int num = ui.numSlices;
     HoveredEdge newEdge = HoveredEdge::None;
 
     if (sel >= 0 && sel < num && ! sliceDrawMode && ! altModeActive)
@@ -656,8 +656,8 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
 
     // Check slice edges (6px hot zone) — only for already-selected slice
     const auto& ui = processor.getUiSliceSnapshot();
-    int sel = ui.autoSliced ? -1 : ui.selectedSlice;
-    int num = ui.autoSliced ?  0 : ui.numSlices;
+    int sel = ui.selectedSlice;
+    int num = ui.numSlices;
 
     if (sel >= 0 && sel < num)
     {

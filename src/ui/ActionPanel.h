@@ -26,10 +26,6 @@ public:
     void setChromaticActive  (bool v) { chromaticActive  = v; repaint(); }
 
     // Callback wired by PluginEditor
-    std::function<void()> onTrimToggle;
-
-    /** Lock/unlock all buttons except TRIM while trim mode is active. */
-    void setTrimLocked (bool locked);
 
 private:
     DysektProcessor& processor;
@@ -41,11 +37,9 @@ private:
 
     void updateToggleBtn (juce::TextButton& btn, bool active);
     void updateMidiButtonAppearance (bool active);
-    void toggleTrimMode();
 
     juce::TextButton addSliceBtn    { "ADD"  };
     juce::TextButton lazyChopBtn    { "LAZY" };
-    juce::TextButton trimBtn        { "TRIM" };
     juce::TextButton shortcutsBtn   { "?"    };
 
     // Kept as members for state sync with HeaderBar — not visible in action panel

@@ -67,6 +67,10 @@ private:
     bool mixerOpen   = false;
     bool softWave    = false;
 
+    // Frame rects set in resized() and drawn in paint() — include padding so borders never clip
+    juce::Rectangle<int> mixerFrameRect;
+    juce::Rectangle<int> browserFrameRect;
+
     std::unique_ptr<TrimSession> trimSession;
     std::unique_ptr<TrimDialog>  trimDialog;
 
@@ -87,7 +91,7 @@ private:
 
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;
-    ShortcutsPanel   shortcutsPanel;
+    ShortcutsPanel   shortcutsPanel { processor };
 
     juce::TooltipWindow tooltipWindow { this, 500 };
 

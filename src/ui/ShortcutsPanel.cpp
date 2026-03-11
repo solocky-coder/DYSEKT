@@ -1,11 +1,13 @@
 #include "ShortcutsPanel.h"
 #include "DysektLookAndFeel.h"
+#include "../PluginProcessor.h"
 
-ShortcutsPanel::ShortcutsPanel()
+ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
+    : processor (proc)
 {
     buildShortcutData();
 
-    titleLabel.setText ("Keyboard Shortcuts", juce::dontSendNotification);
+    titleLabel.setText ("Settings & Shortcuts", juce::dontSendNotification);
     titleLabel.setFont (DysektLookAndFeel::makeFont (15.0f, true));
     titleLabel.setColour (juce::Label::textColourId, getTheme().foreground);
     titleLabel.setJustificationType (juce::Justification::centredLeft);
@@ -56,9 +58,9 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory nav;
         nav.title = "Navigation";
         nav.entries = {
-            { "← / →",       "Select previous / next slice" },
-            { "Tab",         "Select next slice" },
-            { "Shift+Tab",   "Select previous slice" },
+            { "← / →",     "Select previous / next slice" },
+            { "Tab",       "Select next slice" },
+            { "Shift+Tab", "Select previous slice" },
         };
         categories.push_back (std::move (nav));
     }
@@ -67,9 +69,9 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory editing;
         editing.title = "Editing";
         editing.entries = {
-            { "⌘Z",       "Undo" },
-            { "⌘⇧Z",     "Redo" },
-            { "F",        "Toggle MIDI-selects-slice mode" },
+            { "⌘Z",  "Undo" },
+            { "⌘⇧Z", "Redo" },
+            { "F",   "Toggle MIDI-selects-slice mode" },
         };
         categories.push_back (std::move (editing));
     }
@@ -78,9 +80,8 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory misc;
         misc.title = "General";
         misc.entries = {
-            { "⌘?",    "Toggle this shortcuts panel" },
-            { "Esc",   "Close panel / cancel operation" },
-            { "Cmd",   "Command modifier for keyboard shortcuts" },
+            { "⌘?", "Toggle this panel" },
+            { "Esc", "Close panel / cancel operation" },
         };
         categories.push_back (std::move (misc));
     }
@@ -96,47 +97,126 @@ bool ShortcutsPanel::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
+void ShortcutsPanel::mouseDown (const juce::MouseEvent& e)
+{
+    const int pref = processor.trimPreference.load (std::memory_order_relaxed);
+    int newPref = pref;
+
+    if (trimAlwaysRect.contains (e.getPosition()))
+        newPref = DysektProcessor::TrimPrefAlways;
+    else if (trimNeverRect.contains (e.getPosition()))
+        newPref = DysektProcessor::TrimPrefNever;
+    else if (trimLongRect.contains (e.getPosition()))
+        newPref = DysektProcessor::TrimPrefAsk;   // "long samples" uses the Ask/duration path
+
+    if (newPref != pref)
+    {
+        processor.trimPreference.store (newPref, std::memory_order_relaxed);
+        repaint();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+void ShortcutsPanel::drawTrimPrefsSection (juce::Graphics& g, juce::Rectangle<int>& area)
+{
+    const int pref    = processor.trimPreference.load (std::memory_order_relaxed);
+    const int rowH    = 22;
+    const int btnH    = 18;
+    const int gap     = 6;
+
+    // Section heading
+    g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
+    g.setColour (getTheme().accent);
+    g.drawText ("TRIM ON LOAD", area.removeFromTop (rowH), juce::Justification::centredLeft);
+    area.removeFromTop (2);
+
+    struct Option { juce::String label; int value; juce::Rectangle<int>* rect; };
+    Option opts[] = {
+        { "Always Trim (Default)", DysektProcessor::TrimPrefAlways, &trimAlwaysRect },
+        { "Trim Long Samples",     DysektProcessor::TrimPrefAsk,    &trimLongRect   },
+        { "Never Trim",            DysektProcessor::TrimPrefNever,  &trimNeverRect  },
+    };
+
+    for (auto& opt : opts)
+    {
+        auto row = area.removeFromTop (btnH);
+        area.removeFromTop (gap);
+
+        const bool active = (pref == opt.value);
+        *opt.rect = row;
+
+        // Radio dot
+        const int dotR = 5;
+        auto dotArea = row.removeFromLeft (dotR * 2 + 6);
+        juce::Rectangle<float> dot (
+            dotArea.getX() + 2.0f,
+            dotArea.getCentreY() - dotR,
+            dotR * 2.0f, dotR * 2.0f);
+
+        g.setColour (active ? getTheme().accent : getTheme().button);
+        g.fillEllipse (dot);
+        g.setColour (getTheme().accent.withAlpha (active ? 1.0f : 0.35f));
+        g.drawEllipse (dot.reduced (0.5f), 1.0f);
+        if (active)
+        {
+            g.setColour (getTheme().header);
+            g.fillEllipse (dot.reduced (3.0f));
+        }
+
+        // Label
+        g.setFont (DysektLookAndFeel::makeFont (10.5f));
+        g.setColour (active ? getTheme().foreground : getTheme().foreground.withAlpha (0.6f));
+        g.drawText (opt.label, row.removeFromLeft (200), juce::Justification::centredLeft);
+    }
+
+    area.removeFromTop (4);
+}
+
 void ShortcutsPanel::paint (juce::Graphics& g)
 {
-    // Dim overlay behind the panel
+    // Dim overlay
     g.fillAll (juce::Colours::black.withAlpha (0.55f));
 
-    // Panel background
     auto panel = getLocalBounds().reduced (40, 30);
     g.setColour (getTheme().header);
     g.fillRoundedRectangle (panel.toFloat(), 8.0f);
-
     g.setColour (getTheme().accent.withAlpha (0.5f));
     g.drawRoundedRectangle (panel.toFloat().reduced (0.5f), 8.0f, 1.0f);
 
-    // Draw shortcut rows below the header controls
     auto content = panel.reduced (14, 6);
-    content.removeFromTop (30 + 8 + 26 + 10); // title row + gap + search + gap
+    content.removeFromTop (30 + 8 + 26 + 10); // title + gap + search + gap
 
-    const int colW    = content.getWidth() / 2;
-    const int rowH    = 18;
-    const int catGap  = 10;
+    // ── Left column: Trim prefs + shortcuts ───────────────────────────────
+    const int colW   = content.getWidth() / 2;
+    auto leftCol     = content.removeFromLeft (colW);
+    auto rightCol    = content;
 
-    auto leftCol  = content.removeFromLeft (colW);
-    auto rightCol = content;
+    // Trim prefs at the top of the left column
+    drawTrimPrefsSection (g, leftCol);
+
+    // Divider
+    g.setColour (getTheme().separator.withAlpha (0.4f));
+    g.drawHorizontalLine (leftCol.getY() + 2, (float) leftCol.getX(), (float) leftCol.getRight() - 8);
+    leftCol.removeFromTop (10);
+
+    // ── Shortcut rows ────────────────────────────────────────────────────
+    const int rowH   = 18;
+    const int catGap = 10;
+    const int keysW  = 72;
 
     bool useLeft = true;
     for (const auto& cat : categories)
     {
-        // Filter: skip categories with no matching entries
         bool hasMatch = currentFilter.isEmpty();
         if (! hasMatch)
-        {
             for (const auto& e : cat.entries)
                 if (e.keys.toLowerCase().contains (currentFilter) || e.description.toLowerCase().contains (currentFilter))
                     { hasMatch = true; break; }
-        }
         if (! hasMatch) continue;
 
         auto& col = useLeft ? leftCol : rightCol;
         useLeft = ! useLeft;
 
-        // Category heading
         g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
         g.setColour (getTheme().accent);
         g.drawText (cat.title.toUpperCase(), col.removeFromTop (rowH), juce::Justification::centredLeft);
@@ -149,10 +229,7 @@ void ShortcutsPanel::paint (juce::Graphics& g)
                 && ! entry.description.toLowerCase().contains (currentFilter))
                 continue;
 
-            auto row = col.removeFromTop (rowH);
-            const int keysW = 72;
-
-            // Keys badge
+            auto row    = col.removeFromTop (rowH);
             auto keyRect = row.removeFromLeft (keysW);
             g.setColour (getTheme().button.withAlpha (0.9f));
             g.fillRoundedRectangle (keyRect.reduced (0, 2).toFloat(), 3.0f);
@@ -160,29 +237,24 @@ void ShortcutsPanel::paint (juce::Graphics& g)
             g.setColour (getTheme().accent);
             g.drawText (entry.keys, keyRect, juce::Justification::centred);
 
-            // Description
             row.removeFromLeft (6);
             g.setFont (DysektLookAndFeel::makeFont (10.5f));
             g.setColour (getTheme().foreground.withAlpha (0.85f));
             g.drawText (entry.description, row, juce::Justification::centredLeft);
         }
-
         col.removeFromTop (catGap);
     }
 }
 
 void ShortcutsPanel::resized()
 {
-    auto panel = getLocalBounds().reduced (40, 30);
+    auto panel  = getLocalBounds().reduced (40, 30);
     auto header = panel.reduced (14, 6);
 
-    // Title row
     auto titleRow = header.removeFromTop (30);
     closeBtn.setBounds (titleRow.removeFromRight (30));
     titleLabel.setBounds (titleRow);
 
     header.removeFromTop (8);
-
-    // Search box
     searchBox.setBounds (header.removeFromTop (26));
 }

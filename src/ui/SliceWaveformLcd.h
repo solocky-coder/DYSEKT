@@ -55,7 +55,6 @@ private:
         double       sampleRate     { 44100.0 };
         juce::String sampleName;
         bool         isDefault   { false };
-        bool         autoSliced  { false };
         juce::Array<float> peaks;
     };
 

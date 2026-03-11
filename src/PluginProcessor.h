@@ -129,7 +129,6 @@ public:
         bool         isDefaultSample   { false };
         bool         midiSelectsSlice   { false };
         bool         snapToZeroCrossing { false };
-        bool         autoSliced          { false };  // true = auto-slice only, treat as unsliced in UI
     };
 
     // ── Oscilloscope ring buffer size ─────────────────────────────────────────
@@ -243,6 +242,11 @@ public:
     std::atomic<int> liveDragSliceIdx    { -1 };
     std::atomic<int>   paramsSyncedForSlice   { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
     std::atomic<float> sliceStartPublished    { -1.0f }; // value written when syncing, used to detect real CC moves
+
+    // Pickup mode state — one flag per MIDI learn slot.
+    // Reset when the selected slice changes or a new CC is learned.
+    // Audio-thread write, audio-thread read only.
+    std::array<bool, kMidiLearnNumSlots> ccPickedUp {};   // zero-init = all false
     std::atomic<float> sliceEndPublished      { -1.0f };
 
     // Shift-preview request (-2 = idle, -1 = stop, >= 0 = start at position)
@@ -252,7 +256,6 @@ public:
     std::atomic<int>  trimRegionStart  { 0 };
     std::atomic<int>  trimRegionEnd    { 0 };
     std::atomic<bool> trimModeActive   { false };  // set by editor; CC routes to trim when true
-    std::atomic<bool> autoSliced        { false };  // true after load until user adds own slice
     std::atomic<int> trimInSample    { 0 };
     std::atomic<int> trimOutSample   { 0 };
 
