@@ -242,11 +242,6 @@ public:
     std::atomic<int> liveDragSliceIdx    { -1 };
     std::atomic<int>   paramsSyncedForSlice   { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
     std::atomic<float> sliceStartPublished    { -1.0f }; // value written when syncing, used to detect real CC moves
-
-    // Pickup mode state — one flag per MIDI learn slot.
-    // Reset when the selected slice changes or a new CC is learned.
-    // Audio-thread write, audio-thread read only.
-    std::array<bool, kMidiLearnNumSlots> ccPickedUp {};   // zero-init = all false
     std::atomic<float> sliceEndPublished      { -1.0f };
 
     // Shift-preview request (-2 = idle, -1 = stop, >= 0 = start at position)

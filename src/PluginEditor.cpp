@@ -11,16 +11,11 @@ static constexpr int kActionH    = 22;
 static constexpr int kTrimBarH   = 34;   // height of inline trim bar
 static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
 
-static constexpr int kBrowserH    = 170;
-static constexpr int kMargin      = 8;
-// Fixed panel slot — same height used for both mixer and browser.
-// Mixer is taller so we cap it; browser gets the full slot.
-static constexpr int kPanelSlotH  = 200;
-static constexpr int kBaseHCore   = kLogoH + kLcdRowH + kSliceLaneH
-                                  + kScrollbarH + kSliceCtrlH + kActionH
-                                  + 120; // minimum waveform height
-// Total height is FIXED — panel slot always reserved, window never resizes.
-static constexpr int kTotalH      = kBaseHCore + kPanelSlotH + 16; // 16 = frame padding
+static constexpr int kBrowserH   = 170;
+static constexpr int kMargin     = 8;
+static constexpr int kBaseHCore  = kLogoH + kLcdRowH + kSliceLaneH
+                                 + kScrollbarH + kSliceCtrlH + kActionH
+                                 + 120; // minimum waveform height
 
 static juce::File getSettingsDir()
 {
@@ -94,6 +89,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         processor.trimModeActive.store (false, std::memory_order_relaxed);
         trimSession.reset();
         trimDialog.reset();
+        actionPanel.setTrimLocked (false);
         resized();
     };
     waveformView.onTrimCancelled = [this]
@@ -101,11 +97,48 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         processor.trimModeActive.store (false, std::memory_order_relaxed);
         trimSession.reset();
         trimDialog.reset();
+        actionPanel.setTrimLocked (false);
         resized();
     };
 
     // TRIM button path: ActionPanel delegates here so PluginEditor owns
     // trim lifecycle, enterTrimMode, and TrimDialog placement.
+    actionPanel.onTrimToggle = [this]
+    {
+        if (trimDialog != nullptr)
+        {
+            // Second press = cancel
+            if (auto* p = trimDialog->getParentComponent())
+                p->removeChildComponent (trimDialog.get());
+            trimDialog.reset();
+            waveformView.setTrimMode (false);
+            processor.trimModeActive.store (false, std::memory_order_relaxed);
+            actionPanel.setTrimLocked (false);
+            resized();
+            repaint();
+            return;
+        }
+
+        if (processor.sampleData.getSnapshot() == nullptr)
+            return;
+
+        auto snap = processor.sampleData.getSnapshot();
+        const int totalFrames = snap->buffer.getNumSamples();
+
+        // Initialise markers at full extent so user drags inward
+        waveformView.enterTrimMode (0, totalFrames);
+        processor.trimModeActive.store (true, std::memory_order_relaxed);  // CC → trim handles
+        // Initialise trim atomics immediately so MIDI play works before first timer tick
+        processor.trimRegionStart.store (0,           std::memory_order_relaxed);
+        processor.trimRegionEnd  .store (totalFrames, std::memory_order_relaxed);
+
+        trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+        addAndMakeVisible (*trimDialog);
+        trimDialog->toFront (false);
+        actionPanel.setTrimLocked (true);  // block ADD SLICE / MIDI SLICE
+        resized();   // re-layout: waveform shrinks, trim bar placed below
+        repaint();
+    };
 
     // FIL / WA / CH now live in headerBar — wire their callbacks there
     headerBar.onBodeToggle      = [this] { toggleMixerPanel(); };
@@ -132,7 +165,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     setWantsKeyboardFocus (true);
     setResizable (true, true);
     setResizeLimits (600, 500, 1920, 1200);
-    setSize (kBaseW, kTotalH);  // Fixed window — Kontakt style
+    setSize (kBaseW, computeTotalHeight());
     lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
     startTimerHz (30);
 }
@@ -145,35 +178,19 @@ DysektEditor::~DysektEditor()
 
 int DysektEditor::computeTotalHeight() const
 {
-    return kTotalH;  // Fixed — Kontakt style, window never resizes
+    int h = kBaseHCore;
+    if (browserOpen) h += kBrowserH;
+    if (mixerOpen)     h += MixerPanel::kPanelH;
+    return h;
 }
 
 
 void DysektEditor::toggleBrowserPanel()
 {
-    if (browserOpen)
-    {
-        // Close browser
-        browserOpen = false;
-        browserPanel.setVisible (false);
-        headerBar.setBrowserActive (false);
-    }
-    else
-    {
-        // Open browser, close mixer if open (one panel at a time)
-        if (mixerOpen)
-        {
-            mixerOpen = false;
-            mixerPanel.setVisible (false);
-            headerBar.setBodeActive (false);
-        }
-        browserOpen = true;
-        browserPanel.setVisible (true);
-        headerBar.setBrowserActive (true);
-    }
-    // Window size never changes — just re-layout
-    resized();
-    repaint();
+    browserOpen = ! browserOpen;
+    browserPanel.setVisible (browserOpen);
+    headerBar.setBrowserActive (browserOpen);
+    setSize (getWidth(), computeTotalHeight());
     resized();
     repaint();   // redraw editor frame for browser panel
 }
@@ -196,8 +213,8 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
         return;
     }
 
-    // Route based on trim preference set in settings panel
-    const int pref = processor.trimPreference.load (std::memory_order_relaxed);
+    // Check user's stored preference
+    int pref = processor.trimPreference.load (std::memory_order_relaxed);
     if (pref == DysektProcessor::TrimPrefNever)
     {
         processor.loadFileAsync (file);
@@ -205,25 +222,46 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
         processor.scroll.store (0.0f);
         return;
     }
-    if (pref == DysektProcessor::TrimPrefAsk)
+    if (pref == DysektProcessor::TrimPrefAlways)
     {
-        // Trim only long samples (>= 5 seconds)
-        juce::AudioFormatManager fm;
-        fm.registerBasicFormats();
-        std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
-        double duration = 0.0;
-        if (reader != nullptr && reader->sampleRate > 0.0)
-            duration = (double) reader->lengthInSamples / reader->sampleRate;
-        if (duration < 5.0)
-        {
-            processor.loadFileAsync (file);
-            processor.zoom.store (1.0f);
-            processor.scroll.store (0.0f);
-            return;
-        }
+        showTrimMode (file);
+        return;
     }
-    // TrimPrefAlways, or long sample in TrimPrefAsk mode
-    showTrimMode (file);
+
+    // Estimate duration from file metadata (without full decode)
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
+    double duration = 0.0;
+    if (reader != nullptr && reader->sampleRate > 0.0)
+        duration = (double) reader->lengthInSamples / reader->sampleRate;
+
+    // Short files skip the dialog
+    if (duration < 5.0 || duration <= 0.0)
+    {
+        processor.loadFileAsync (file);
+        processor.zoom.store (1.0f);
+        processor.scroll.store (0.0f);
+        return;
+    }
+
+    // Show trim dialog
+    TrimDialog::show (file.getFileName(), duration, this,
+        [this, file] (TrimDialog::Result result)
+        {
+            if (result.remember)
+                processor.trimPreference.store (result.trim ? DysektProcessor::TrimPrefAlways
+                                                            : DysektProcessor::TrimPrefNever,
+                                                std::memory_order_relaxed);
+            if (result.trim)
+                showTrimMode (file);
+            else
+            {
+                processor.loadFileAsync (file);
+                processor.zoom.store (1.0f);
+                processor.scroll.store (0.0f);
+            }
+        });
 }
 
 void DysektEditor::showTrimMode (const juce::File& file)
@@ -328,10 +366,11 @@ void DysektEditor::paint (juce::Graphics& g)
     }
 
     // ── Mixer frame ───────────────────────────────────────────────────────────
-    if (mixerOpen && mixerPanel.isVisible() && ! mixerFrameRect.isEmpty())
+    if (mixerOpen && mixerPanel.isVisible())
     {
         const auto& ac  = getTheme().accent;
-        const juce::Rectangle<float> outerF = mixerFrameRect.toFloat();
+        const juce::Rectangle<float> outerF = mixerPanel.getBounds().toFloat()
+                                                .expanded (3.f, 3.f);
 
         // Outer gradient fill
         juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
@@ -360,10 +399,11 @@ void DysektEditor::paint (juce::Graphics& g)
     }
 
     // ── Browser frame ─────────────────────────────────────────────────────────
-    if (browserOpen && browserPanel.isVisible() && ! browserFrameRect.isEmpty())
+    if (browserOpen && browserPanel.isVisible())
     {
         const auto& ac  = getTheme().accent;
-        const juce::Rectangle<float> outerF = browserFrameRect.toFloat();
+        const juce::Rectangle<float> outerF = browserPanel.getBounds().toFloat()
+                                                .expanded (3.f, 3.f);
 
         // Outer gradient fill
         juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
@@ -428,44 +468,16 @@ void DysektEditor::resized()
     // 2b. Reserve the action panel height — it becomes the TOP of the LCD frame.
     auto actionArea = area.removeFromTop (kActionH);
 
-    // ── Panel slot — always reserved, Kontakt style ─────────────────────────
-    // The slot sits at the very bottom. Only one panel occupies it at a time.
-    // Window height is fixed so this space is always present.
-    {
-        area.removeFromBottom (4);                              // bottom gap
-        auto slot = area.removeFromBottom (kPanelSlotH);
-        area.removeFromBottom (4);                              // top gap
-
-        if (mixerOpen)
-        {
-            // Mixer centred vertically in slot (it may be shorter than kPanelSlotH)
-            const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
-            auto mb = slot.removeFromTop (mh);
-            mixerFrameRect   = mb.expanded (3, 3);
-            browserFrameRect = {};
-            mixerPanel.setBounds (mb);
-            browserPanel.setBounds ({});
-        }
-        else if (browserOpen)
-        {
-            const int bh = juce::jmin (kBrowserH, kPanelSlotH);
-            auto bb = slot.removeFromTop (bh);
-            browserFrameRect = bb.expanded (3, 3);
-            mixerFrameRect   = {};
-            browserPanel.setBounds (bb);
-            mixerPanel.setBounds ({});
-        }
-        else
-        {
-            mixerFrameRect   = {};
-            browserFrameRect = {};
-            mixerPanel.setBounds ({});
-            browserPanel.setBounds ({});
-        }
-    }
-
-    // Slice control bar — directly above panel slot
+    // 4. Slice control bar — bottom (outside frame)
     sliceControlBar.setBounds (area.removeFromBottom (kSliceCtrlH));
+
+    // 4a. Mixer panel — sits above slice ctrl bar (if open)
+    if (mixerOpen)
+        mixerPanel.setBounds (area.removeFromBottom (MixerPanel::kPanelH));
+
+    // 5. Browser panel — above slice ctrl (if open)
+    if (browserOpen)
+        browserPanel.setBounds (area.removeFromBottom (kBrowserH));
 
     area.removeFromBottom (4);  // bottom gap
 
@@ -527,27 +539,10 @@ void DysektEditor::resized()
 
 void DysektEditor::toggleMixerPanel()
 {
-    if (mixerOpen)
-    {
-        mixerOpen = false;
-        mixerPanel.setVisible (false);
-        headerBar.setBodeActive (false);
-    }
-    else
-    {
-        // Open mixer, close browser if open (one panel at a time)
-        if (browserOpen)
-        {
-            browserOpen = false;
-            browserPanel.setVisible (false);
-            headerBar.setBrowserActive (false);
-        }
-        mixerOpen = true;
-        mixerPanel.setVisible (true);
-        headerBar.setBodeActive (true);
-    }
-    resized();
-    repaint();
+    mixerOpen = ! mixerOpen;
+    mixerPanel.setVisible (mixerOpen);
+    headerBar.setBodeActive (mixerOpen);
+    setSize (getWidth(), computeTotalHeight());
     resized();
     repaint();   // redraw editor frame for mixer panel
 }
@@ -665,7 +660,8 @@ void DysektEditor::timerCallback()
                 trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
                 addAndMakeVisible (*trimDialog);
                 trimDialog->toFront (false);
-                        resized();   // re-layout: waveform shrinks, trim bar placed below
+                actionPanel.setTrimLocked (true);
+                resized();   // re-layout: waveform shrinks, trim bar placed below
             }
         }
     }
