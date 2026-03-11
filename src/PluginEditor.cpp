@@ -40,7 +40,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       sliceWaveformLcd (p),
       sliceLane      (p),
       waveformView   (p),
-      scrollZoomBar  (p),
+      waveformOverview (p),
       sliceControlBar(p),
       actionPanel    (p, waveformView),
 
@@ -64,7 +64,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     addAndMakeVisible (sliceLane);
     addAndMakeVisible (waveformView);
-    addAndMakeVisible (scrollZoomBar);
+    addAndMakeVisible (waveformOverview);
     addAndMakeVisible (sliceControlBar);
     addAndMakeVisible (actionPanel);
 
@@ -276,14 +276,14 @@ void DysektEditor::paint (juce::Graphics& g)
     g.fillAll (getTheme().background);
 
     // ── Waveform frame — exact same style as SliceLcdDisplay / SliceWaveformLcd ──
-    if (actionPanel.isVisible() && waveformView.isVisible() && scrollZoomBar.isVisible())
+    if (actionPanel.isVisible() && waveformView.isVisible() && waveformOverview.isVisible())
     {
         const auto& abnd = actionPanel.getBounds();
-        const auto& sbnd = scrollZoomBar.getBounds();
+        const auto& sbnd = waveformOverview.getBounds();
         const auto  ac   = getTheme().accent;
 
         // Outer frame rect — kMargin inset on left/right, spanning actionPanel
-        // top to scrollZoomBar bottom.  Must match resized() exactly.
+        // top to waveformOverview bottom.  Must match resized() exactly.
         const int kFrameInset = 4;
         const int kFrameX     = kMargin;
         const int kFrameW     = getWidth() - kMargin * 2;
@@ -328,69 +328,6 @@ void DysektEditor::paint (juce::Graphics& g)
                               screenF.getX() + 4.f, screenF.getRight() - 4.f);
     }
 
-    // ── Mixer frame ───────────────────────────────────────────────────────────
-    if (mixerOpen && mixerPanel.isVisible() && ! mixerFrameRect.isEmpty())
-    {
-        const auto& ac  = getTheme().accent;
-        const juce::Rectangle<float> outerF = mixerFrameRect.toFloat();
-
-        // Outer gradient fill
-        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
-                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
-        g.setGradientFill (outerGrad);
-        g.fillRoundedRectangle (outerF, 4.0f);
-
-        // Outer accent border
-        g.setColour (ac.withAlpha (0.22f));
-        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.0f);
-
-        // Inner screen background
-        const auto screenF = outerF.reduced (4.0f);
-        g.setColour (getTheme().darkBar.darker (0.4f));
-        g.fillRoundedRectangle (screenF, 2.0f);
-
-        // Phosphor glow at top
-        juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, screenF.getY(),
-                                    juce::Colours::transparentBlack, 0.f, screenF.getY() + 16.f, false);
-        g.setGradientFill (glow);
-        g.fillRoundedRectangle (screenF, 2.0f);
-
-        // Inner border
-        g.setColour (ac.withAlpha (0.13f));
-        g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
-    }
-
-    // ── Browser frame ─────────────────────────────────────────────────────────
-    if (browserOpen && browserPanel.isVisible() && ! browserFrameRect.isEmpty())
-    {
-        const auto& ac  = getTheme().accent;
-        const juce::Rectangle<float> outerF = browserFrameRect.toFloat();
-
-        // Outer gradient fill
-        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
-                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
-        g.setGradientFill (outerGrad);
-        g.fillRoundedRectangle (outerF, 4.0f);
-
-        // Outer accent border
-        g.setColour (ac.withAlpha (0.22f));
-        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.0f);
-
-        // Inner screen background
-        const auto screenF = outerF.reduced (4.0f);
-        g.setColour (getTheme().darkBar.darker (0.4f));
-        g.fillRoundedRectangle (screenF, 2.0f);
-
-        // Phosphor glow at top
-        juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, screenF.getY(),
-                                    juce::Colours::transparentBlack, 0.f, screenF.getY() + 16.f, false);
-        g.setGradientFill (glow);
-        g.fillRoundedRectangle (screenF, 2.0f);
-
-        // Inner border
-        g.setColour (ac.withAlpha (0.13f));
-        g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
-    }
 }
 
 void DysektEditor::resized()
@@ -435,16 +372,14 @@ void DysektEditor::resized()
 
     // ── Panel slot — always reserved, Kontakt style ─────────────────────────
     {
-        area.removeFromBottom (4);                              // bottom gap
+        area.removeFromBottom (4);                              // gap: window bottom → panel bottom
         auto slot = area.removeFromBottom (kPanelSlotH);
-        area.removeFromBottom (4);                              // gap between slot and SCB
+        area.removeFromBottom (4);                              // gap: panel top → SCB bottom
 
         if (mixerOpen)
         {
             const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
             auto mb = juce::Rectangle<int> (kFX, slot.getY(), kFW, mh);
-            mixerFrameRect   = mb.expanded (3, 3);
-            browserFrameRect = {};
             mixerPanel.setBounds (mb);
             browserPanel.setBounds ({});
         }
@@ -452,27 +387,23 @@ void DysektEditor::resized()
         {
             const int bh = juce::jmin (kBrowserH, kPanelSlotH);
             auto bb = juce::Rectangle<int> (kFX, slot.getY(), kFW, bh);
-            browserFrameRect = bb.expanded (3, 3);
-            mixerFrameRect   = {};
             browserPanel.setBounds (bb);
             mixerPanel.setBounds ({});
         }
         else
         {
-            mixerFrameRect   = {};
-            browserFrameRect = {};
             mixerPanel.setBounds ({});
             browserPanel.setBounds ({});
         }
     }
 
-    // Slice control bar — aligned to waveform frame width
+    // Slice control bar — aligned to waveform frame width, 4px below waveform frame
     {
         auto scbArea = area.removeFromBottom (kSliceCtrlH);
         sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, kSliceCtrlH));
     }
 
-    area.removeFromBottom (4);  // gap between SCB top and waveform frame bottom
+    area.removeFromBottom (4);  // gap: waveform frame bottom → SCB top
 
     // ── LCD frame outer rect ─────────────────────────────────────────────────
     // The full outer rect spans actionArea.top → area.bottom, kMargin inset
@@ -497,7 +428,7 @@ void DysektEditor::resized()
     // Scrollbar — bottom of screen
     {
         auto r = juce::Rectangle<int> (screenX, screenBot - kScrollbarH, screenW, kScrollbarH);
-        scrollZoomBar.setBounds (r);
+        waveformOverview.setBounds (r);
     }
 
     // Action panel — top of screen
@@ -622,7 +553,7 @@ void DysektEditor::timerCallback()
     bool uiChanged = false, viewportChanged = false;
     const bool previewActive      = waveformView.hasActiveSlicePreview();
     const bool waveformInteracting = waveformView.isInteracting();
-    const bool rulerDragging      = scrollZoomBar.isDraggingNow();
+    const bool rulerDragging      = waveformOverview.isDraggingNow();
 
     const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
     if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
@@ -688,7 +619,7 @@ void DysektEditor::timerCallback()
 
     if (waveformNeedsRepaint) waveformView.repaint();
     if (laneNeedsRepaint)     sliceLane.repaint();
-    if (rulerNeedsRepaint)    scrollZoomBar.repaint();
+    if (rulerNeedsRepaint)    waveformOverview.repaint();
     // v8: refresh both LCD panels
     sliceLcd.repaintLcd();
     sliceWaveformLcd.repaintLcd();
