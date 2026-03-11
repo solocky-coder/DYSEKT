@@ -112,9 +112,6 @@ void ActionPanel::paint (juce::Graphics& g)
         g.fillRect (lazyChopBtn.getBounds());
     }
 
-                       trimActive ? getTheme().accent : getTheme().foreground);
-    if (trimActive)
-    { g.setColour (getTheme().accent.withAlpha (0.15f)); g.fillRect (trimBtn.getBounds()); }
 }
 
 
