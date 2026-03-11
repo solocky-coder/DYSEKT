@@ -131,7 +131,6 @@ void WaveformView::paint (juce::Graphics& g)
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
         drawPlaybackCursors (g);
-        if (trimMode) paintTrimOverlay (g);
         paintViewStateActive = false;
     }
     else
@@ -230,9 +229,6 @@ void WaveformView::paintTransientMarkers (juce::Graphics& g)
 
 void WaveformView::drawWaveform (juce::Graphics& g)
 {
-    // Waveform always uses the theme colour — slice colour only on accent bar.
-    juce::Colour waveformColour = getTheme().waveform;
-
     const int   cy    = getHeight() / 2;
     const float scale = (float) getHeight() * UILayout::waveformVerticalScale;
 
@@ -269,7 +265,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         // ── HARD MODE (original flat-fill rendering) ──────────────────────────
         if (samplesPerPixel < 1.0f)
         {
-            g.setColour (waveformColour.withAlpha (0.9f));
+            g.setColour (getTheme().waveform.withAlpha (0.9f));
             juce::Path path;
             bool started = false;
             for (int px = 0; px < numPeaks; ++px)
@@ -297,7 +293,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         }
         else
         {
-            g.setColour (waveformColour);
+            g.setColour (getTheme().waveform);
             g.fillPath (fillPath);
 
             if (samplesPerPixel < 8.0f)
@@ -317,7 +313,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
     else
     {
         // ── SOFT MODE (TAL-style: gradient fill + bright outline stroke) ──────
-        const juce::Colour waveCol  = waveformColour;
+        const juce::Colour waveCol  = getTheme().waveform;
         const juce::Colour bgCol    = getTheme().waveformBg;
         const int h = getHeight();
 
@@ -428,8 +424,8 @@ void WaveformView::drawWaveform (juce::Graphics& g)
 void WaveformView::drawSlices (juce::Graphics& g)
 {
     const auto& ui = processor.getUiSliceSnapshot();
-    int sel = ui.selectedSlice;
-    int num = ui.numSlices;
+    int sel = ui.autoSliced ? -1 : ui.selectedSlice;
+    int num = ui.autoSliced ?  0 : ui.numSlices;
 
     for (int i = 0; i < num; ++i)
     {
@@ -518,14 +514,6 @@ void WaveformView::drawSlices (juce::Graphics& g)
             g.drawVerticalLine (x1, 0.0f, (float) getHeight());
             g.drawVerticalLine (x2 - 1, 0.0f, (float) getHeight());
         }
-
-        // ── Colour accent bar at BOTTOM of waveform ───────────────────────
-        {
-            const int H = getHeight();
-            const int barH = (i == sel) ? 3 : 1;
-            g.setColour (s.colour.withAlpha ((i == sel) ? 0.90f : 0.45f));
-            g.fillRect (x1, H - barH, x2 - x1, barH);
-        }
     }
 }
 
@@ -580,8 +568,8 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
     auto sampleSnap = processor.sampleData.getSnapshot();
     if (sampleSnap == nullptr) return;
     const auto& ui = processor.getUiSliceSnapshot();
-    int sel = ui.selectedSlice;
-    int num = ui.numSlices;
+    int sel = ui.autoSliced ? -1 : ui.selectedSlice;
+    int num = ui.autoSliced ?  0 : ui.numSlices;
     HoveredEdge newEdge = HoveredEdge::None;
 
     if (sel >= 0 && sel < num && ! sliceDrawMode && ! altModeActive)
@@ -627,19 +615,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     if (sampleSnap == nullptr)
         return;
 
-    // Trim mode: intercept clicks for trim marker drag
-    if (trimMode)
-    {
-        static constexpr int kTrimMarkerHitTolerance = 6;
-        int inX  = sampleToPixel (trimInPoint);
-        int outX = sampleToPixel (trimOutPoint);
-        if (std::abs (e.x - inX) <= kTrimMarkerHitTolerance)
-            { dragMode = DragTrimIn;  return; }
-        if (std::abs (e.x - outX) <= kTrimMarkerHitTolerance)
-            { dragMode = DragTrimOut; return; }
-        return;  // all other trim-mode clicks are no-ops
-    }
-
     // Middle-mouse drag: scroll+zoom (like ScrollZoomBar)
     if (e.mods.isMiddleButtonDown())
     {
@@ -681,8 +656,8 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
 
     // Check slice edges (6px hot zone) — only for already-selected slice
     const auto& ui = processor.getUiSliceSnapshot();
-    int sel = ui.selectedSlice;
-    int num = ui.numSlices;
+    int sel = ui.autoSliced ? -1 : ui.selectedSlice;
+    int num = ui.autoSliced ?  0 : ui.numSlices;
 
     if (sel >= 0 && sel < num)
     {
@@ -767,26 +742,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
 
 void WaveformView::mouseDrag (const juce::MouseEvent& e)
 {
-    if (dragMode == DragTrimIn || dragMode == DragTrimOut)
-    {
-        static constexpr int kMinTrimRegionSamples = 64;
-        auto sn = processor.sampleData.getSnapshot();
-        int totalFrames = sn ? sn->buffer.getNumSamples() : 1;
-        int newPos = juce::jlimit (0, totalFrames, pixelToSample (e.x));
-        if (dragMode == DragTrimIn)
-        {
-            newPos = juce::jlimit (0, trimOutPoint - kMinTrimRegionSamples, newPos);
-            trimInPoint = newPos;
-        }
-        else
-        {
-            newPos = juce::jlimit (trimInPoint + kMinTrimRegionSamples, totalFrames, newPos);
-            trimOutPoint = newPos;
-        }
-        repaint();
-        return;
-    }
-
     syncAltStateFromMods (e.mods);
 
     auto sampleSnap = processor.sampleData.getSnapshot();
@@ -869,13 +824,6 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
 
 void WaveformView::mouseUp (const juce::MouseEvent& e)
 {
-    if (dragMode == DragTrimIn || dragMode == DragTrimOut)
-    {
-        dragMode = None;
-        repaint();
-        return;
-    }
-
     syncAltStateFromMods (e.mods);
 
     auto sampleSnap = processor.sampleData.getSnapshot();
@@ -1071,41 +1019,7 @@ void WaveformView::setTrimMode (bool active)
     trimMode = active;
     if (! active)
     {
-        dragMode     = None;
-        trimInPoint  = 0;
-        trimOutPoint = 0;
+        dragMode = None;
     }
     repaint();
-}
-
-// ── paintTrimOverlay ──────────────────────────────────────────────────────────
-void WaveformView::paintTrimOverlay (juce::Graphics& g)
-{
-    const int w = getWidth();
-    const int h = getHeight();
-
-    int inX  = sampleToPixel (trimInPoint);
-    int outX = sampleToPixel (trimOutPoint);
-
-    // Shade regions outside trim window
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillRect (0, 0, inX,      h);
-    g.fillRect (outX, 0, w - outX, h);
-
-    // IN marker — cyan, right-pointing triangle
-    g.setColour (juce::Colour (0xFF00FFFF));
-    g.drawVerticalLine (inX, 0.0f, (float) h);
-    juce::Path tri;
-    tri.addTriangle ((float) inX, 4.f, (float) (inX + 8), 10.f, (float) inX, 16.f);
-    g.fillPath (tri);
-    g.setFont (DysektLookAndFeel::makeFont (9.0f));
-    g.drawText ("IN",  inX + 2,  2, 24, 12, juce::Justification::left);
-
-    // OUT marker — orange, left-pointing triangle
-    g.setColour (juce::Colour (0xFFFF8C00));
-    g.drawVerticalLine (outX, 0.0f, (float) h);
-    juce::Path tri2;
-    tri2.addTriangle ((float) outX, 4.f, (float) (outX - 8), 10.f, (float) outX, 16.f);
-    g.fillPath (tri2);
-    g.drawText ("OUT", outX - 28, 2, 28, 12, juce::Justification::right);
 }

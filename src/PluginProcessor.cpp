@@ -1060,8 +1060,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
         case CmdApplyTrim:
             // 1. Physically crop the audio buffer to [trimStart, trimEnd)
-            // 2. Re-offset all slice start positions relative to the new origin
-            // 3. Clamp any out-of-range slices so nothing references dead audio
+            // 2. Clear all slices — trimmed sample enters slice window clean,
+            //    playing chromatically until user adds first slice (same as fresh load).
             {
                 const int tStart = cmd.intParam1;
                 const int tEnd   = cmd.intParam2;
@@ -1074,19 +1074,21 @@ void DysektProcessor::handleCommand (const Command& cmd)
                         sampleData.applyDecodedSample (std::move (trimmed));
                 }
 
-                const int newLen = tEnd - tStart;
-                const int n      = sliceManager.getNumSlices();
-                for (int i = 0; i < n; ++i)
+                const int totalFrames = sampleData.getNumFrames();
+                sliceManager.clearAll();
+                if (totalFrames > 0)
                 {
-                    auto& sl = sliceManager.getSlice (i);
-                    // Re-origin: subtract trim start, then clamp inside new buffer
-                    sl.startSample = juce::jlimit (0, juce::jmax (0, newLen - 1),
-                                                   sl.startSample - tStart);
+                    // Auto-slice so audio engine has valid bounds for chromatic play
+                    int idx = sliceManager.createSlice (0, totalFrames);
+                    if (idx >= 0)
+                    {
+                        sliceManager.getSlice (idx).midiNote = 36;
+                        sliceManager.rebuildMidiMap();
+                    }
                 }
-                sliceManager.sortByStart();
-                // Restore selection to first slice so chromatic mode stays functional
-                if (sliceManager.getNumSlices() > 0)
-                    sliceManager.selectedSlice.store (0, std::memory_order_relaxed);
+                // Hide auto-slice from UI; user adds real slices via ADD SLICE
+                sliceManager.selectedSlice.store (-1, std::memory_order_relaxed);
+                autoSliced.store (true, std::memory_order_relaxed);
             }
             publishUiSliceSnapshot();
             break;

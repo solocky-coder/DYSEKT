@@ -128,6 +128,9 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         // Initialise markers at full extent so user drags inward
         waveformView.enterTrimMode (0, totalFrames);
         processor.trimModeActive.store (true, std::memory_order_relaxed);  // CC → trim handles
+        // Initialise trim atomics immediately so MIDI play works before first timer tick
+        processor.trimRegionStart.store (0,           std::memory_order_relaxed);
+        processor.trimRegionEnd  .store (totalFrames, std::memory_order_relaxed);
 
         trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
         addAndMakeVisible (*trimDialog);
