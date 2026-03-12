@@ -113,8 +113,7 @@ FileBrowserPanel::~FileBrowserPanel()
 
 void FileBrowserPanel::resized()
 {
-    // Inner screen — 4px inset to stay inside the LCD-style frame border
-    auto bounds = getLocalBounds().reduced (4);
+    auto bounds = getLocalBounds();
 
     if (previewVisible)
     {
