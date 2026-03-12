@@ -555,24 +555,6 @@ void DysektEditor::timerCallback()
     const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
     if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
 
-    // ── MIDI follow: always sync icon to processor state ─────────────────────
-    // (processor can change it independently via LazyChop or state restore)
-    {
-        const bool procState = processor.midiSelectsSlice.load (std::memory_order_relaxed);
-        headerBar.setMidiFollowActive (procState);
-    }
-
-    // ── Auto-enable MIDI follow on first slice creation ────────────────────
-    {
-        const int curSlices = processor.sliceManager.getNumSlices();
-        if (lastNumSlices == 0 && curSlices > 0)
-        {
-            processor.midiSelectsSlice.store (true, std::memory_order_relaxed);
-            headerBar.setMidiFollowActive (true);
-        }
-        lastNumSlices = curSlices;
-    }
-
     const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
     if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
 
@@ -626,14 +608,30 @@ void DysektEditor::timerCallback()
         }
     }
 
-    // Sync trim handles: always proc → view.
-    // Drag and MIDI both write to processor directly; view follows.
+    // Sync trim handles bidirectionally.
+    // MIDI CC writes processor atomics directly; the timer must push those
+    // changes back into WaveformView so the overlay redraws correctly, and
+    // must also push WaveformView drag positions into the processor so MIDI
+    // playback uses the current region.
     if (processor.trimModeActive.load (std::memory_order_relaxed))
     {
         const int procStart = processor.trimRegionStart.load (std::memory_order_relaxed);
         const int procEnd   = processor.trimRegionEnd  .load (std::memory_order_relaxed);
-        if (procStart != waveformView.getTrimIn() || procEnd != waveformView.getTrimOut())
-            waveformView.setTrimPoints (procStart, procEnd);
+        const int viewStart = waveformView.getTrimIn();
+        const int viewEnd   = waveformView.getTrimOut();
+
+        if (procStart != viewStart || procEnd != viewEnd)
+        {
+            // Processor was moved externally (MIDI CC) — push back into view.
+            if (procStart != viewStart || procEnd != viewEnd)
+                waveformView.setTrimPoints (procStart, procEnd);
+        }
+        else
+        {
+            // View was dragged — push into processor.
+            processor.trimRegionStart.store (viewStart, std::memory_order_relaxed);
+            processor.trimRegionEnd  .store (viewEnd,   std::memory_order_relaxed);
+        }
     }
 
     const int targetHz = waveformAnimating ? 60 : 30;
