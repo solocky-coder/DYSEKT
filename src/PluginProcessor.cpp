@@ -1074,18 +1074,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
                 const int totalFrames = sampleData.getNumFrames();
                 sliceManager.clearAll();
-                if (totalFrames > 0)
-                {
-                    // Auto-slice so audio engine has valid bounds for chromatic play
-                    int idx = sliceManager.createSlice (0, totalFrames);
-                    if (idx >= 0)
-                    {
-                        sliceManager.getSlice (idx).midiNote = 36;
-                        sliceManager.rebuildMidiMap();
-                    }
-                }
-                // Hide auto-slice from UI; user adds real slices via ADD SLICE
                 sliceManager.selectedSlice.store (-1, std::memory_order_relaxed);
+                (void) totalFrames;
             }
             publishUiSliceSnapshot();
             break;
@@ -1467,28 +1457,13 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (latestLoadKind.load (std::memory_order_acquire) == (int) LoadKindReplace)
             {
                 sliceManager.clearAll();
-                const int totalFrames = sampleData.getNumFrames();
                 const juce::String fname = sampleData.getFileName();
                 const bool isDefault = fname.equalsIgnoreCase ("Empty.wav")
                                     || fname.equalsIgnoreCase ("DYSEKT_default.wav")
                                     || fname.isEmpty();
-
-                if (totalFrames > 0 && ! isDefault)
-                {
-                    // Auto-slice: makes sample immediately playable via MIDI note 36.
-                    int idx = sliceManager.createSlice (0, totalFrames);
-                    if (idx >= 0)
-                    {
-                        sliceManager.getSlice (idx).midiNote = 36;
-                        sliceManager.rebuildMidiMap();
-                        sliceManager.selectedSlice.store (0, std::memory_order_relaxed);
-                    }
-                }
-                else
-                {
-                    // Default sample: no slice, LCD shows EMPTY.
-                    sliceManager.selectedSlice.store (-1, std::memory_order_relaxed);
-                }
+                // No auto-slice: sample is immediately playable chromatically
+                // via the unsliced path. User adds slices explicitly via ADD SLICE.
+                sliceManager.selectedSlice.store (isDefault ? -1 : -1, std::memory_order_relaxed);
             }
             else
             {

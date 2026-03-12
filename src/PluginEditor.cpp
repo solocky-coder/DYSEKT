@@ -592,6 +592,11 @@ void DysektEditor::timerCallback()
             const int totalFrames = snap->buffer.getNumSamples();
             waveformView.enterTrimMode (0, totalFrames);
 
+            // Enable chromatic playback over the trim region
+            processor.trimModeActive.store (true, std::memory_order_relaxed);
+            processor.trimRegionStart.store (0,           std::memory_order_relaxed);
+            processor.trimRegionEnd  .store (totalFrames, std::memory_order_relaxed);
+
             // Show the trim bar overlay
             if (trimDialog == nullptr)
             {
