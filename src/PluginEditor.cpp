@@ -372,9 +372,9 @@ void DysektEditor::resized()
 
     // ── Panel slot — always reserved, Kontakt style ─────────────────────────
     {
-        area.removeFromBottom (4);                              // gap: window bottom → panel bottom
+        area.removeFromBottom (kMargin);                        // gap: window bottom → panel bottom
         auto slot = area.removeFromBottom (kPanelSlotH);
-        area.removeFromBottom (4);                              // gap: panel top → SCB bottom
+        area.removeFromBottom (kMargin);                        // gap: panel top → SCB bottom
 
         if (mixerOpen)
         {
@@ -403,7 +403,7 @@ void DysektEditor::resized()
         sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, kSliceCtrlH));
     }
 
-    area.removeFromBottom (4);  // gap: waveform frame bottom → SCB top
+    area.removeFromBottom (kMargin);  // gap: waveform frame bottom → SCB top
 
     // ── LCD frame outer rect ─────────────────────────────────────────────────
     // The full outer rect spans actionArea.top → area.bottom, kMargin inset
