@@ -51,7 +51,8 @@ private:
                             const juce::String& label, int fieldId, int& outWidth);
 
     void drawKnob (juce::Graphics& g, int cx, int cy, int r,
-                   float normVal, bool locked, bool armed, bool mapped);
+                   float normVal, bool locked, bool armed, bool mapped,
+                   juce::Colour tintOverride = {});
 
     void drawLockIcon (juce::Graphics& g, int x, int y, bool locked);
     void showTextEditor (const ParamCell& cell, float currentValue);

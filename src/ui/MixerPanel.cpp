@@ -13,6 +13,7 @@ MixerPanel::MixerPanel (DysektProcessor& p)
     : processor (p)
 {
     setWantsKeyboardFocus (false);
+    startTimerHz (30);
 }
 
 MixerPanel::~MixerPanel() = default;
@@ -245,37 +246,96 @@ void MixerPanel::drawChroBadge (juce::Graphics& g, int cx, int cy, int channel, 
 void MixerPanel::drawMeter (juce::Graphics& g,
                              int x, int y, int w, int h,
                              float peakL, float peakR,
-                             juce::Colour tint) const
+                             juce::Colour tint, int si) const
 {
-    // Segmented LED-style meter — two rows (L / R)
-    const int segs    = 20;
-    const int segW    = std::max (1, (w - segs) / segs);
-    const int gap     = 1;
-    const int rowH    = (h - gap) / 2;
+    // ── Phosphor hairline meter ───────────────────────────────────────────
+    // Two channels (L top, R bottom), each a single 1px fill bar plus a
+    // glowing 1px hold marker.  Colours shift green → yellow → red like
+    // a phosphor CRT trace.
 
-    auto drawRow = [&] (int ry, float pk)
+    const int gap    = 2;
+    const int barH   = (h - gap) / 2;   // height of each channel bar
+    const int holdW  = 2;               // hold marker width in px
+
+    // Update hold registers
+    const int si2 = juce::jlimit (0, kMaxHoldSlices - 1, si);
+    if (peakL > holdL[si2]) holdL[si2] = peakL;
+    if (peakR > holdR[si2]) holdR[si2] = peakR;
+
+    // Perceptual mapping: sqrt gives better visual resolution in the low end
+    auto toFill = [] (float pk) -> float
     {
-        // Apply perceptual curve (sqrt) then map to segments
-        const float fill = std::sqrt (juce::jlimit (0.0f, 1.0f, pk));
-        const int litSegs = juce::roundToInt (fill * (float) segs);
+        return std::sqrt (juce::jlimit (0.0f, 1.0f, pk));
+    };
 
-        for (int i = 0; i < segs; ++i)
+    // Phosphor colour at normalised position 0-1 along bar
+    auto phosphorCol = [&] (float pos, float /*pk*/) -> juce::Colour
+    {
+        if (pos < 0.70f)
         {
-            const int sx = x + i * (segW + gap);
-            const bool lit = (i < litSegs);
-
-            juce::Colour col;
-            if      (i < 14) col = tint;                              // green zone (0-70%)
-            else if (i < 17) col = juce::Colour (0xFFFFE000);        // yellow zone (70-85%)
-            else             col = juce::Colour (0xFFFF2222);        // red zone (85-100%)
-
-            g.setColour (lit ? col.withAlpha (0.88f) : col.withAlpha (0.10f));
-            g.fillRect (sx, ry, segW, rowH);
+            // Green zone: dim base → bright phosphor green
+            const float t = pos / 0.70f;
+            return tint.withAlpha (0.25f + t * 0.65f);
+        }
+        else if (pos < 0.85f)
+        {
+            // Yellow zone
+            const float t = (pos - 0.70f) / 0.15f;
+            return tint.interpolatedWith (juce::Colour (0xFFFFE000), t)
+                       .withAlpha (0.88f);
+        }
+        else
+        {
+            // Red zone
+            const float t = (pos - 0.85f) / 0.15f;
+            return juce::Colour (0xFFFF2222).withAlpha (0.75f + t * 0.20f);
         }
     };
 
-    drawRow (y,          peakL);
-    drawRow (y + rowH + gap, peakR);
+    auto drawBar = [&] (int barY, float pk, float hold)
+    {
+        const float fill = toFill (pk);
+        const int   litW = juce::roundToInt (fill * (float)(w - holdW - 2));
+
+        // Dark background track
+        g.setColour (juce::Colour (0xFF0A0A0A));
+        g.fillRect (x, barY, w, barH);
+
+        // Thin border
+        g.setColour (juce::Colour (0xFF1E1E1E));
+        g.drawRect (x, barY, w, barH);
+
+        // Gradient fill — drawn as a single gradient rect for performance
+        if (litW > 0)
+        {
+            juce::ColourGradient grad (phosphorCol (0.0f,  pk), (float) x,           (float) barY,
+                                       phosphorCol (fill,  pk), (float)(x + litW),   (float) barY,
+                                       false);
+            // add midpoint anchors for accurate colour mapping
+            grad.addColour (0.70 / (double) juce::jmax (fill, 0.01f),
+                            phosphorCol (0.70f * fill, pk));
+            grad.addColour (juce::jlimit (0.0, 1.0, 0.85 / (double) juce::jmax (fill, 0.01f)),
+                            phosphorCol (0.85f * fill, pk));
+            g.setGradientFill (grad);
+            g.fillRect (x + 1, barY + 1, litW, barH - 2);
+        }
+
+        // Hold marker — bright hairline with soft glow
+        const float hFill = toFill (hold);
+        const int   hx    = x + 1 + juce::roundToInt (hFill * (float)(w - holdW - 2));
+        if (hFill > 0.01f && hx < x + w - 1)
+        {
+            // Outer glow
+            g.setColour (phosphorCol (hFill, hold).withAlpha (0.25f));
+            g.fillRect  (hx - 1, barY + 1, holdW + 2, barH - 2);
+            // Core bright line
+            g.setColour (phosphorCol (hFill, hold).withAlpha (0.95f));
+            g.fillRect  (hx, barY + 1, holdW, barH - 2);
+        }
+    };
+
+    drawBar (y,            peakL, holdL[si2]);
+    drawBar (y + barH + gap, peakR, holdR[si2]);
 }
 
 void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected) const
@@ -400,7 +460,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
             const int si = idx < kMaxMeterSlices ? idx : 0;
             const float pkL = processor.slicePeakL[si].load (std::memory_order_relaxed);
             const float pkR = processor.slicePeakR[si].load (std::memory_order_relaxed);
-            drawMeter (g, mx, ry + 4, mw, kRowH - 8, pkL, pkR, dot);
+            drawMeter (g, mx, ry + 4, mw, kRowH - 8, pkL, pkR, dot, si);
         }
     }
 }

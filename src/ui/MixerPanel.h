@@ -48,8 +48,19 @@ public:
     /** Called from editor timer — snapshot version check, repaint if stale. */
     void updateFromSnapshot();
 
-    // Timer (drives scroll animation if ever needed)
-    void timerCallback() override {}
+    // Timer (drives hold decay and repaints while voices are active)
+    void timerCallback() override
+    {
+        static constexpr float kHoldDecay = 0.94f;   // ~40 dB/s visual falloff
+        bool anyHeld = false;
+        for (int i = 0; i < kMaxHoldSlices; ++i)
+        {
+            holdL[i] *= kHoldDecay;
+            holdR[i] *= kHoldDecay;
+            if (holdL[i] > 0.001f || holdR[i] > 0.001f) anyHeld = true;
+        }
+        if (anyHeld) repaint();
+    }
 
 private:
     // ── Column layout ─────────────────────────────────────────────────────
@@ -73,7 +84,7 @@ private:
                         int muteGroup, bool locked) const;
     void drawChroBadge (juce::Graphics&, int cx, int cy, int channel, bool locked) const;
     void drawMeter     (juce::Graphics&, int x, int y, int w, int h,
-                        float peakL, float peakR, juce::Colour tint) const;
+                        float peakL, float peakR, juce::Colour tint, int sliceIdx) const;
 
     juce::String fmtGain (float db)      const;
     juce::String fmtPan  (float pan)     const;
@@ -104,6 +115,11 @@ private:
         int    startY    { 0 };
         float  startVal  { 0.f };
     } drag;
+
+    // ── Peak-hold for phosphor meter (UI-side, decays in timerCallback) ──
+    static constexpr int kMaxHoldSlices = 128;  // matches DysektProcessor::kMaxMeterSlices
+    mutable std::array<float, kMaxHoldSlices> holdL {};
+    mutable std::array<float, kMaxHoldSlices> holdR {};
 
     // ── Scroll ────────────────────────────────────────────────────────────
     int   scrollPixels { 0 };   // vertical scroll offset in pixels

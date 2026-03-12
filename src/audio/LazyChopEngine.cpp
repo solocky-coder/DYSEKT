@@ -171,7 +171,10 @@ int LazyChopEngine::onNote (int note, VoicePool& voicePool, SliceManager& sliceM
 
     // Subsequent unassigned note — place slice boundary at playhead
     auto& v = voicePool.getVoice (getPreviewVoiceIndex());
-    int playhead = (int) std::floor (v.position);
+    double rawPos = v.stretchActive ? v.stretchSrcPos
+                  : v.bungeeActive  ? v.bungeeSrcPos
+                  :                   v.position;
+    int playhead = (int) std::floor (rawPos);
 
     if (snapEnabled && sampleBuffer != nullptr)
         playhead = AudioAnalysis::findNearestZeroCrossing (*sampleBuffer, playhead);

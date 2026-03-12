@@ -1101,6 +1101,13 @@ void WaveformView::enterTrimMode (int start, int end)
     repaint();
 }
 
+void WaveformView::setTrimPoints (int inPt, int outPt)
+{
+    trimInPoint  = inPt;
+    trimOutPoint = outPt;
+    repaint();
+}
+
 // setTrimMode — toggle used by TrimDialog buttons (Apply / Cancel).
 // When active=false the overlay is hidden; a repaint clears the markers.
 void WaveformView::setTrimMode (bool active)

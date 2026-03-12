@@ -5,6 +5,22 @@
 #include "../PluginProcessor.h"
 #include "../audio/GrainEngine.h"
 
+// ── Fixed ADSR knob colours — match LCD node colours, theme-independent ───────
+static const juce::Colour kAdsrAttack  { 0xFF00FF87 };   // Toxic Lime
+static const juce::Colour kAdsrDecay   { 0xFFFFE800 };   // Radioactive Yellow
+static const juce::Colour kAdsrSustain { 0xFF00C8FF };   // Ice Blue
+static const juce::Colour kAdsrRelease { 0xFFFF6B00 };   // Molten Orange
+
+static juce::Colour adsrTintForField (int fieldId)
+{
+    using F = DysektProcessor;
+    if (fieldId == F::FieldAttack)  return kAdsrAttack;
+    if (fieldId == F::FieldDecay)   return kAdsrDecay;
+    if (fieldId == F::FieldSustain) return kAdsrSustain;
+    if (fieldId == F::FieldRelease) return kAdsrRelease;
+    return {};  // invalid = use theme default
+}
+
 namespace
 {
 constexpr int kParamCellTextX    = 14;
@@ -68,7 +84,8 @@ void SliceControlBar::drawParamCell (juce::Graphics& g, int x, int y,
 void SliceControlBar::drawKnob (juce::Graphics& g,
                                 int cx, int cy, int r,
                                 float normVal,
-                                bool locked, bool armed, bool mapped)
+                                bool locked, bool armed, bool mapped,
+                                juce::Colour tintOverride)
 {
     const float angle = kKnobStart + normVal * (kKnobEnd - kKnobStart);
     const float fcx = (float) cx, fcy = (float) cy, fr = (float) r;
@@ -79,10 +96,14 @@ void SliceControlBar::drawKnob (juce::Graphics& g,
     g.strokePath (track, juce::PathStrokeType (1.5f,
                   juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    juce::Colour arcCol = armed  ? getTheme().accent
-                        : mapped ? getTheme().accent.withAlpha (0.7f)
+    // Base colour: fixed tint if provided, otherwise theme accent
+    const juce::Colour base = tintOverride.isTransparent() ? getTheme().accent
+                                                            : tintOverride;
+
+    juce::Colour arcCol = armed  ? base
+                        : mapped ? base.withAlpha (0.7f)
                         : locked ? getTheme().lockActive.withAlpha (0.85f)
-                                 : getTheme().accent.withAlpha (0.42f);
+                                 : base.withAlpha (0.55f);
 
     juce::Path arc;
     arc.addCentredArc (fcx, fcy, fr, fr, 0.f, kKnobStart, angle, true);
@@ -156,7 +177,8 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
         g.fillRoundedRectangle ((float) x, (float) y, (float) cellW, (float) cellH, 2.f);
     }
 
-    drawKnob (g, knobCX, knobCY, kKnobR, normVal, locked, armed, mapped);
+    drawKnob (g, knobCX, knobCY, kKnobR, normVal, locked, armed, mapped,
+              adsrTintForField (fieldId));
 
     if (armed || mapped)
     {
@@ -169,10 +191,13 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
 
     const int textX = knobCX + kKnobR + 4;
     const int textW = cellW - (textX - x) - 1;
+    const juce::Colour adsr = adsrTintForField (fieldId);
+    const bool hasAdsr = ! adsr.isTransparent();
 
     g.setFont (DysektLookAndFeel::makeFont (10.0f));
-    g.setColour (locked ? getTheme().lockActive.withAlpha (0.8f)
-                        : getTheme().foreground.withAlpha (0.42f));
+    g.setColour (locked    ? getTheme().lockActive.withAlpha (0.8f)
+                : hasAdsr  ? adsr.withAlpha (0.70f)
+                           : getTheme().foreground.withAlpha (0.42f));
     g.drawText (label, textX, y + 2,  textW, 12, juce::Justification::centredLeft);
 
     g.setFont (DysektLookAndFeel::makeFont (11.0f));

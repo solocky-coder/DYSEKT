@@ -46,33 +46,48 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         }
         g.strokePath (p, juce::PathStrokeType (1.5f));
     }
-    else if (type == 2) // MIDI Follow — note + right arrow, scaled up
+    else if (type == 2) // MIDI Follow — 5-pin DIN connector
     {
-        // Musical note notehead
-        const float nhW = 6.0f, nhH = 4.5f;
-        const float nhCX = cx - 4.5f, nhCY = cy2 + 2.5f;
-        juce::Path note;
-        note.addEllipse (nhCX - nhW * 0.5f, nhCY - nhH * 0.5f, nhW, nhH);
-        note.applyTransform (juce::AffineTransform::rotation (-0.35f, nhCX, nhCY));
-        g.fillPath (note);
-        // Stem
-        const float stemX = nhCX + nhW * 0.42f;
-        g.drawLine (stemX, nhCY - 0.5f, stemX, nhCY - 11.0f, 1.5f);
-        // Flag
-        juce::Path flag;
-        flag.startNewSubPath (stemX, nhCY - 11.0f);
-        flag.cubicTo (stemX + 6.0f, nhCY - 9.0f, stemX + 5.5f, nhCY - 6.5f, stemX + 2.0f, nhCY - 5.0f);
-        g.strokePath (flag, juce::PathStrokeType (1.4f));
-        // Arrow
-        const float ax = cx + 4.5f, ay = cy2 + 1.0f;
-        const float aw = 9.0f, ahh = 3.5f, ahd = 4.0f;
-        g.drawLine (ax, ay, ax + aw - ahd, ay, 1.4f);
-        juce::Path head;
-        head.startNewSubPath (ax + aw - ahd, ay - ahh);
-        head.lineTo          (ax + aw,       ay);
-        head.lineTo          (ax + aw - ahd, ay + ahh);
-        head.closeSubPath();
-        g.fillPath (head);
+        // Outer D-shell body (semicircle top, flat bottom)
+        const float bW = 16.0f, bH = 10.0f;
+        const float bX = cx - bW * 0.5f, bY = cy2 - 4.0f;
+
+        // Body fill + stroke
+        juce::Path body;
+        body.addRoundedRectangle (bX, bY, bW, bH, 2.5f);
+        g.setColour (col.withAlpha (active ? 0.18f : 0.09f));
+        g.fillPath (body);
+        g.setColour (col.withAlpha (active ? 0.90f : 0.55f));
+        g.strokePath (body, juce::PathStrokeType (1.2f));
+
+        // 5 pins arranged in a D-sub arc inside the body
+        // Standard MIDI DIN layout: 3 on top row, 2 on bottom row
+        struct Pin { float x, y; };
+        const float pr = 1.5f;  // pin radius
+        const float pc = active ? 0.95f : 0.60f;
+
+        Pin pins[5] = {
+            { cx - 5.0f, bY + 3.0f },   // pin 1 (top-left)
+            { cx,        bY + 2.2f },   // pin 2 (top-centre)
+            { cx + 5.0f, bY + 3.0f },   // pin 3 (top-right)
+            { cx - 2.8f, bY + 6.5f },   // pin 4 (bottom-left)
+            { cx + 2.8f, bY + 6.5f },   // pin 5 (bottom-right)
+        };
+
+        for (const auto& p : pins)
+        {
+            // Pin hole outline
+            g.setColour (col.withAlpha (pc));
+            g.drawEllipse (p.x - pr, p.y - pr, pr * 2.0f, pr * 2.0f, 1.0f);
+            // Pin centre dot
+            g.setColour (col.withAlpha (active ? 0.70f : 0.30f));
+            g.fillEllipse (p.x - 0.7f, p.y - 0.7f, 1.4f, 1.4f);
+        }
+
+        // Small cable stub at bottom
+        g.setColour (col.withAlpha (active ? 0.75f : 0.40f));
+        g.drawLine (cx, bY + bH, cx, bY + bH + 3.5f, 1.5f);
+        g.fillEllipse (cx - 2.0f, bY + bH + 3.0f, 4.0f, 3.0f);
     }
     else // type == 3: Mixer — three vertical faders at different positions
     {

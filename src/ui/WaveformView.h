@@ -34,6 +34,7 @@ public:
 
     // Trim mode — entered when the user asks to trim before loading
     void enterTrimMode (int start, int end);
+    void setTrimPoints (int inPt, int outPt);  // MIDI feedback path
     void exitTrimMode();
     void getTrimBounds (int& outStart, int& outEnd) const;
     bool isTrimModeActive() const noexcept { return trimMode; }

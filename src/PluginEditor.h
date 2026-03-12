@@ -62,6 +62,7 @@ private:
     bool     lastPreviewActive     = false;
     float    savedScale            = -1.0f;
     uint32_t lastUiSnapshotVersion = 0;
+    int      lastNumSlices         = -1;  // for auto-enable midi follow on first slice
 
     bool browserOpen = false;
     bool mixerOpen   = false;
