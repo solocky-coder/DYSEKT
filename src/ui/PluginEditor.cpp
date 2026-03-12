@@ -489,9 +489,6 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
     if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
     { toggleShortcutsPanel(); return true; }
 
-    if (code == juce::KeyPress::escapeKey && actionPanel.isAutoChopOpen())
-    { actionPanel.toggleAutoChop(); return true; }
-    if (code == 'C') { actionPanel.toggleAutoChop(); return true; }
     if (code == 'A') { waveformView.setSliceDrawMode (! waveformView.isSliceDrawModeActive()); repaint(); return true; }
     if (code == 'L')
     {

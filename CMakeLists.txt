@@ -95,7 +95,6 @@ target_sources(Dysekt PRIVATE
     src/audio/VoicePool.cpp
     src/audio/GrainEngine.cpp
     src/audio/LazyChopEngine.cpp
-    src/audio/TransientDetector.cpp
     src/audio/SoundFontLoader.cpp
     src/params/ParamLayout.cpp
     src/ui/DysektLookAndFeel.cpp
@@ -106,7 +105,6 @@ target_sources(Dysekt PRIVATE
     src/ui/WaveformOverview.cpp
     src/ui/SliceLane.cpp
     src/ui/ActionPanel.cpp
-    src/ui/AutoChopPanel.cpp
     src/ui/LogoBar.cpp
     src/ui/KeysPanel.cpp
     src/ui/FileBrowserPanel.cpp
