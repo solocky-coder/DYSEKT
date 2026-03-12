@@ -850,6 +850,7 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     if (dragMode == DragTrimIn)
     {
         trimInPoint = juce::jlimit (0, trimOutPoint - 64, samplePos);
+        processor.trimRegionStart.store (trimInPoint, std::memory_order_relaxed);
         repaint();
         return;
     }
@@ -857,6 +858,7 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     {
         trimOutPoint = juce::jlimit (trimInPoint + 64,
                                      sampleSnap->buffer.getNumSamples(), samplePos);
+        processor.trimRegionEnd.store (trimOutPoint, std::memory_order_relaxed);
         repaint();
         return;
     }

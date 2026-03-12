@@ -626,30 +626,14 @@ void DysektEditor::timerCallback()
         }
     }
 
-    // Sync trim handles bidirectionally.
-    // MIDI CC writes processor atomics directly; the timer must push those
-    // changes back into WaveformView so the overlay redraws correctly, and
-    // must also push WaveformView drag positions into the processor so MIDI
-    // playback uses the current region.
+    // Sync trim handles: always proc → view.
+    // Drag and MIDI both write to processor directly; view follows.
     if (processor.trimModeActive.load (std::memory_order_relaxed))
     {
         const int procStart = processor.trimRegionStart.load (std::memory_order_relaxed);
         const int procEnd   = processor.trimRegionEnd  .load (std::memory_order_relaxed);
-        const int viewStart = waveformView.getTrimIn();
-        const int viewEnd   = waveformView.getTrimOut();
-
-        if (procStart != viewStart || procEnd != viewEnd)
-        {
-            // Processor was moved externally (MIDI CC) — push back into view.
-            if (procStart != viewStart || procEnd != viewEnd)
-                waveformView.setTrimPoints (procStart, procEnd);
-        }
-        else
-        {
-            // View was dragged — push into processor.
-            processor.trimRegionStart.store (viewStart, std::memory_order_relaxed);
-            processor.trimRegionEnd  .store (viewEnd,   std::memory_order_relaxed);
-        }
+        if (procStart != waveformView.getTrimIn() || procEnd != waveformView.getTrimOut())
+            waveformView.setTrimPoints (procStart, procEnd);
     }
 
     const int targetHz = waveformAnimating ? 60 : 30;
