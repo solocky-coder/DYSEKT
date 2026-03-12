@@ -130,6 +130,7 @@ void WaveformView::paint (juce::Graphics& g)
         paintDrawSlicePreview (g);
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
+        paintTrimOverlay (g);
         drawPlaybackCursors (g);
         paintViewStateActive = false;
     }
@@ -202,6 +203,50 @@ void WaveformView::paintLazyChopOverlay (juce::Graphics& g)
         g.setColour (juce::Colour (0xFFCC4444).withAlpha (0.5f));
         g.drawVerticalLine (sampleToPixel (chopSample), 0.0f, (float) getHeight());
     }
+}
+
+void WaveformView::paintTrimOverlay (juce::Graphics& g)
+{
+    if (! trimMode) return;
+
+    const int w  = getWidth();
+    const int h  = getHeight();
+    const int x1 = sampleToPixel (trimInPoint);
+    const int x2 = sampleToPixel (trimOutPoint);
+    const auto ac = getTheme().accent;
+
+    // Excluded regions — dark overlay outside trim window
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
+    if (x1 > 0)
+        g.fillRect (0, 0, x1, h);
+    if (x2 < w)
+        g.fillRect (x2, 0, w - x2, h);
+
+    // In-point marker — bright vertical + top triangle handle
+    g.setColour (ac.withAlpha (0.90f));
+    g.drawVerticalLine (x1, 0.0f, (float) h);
+    {
+        juce::Path tri;
+        tri.addTriangle ((float) x1, 0.0f,
+                         (float) x1 + 10.0f, 0.0f,
+                         (float) x1, 10.0f);
+        g.fillPath (tri);
+    }
+
+    // Out-point marker — bright vertical + top triangle handle (flipped)
+    g.drawVerticalLine (x2, 0.0f, (float) h);
+    {
+        juce::Path tri;
+        tri.addTriangle ((float) x2, 0.0f,
+                         (float) x2 - 10.0f, 0.0f,
+                         (float) x2, 10.0f);
+        g.fillPath (tri);
+    }
+
+    // Thin accent tint inside trim window
+    g.setColour (ac.withAlpha (0.04f));
+    if (x2 > x1)
+        g.fillRect (x1, 0, x2 - x1, h);
 }
 
 void WaveformView::paintTransientMarkers (juce::Graphics& g)
@@ -565,6 +610,18 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
 {
     syncAltStateFromMods (e.mods);
 
+    // Trim mode: only show resize cursor near markers
+    if (trimMode)
+    {
+        const int x1 = sampleToPixel (trimInPoint);
+        const int x2 = sampleToPixel (trimOutPoint);
+        if (std::abs (e.x - x1) < 8 || std::abs (e.x - x2) < 8)
+            setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+        else
+            setMouseCursor (juce::MouseCursor::NormalCursor);
+        return;
+    }
+
     auto sampleSnap = processor.sampleData.getSnapshot();
     if (sampleSnap == nullptr) return;
     const auto& ui = processor.getUiSliceSnapshot();
@@ -635,6 +692,23 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     }
 
     int samplePos = std::max (0, std::min (pixelToSample (e.x), sampleSnap->buffer.getNumSamples()));
+
+    // ── Trim mode: only allow dragging the trim markers ───────────────────────
+    if (trimMode)
+    {
+        const int x1 = sampleToPixel (trimInPoint);
+        const int x2 = sampleToPixel (trimOutPoint);
+        if (std::abs (e.x - x1) < 8)
+        {
+            dragMode = DragTrimIn;
+        }
+        else if (std::abs (e.x - x2) < 8)
+        {
+            dragMode = DragTrimOut;
+        }
+        // Click inside trim region does nothing (no slice selection)
+        return;
+    }
 
     // Shift+click: preview audio from pointer position
     if (e.mods.isShiftDown() && ! sliceDrawMode && ! altModeActive
@@ -771,6 +845,21 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     }
 
     int samplePos = std::max (0, std::min (pixelToSample (e.x), sampleSnap->buffer.getNumSamples()));
+
+    // Trim marker drag
+    if (dragMode == DragTrimIn)
+    {
+        trimInPoint = juce::jlimit (0, trimOutPoint - 64, samplePos);
+        repaint();
+        return;
+    }
+    if (dragMode == DragTrimOut)
+    {
+        trimOutPoint = juce::jlimit (trimInPoint + 64,
+                                     sampleSnap->buffer.getNumSamples(), samplePos);
+        repaint();
+        return;
+    }
 
     if (dragMode == DrawSlice)
     {

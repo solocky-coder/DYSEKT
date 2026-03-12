@@ -87,6 +87,7 @@ private:
     void paintLazyChopOverlay (juce::Graphics& g);
     void paintTransientMarkers (juce::Graphics& g);
     void paintTrimOverlay (juce::Graphics& g);
+    void paintTrimOverlay (juce::Graphics& g);
     void paintTrimMarkers (juce::Graphics& g);
 
     // Aggregates all cache-invalidation inputs; rebuild is skipped when unchanged.
