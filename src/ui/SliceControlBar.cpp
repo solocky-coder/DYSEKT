@@ -597,16 +597,12 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += 8;
 
         // START knob — normalised 0-1 over sample length
-        // In trim mode: shows trimRegionStart position
         {
-            const bool inTrim = processor.trimModeActive.load (std::memory_order_relaxed);
-            int startSample;
-            if (inTrim)
-                startSample = processor.trimRegionStart.load (std::memory_order_relaxed);
-            else
-                startSample = (ui.numSlices > 0 && idx >= 0) ? s.startSample : 0;
-            float startNorm = (float) startSample / (float) juce::jmax (1, ui.sampleNumFrames);
-            drawKnobCell (g, x, row1y, inTrim ? "IN" : "START", juce::String (startSample),
+            float startNorm = (ui.numSlices > 0 && idx >= 0)
+                ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames)
+                : 0.f;
+            juce::String startStr = juce::String (s.startSample);
+            drawKnobCell (g, x, row1y, "START", startStr,
                           startNorm, false, 0,
                           F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
             cells.back().isMidiLearnable = true;
@@ -614,18 +610,13 @@ void SliceControlBar::paint (juce::Graphics& g)
         }
 
         // END knob
-        // In trim mode: shows trimRegionEnd position
         {
-            const bool inTrim = processor.trimModeActive.load (std::memory_order_relaxed);
-            int endSample;
-            if (inTrim)
-                endSample = processor.trimRegionEnd.load (std::memory_order_relaxed);
-            else
-                endSample = (ui.numSlices > 0 && idx >= 0)
-                    ? processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames)
-                    : ui.sampleNumFrames;
-            float endNorm = (float) endSample / (float) juce::jmax (1, ui.sampleNumFrames);
-            drawKnobCell (g, x, row1y, inTrim ? "OUT" : "END", juce::String (endSample),
+            const int sliceEnd2 = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
+            float endNorm = (ui.numSlices > 0 && idx >= 0)
+                ? (float) sliceEnd2 / (float) juce::jmax (1, ui.sampleNumFrames)
+                : 1.f;
+            juce::String endStr = juce::String (sliceEnd2);
+            drawKnobCell (g, x, row1y, "END", endStr,
                           endNorm, false, 0,
                           F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
             cells.back().isMidiLearnable = true;
@@ -894,16 +885,8 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                     case F::FieldSustain:     dragStartValue = (sl.lockMask & kLockSustain)     ? sl.sustainLevel         : processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.f;  break;
                     case F::FieldRelease:     dragStartValue = (sl.lockMask & kLockRelease)     ? sl.releaseSec           : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f; break;
                     case F::FieldMuteGroup:   dragStartValue = (float)((sl.lockMask & kLockMuteGroup)  ? sl.muteGroup  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load());   break;
-                    case F::FieldSliceStart:
-                        dragStartValue = processor.trimModeActive.load (std::memory_order_relaxed)
-                            ? (float) processor.trimRegionStart.load (std::memory_order_relaxed)
-                            : (float) sl.startSample;
-                        break;
-                    case F::FieldSliceEnd:
-                        dragStartValue = processor.trimModeActive.load (std::memory_order_relaxed)
-                            ? (float) processor.trimRegionEnd.load (std::memory_order_relaxed)
-                            : (float) processor.sliceManager.getEndForSlice (sIdx, ui.sampleNumFrames);
-                        break;
+                    case F::FieldSliceStart:  dragStartValue = (float) sl.startSample; break;
+                    case F::FieldSliceEnd:    dragStartValue = (float) processor.sliceManager.getEndForSlice (sIdx, ui.sampleNumFrames); break;
                     case F::FieldMidiNote:    dragStartValue = (float) sl.midiNote;              break;
                     case F::FieldVolume:      dragStartValue = (sl.lockMask & kLockVolume)      ? sl.volume               : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();            break;
                     case F::FieldOutputBus:   dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
@@ -1069,32 +1052,6 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
     if (cell.fieldId == F::FieldSliceStart || cell.fieldId == F::FieldSliceEnd)
     {
         const auto& ui2 = processor.getUiSliceSnapshot();
-        const bool inTrim = processor.trimModeActive.load (std::memory_order_relaxed);
-
-        if (inTrim && ui2.sampleNumFrames > 1)
-        {
-            // Trim mode: drag moves trim in/out handles directly
-            float sensitivity = (float) ui2.sampleNumFrames / 300.f;
-            if (e.mods.isShiftDown()) sensitivity *= 0.05f;
-            int delta = (int) (deltaY * sensitivity);
-
-            if (cell.fieldId == F::FieldSliceStart)
-            {
-                const int curEnd = processor.trimRegionEnd.load (std::memory_order_relaxed);
-                int newStart = juce::jlimit (0, curEnd - 64, (int) dragStartValue + delta);
-                processor.trimRegionStart.store (newStart, std::memory_order_relaxed);
-            }
-            else
-            {
-                const int curStart = processor.trimRegionStart.load (std::memory_order_relaxed);
-                int newEnd = juce::jlimit (curStart + 64, ui2.sampleNumFrames,
-                                           (int) dragStartValue + delta);
-                processor.trimRegionEnd.store (newEnd, std::memory_order_relaxed);
-            }
-            processor.markUiDirty();
-            repaint(); return;
-        }
-
         int liveSel = ui2.selectedSlice;
         if (liveSel >= 0 && liveSel < ui2.numSlices && ui2.sampleNumFrames > 1)
         {

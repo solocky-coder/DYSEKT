@@ -6,9 +6,9 @@ class DysektProcessor;
 class WaveformView;
 
 /** Inline trim panel rendered at the bottom of the waveform view.
-    Shows APPLY TRIM and CANCEL buttons; on apply it pushes CmdApplyTrim
-    to the processor using the current trimInSample / trimOutSample values. */
-class TrimDialog : public juce::Component
+    Contains draggable IN / OUT knob cells plus APPLY TRIM and CANCEL buttons. */
+class TrimDialog : public juce::Component,
+                   public juce::Timer
 {
 public:
     struct Result
@@ -24,17 +24,27 @@ public:
     TrimDialog (DysektProcessor& processor, WaveformView& waveformView);
     ~TrimDialog() override;
 
-    void paint  (juce::Graphics& g) override;
-    void resized() override;
+    void paint        (juce::Graphics& g) override;
+    void resized      () override;
+    void mouseDown    (const juce::MouseEvent& e) override;
+    void mouseDrag    (const juce::MouseEvent& e) override;
+    void mouseUp      (const juce::MouseEvent& e) override;
+    void timerCallback() override;
 
 private:
     DysektProcessor& processor;
     WaveformView&    waveformView;
 
-    juce::Label      infoLabel;
-    juce::TextButton applyBtn  { "APPLY TRIM" };
+    juce::TextButton applyBtn  { "APPLY" };
     juce::TextButton cancelBtn { "CANCEL" };
 
+    juce::Rectangle<int> inCell, outCell;
+    int  activeDrag   = -1;   // 0=IN, 1=OUT, -1=none
+    int  dragStartY   = 0;
+    int  dragStartVal = 0;
+
+    void drawTrimKnob (juce::Graphics& g, juce::Rectangle<int> cell,
+                       const char* label, int sampleVal, int totalFrames);
     void onApply();
     void onCancel();
 
