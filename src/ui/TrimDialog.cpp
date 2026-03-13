@@ -6,7 +6,7 @@
 TrimDialog::TrimDialog (DysektProcessor& proc, WaveformView& wv)
     : processor (proc), waveformView (wv)
 {
-    applyBtn.setColour (juce::TextButton::buttonColourId,  getTheme().accent.withAlpha (0.8f));
+    applyBtn.setColour (juce::TextButton::buttonColourId,  getTheme().accent.withAlpha (0.85f));
     applyBtn.setColour (juce::TextButton::textColourOffId, juce::Colours::black);
     applyBtn.onClick = [this] { onApply(); };
     addAndMakeVisible (applyBtn);
@@ -16,78 +16,57 @@ TrimDialog::TrimDialog (DysektProcessor& proc, WaveformView& wv)
     cancelBtn.onClick = [this] { onCancel(); };
     addAndMakeVisible (cancelBtn);
 
+    // 30 Hz repaint keeps cells in sync with MIDI CC driving trimRegionStart/End
     startTimerHz (30);
 }
 
-TrimDialog::~TrimDialog()
-{
-    stopTimer();
-}
+TrimDialog::~TrimDialog() { stopTimer(); }
 
-void TrimDialog::timerCallback()
-{
-    // Repaint so the IN/OUT knobs stay in sync with MIDI-driven changes
-    repaint();
-}
+void TrimDialog::timerCallback() { repaint(); }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Draw a single trim knob cell (IN or OUT)
+//  Flat LCD-style knob cell — wide enough to read, tall enough for two rows
 // ─────────────────────────────────────────────────────────────────────────────
-void TrimDialog::drawTrimKnob (juce::Graphics& g, juce::Rectangle<int> cell,
+void TrimDialog::drawTrimKnob (juce::Graphics& g,
+                                juce::Rectangle<int> cell,
                                 const char* label, int sampleVal, int totalFrames)
 {
-    const auto& theme = getTheme();
-    const float norm = (totalFrames > 0)
-        ? juce::jlimit (0.0f, 1.0f, (float) sampleVal / (float) totalFrames)
-        : 0.0f;
+    const auto& T = getTheme();
 
-    // Background
-    g.setColour (theme.darkBar.withAlpha (0.6f));
+    // Background + border
+    g.setColour (T.darkBar);
     g.fillRoundedRectangle (cell.toFloat(), 3.0f);
-    g.setColour (theme.separator);
+    g.setColour (T.accent.withAlpha (0.55f));
     g.drawRoundedRectangle (cell.toFloat().reduced (0.5f), 3.0f, 1.0f);
 
-    // Knob arc
-    const int kR = 10;
-    const int cx = cell.getCentreX();
-    const int arcY = cell.getY() + 4;
-    const juce::Point<float> centre ((float)cx, (float)(arcY + kR));
-    const float startA = juce::MathConstants<float>::pi * 0.75f;
-    const float endA   = juce::MathConstants<float>::pi * 2.25f;
-    const float curA   = startA + norm * (endA - startA);
+    // Progress bar along bottom edge (shows position in file, 0–1)
+    if (totalFrames > 0)
+    {
+        const float frac = juce::jlimit (0.0f, 1.0f,
+                                         (float) sampleVal / (float) totalFrames);
+        const auto bar = cell.removeFromBottom (3).toFloat();
+        g.setColour (T.separator);
+        g.fillRect (bar);
+        g.setColour (T.accent);
+        g.fillRect (bar.withWidth (bar.getWidth() * frac));
+    }
 
-    juce::Path track;
-    track.addCentredArc (centre.x, centre.y, (float)kR, (float)kR, 0.0f, startA, endA, true);
-    g.setColour (theme.separator);
-    g.strokePath (track, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved,
-                                                juce::PathStrokeType::rounded));
+    // Label — top half, small caps style
+    const int midY = cell.getY() + cell.getHeight() / 2;
+    g.setFont (DysektLookAndFeel::makeFont (8.0f));
+    g.setColour (T.accent.withAlpha (0.65f));
+    g.drawText (label,
+                cell.getX(), cell.getY() + 2,
+                cell.getWidth(), midY - cell.getY() - 2,
+                juce::Justification::centred, false);
 
-    juce::Path fill;
-    fill.addCentredArc (centre.x, centre.y, (float)kR, (float)kR, 0.0f, startA, curA, true);
-    g.setColour (theme.accent);
-    g.strokePath (fill, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved,
-                                               juce::PathStrokeType::rounded));
-
-    // Tick
-    const float tickLen = 5.0f;
-    const float tx = centre.x + (float)(kR + 2) * std::cos (curA - juce::MathConstants<float>::halfPi);
-    const float ty = centre.y + (float)(kR + 2) * std::sin (curA - juce::MathConstants<float>::halfPi);
-    const float tx2 = centre.x + (float)(kR + 2 - tickLen) * std::cos (curA - juce::MathConstants<float>::halfPi);
-    const float ty2 = centre.y + (float)(kR + 2 - tickLen) * std::sin (curA - juce::MathConstants<float>::halfPi);
-    g.setColour (theme.accent.brighter (0.4f));
-    g.drawLine (tx, ty, tx2, ty2, 1.5f);
-
-    // Label (top)
-    g.setFont (DysektLookAndFeel::makeFont (7.5f));
-    g.setColour (theme.accent.withAlpha (0.75f));
-    g.drawText (label, cell.getX(), cell.getY() + 1, cell.getWidth(), 10,
-                juce::Justification::centred);
-
-    // Value (bottom)
-    g.setFont (DysektLookAndFeel::makeFont (7.0f));
-    g.setColour (theme.foreground.withAlpha (0.7f));
-    g.drawText (juce::String (sampleVal), cell.getX(), cell.getBottom() - 11,
-                cell.getWidth(), 10, juce::Justification::centred);
+    // Value — bottom half, full brightness
+    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setColour (T.foreground);
+    g.drawText (juce::String (sampleVal),
+                cell.getX(), midY,
+                cell.getWidth(), cell.getBottom() - midY - 3,
+                juce::Justification::centred, false);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -108,39 +87,35 @@ void TrimDialog::paint (juce::Graphics& g)
 void TrimDialog::resized()
 {
     auto b = getLocalBounds().reduced (6, 4);
-    const int btnW  = 76;
-    const int knobW = 40;
-    const int knobH = b.getHeight();
-    const int gap   = 4;
+
+    const int btnW  = 72;
+    const int knobW = 72;   // wide enough for 6-digit sample number
+    const int gap   = 5;
 
     cancelBtn.setBounds (b.removeFromRight (btnW));
     b.removeFromRight (gap);
     applyBtn.setBounds (b.removeFromRight (btnW));
     b.removeFromRight (gap * 3);
 
-    outCell = b.removeFromRight (knobW).withHeight (knobH);
+    outCell = b.removeFromRight (knobW);
     b.removeFromRight (gap);
-    inCell  = b.removeFromRight (knobW).withHeight (knobH);
+    inCell  = b.removeFromRight (knobW);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Mouse handling — drag IN/OUT knobs
+//  Mouse — vertical drag moves IN / OUT, shift = fine
+//  Same CC: FieldSliceStart drives IN, FieldSliceEnd drives OUT (in processor)
 // ─────────────────────────────────────────────────────────────────────────────
 void TrimDialog::mouseDown (const juce::MouseEvent& e)
 {
-    const auto pos = e.getPosition();
-    if (inCell.contains (pos))
-    {
-        activeDrag   = 0;
-        dragStartY   = pos.y;
-        dragStartVal = processor.trimRegionStart.load (std::memory_order_relaxed);
-    }
-    else if (outCell.contains (pos))
-    {
-        activeDrag   = 1;
-        dragStartY   = pos.y;
-        dragStartVal = processor.trimRegionEnd.load (std::memory_order_relaxed);
-    }
+    if      (inCell .contains (e.getPosition())) activeDrag = 0;
+    else if (outCell.contains (e.getPosition())) activeDrag = 1;
+    else return;
+
+    dragStartY   = e.getPosition().y;
+    dragStartVal = (activeDrag == 0)
+        ? processor.trimRegionStart.load (std::memory_order_relaxed)
+        : processor.trimRegionEnd  .load (std::memory_order_relaxed);
 }
 
 void TrimDialog::mouseDrag (const juce::MouseEvent& e)
@@ -173,10 +148,7 @@ void TrimDialog::mouseDrag (const juce::MouseEvent& e)
     repaint();
 }
 
-void TrimDialog::mouseUp (const juce::MouseEvent&)
-{
-    activeDrag = -1;
-}
+void TrimDialog::mouseUp (const juce::MouseEvent&) { activeDrag = -1; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 void TrimDialog::onApply()
