@@ -1184,6 +1184,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             Command ccCmd;
                             ccCmd.type = CmdSetSliceBounds;
                             ccCmd.intParam1 = sel;
+                            bool doEnqueue = true;
+
                             if (outFieldId == FieldSliceStart)
                             {
                                 const int slEnd = sliceManager.getEndForSlice (sel, total);
@@ -1193,15 +1195,20 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                     const float curNorm = (float) cur / (float) total;
                                     if (! ccPickedUp[(size_t) outFieldId])
                                     {
-                                        if (std::abs (outNorm - curNorm) <= 0.04f) ccPickedUp[(size_t) outFieldId] = true;
-                                        else break;
+                                        if (std::abs (outNorm - curNorm) <= 0.04f)
+                                            ccPickedUp[(size_t) outFieldId] = true;
+                                        else
+                                            doEnqueue = false;
                                     }
                                 }
-                                const int newStart = outIsRelative
-                                    ? juce::jlimit (0, slEnd - 64, cur + (int)(outNorm * stepSamples))
-                                    : juce::jlimit (0, slEnd - 64, (int)(outNorm * (float)total));
-                                ccCmd.intParam2    = newStart;
-                                ccCmd.positions[0] = slEnd;
+                                if (doEnqueue)
+                                {
+                                    const int newStart = outIsRelative
+                                        ? juce::jlimit (0, slEnd - 64, cur + (int)(outNorm * stepSamples))
+                                        : juce::jlimit (0, slEnd - 64, (int)(outNorm * (float)total));
+                                    ccCmd.intParam2    = newStart;
+                                    ccCmd.positions[0] = slEnd;
+                                }
                             }
                             else
                             {
@@ -1211,18 +1218,27 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                     const float curNorm = (float) cur / (float) total;
                                     if (! ccPickedUp[(size_t) outFieldId])
                                     {
-                                        if (std::abs (outNorm - curNorm) <= 0.04f) ccPickedUp[(size_t) outFieldId] = true;
-                                        else break;
+                                        if (std::abs (outNorm - curNorm) <= 0.04f)
+                                            ccPickedUp[(size_t) outFieldId] = true;
+                                        else
+                                            doEnqueue = false;
                                     }
                                 }
-                                const int newEnd = outIsRelative
-                                    ? juce::jlimit (sl.startSample + 64, total, cur + (int)(outNorm * stepSamples))
-                                    : juce::jlimit (sl.startSample + 64, total, (int)(outNorm * (float)total));
-                                ccCmd.intParam2    = sl.startSample;
-                                ccCmd.positions[0] = newEnd;
+                                if (doEnqueue)
+                                {
+                                    const int newEnd = outIsRelative
+                                        ? juce::jlimit (sl.startSample + 64, total, cur + (int)(outNorm * stepSamples))
+                                        : juce::jlimit (sl.startSample + 64, total, (int)(outNorm * (float)total));
+                                    ccCmd.intParam2    = sl.startSample;
+                                    ccCmd.positions[0] = newEnd;
+                                }
                             }
-                            ccCmd.numPositions = 1;
-                            enqueueCoalescedCommand (ccCmd);
+
+                            if (doEnqueue)
+                            {
+                                ccCmd.numPositions = 1;
+                                enqueueCoalescedCommand (ccCmd);
+                            }
                         }
                     }
                     else

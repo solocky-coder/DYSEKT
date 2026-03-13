@@ -701,10 +701,12 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         if (std::abs (e.x - x1) < 8)
         {
             dragMode = DragTrimIn;
+            trimDragging = true;
         }
         else if (std::abs (e.x - x2) < 8)
         {
             dragMode = DragTrimOut;
+            trimDragging = true;
         }
         // Click inside trim region does nothing (no slice selection)
         return;
@@ -850,6 +852,7 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     if (dragMode == DragTrimIn)
     {
         trimInPoint = juce::jlimit (0, trimOutPoint - 64, samplePos);
+        processor.trimRegionStart.store (trimInPoint, std::memory_order_relaxed);
         repaint();
         return;
     }
@@ -857,6 +860,7 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     {
         trimOutPoint = juce::jlimit (trimInPoint + 64,
                                      sampleSnap->buffer.getNumSamples(), samplePos);
+        processor.trimRegionEnd.store (trimOutPoint, std::memory_order_relaxed);
         repaint();
         return;
     }
@@ -995,7 +999,8 @@ void WaveformView::mouseUp (const juce::MouseEvent& e)
     // a stale idx could re-activate on the next block.
     processor.liveDragSliceIdx.store (-1, std::memory_order_release);
 
-    dragMode = None;
+    dragMode     = None;
+    trimDragging = false;
     dragSliceIdx = -1;
     dragPreviewStart = 0;
     dragPreviewEnd = 0;
@@ -1092,12 +1097,13 @@ void WaveformView::filesDropped (const juce::StringArray& files, int, int)
 // totalFrames so the markers sit at the extremes and the user drags inward).
 void WaveformView::enterTrimMode (int start, int end)
 {
-    trimMode    = true;
-    trimStart   = start;
-    trimEnd     = end;
-    trimInPoint = start;
+    trimMode     = true;
+    trimStart    = start;
+    trimEnd      = end;
+    trimInPoint  = start;
     trimOutPoint = end;
-    dragMode    = None;
+    trimDragging = false;
+    dragMode     = None;
     repaint();
 }
 

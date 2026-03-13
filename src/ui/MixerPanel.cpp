@@ -12,7 +12,6 @@ static constexpr int kMaxMeterSlices = DysektProcessor::kMaxMeterSlices;
 MixerPanel::MixerPanel (DysektProcessor& p)
     : processor (p)
 {
-    setOpaque (true);
     setWantsKeyboardFocus (false);
     startTimerHz (30);
 }
@@ -545,18 +544,16 @@ void MixerPanel::paint (juce::Graphics& g)
         g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
     }
 
-    // Clip content area
+    // Clip ALL content to inner screen rect so the frame border is never overwritten
     g.saveState();
-    g.reduceClipRegion (0, kHeaderH, getWidth(), getHeight() - kHeaderH);
+    g.reduceClipRegion (getLocalBounds().reduced (4));
 
     for (int i = 0; i < snap.numSlices; ++i)
         drawSliceRow (g, rowY (i), i, i == snap.selectedSlice);
 
     drawMasterRow (g, masterRowY());
 
-    g.restoreState();
-
-    // Column dividers — use theme accent for a more cohesive look
+    // Column dividers
     g.setColour (theme.accent.withAlpha (0.12f));
     g.drawVerticalLine (kNameColW - 1, 0.f, (float) getHeight());
     for (int i = 1; i < kNumCols; ++i)
@@ -573,6 +570,8 @@ void MixerPanel::paint (juce::Graphics& g)
     }
 
     drawHeader (g);
+
+    g.restoreState();
 }
 
 void MixerPanel::resized() {}

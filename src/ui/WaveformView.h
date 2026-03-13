@@ -44,6 +44,7 @@ public:
     void resetTrim();
     int  getTrimIn()  const noexcept { return trimInPoint; }
     int  getTrimOut() const noexcept { return trimOutPoint; }
+    bool isTrimDragging() const noexcept { return trimDragging; }
 
     // Callback invoked when user applies trim; parameters are sample-accurate bounds
     std::function<void (int trimStart, int trimEnd)> onTrimApplied;
@@ -105,6 +106,7 @@ private:
     bool trimMode      = false;   // trim in/out marker editing mode
     int  trimInPoint   = 0;       // trim-in marker position in samples (DragTrimIn path)
     int  trimOutPoint  = 0;       // trim-out marker position in samples (DragTrimOut path)
+    bool trimDragging  = false;   // true while user is actively dragging a trim handle
     int  trimStart     = 0;       // trim-in marker position in samples (enterTrimMode path)
     int  trimEnd       = 0;       // trim-out marker position in samples (enterTrimMode path)
     mutable ViewState cachedPaintViewState;   // valid only between paint() start and end
