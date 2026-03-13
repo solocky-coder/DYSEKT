@@ -39,6 +39,10 @@ void SliceLane::paint (juce::Graphics& g)
     const bool hasPreview = waveformView != nullptr
         && waveformView->getActiveSlicePreview (previewIdx, previewStart, previewEnd);
 
+    int linkedIdx = -1, linkedStart = 0, linkedEnd = 0;
+    const bool hasLinked = waveformView != nullptr
+        && waveformView->getLinkedSlicePreview (linkedIdx, linkedStart, linkedEnd);
+
     // ── Collect visible slices ────────────────────────────────────────────────
     struct SliceInfo { int idx; int x1; int x2; bool selected; juce::Colour col; };
     std::array<SliceInfo, SliceManager::kMaxSlices> vis {};
@@ -50,7 +54,8 @@ void SliceLane::paint (juce::Graphics& g)
         if (! s.active) continue;
         int startSample = s.startSample;
         int endSample   = processor.sliceManager.getEndForSlice (i, numFrames);
-        if (hasPreview && i == previewIdx) { startSample = previewStart; endSample = previewEnd; }
+        if (hasPreview  && i == previewIdx) { startSample = previewStart; endSample = previewEnd; }
+        if (hasLinked   && i == linkedIdx)  { startSample = linkedStart;  endSample = linkedEnd;  }
 
         int x1 = (int) ((float) (startSample - visStart) / visLen * w);
         int x2 = (int) ((float) (endSample   - visStart) / visLen * w);
@@ -133,6 +138,11 @@ void SliceLane::paint (juce::Graphics& g)
     currentKey.visStart      = visStart;
     currentKey.visLen        = visLen;
     currentKey.width         = w;
+
+    // If a drag preview is active the slice x-positions have changed but the
+    // cache key hasn't — force a rebuild so labels track their moving markers.
+    if (hasPreview || hasLinked)
+        labelCacheDirty = true;
 
     if (labelCacheDirty || !(currentKey == prevLabelCacheKey))
     {

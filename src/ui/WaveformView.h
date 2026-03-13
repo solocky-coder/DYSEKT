@@ -27,6 +27,7 @@ public:
     void rebuildCacheIfNeeded();
     bool hasActiveSlicePreview() const noexcept;
     bool getActiveSlicePreview (int& sliceIdx, int& startSample, int& endSample) const;
+    bool getLinkedSlicePreview (int& sliceIdx, int& startSample, int& endSample) const;
     bool isInteracting() const noexcept;
 
     void setSliceDrawMode (bool active);
@@ -135,9 +136,10 @@ private:
     int ghostStart = 0;    // for DuplicateSlice: ghost overlay start sample
     int ghostEnd   = 0;    // for DuplicateSlice: ghost overlay end sample
 
-    // Linked slice preview state (set by SliceLane to highlight a hovered slice)
-    int linkedSliceIdx    = -1;
+    // Linked (adjacent) slice preview — kept in sync with the dragged edge
+    int linkedSliceIdx     = -1;
     int linkedPreviewStart = 0;
+    int linkedPreviewEnd   = 0;
     int linkedPreviewEnd   = 0;
 
     // Middle-mouse drag (scroll+zoom like ScrollZoomBar)

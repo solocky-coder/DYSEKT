@@ -31,6 +31,16 @@ bool WaveformView::getActiveSlicePreview (int& sliceIdx, int& startSample, int& 
     return true;
 }
 
+bool WaveformView::getLinkedSlicePreview (int& sliceIdx, int& startSample, int& endSample) const
+{
+    if (linkedSliceIdx < 0 || dragMode == None)
+        return false;
+    sliceIdx    = linkedSliceIdx;
+    startSample = linkedPreviewStart;
+    endSample   = linkedPreviewEnd;
+    return true;
+}
+
 bool WaveformView::isInteracting() const noexcept
 {
     return dragMode != None || midDragging || shiftPreviewActive;
@@ -485,6 +495,11 @@ void WaveformView::drawSlices (juce::Graphics& g)
             drawStartSample = dragPreviewStart;
             drawEndSample = dragPreviewEnd;
         }
+        else if (i == linkedSliceIdx && linkedSliceIdx >= 0 && dragMode != None)
+        {
+            drawStartSample = linkedPreviewStart;
+            drawEndSample   = linkedPreviewEnd;
+        }
         else if (dragMode == None)
         {
             // Live preview from SliceControlBar knob drag (processor atomics)
@@ -755,6 +770,20 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 dragPreviewEnd = selEnd;
                 dragOrigStart = s.startSample;
                 dragOrigEnd   = selEnd;
+
+                // Find the slice whose end is flush with our start (link it)
+                linkedSliceIdx = -1;
+                for (int i = 0; i < ui.numSlices; ++i)
+                {
+                    if (i == sel || ! ui.slices[(size_t) i].active) continue;
+                    if (processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames) == s.startSample)
+                    {
+                        linkedSliceIdx    = i;
+                        linkedPreviewStart = ui.slices[(size_t) i].startSample;
+                        linkedPreviewEnd   = s.startSample;  // current boundary
+                        break;
+                    }
+                }
                 return;
             }
             if (std::abs (e.x - x2) < 6)
@@ -768,33 +797,24 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 dragPreviewEnd = selEnd;
                 dragOrigStart = s.startSample;
                 dragOrigEnd   = selEnd;
-                return;
-            }
 
-            if (e.x > x1 && e.x < x2)
-            {
-                DysektProcessor::Command gestureCmd;
-                gestureCmd.type = DysektProcessor::CmdBeginGesture;
-                processor.pushCommand (gestureCmd);
-
-                dragSliceIdx = sel;
-                dragOffset   = samplePos - s.startSample;
-                dragSliceLen = selEnd - s.startSample;
-
-                if (e.mods.isCtrlDown())
+                // Find the slice whose start is flush with our end (link it)
+                linkedSliceIdx = -1;
+                for (int i = 0; i < ui.numSlices; ++i)
                 {
-                    dragMode   = DuplicateSlice;
-                    ghostStart = s.startSample;
-                    ghostEnd   = selEnd;
-                }
-                else
-                {
-                    dragMode = MoveSlice;
-                    dragPreviewStart = s.startSample;
-                    dragPreviewEnd = selEnd;
+                    if (i == sel || ! ui.slices[(size_t) i].active) continue;
+                    if (ui.slices[(size_t) i].startSample == selEnd)
+                    {
+                        linkedSliceIdx     = i;
+                        linkedPreviewStart = selEnd;          // current boundary
+                        linkedPreviewEnd   = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
+                        break;
+                    }
                 }
                 return;
             }
+
+            // Clicking inside the slice body selects it (no region drag).
         }
     }
 
@@ -875,14 +895,24 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     {
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
+
         dragPreviewStart = juce::jlimit (0, dragPreviewEnd - 64, samplePos);
+
+        // Keep linked left-neighbor's end flush with our new start
+        if (linkedSliceIdx >= 0)
+            linkedPreviewEnd = dragPreviewStart;
     }
     else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
     {
         if (processor.snapToZeroCrossing.load())
             samplePos = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, samplePos);
+
         dragPreviewEnd = juce::jlimit (dragPreviewStart + 64,
                                        sampleSnap->buffer.getNumSamples(), samplePos);
+
+        // Keep linked right-neighbor's start flush with our new end
+        if (linkedSliceIdx >= 0)
+            linkedPreviewStart = dragPreviewEnd;
     }
     else if (dragMode == MoveSlice && dragSliceIdx >= 0)
     {
@@ -978,6 +1008,18 @@ void WaveformView::mouseUp (const juce::MouseEvent& e)
             cmd.positions[0] = dragPreviewEnd;
             cmd.numPositions = 1;
             processor.pushCommand (cmd);
+
+            // Also commit the linked adjacent slice so boundaries stay flush
+            if (linkedSliceIdx >= 0)
+            {
+                DysektProcessor::Command lCmd;
+                lCmd.type = DysektProcessor::CmdSetSliceBounds;
+                lCmd.intParam1 = linkedSliceIdx;
+                lCmd.intParam2 = linkedPreviewStart;
+                lCmd.positions[0] = linkedPreviewEnd;
+                lCmd.numPositions = 1;
+                processor.pushCommand (lCmd);
+            }
         }
     }
     else if (dragMode == DuplicateSlice)
@@ -1002,6 +1044,7 @@ void WaveformView::mouseUp (const juce::MouseEvent& e)
     dragMode     = None;
     trimDragging = false;
     dragSliceIdx = -1;
+    linkedSliceIdx = -1;
     dragPreviewStart = 0;
     dragPreviewEnd = 0;
     drawStartedFromAlt = false;
