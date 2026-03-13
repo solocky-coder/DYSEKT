@@ -1091,7 +1091,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
                                            (int) dragStartValue + delta);
                 processor.trimRegionEnd.store (newEnd, std::memory_order_relaxed);
             }
-            processor.uiSnapshotDirty.store (true, std::memory_order_release);
+            processor.markUiDirty();
             repaint(); return;
         }
 
