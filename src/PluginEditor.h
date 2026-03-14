@@ -7,7 +7,7 @@
 #include "ui/SliceLane.h"
 #include "ui/SliceControlBar.h"
 #include "ui/WaveformView.h"
-#include "ui/ScrollZoomBar.h"
+#include "ui/WaveformOverview.h"
 #include "ui/ActionPanel.h"
 #include "ui/ShortcutsPanel.h"
 
@@ -62,14 +62,14 @@ private:
     bool     lastPreviewActive     = false;
     float    savedScale            = -1.0f;
     uint32_t lastUiSnapshotVersion = 0;
+    int      lastNumSlices         = -1;  // for auto-enable midi follow on first slice
 
     bool browserOpen = false;
     bool mixerOpen   = false;
     bool softWave    = false;
 
     // Frame rects set in resized() and drawn in paint() — include padding so borders never clip
-    juce::Rectangle<int> mixerFrameRect;
-    juce::Rectangle<int> browserFrameRect;
+    WaveformOverview waveformOverview;
 
     std::unique_ptr<TrimSession> trimSession;
     std::unique_ptr<TrimDialog>  trimDialog;
@@ -85,7 +85,7 @@ private:
 
     SliceLane       sliceLane;
     WaveformView    waveformView;
-    ScrollZoomBar   scrollZoomBar;
+    // waveformOverview declared above with frame rects
     SliceControlBar sliceControlBar;
     ActionPanel     actionPanel;
 

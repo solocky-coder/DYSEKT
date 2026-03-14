@@ -1074,18 +1074,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
                 const int totalFrames = sampleData.getNumFrames();
                 sliceManager.clearAll();
-                if (totalFrames > 0)
-                {
-                    // Auto-slice so audio engine has valid bounds for chromatic play
-                    int idx = sliceManager.createSlice (0, totalFrames);
-                    if (idx >= 0)
-                    {
-                        sliceManager.getSlice (idx).midiNote = 36;
-                        sliceManager.rebuildMidiMap();
-                    }
-                }
-                // Hide auto-slice from UI; user adds real slices via ADD SLICE
                 sliceManager.selectedSlice.store (-1, std::memory_order_relaxed);
+                (void) totalFrames;
             }
             publishUiSliceSnapshot();
             break;
@@ -1111,6 +1101,45 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                      msg.getControllerValue(),
                                      outFieldId, outNorm, outIsRelative))
             {
+                // ── Trim region CC: runs regardless of slice count ──────────
+                // FieldSliceStart / FieldSliceEnd are hardwired to trim in/out.
+                // This block executes BEFORE the slice guard so it works in trim
+                // mode even when there are zero slices.
+                if (outFieldId == FieldSliceStart || outFieldId == FieldSliceEnd)
+                {
+                    const int total = sampleData.getNumFrames();
+                    if (total > 1)
+                    {
+                        static constexpr float kEndlessSamplesPerStep = 1.0f / 512.0f;
+                        const int stepSamples = juce::jmax (1, (int) (total * kEndlessSamplesPerStep));
+
+                        const int curStart = trimRegionStart.load (std::memory_order_relaxed);
+                        const int curEnd   = trimRegionEnd  .load (std::memory_order_relaxed);
+
+                        if (outFieldId == FieldSliceStart)
+                        {
+                            const int cur  = curStart;
+                            const int next = outIsRelative
+                                ? juce::jlimit (0, curEnd - 64, cur + (int)(outNorm * stepSamples))
+                                : juce::jlimit (0, curEnd - 64, (int)(outNorm * (float)total));
+                            trimRegionStart.store (next, std::memory_order_relaxed);
+                        }
+                        else
+                        {
+                            const int cur  = curEnd;
+                            const int next = outIsRelative
+                                ? juce::jlimit (curStart + 64, total, cur + (int)(outNorm * stepSamples))
+                                : juce::jlimit (curStart + 64, total, (int)(outNorm * (float)total));
+                            trimRegionEnd.store (next, std::memory_order_relaxed);
+                        }
+                        uiSnapshotDirty.store (true, std::memory_order_release);
+                    }
+
+                    // If not in trim mode also move slice boundary (handled below in slice guard)
+                    if (trimModeActive.load (std::memory_order_relaxed))
+                        continue;  // trim mode: CC consumed, skip slice path
+                }
+
                 const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
                 if (sel >= 0 && sel < sliceManager.getNumSlices())
                 {
@@ -1140,104 +1169,73 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         default: break;
                     }
 
-                    // Slice start/end CC: route to trim handles when trim mode is active,
-                    // otherwise move the slice boundary as normal.
-                    // Supports both absolute 7-bit CC and endless (relative) encoders.
+                    // ── Slice start/end boundary (non-trim mode only) ────────
+                    // Trim CC already handled above the slice guard; this path
+                    // only runs when trim mode is inactive.
                     if (outFieldId == FieldSliceStart || outFieldId == FieldSliceEnd)
                     {
                         const int total = sampleData.getNumFrames();
                         if (total > 1)
                         {
-                            // Sensitivity for endless encoders: fraction of sample per step.
-                            // Default: 512 steps = full sweep (adjustable).
                             static constexpr float kEndlessSamplesPerStep = 1.0f / 512.0f;
                             const int stepSamples = juce::jmax (1, (int) (total * kEndlessSamplesPerStep));
 
-                            if (trimModeActive.load (std::memory_order_relaxed))
+                            auto& sl = sliceManager.getSlice (sel);
+                            Command ccCmd;
+                            ccCmd.type = CmdSetSliceBounds;
+                            ccCmd.intParam1 = sel;
+                            bool doEnqueue = true;
+
+                            if (outFieldId == FieldSliceStart)
                             {
-                                // ── Trim mode: CC scrubs trim region handles ──
-                                const int curStart = trimRegionStart.load (std::memory_order_relaxed);
-                                const int curEnd   = trimRegionEnd  .load (std::memory_order_relaxed);
-                                if (outFieldId == FieldSliceStart)
+                                const int slEnd = sliceManager.getEndForSlice (sel, total);
+                                const int cur   = sl.startSample;
+                                if (! outIsRelative)
                                 {
-                                    const int cur = curStart;
-                                    if (! outIsRelative)
+                                    const float curNorm = (float) cur / (float) total;
+                                    if (! ccPickedUp[(size_t) outFieldId])
                                     {
-                                        const float curNorm = (float) cur / (float) total;
-                                        if (! ccPickedUp[(size_t) outFieldId])
-                                        {
-                                            if (std::abs (outNorm - curNorm) <= 0.04f) ccPickedUp[(size_t) outFieldId] = true;
-                                            else break;
-                                        }
+                                        if (std::abs (outNorm - curNorm) <= 0.04f)
+                                            ccPickedUp[(size_t) outFieldId] = true;
+                                        else
+                                            doEnqueue = false;
                                     }
-                                    const int next = outIsRelative
-                                        ? juce::jlimit (0, curEnd - 64, cur + (int)(outNorm * stepSamples))
-                                        : juce::jlimit (0, curEnd - 64, (int)(outNorm * (float)total));
-                                    trimRegionStart.store (next, std::memory_order_relaxed);
                                 }
-                                else
+                                if (doEnqueue)
                                 {
-                                    const int cur = curEnd;
-                                    if (! outIsRelative)
-                                    {
-                                        const float curNorm = (float) cur / (float) total;
-                                        if (! ccPickedUp[(size_t) outFieldId])
-                                        {
-                                            if (std::abs (outNorm - curNorm) <= 0.04f) ccPickedUp[(size_t) outFieldId] = true;
-                                            else break;
-                                        }
-                                    }
-                                    const int next = outIsRelative
-                                        ? juce::jlimit (curStart + 64, total, cur + (int)(outNorm * stepSamples))
-                                        : juce::jlimit (curStart + 64, total, (int)(outNorm * (float)total));
-                                    trimRegionEnd.store (next, std::memory_order_relaxed);
-                                }
-                                // No command needed — WaveformView polls trimRegionStart/End directly
-                            }
-                            else
-                            {
-                                // ── Normal mode: CC moves slice boundary ──
-                                auto& sl = sliceManager.getSlice (sel);
-                                Command ccCmd;
-                                ccCmd.type = CmdSetSliceBounds;
-                                ccCmd.intParam1 = sel;
-                                if (outFieldId == FieldSliceStart)
-                                {
-                                    const int slEnd = sliceManager.getEndForSlice (sel, total);
-                                    const int cur   = sl.startSample;
-                                    if (! outIsRelative)
-                                    {
-                                        const float curNorm = (float) cur / (float) total;
-                                        if (! ccPickedUp[(size_t) outFieldId])
-                                        {
-                                            if (std::abs (outNorm - curNorm) <= 0.04f) ccPickedUp[(size_t) outFieldId] = true;
-                                            else break;
-                                        }
-                                    }
                                     const int newStart = outIsRelative
                                         ? juce::jlimit (0, slEnd - 64, cur + (int)(outNorm * stepSamples))
                                         : juce::jlimit (0, slEnd - 64, (int)(outNorm * (float)total));
                                     ccCmd.intParam2    = newStart;
                                     ccCmd.positions[0] = slEnd;
                                 }
-                                else
+                            }
+                            else
+                            {
+                                const int cur = sliceManager.getEndForSlice (sel, total);
+                                if (! outIsRelative)
                                 {
-                                    const int cur = sliceManager.getEndForSlice (sel, total);
-                                    if (! outIsRelative)
+                                    const float curNorm = (float) cur / (float) total;
+                                    if (! ccPickedUp[(size_t) outFieldId])
                                     {
-                                        const float curNorm = (float) cur / (float) total;
-                                        if (! ccPickedUp[(size_t) outFieldId])
-                                        {
-                                            if (std::abs (outNorm - curNorm) <= 0.04f) ccPickedUp[(size_t) outFieldId] = true;
-                                            else break;
-                                        }
+                                        if (std::abs (outNorm - curNorm) <= 0.04f)
+                                            ccPickedUp[(size_t) outFieldId] = true;
+                                        else
+                                            doEnqueue = false;
                                     }
+                                }
+                                if (doEnqueue)
+                                {
                                     const int newEnd = outIsRelative
                                         ? juce::jlimit (sl.startSample + 64, total, cur + (int)(outNorm * stepSamples))
                                         : juce::jlimit (sl.startSample + 64, total, (int)(outNorm * (float)total));
                                     ccCmd.intParam2    = sl.startSample;
                                     ccCmd.positions[0] = newEnd;
                                 }
+                            }
+
+                            if (doEnqueue)
+                            {
                                 ccCmd.numPositions = 1;
                                 enqueueCoalescedCommand (ccCmd);
                             }
@@ -1467,28 +1465,13 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (latestLoadKind.load (std::memory_order_acquire) == (int) LoadKindReplace)
             {
                 sliceManager.clearAll();
-                const int totalFrames = sampleData.getNumFrames();
                 const juce::String fname = sampleData.getFileName();
                 const bool isDefault = fname.equalsIgnoreCase ("Empty.wav")
                                     || fname.equalsIgnoreCase ("DYSEKT_default.wav")
                                     || fname.isEmpty();
-
-                if (totalFrames > 0 && ! isDefault)
-                {
-                    // Auto-slice: makes sample immediately playable via MIDI note 36.
-                    int idx = sliceManager.createSlice (0, totalFrames);
-                    if (idx >= 0)
-                    {
-                        sliceManager.getSlice (idx).midiNote = 36;
-                        sliceManager.rebuildMidiMap();
-                        sliceManager.selectedSlice.store (0, std::memory_order_relaxed);
-                    }
-                }
-                else
-                {
-                    // Default sample: no slice, LCD shows EMPTY.
-                    sliceManager.selectedSlice.store (-1, std::memory_order_relaxed);
-                }
+                // No auto-slice: sample is immediately playable chromatically
+                // via the unsliced path. User adds slices explicitly via ADD SLICE.
+                sliceManager.selectedSlice.store (isDefault ? -1 : -1, std::memory_order_relaxed);
             }
             else
             {
