@@ -14,13 +14,12 @@ public:
     void paint (juce::Graphics& g) override;
     void paintOverChildren (juce::Graphics& g) override;
 
-    /// Invoked when the user clicks the "?" button to open the shortcuts panel.
     std::function<void()> onShortcutsToggle;
 
-    // Callbacks wired up by DysektEditor
     void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
     void setWaveActive       (bool v) { waveActive       = v; repaint(); }
     void setChromaticActive  (bool v) { chromaticActive  = v; repaint(); }
+    bool isAddSliceModeActive() const { return addSliceBtn.getToggleState(); }
 
 private:
     DysektProcessor& processor;
@@ -30,10 +29,9 @@ private:
     bool waveActive       = false;
     bool chromaticActive  = false;
 
-    void updateToggleBtn (juce::TextButton& btn, bool active);
-    void updateMidiButtonAppearance (bool active);
+    void updateToggleBtn (juce::ToggleButton& btn, bool active);
 
-    juce::TextButton addSliceBtn    { "ADD"  };
-    juce::TextButton lazyChopBtn    { "LAZY" };
+    juce::ToggleButton addSliceBtn  { "ADD"  };
+    juce::ToggleButton midiSliceBtn { "MIDI" };
     juce::TextButton shortcutsBtn   { "?"    };
 };
