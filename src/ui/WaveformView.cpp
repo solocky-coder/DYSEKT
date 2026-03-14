@@ -6,7 +6,6 @@
 
 WaveformView::WaveformView(DysektProcessor& p) : processor(p) {}
 
-void WaveformView::setAddSliceActiveGetter(std::function<bool()> fn) { isAddSliceActive = std::move(fn); }
 
 void WaveformView::paint(juce::Graphics& g)
 {
