@@ -273,10 +273,6 @@ public:
 
     // Peak metering (written in processBlock, read by UI)
 
-    /** Signal that the UI slice snapshot needs to be rebuilt on the next audio block.
-        Safe to call from the UI thread. */
-    void markUiDirty() noexcept { uiSnapshotDirty.store (true, std::memory_order_release); }
-
 private:
     // =========================================================================
     // Private types
