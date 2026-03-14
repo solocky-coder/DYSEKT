@@ -18,22 +18,23 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     addSliceBtn.setClickingTogglesState(true);
     lazyChopBtn.setClickingTogglesState(true);
 
-    // Synced presentation logic for both buttons
-    auto syncButtonColours = [this]()
-    {
+    // Unified color sync after any change
+    auto syncButtonColours = [this] {
         updateToggleBtn(addSliceBtn, addSliceBtn.getToggleState());
         updateToggleBtn(lazyChopBtn, lazyChopBtn.getToggleState());
     };
 
     addSliceBtn.onClick = [this, syncButtonColours]
     {
-        const bool addActive = addSliceBtn.getToggleState();
-        const bool midiActive = lazyChopBtn.getToggleState();
+        bool addActive = addSliceBtn.getToggleState();
+        bool midiActive = lazyChopBtn.getToggleState();
 
         if (addActive && midiActive)
         {
+            // Only one on at a time
             lazyChopBtn.setToggleState(false, juce::dontSendNotification);
             updateToggleBtn(lazyChopBtn, false);
+
             if (processor.lazyChop.isActive())
             {
                 DysektProcessor::Command cmd;
@@ -49,8 +50,8 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     lazyChopBtn.onClick = [this, syncButtonColours]
     {
-        const bool midiActive = lazyChopBtn.getToggleState();
-        const bool addActive = addSliceBtn.getToggleState();
+        bool midiActive = lazyChopBtn.getToggleState();
+        bool addActive = addSliceBtn.getToggleState();
 
         if (midiActive && addActive)
         {
@@ -75,12 +76,11 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
     lazyChopBtn.setTooltip ("MIDI Slice — chop by incoming MIDI notes (L)");
 
-    // Only custom icons are drawn - label text is empty
     addSliceBtn.setButtonText ("");
     lazyChopBtn.setButtonText ("");
     updateMidiButtonAppearance(false);
 
-    // Ensure initial visual state matches toggle state
+    // Ensure initial visuals match toggle state
     syncButtonColours();
 }
 
@@ -96,6 +96,7 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
     }
     else
     {
+        // INACTIVE: both buttons use the *same* theme color, matching MIDI OFF
         btn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
         btn.setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
         btn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
@@ -103,18 +104,20 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
     btn.setEnabled(true); // Always clickable!
 }
 
-void ActionPanel::updateMidiButtonAppearance (bool) {}
+void ActionPanel::updateMidiButtonAppearance (bool /*active*/) {}
 
 void ActionPanel::resized()
 {
     const int gap    = 4;
     const int h      = getHeight();
-    const int thinW  = 30;
-    const int addW   = 80;
-    const int midiW  = 34;
+    const int thinW  = 30;   // MIDI select icon button (hard right)
+    const int addW   = 80;   // ADD SLICE natural width
+    const int midiW  = 34;   // MIDI SLICE natural width (icon only)
 
+    // MIDI icon hard right, then TRIM, then ADD SLICE and MIDI SLICE left-aligned
     int right = getWidth();    right -= thinW + gap;
 
+    // ADD SLICE and MIDI SLICE left-aligned with natural widths
     addSliceBtn.setBounds (0,            0, addW, h);
     lazyChopBtn.setBounds (addW + gap,   0, midiW, h);
 
@@ -123,15 +126,12 @@ void ActionPanel::resized()
 
 void ActionPanel::paint (juce::Graphics& g)
 {
-    for (auto* btn : { &addSliceBtn, &lazyChopBtn })
-    {
-        btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
-        btn->setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
-        btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
-    }
+    // Only highlight ON buttons
     if (waveformView.isSliceDrawModeActive())
-    { g.setColour (getTheme().accent.withAlpha (0.25f)); g.fillRect (addSliceBtn.getBounds()); }
-
+    {
+        g.setColour (getTheme().accent.withAlpha (0.25f));
+        g.fillRect (addSliceBtn.getBounds());
+    }
     if (processor.lazyChop.isActive())
     {
         g.setColour (juce::Colours::red.withAlpha (0.25f));
@@ -139,7 +139,7 @@ void ActionPanel::paint (juce::Graphics& g)
     }
 }
 
-// --- Icon helpers (unchanged) ---
+// Icon helpers
 static void ap_drawScissors (juce::Graphics& g, float cx, float cy, float sz, juce::Colour col)
 {
     const float hw = sz * 0.38f; const float hh = sz * 0.22f;
@@ -171,6 +171,7 @@ static void ap_drawPiano (juce::Graphics& g, float cx, float cy, float sz, juce:
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
+    // ── ADD SLICE: Plus + Scissors ──
     {
         auto b  = addSliceBtn.getBounds().toFloat();
         const float cx = b.getCentreX();
@@ -182,6 +183,7 @@ void ActionPanel::paintOverChildren (juce::Graphics& g)
         ap_drawScissors (g, cx + sz * 0.36f, cy, sz, col);
     }
 
+    // ── MIDI SLICE: Piano + Scissors ──
     {
         auto b  = lazyChopBtn.getBounds().toFloat();
         const float cx    = b.getCentreX();
