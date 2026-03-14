@@ -1,7 +1,6 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "WaveformCache.h"
-#include <functional> // required for std::function
 
 class DysektProcessor;
 
@@ -62,15 +61,7 @@ public:
     bool shiftPreviewActive = false;
     std::vector<int> transientPreviewPositions;
 
-    // ---- NEW: Add this for Add Slice toggle logic ----
-    void setAddSliceActiveGetter(std::function<bool()> fn) { isAddSliceActive = std::move(fn); }
-    // --------------------------------------------------
-
 private:
-    // ---- NEW: Add this private member for Add Slice toggle logic ----
-    std::function<bool()> isAddSliceActive;
-    // ---------------------------------------------------------------
-
     struct ViewState
     {
         int numFrames = 0;
@@ -149,6 +140,7 @@ private:
     int linkedSliceIdx     = -1;
     int linkedPreviewStart = 0;
     int linkedPreviewEnd   = 0;
+
 
     // Middle-mouse drag (scroll+zoom like ScrollZoomBar)
     bool midDragging = false;
