@@ -1,0 +1,96 @@
+diff --git a/src/ui/ActionPanel.h b/src/ui/ActionPanel.h
+index f412fe2..a1b2c3d 100644
+--- a/src/ui/ActionPanel.h
++++ b/src/ui/ActionPanel.h
+@@ ... @@
+-    juce::TextButton addSliceBtn    { "ADD"  };
++    juce::ToggleButton addSliceBtn  { "ADD"  };
+diff --git a/src/ui/ActionPanel.cpp b/src/ui/ActionPanel.cpp
+index 34f28d2..43ce1e2 100644
+--- a/src/ui/ActionPanel.cpp
++++ b/src/ui/ActionPanel.cpp
+@@ ... @@
+-    addSliceBtn.setButtonText ("");   // icon drawn in paintOverChildren
++    addSliceBtn.setClickingTogglesState(true);
+@@ ... @@
+-void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
++void ActionPanel::updateToggleBtn (juce::ToggleButton& btn, bool active)
+ {
+     if (active)
+     {
+-        btn.setColour (juce::TextButton::buttonColourId,  getTheme().accent.withAlpha (0.2f));
+-        btn.setColour (juce::TextButton::textColourOnId,  getTheme().accent);
+-        btn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
++        btn.setColour(juce::ToggleButton::tickColourId, getTheme().accent);
++        btn.setColour(juce::ToggleButton::textColourId, getTheme().accent);
++        btn.setAlpha(1.0f);
+     }
+     else
+     {
+-        btn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
+-        btn.setColour (juce::TextButton::textColourOnId,  getTheme().accent);
+-        btn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
++        btn.setColour(juce::ToggleButton::tickColourId, getTheme().button.withAlpha(0.5f));
++        btn.setColour(juce::ToggleButton::textColourId, getTheme().foreground.withAlpha(0.5f));
++        btn.setAlpha(0.6f);
+     }
+ }
+@@ ... @@
++// In your ActionPanel constructor or initialization
++updateToggleBtn(addSliceBtn, addSliceBtn.getToggleState());
++addSliceBtn.onClick = [this] {
++    const bool active = addSliceBtn.getToggleState();
++    updateToggleBtn(addSliceBtn, active);
++    // Optionally notify waveform or main editor to enter/exit add-slice mode.
++};
+@@ ... @@
+ void ActionPanel::resized()
+ {
+     const int gap    = 4;
+     const int h      = getHeight();
+     const int thinW  = 30;   // MIDI select icon button (hard right)
+-    const int addW   = 80;   // ADD SLICE natural width
++    const int addW   = 80;   // ADD SLICE natural width
+     const int midiW  = 34;   // MIDI SLICE natural width (icon only)
+ 
+     // MIDI icon hard right, then TRIM, then ADD SLICE and MIDI SLICE left-aligned
+     int right = getWidth();    right -= thinW + gap;
+ 
+     // ADD SLICE and MIDI SLICE left-aligned with natural widths
+-    addSliceBtn.setBounds (0,            0, addW, h);
++    addSliceBtn.setBounds (0,            0, addW, h);
+     lazyChopBtn.setBounds (addW + gap,   0, midiW, h);
+ 
+     shortcutsBtn.setVisible (false);
+ }
+diff --git a/src/ui/WaveformView.h b/src/ui/WaveformView.h
+index e391712..9ff29a3 100644
+--- a/src/ui/WaveformView.h
++++ b/src/ui/WaveformView.h
+@@ ... @@
++    // Add this public setter to link the ActionPanel Add Slice toggle to WaveformView
++    void setAddSliceActiveGetter(std::function<bool()> fn) { isAddSliceActive = std::move(fn); }
++ 
++private:
++    std::function<bool()> isAddSliceActive;
+diff --git a/src/ui/WaveformView.cpp b/src/ui/WaveformView.cpp
+index 785c4a1..0a97ecd 100644
+--- a/src/ui/WaveformView.cpp
++++ b/src/ui/WaveformView.cpp
+@@ ... @@
+-void WaveformView::mouseDown(const juce::MouseEvent& e)
+-{
+-    // Existing functionality (drag, selection)...
+-}
++void WaveformView::mouseDown(const juce::MouseEvent& e)
++{
++    if (isAddSliceActive && isAddSliceActive()) {
++        // Calculate the marker position from e.position.x:
++        int markerSample = positionToSample(e.position.x); // or your actual mapping logic
++        addSliceAtPosition(markerSample);                  // or your existing add-slice call
++        // Optionally: turn off add-slice mode after adding
++        // If ActionPanel accessible here: actionPanel.addSliceBtn.setToggleState(false);
++        return;
++    }
++    // Otherwise, keep legacy behavior if not in add-slice mode.
++}
