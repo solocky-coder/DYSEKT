@@ -161,33 +161,50 @@ static void ap_drawPiano (juce::Graphics& g, float cx, float cy, float sz, juce:
         g.fillRect  (startX + i * (kw + 1.f) + kw * 0.65f, cy - kh * 0.5f, kw * 0.68f, bh);
 }
 
+// --- SPACING CONSTANT ---
+static constexpr float iconGap = 9.0f; // adjust for more/less space between icons
+
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // --- ADD SLICE icon: Plus + Scissors ---
+    // --- ADD SLICE icon: Plus + Scissors (with gap) ---
     {
         auto b  = addSliceBtn.getBounds().toFloat();
-        const float cx = b.getCentreX();
         const float cy = b.getCentreY();
         const float sz = b.getHeight() * 0.72f;
         const float alpha = addSliceBtn.isEnabled() ? 0.92f : 0.35f;
         const auto col = waveformView.isSliceDrawModeActive()
             ? getTheme().accent
             : getTheme().foreground.withAlpha(alpha);
-        ap_drawPlus     (g, cx - sz * 0.32f, cy, sz, col);
-        ap_drawScissors (g, cx + sz * 0.36f, cy, sz, col);
+
+        // measure icon extents
+        const float plusW = sz * 0.70f;     // approx icon bounds (for centering)
+        const float scissorsW = sz * 0.70f; // same
+        const float totalW = plusW + iconGap + scissorsW;
+
+        const float left = b.getCentreX() - totalW/2.f;
+
+        ap_drawPlus     (g, left + plusW/2.f,            cy, sz, col);
+        ap_drawScissors (g, left + plusW + iconGap + scissorsW/2.f, cy, sz, col);
     }
 
-    // --- MIDI SLICE icon: Piano + Scissors ---
+    // --- MIDI SLICE icon: Piano + Scissors (with gap) ---
     {
         auto b  = lazyChopBtn.getBounds().toFloat();
-        const float cx    = b.getCentreX();
         const float cy    = b.getCentreY();
         const float sz    = b.getHeight() * 0.72f;
         const float alpha = lazyChopBtn.isEnabled() ? 0.92f : 0.35f;
         const auto  col   = processor.lazyChop.isActive()
             ? getTheme().accent
             : getTheme().foreground.withAlpha(alpha);
-        ap_drawPiano    (g, cx - sz * 0.30f, cy, sz, col);
-        ap_drawScissors (g, cx + sz * 0.38f, cy, sz, col);
+
+        // measure icon extents
+        const float pianoW = sz * 0.70f;
+        const float scissorsW = sz * 0.70f;
+        const float totalW = pianoW + iconGap + scissorsW;
+
+        const float left = b.getCentreX() - totalW/2.f;
+
+        ap_drawPiano    (g, left + pianoW/2.f,            cy, sz, col);
+        ap_drawScissors (g, left + pianoW + iconGap + scissorsW/2.f, cy, sz, col);
     }
 }
