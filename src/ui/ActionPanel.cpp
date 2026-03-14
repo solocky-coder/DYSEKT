@@ -15,18 +15,25 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
-    // --- MUTUALLY EXCLUSIVE BUTTON LOGIC START ---
     addSliceBtn.setClickingTogglesState(true);
     lazyChopBtn.setClickingTogglesState(true);
 
-    addSliceBtn.onClick = [this]
+    // Synced presentation logic for both buttons
+    auto syncButtonColours = [this]()
     {
-        bool addActive = addSliceBtn.getToggleState();
-        if (addActive)
+        updateToggleBtn(addSliceBtn, addSliceBtn.getToggleState());
+        updateToggleBtn(lazyChopBtn, lazyChopBtn.getToggleState());
+    };
+
+    addSliceBtn.onClick = [this, syncButtonColours]
+    {
+        const bool addActive = addSliceBtn.getToggleState();
+        const bool midiActive = lazyChopBtn.getToggleState();
+
+        if (addActive && midiActive)
         {
-            // If enabling Add, turn off MIDI
             lazyChopBtn.setToggleState(false, juce::dontSendNotification);
-            // Turn off MIDI logic if it's on
+            updateToggleBtn(lazyChopBtn, false);
             if (processor.lazyChop.isActive())
             {
                 DysektProcessor::Command cmd;
@@ -34,22 +41,24 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
                 processor.pushCommand(cmd);
             }
         }
-        // Apply add slice draw mode in waveform
+
         waveformView.setSliceDrawMode(addActive);
+        syncButtonColours();
         repaint();
     };
 
-    lazyChopBtn.onClick = [this]
+    lazyChopBtn.onClick = [this, syncButtonColours]
     {
-        bool midiActive = lazyChopBtn.getToggleState();
-        if (midiActive)
+        const bool midiActive = lazyChopBtn.getToggleState();
+        const bool addActive = addSliceBtn.getToggleState();
+
+        if (midiActive && addActive)
         {
-            // If enabling MIDI, turn off Add
             addSliceBtn.setToggleState(false, juce::dontSendNotification);
+            updateToggleBtn(addSliceBtn, false);
             waveformView.setSliceDrawMode(false);
         }
-        // MIDI Slice logic as before
-        const bool wasActive = processor.lazyChop.isActive();
+
         DysektProcessor::Command cmd;
         cmd.type = midiActive ? DysektProcessor::CmdLazyChopStart : DysektProcessor::CmdLazyChopStop;
         processor.pushCommand(cmd);
@@ -57,18 +66,22 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         if (midiActive)
             processor.midiSelectsSlice.store(true);
 
+        syncButtonColours();
         repaint();
     };
-    // --- MUTUALLY EXCLUSIVE BUTTON LOGIC END ---
 
     shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
     shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");
     addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
     lazyChopBtn.setTooltip ("MIDI Slice — chop by incoming MIDI notes (L)");
 
-    addSliceBtn.setButtonText ("");   // icon drawn in paintOverChildren
-    lazyChopBtn.setButtonText ("");   // icon drawn in paintOverChildren
-    updateMidiButtonAppearance (false);
+    // Only custom icons are drawn - label text is empty
+    addSliceBtn.setButtonText ("");
+    lazyChopBtn.setButtonText ("");
+    updateMidiButtonAppearance(false);
+
+    // Ensure initial visual state matches toggle state
+    syncButtonColours();
 }
 
 ActionPanel::~ActionPanel() = default;
@@ -84,15 +97,13 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
     else
     {
         btn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
-        btn.setColour (juce::TextButton::textColourOnId,  getTheme().accent);
-        btn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
+        btn.setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
+        btn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
+    btn.setEnabled(true); // Always clickable!
 }
 
-void ActionPanel::updateMidiButtonAppearance (bool /*active*/)
-{
-    // midiSelectBtn removed — MIDI Follow is now in HeaderBar icon slot.
-}
+void ActionPanel::updateMidiButtonAppearance (bool) {}
 
 void ActionPanel::resized()
 {
@@ -128,6 +139,7 @@ void ActionPanel::paint (juce::Graphics& g)
     }
 }
 
+// --- Icon helpers (unchanged) ---
 static void ap_drawScissors (juce::Graphics& g, float cx, float cy, float sz, juce::Colour col)
 {
     const float hw = sz * 0.38f; const float hh = sz * 0.22f;
@@ -159,7 +171,6 @@ static void ap_drawPiano (juce::Graphics& g, float cx, float cy, float sz, juce:
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // ADD SLICE icon: Plus + Scissors
     {
         auto b  = addSliceBtn.getBounds().toFloat();
         const float cx = b.getCentreX();
@@ -171,7 +182,6 @@ void ActionPanel::paintOverChildren (juce::Graphics& g)
         ap_drawScissors (g, cx + sz * 0.36f, cy, sz, col);
     }
 
-    // MIDI SLICE icon: Piano + Scissors
     {
         auto b  = lazyChopBtn.getBounds().toFloat();
         const float cx    = b.getCentreX();
