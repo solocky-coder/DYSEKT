@@ -7,8 +7,7 @@
 ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
 {
-    for (auto* btn : { &addSliceBtn, &lazyChopBtn,
-                       &shortcutsBtn })
+    for (auto* btn : { &addSliceBtn, &lazyChopBtn, &shortcutsBtn })
     {
         addAndMakeVisible (btn);
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -16,32 +15,59 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
-    // snapBtn removed — snap-to-zero-crossing is now always active (hardcoded)
-    // FIL/WA/CH buttons moved to HeaderBar — keep members for state sync only
+    // --- MUTUALLY EXCLUSIVE BUTTON LOGIC START ---
+    addSliceBtn.setClickingTogglesState(true);
+    lazyChopBtn.setClickingTogglesState(true);
 
-    addSliceBtn.onClick = [this] { waveformView.setSliceDrawMode (! waveformView.isSliceDrawModeActive()); repaint(); };
-
-    lazyChopBtn.onClick = [this] {
-        const bool wasActive = processor.lazyChop.isActive();
-        DysektProcessor::Command cmd;
-        cmd.type = wasActive ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
-        processor.pushCommand (cmd);
-
-        // MIDI FOLLOW auto-on: enabling MIDI Slice automatically turns on MIDI Follow
-        if (! wasActive)
-            processor.midiSelectsSlice.store (true);
-
+    addSliceBtn.onClick = [this]
+    {
+        bool addActive = addSliceBtn.getToggleState();
+        if (addActive)
+        {
+            // If enabling Add, turn off MIDI
+            lazyChopBtn.setToggleState(false, juce::dontSendNotification);
+            // Turn off MIDI logic if it's on
+            if (processor.lazyChop.isActive())
+            {
+                DysektProcessor::Command cmd;
+                cmd.type = DysektProcessor::CmdLazyChopStop;
+                processor.pushCommand(cmd);
+            }
+        }
+        // Apply add slice draw mode in waveform
+        waveformView.setSliceDrawMode(addActive);
         repaint();
     };
 
+    lazyChopBtn.onClick = [this]
+    {
+        bool midiActive = lazyChopBtn.getToggleState();
+        if (midiActive)
+        {
+            // If enabling MIDI, turn off Add
+            addSliceBtn.setToggleState(false, juce::dontSendNotification);
+            waveformView.setSliceDrawMode(false);
+        }
+        // MIDI Slice logic as before
+        const bool wasActive = processor.lazyChop.isActive();
+        DysektProcessor::Command cmd;
+        cmd.type = midiActive ? DysektProcessor::CmdLazyChopStart : DysektProcessor::CmdLazyChopStop;
+        processor.pushCommand(cmd);
+
+        if (midiActive)
+            processor.midiSelectsSlice.store(true);
+
+        repaint();
+    };
+    // --- MUTUALLY EXCLUSIVE BUTTON LOGIC END ---
 
     shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
-    shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");    addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
+    shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");
+    addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
     lazyChopBtn.setTooltip ("MIDI Slice — chop by incoming MIDI notes (L)");
 
     addSliceBtn.setButtonText ("");   // icon drawn in paintOverChildren
-    // lazyChopBtn label intentionally empty — PLAY/STOP icon drawn in paintOverChildren
-    lazyChopBtn.setButtonText ("");
+    lazyChopBtn.setButtonText ("");   // icon drawn in paintOverChildren
     updateMidiButtonAppearance (false);
 }
 
@@ -63,25 +89,21 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
     }
 }
 
-
 void ActionPanel::updateMidiButtonAppearance (bool /*active*/)
 {
     // midiSelectBtn removed — MIDI Follow is now in HeaderBar icon slot.
-    // This stub satisfies any remaining call sites during transition.
 }
 
 void ActionPanel::resized()
 {
     const int gap    = 4;
     const int h      = getHeight();
-    const int thinW  = 30;   // MIDI select icon button (hard right)
-    const int addW   = 80;   // ADD SLICE natural width
-    const int midiW  = 34;   // MIDI SLICE natural width (icon only)
+    const int thinW  = 30;
+    const int addW   = 80;
+    const int midiW  = 34;
 
-    // MIDI icon hard right, then TRIM, then ADD SLICE and MIDI SLICE left-aligned
     int right = getWidth();    right -= thinW + gap;
 
-    // ADD SLICE and MIDI SLICE left-aligned with natural widths
     addSliceBtn.setBounds (0,            0, addW, h);
     lazyChopBtn.setBounds (addW + gap,   0, midiW, h);
 
@@ -104,13 +126,8 @@ void ActionPanel::paint (juce::Graphics& g)
         g.setColour (juce::Colours::red.withAlpha (0.25f));
         g.fillRect (lazyChopBtn.getBounds());
     }
-
 }
 
-
-// snapBtn removed — updateSnapButtonAppearance no longer needed
-
-// ── Icon helpers ─────────────────────────────────────────────────────────────
 static void ap_drawScissors (juce::Graphics& g, float cx, float cy, float sz, juce::Colour col)
 {
     const float hw = sz * 0.38f; const float hh = sz * 0.22f;
@@ -142,7 +159,7 @@ static void ap_drawPiano (juce::Graphics& g, float cx, float cy, float sz, juce:
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // ── ADD SLICE icon: Plus + Scissors ──────────────────────────────────
+    // ADD SLICE icon: Plus + Scissors
     {
         auto b  = addSliceBtn.getBounds().toFloat();
         const float cx = b.getCentreX();
@@ -154,7 +171,7 @@ void ActionPanel::paintOverChildren (juce::Graphics& g)
         ap_drawScissors (g, cx + sz * 0.36f, cy, sz, col);
     }
 
-    // ── MIDI SLICE icon: Piano + Scissors ────────────────────────────────
+    // MIDI SLICE icon: Piano + Scissors
     {
         auto b  = lazyChopBtn.getBounds().toFloat();
         const float cx    = b.getCentreX();
@@ -164,9 +181,7 @@ void ActionPanel::paintOverChildren (juce::Graphics& g)
         const auto  col   = processor.lazyChop.isActive()
                               ? getTheme().accent
                               : getTheme().foreground.withAlpha (alpha);
-        // Piano left, scissors right — mirrors ADD SLICE (plus + scissors)
         ap_drawPiano    (g, cx - sz * 0.30f, cy, sz, col);
         ap_drawScissors (g, cx + sz * 0.38f, cy, sz, col);
     }
-
 }
