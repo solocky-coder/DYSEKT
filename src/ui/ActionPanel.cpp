@@ -106,14 +106,12 @@ void ActionPanel::resized()
 {
     const int gap    = 4;
     const int h      = getHeight();
-    const int thinW  = 30;   // MIDI select icon button (hard right)
-    const int addW   = 80;   // ADD SLICE natural width
-    const int midiW  = 34;   // MIDI SLICE natural width (icon only)
+    // Use the same width for both buttons!
+    const int btnW   = 34;   // Was: addW=80, midiW=34
+    // const int thinW  = 30; // Not used here
 
-    int right = getWidth();    right -= thinW + gap;
-
-    addSliceBtn.setBounds (0,            0, addW, h);
-    lazyChopBtn.setBounds (addW + gap,   0, midiW, h);
+    addSliceBtn.setBounds (0,           0, btnW, h);
+    lazyChopBtn.setBounds (btnW + gap,  0, btnW, h);
 
     shortcutsBtn.setVisible (false);
 }
