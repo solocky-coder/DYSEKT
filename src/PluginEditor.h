@@ -62,13 +62,12 @@ private:
     bool     lastPreviewActive     = false;
     float    savedScale            = -1.0f;
     uint32_t lastUiSnapshotVersion = 0;
-    int      lastNumSlices         = -1;  // for auto-enable midi follow on first slice
+    int      lastNumSlices         = -1;
 
     bool browserOpen = false;
     bool mixerOpen   = false;
     bool softWave    = false;
 
-    // Frame rects set in resized() and drawn in paint() — include padding so borders never clip
     WaveformOverview waveformOverview;
 
     std::unique_ptr<TrimSession> trimSession;
@@ -85,7 +84,6 @@ private:
 
     SliceLane       sliceLane;
     WaveformView    waveformView;
-    // waveformOverview declared above with frame rects
     SliceControlBar sliceControlBar;
     ActionPanel     actionPanel;
 
