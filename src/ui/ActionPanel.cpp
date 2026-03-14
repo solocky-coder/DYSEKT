@@ -18,7 +18,6 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     addSliceBtn.setClickingTogglesState(true);
     lazyChopBtn.setClickingTogglesState(true);
 
-    // Unified color sync after any change
     auto syncButtonColours = [this] {
         updateToggleBtn(addSliceBtn, addSliceBtn.getToggleState());
         updateToggleBtn(lazyChopBtn, lazyChopBtn.getToggleState());
@@ -31,7 +30,6 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
         if (addActive && midiActive)
         {
-            // Only one on at a time
             lazyChopBtn.setToggleState(false, juce::dontSendNotification);
             updateToggleBtn(lazyChopBtn, false);
 
@@ -80,7 +78,6 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     lazyChopBtn.setButtonText ("");
     updateMidiButtonAppearance(false);
 
-    // Ensure initial visuals match toggle state
     syncButtonColours();
 }
 
@@ -96,7 +93,6 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
     }
     else
     {
-        // INACTIVE: both buttons use the *same* theme color, matching MIDI OFF
         btn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
         btn.setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
         btn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
@@ -114,10 +110,8 @@ void ActionPanel::resized()
     const int addW   = 80;   // ADD SLICE natural width
     const int midiW  = 34;   // MIDI SLICE natural width (icon only)
 
-    // MIDI icon hard right, then TRIM, then ADD SLICE and MIDI SLICE left-aligned
     int right = getWidth();    right -= thinW + gap;
 
-    // ADD SLICE and MIDI SLICE left-aligned with natural widths
     addSliceBtn.setBounds (0,            0, addW, h);
     lazyChopBtn.setBounds (addW + gap,   0, midiW, h);
 
@@ -126,7 +120,6 @@ void ActionPanel::resized()
 
 void ActionPanel::paint (juce::Graphics& g)
 {
-    // Only highlight ON buttons
     if (waveformView.isSliceDrawModeActive())
     {
         g.setColour (getTheme().accent.withAlpha (0.25f));
@@ -139,7 +132,6 @@ void ActionPanel::paint (juce::Graphics& g)
     }
 }
 
-// Icon helpers
 static void ap_drawScissors (juce::Graphics& g, float cx, float cy, float sz, juce::Colour col)
 {
     const float hw = sz * 0.38f; const float hh = sz * 0.22f;
@@ -171,19 +163,21 @@ static void ap_drawPiano (juce::Graphics& g, float cx, float cy, float sz, juce:
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
-    // ── ADD SLICE: Plus + Scissors ──
+    // --- ADD SLICE icon: Plus + Scissors ---
     {
         auto b  = addSliceBtn.getBounds().toFloat();
         const float cx = b.getCentreX();
         const float cy = b.getCentreY();
         const float sz = b.getHeight() * 0.72f;
         const float alpha = addSliceBtn.isEnabled() ? 0.92f : 0.35f;
-        const auto  col = getTheme().accent.withAlpha (alpha);
+        const auto col = waveformView.isSliceDrawModeActive()
+            ? getTheme().accent
+            : getTheme().foreground.withAlpha(alpha);
         ap_drawPlus     (g, cx - sz * 0.32f, cy, sz, col);
         ap_drawScissors (g, cx + sz * 0.36f, cy, sz, col);
     }
 
-    // ── MIDI SLICE: Piano + Scissors ──
+    // --- MIDI SLICE icon: Piano + Scissors ---
     {
         auto b  = lazyChopBtn.getBounds().toFloat();
         const float cx    = b.getCentreX();
@@ -191,8 +185,8 @@ void ActionPanel::paintOverChildren (juce::Graphics& g)
         const float sz    = b.getHeight() * 0.72f;
         const float alpha = lazyChopBtn.isEnabled() ? 0.92f : 0.35f;
         const auto  col   = processor.lazyChop.isActive()
-                              ? getTheme().accent
-                              : getTheme().foreground.withAlpha (alpha);
+            ? getTheme().accent
+            : getTheme().foreground.withAlpha(alpha);
         ap_drawPiano    (g, cx - sz * 0.30f, cy, sz, col);
         ap_drawScissors (g, cx + sz * 0.38f, cy, sz, col);
     }
