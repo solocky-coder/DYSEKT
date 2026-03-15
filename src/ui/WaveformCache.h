@@ -1,4 +1,5 @@
 #pragma once
+#include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
@@ -25,14 +26,12 @@ public:
     WaveformCache() = default;
     ~WaveformCache() = default;
 
-    // Example interface -- adapt to your real implementation:
     void clear();
-    void update(const juce::AudioSampleBuffer* buf, const CacheKey& key);
+    void update(const juce::AudioBuffer<float>* buf, const CacheKey& key);
     // ... Other waveform cache logic and member functions ...
 
 private:
-    // Example private data members -- adapt as needed
     juce::Image cachedImage;
     CacheKey cachedKey;
-    // ... Any additional members for your actual cache logic ...
+    // ... Any additional members ...
 };
