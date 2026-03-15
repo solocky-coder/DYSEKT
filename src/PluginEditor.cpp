@@ -5,36 +5,70 @@
 namespace
 {
     static constexpr int kBaseW      = 1130;
-    static constexpr int kLogoH      = 52;    // single combined header bar
-    static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LCD row + padding
-    static constexpr int kSliceLaneH = 36;   // 30 body + 6 ADSR dot strip
+    static constexpr int kLogoH      = 52;
+    static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12;
+    static constexpr int kSliceLaneH = 36;
     static constexpr int kScrollbarH = 28;
     static constexpr int kSliceCtrlH = 72;
     static constexpr int kActionH    = 22;
-    static constexpr int kTrimBarH   = 34;   // height of inline trim bar
-    static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
-
+    static constexpr int kTrimBarH   = 34;
+    static constexpr int kCtrlFrameW    = 180;
     static constexpr int kBrowserH    = 170;
     static constexpr int kMargin      = 8;
-    // Fixed panel slot — same height used for both mixer and browser.
-    // Mixer is taller so we cap it; browser gets the full slot.
     static constexpr int kPanelSlotH  = 200;
     static constexpr int kBaseHCore   = kLogoH + kLcdRowH + kSliceLaneH
                                       + kScrollbarH + kSliceCtrlH + kActionH
-                                      + 120; // minimum waveform height
-    // Total height is FIXED — panel slot always reserved, window never resizes.
-    static constexpr int kTotalH      = kBaseHCore + kPanelSlotH + 16; // 16 = frame padding
+                                      + 120;
+    static constexpr int kTotalH      = kBaseHCore + kPanelSlotH + 16;
 }
-// ────────────── End layout constants block ───────────────────────
 
-// ────────────── Rest of your code unchanged ──────────────────────
+// ────────────── DysektEditor Implementation ──────────────────────
+
+DysektEditor::DysektEditor (DysektProcessor& p)
+    : juce::AudioProcessorEditor (p)
+    , processor (p)
+    , shortcutsPanel (processor)
+{
+    // Add and make visible all top-level GUI components
+    addAndMakeVisible (logoBar);
+    addAndMakeVisible (headerBar);
+    addAndMakeVisible (sliceLcd);
+    addAndMakeVisible (sliceWaveformLcd);
+    addAndMakeVisible (sliceLane);
+    addAndMakeVisible (waveformView);
+    addAndMakeVisible (sliceControlBar);
+    addAndMakeVisible (actionPanel);
+    addAndMakeVisible (waveformOverview);
+    addAndMakeVisible (browserPanel);
+    addAndMakeVisible (mixerPanel);
+    addAndMakeVisible (shortcutsPanel);
+
+    // Tooltip window is already created in member initializer
+    // LookAndFeel setup if needed:
+    setLookAndFeel (&lnf);
+
+    // Size the editor
+    setSize (kBaseW, kTotalH);
+
+    // Start timer if you use it
+    startTimerHz (timerHz);
+}
+
+DysektEditor::~DysektEditor()
+{
+    setLookAndFeel (nullptr);
+}
+
+void DysektEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::darkgrey);// Replace or theme as needed
+}
 
 void DysektEditor::resized()
 {
     auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
 
     // 1. Combined header bar (logo left + UNDO/REDO/PANIC/UI right)
-    //    LogoBar and HeaderBar share the same horizontal strip.
     {
         auto headerStrip = area.removeFromTop (kLogoH);
         logoBar.setBounds (headerStrip.removeFromLeft (220));
@@ -44,15 +78,12 @@ void DysektEditor::resized()
     // 2. Dual LCD row — LCD1 | CtrlFrame | LCD2
     {
         auto lcdRow = area.removeFromTop (kLcdRowH).reduced (kMargin, 6);
-
         const int lcdW = (lcdRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
         sliceLcd.setBounds (lcdRow.removeFromLeft (lcdW));
-
         lcdRow.removeFromLeft (kMargin);
 
         if (auto* cf = headerBar.getControlFrame())
             cf->setBounds (lcdRow.removeFromLeft (kCtrlFrameW));
-
         lcdRow.removeFromLeft (kMargin);
         sliceWaveformLcd.setBounds (lcdRow);
     }
@@ -108,8 +139,6 @@ void DysektEditor::resized()
     const int screenBot   = frameBot - kFrameInset;
     const int screenH     = screenBot - screenTop;
 
-    // ----------- REMOVE ZOOMBAR SETUP COMPLETELY ------------
-
     // Scrollbar (now just the waveformOverview)
     {
         auto r = juce::Rectangle<int> (screenX, screenBot - kScrollbarH, screenW, kScrollbarH);
@@ -143,5 +172,3 @@ void DysektEditor::resized()
     if (shortcutsPanel.isVisible())
         shortcutsPanel.setBounds (getLocalBounds());
 }
-
-// [ ... everything else unmodified ... ]
