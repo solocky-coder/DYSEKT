@@ -1,73 +1,33 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
-#include <juce_audio_formats/juce_audio_formats.h>
-#include <atomic>
 #include <array>
 #include <memory>
-#include <vector>
 
-#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
-#define DYSEKT_HAS_STD_ATOMIC_SHARED_PTR 1
-#else
-#define DYSEKT_HAS_STD_ATOMIC_SHARED_PTR 0
-#endif
-
-class SampleData
+// Simplified: Each Peak has min/max value in [-1,1]
+struct WaveformPeak
 {
-public:
-    struct PeakMipmap
+    float minVal = 0.0f, maxVal = 0.0f;
+};
+
+constexpr int kMaxWaveformWidth = 4000;
+
+using PeakArray = std::vector<WaveformPeak>;
+
+// For SampleData::Snapshot, which has audio & peaks
+struct SampleDataSnapshot
+{
+    juce::AudioBuffer<float> buffer;              // The raw sample data
+    PeakArray peakPeaks;                          // One sample per pixel, already generated
+};
+
+using SnapshotPtr = std::shared_ptr<const SampleDataSnapshot>;
+
+struct SampleData
+{
+    SnapshotPtr getSnapshot() const
     {
-        int samplesPerPeak = 0;
-        std::vector<float> maxPeaks;
-        std::vector<float> minPeaks;
-    };
-
-    static constexpr int kNumMipmapLevels = 3;
-
-    struct DecodedSample
-    {
-        juce::AudioBuffer<float> buffer;  // always stereo
-        std::array<PeakMipmap, kNumMipmapLevels> peakMipmaps;
-        juce::String fileName;
-        juce::String filePath;
-    };
-
-    using SnapshotPtr = std::shared_ptr<const DecodedSample>;
-
-    SampleData();
-
-    static std::unique_ptr<DecodedSample> decodeFromFile (const juce::File& file,
-                                                           double projectSampleRate);
-    void applyDecodedSample (std::unique_ptr<DecodedSample> decoded);
-    bool loadFromFile (const juce::File& file, double projectSampleRate);
-    void clear();
-    SnapshotPtr getSnapshot() const;
-
-    float getInterpolatedSample (double pos, int channel) const;
-
-    int getNumFrames() const { return buffer.getNumSamples(); }
-    bool isLoaded() const { return loaded; }
-
-    const juce::AudioBuffer<float>& getBuffer() const { return buffer; }
-    const std::array<PeakMipmap, kNumMipmapLevels>& getMipmaps() const { return peakMipmaps; }
-
-    const juce::String& getFileName() const { return loadedFileName; }
-    void setFileName (const juce::String& name) { loadedFileName = name; }
-
-    const juce::String& getFilePath() const { return loadedFilePath; }
-    void setFilePath (const juce::String& path) { loadedFilePath = path; }
-
-private:
-    void buildMipmaps();
-
-    juce::AudioBuffer<float> buffer;  // always stereo
-    std::array<PeakMipmap, kNumMipmapLevels> peakMipmaps;
-#if DYSEKT_HAS_STD_ATOMIC_SHARED_PTR
-    std::atomic<std::shared_ptr<const DecodedSample>> snapshot;
-#else
-    std::shared_ptr<const DecodedSample> snapshot;
-#endif
-    juce::String loadedFileName;
-    juce::String loadedFilePath;
-    bool loaded = false;
+        // For testing, you might want a stub here that returns a
+        // std::make_shared<SampleDataSnapshot>(...);
+        return nullptr; // Replace with actual code
+    }
 };

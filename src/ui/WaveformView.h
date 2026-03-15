@@ -1,67 +1,63 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <functional>
 #include "WaveformCache.h"
+#include "SampleData.h"
 
+// Forward declaration
 class DysektProcessor;
 
-class WaveformView : public juce::Component,
-                     public juce::FileDragAndDropTarget
+class WaveformView : public juce::Component, public juce::FileDragAndDropTarget
 {
 public:
-    explicit WaveformView (DysektProcessor& p);
+    explicit WaveformView(DysektProcessor& p);
 
-    void paint (juce::Graphics& g) override;
+    void paint(juce::Graphics& g) override;
     void resized() override;
-    void mouseDown (const juce::MouseEvent& e) override;
-    void mouseDrag (const juce::MouseEvent& e) override;
-    void mouseUp (const juce::MouseEvent& e) override;
-    void mouseMove (const juce::MouseEvent& e) override;
-    void mouseEnter (const juce::MouseEvent& e) override;
-    void mouseExit (const juce::MouseEvent& e) override;
-    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override;
-    void modifierKeysChanged (const juce::ModifierKeys& mods) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override;
+    void modifierKeysChanged(const juce::ModifierKeys& mods) override;
 
-    bool isInterestedInFileDrag (const juce::StringArray& files) override;
-    void filesDropped (const juce::StringArray& files, int x, int y) override;
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
 
     void rebuildCacheIfNeeded();
+
+    // ---- Rendering & Utility ---
+    void drawWaveform(juce::Graphics& g);
+    void drawSlices(juce::Graphics& g);
+    void drawPlaybackCursors(juce::Graphics& g);
+
+    int pixelToSample(int px) const;
+    int sampleToPixel(int sample) const;
+
+    // --- Trim mode API ---
+    void enterTrimMode(int start, int end);
+    void setTrimPoints(int inPt, int outPt);
+    void exitTrimMode();
+    void getTrimBounds(int& outStart, int& outEnd) const;
+    void setTrimMode(bool active);
+    void resetTrim();
+
+    // Core state for other logic
+    void setSliceDrawMode(bool active);
     bool hasActiveSlicePreview() const noexcept;
-    bool getActiveSlicePreview (int& sliceIdx, int& startSample, int& endSample) const;
-    bool getLinkedSlicePreview (int& sliceIdx, int& startSample, int& endSample) const;
+    bool getActiveSlicePreview(int& sliceIdx, int& startSample, int& endSample) const;
+    bool getLinkedSlicePreview(int& sliceIdx, int& startSample, int& endSample) const;
     bool isInteracting() const noexcept;
 
-    void setSliceDrawMode (bool active);
-    bool isSliceDrawModeActive() const noexcept { return sliceDrawMode; }
-
-    // Trim mode — entered when the user asks to trim before loading
-    void enterTrimMode (int start, int end);
-    void setTrimPoints (int inPt, int outPt);  // MIDI feedback path
-    void exitTrimMode();
-    void getTrimBounds (int& outStart, int& outEnd) const;
-    bool isTrimModeActive() const noexcept { return trimMode; }
-
-    // Trim mode API used by TrimDialog and ActionPanel
-    void setTrimMode (bool active);
-    void resetTrim();
-    int  getTrimIn()  const noexcept { return trimInPoint; }
-    int  getTrimOut() const noexcept { return trimOutPoint; }
-    bool isTrimDragging() const noexcept { return trimDragging; }
-
-    // Callback invoked when user applies trim; parameters are sample-accurate bounds
-    std::function<void (int trimStart, int trimEnd)> onTrimApplied;
-    // Callback invoked when user cancels trim (CANCEL button)
+    // Callbacks
+    std::function<void(const juce::File&)> onLoadRequest;
+    std::function<void(int, int)> onTrimApplied;
     std::function<void()> onTrimCancelled;
-    // Callback for file load requests (routed through trim dialog if set)
-    std::function<void (const juce::File&)> onLoadRequest;
-
-    void setSoftWaveform (bool soft) { softWaveform = soft; repaint(); }
-    bool isSoftWaveform() const noexcept { return softWaveform; }
-
-    bool altModeActive = false;
-    bool shiftPreviewActive = false;
-    std::vector<int> transientPreviewPositions;
 
 private:
+    // Copy of previously posted headers, but ViewState public for use
     struct ViewState
     {
         int numFrames = 0;
@@ -72,43 +68,31 @@ private:
         bool valid = false;
     };
 
-    enum DragMode { None, DragEdgeLeft, DragEdgeRight, DrawSlice, MoveSlice, DuplicateSlice,
-                    TrimMarkerLeft, TrimMarkerRight, DragTrimIn, DragTrimOut };
+    ViewState buildViewState(const SampleData::SnapshotPtr& sampleSnap) const;
 
     // Internal state
     DysektProcessor& processor;
-
-    bool sliceDrawMode = false;
-    bool trimMode = false;
-    int trimInPoint = 0;
-    int trimOutPoint = 0;
-    int trimStart = 0;
-    int trimEnd = 0;
-    bool trimDragging = false;
-
-    DragMode dragMode = None;
-    int dragSliceIdx = -1;
-    int dragPreviewStart = 0;
-    int dragPreviewEnd = 0;
-    int dragOrigStart = 0;
-    int dragOrigEnd = 0;
-    int linkedSliceIdx = -1;
-    int linkedPreviewStart = 0;
-    int linkedPreviewEnd = 0;
-    bool midDragging = false;
-    bool drawStartedFromAlt = false;
-
-    // For waveform cache, rendering, and preview overlays
     WaveformCache cache;
     WaveformCache::CacheKey prevCacheKey;
-    ViewState cachedPaintViewState;
-    bool paintViewStateActive = false;
 
-    // Painting and transient overlays
-    bool softWaveform = false;
+    // Draw state and cache
+    mutable ViewState cachedPaintViewState;
+    mutable bool paintViewStateActive = false;
 
-    enum class HoveredEdge { None, Left, Right };
-    HoveredEdge hoveredEdge = HoveredEdge::None;
+    // Drag, preview & editing state
+    bool sliceDrawMode = false;
+    bool trimMode = false;
+    int trimInPoint = 0, trimOutPoint = 0, trimStart = 0, trimEnd = 0;
+    bool trimDragging = false;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaveformView)
+    enum DragMode { None, DragEdgeLeft, DragEdgeRight, MoveSlice };
+    DragMode dragMode = None;
+    int dragSliceIdx = -1;
+    int dragPreviewStart = 0, dragPreviewEnd = 0;
+    int linkedSliceIdx = -1;
+    int linkedPreviewStart = 0, linkedPreviewEnd = 0;
+    bool midDragging = false;
+    bool shiftPreviewActive = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformView)
 };
