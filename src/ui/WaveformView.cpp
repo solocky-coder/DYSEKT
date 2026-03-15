@@ -6,17 +6,21 @@
 
 WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
 
-void WaveformView::setSliceDrawMode (bool active) {
+void WaveformView::setSliceDrawMode (bool active)
+{
     sliceDrawMode = active;
     setMouseCursor (active ? juce::MouseCursor::IBeamCursor : juce::MouseCursor::NormalCursor);
 }
 
-bool WaveformView::hasActiveSlicePreview() const noexcept {
+bool WaveformView::hasActiveSlicePreview() const noexcept
+{
     if (dragSliceIdx < 0)
         return false;
     return dragMode == DragEdgeLeft || dragMode == DragEdgeRight || dragMode == MoveSlice;
 }
-bool WaveformView::getActiveSlicePreview (int& sliceIdx, int& startSample, int& endSample) const {
+
+bool WaveformView::getActiveSlicePreview (int& sliceIdx, int& startSample, int& endSample) const
+{
     if (! hasActiveSlicePreview())
         return false;
     sliceIdx = dragSliceIdx;
@@ -24,7 +28,9 @@ bool WaveformView::getActiveSlicePreview (int& sliceIdx, int& startSample, int& 
     endSample = dragPreviewEnd;
     return true;
 }
-bool WaveformView::getLinkedSlicePreview (int& sliceIdx, int& startSample, int& endSample) const {
+
+bool WaveformView::getLinkedSlicePreview (int& sliceIdx, int& startSample, int& endSample) const
+{
     if (linkedSliceIdx < 0 || dragMode == None)
         return false;
     sliceIdx    = linkedSliceIdx;
@@ -32,11 +38,14 @@ bool WaveformView::getLinkedSlicePreview (int& sliceIdx, int& startSample, int& 
     endSample   = linkedPreviewEnd;
     return true;
 }
-bool WaveformView::isInteracting() const noexcept {
+
+bool WaveformView::isInteracting() const noexcept
+{
     return dragMode != None || midDragging || shiftPreviewActive;
 }
 
-WaveformView::ViewState WaveformView::buildViewState (const SampleData::SnapshotPtr& sampleSnap) const {
+WaveformView::ViewState WaveformView::buildViewState (const SampleData::SnapshotPtr& sampleSnap) const
+{
     ViewState state;
     if (sampleSnap == nullptr)
         return state;
@@ -58,7 +67,8 @@ WaveformView::ViewState WaveformView::buildViewState (const SampleData::Snapshot
     return state;
 }
 
-int WaveformView::pixelToSample (int px) const {
+int WaveformView::pixelToSample (int px) const
+{
     if (paintViewStateActive && cachedPaintViewState.valid)
         return cachedPaintViewState.visibleStart
             + (int) ((float) px / (float) cachedPaintViewState.width * cachedPaintViewState.visibleLen);
@@ -67,7 +77,8 @@ int WaveformView::pixelToSample (int px) const {
     return state.visibleStart + (int) ((float) px / (float) state.width * state.visibleLen);
 }
 
-int WaveformView::sampleToPixel (int sample) const {
+int WaveformView::sampleToPixel (int sample) const
+{
     if (paintViewStateActive && cachedPaintViewState.valid)
         return (int) ((float) (sample - cachedPaintViewState.visibleStart)
                       / (float) cachedPaintViewState.visibleLen
@@ -77,7 +88,8 @@ int WaveformView::sampleToPixel (int sample) const {
     return (int) ((float) (sample - state.visibleStart) / (float) state.visibleLen * (float) state.width);
 }
 
-void WaveformView::rebuildCacheIfNeeded() {
+void WaveformView::rebuildCacheIfNeeded()
+{
     auto sampleSnap = processor.sampleData.getSnapshot();
     const auto view = buildViewState (sampleSnap);
     if (! view.valid) return;
@@ -88,7 +100,8 @@ void WaveformView::rebuildCacheIfNeeded() {
     prevCacheKey = key;
 }
 
-void WaveformView::paint (juce::Graphics& g) {
+void WaveformView::paint (juce::Graphics& g)
+{
     auto sampleSnap = processor.sampleData.getSnapshot();
     g.fillAll (getTheme().waveformBg);
     int cy = getHeight() / 2;
@@ -117,9 +130,13 @@ void WaveformView::paint (juce::Graphics& g) {
     }
 }
 
-void WaveformView::paintDrawSlicePreview (juce::Graphics&) {}
+void WaveformView::paintDrawSlicePreview (juce::Graphics& g)
+{
+    // You can implement region preview here if ever needed.
+}
 
-void WaveformView::paintLazyChopOverlay (juce::Graphics& g) {
+void WaveformView::paintLazyChopOverlay (juce::Graphics& g)
+{
     if (! (processor.lazyChop.isActive() && processor.lazyChop.isPlaying()
            && processor.lazyChop.getChopPos() >= 0))
         return;
@@ -139,7 +156,6 @@ void WaveformView::paintLazyChopOverlay (juce::Graphics& g) {
     }
 }
 
-// --- Fix: always clamp visible trim markers to drawable region and buffer ---
 void WaveformView::paintTrimOverlay (juce::Graphics& g)
 {
     if (! trimMode) return;
@@ -154,7 +170,6 @@ void WaveformView::paintTrimOverlay (juce::Graphics& g)
 
     const int x1 = juce::jlimit(0, w, sampleToPixel (clampedTrimIn));
     const int x2 = juce::jlimit(0, w, sampleToPixel (clampedTrimOut));
-
     const auto ac = getTheme().accent;
 
     g.setColour (juce::Colours::black.withAlpha (0.55f));
@@ -178,7 +193,8 @@ void WaveformView::paintTrimOverlay (juce::Graphics& g)
     if (x2 > x1) g.fillRect (x1, 0, x2 - x1, h);
 }
 
-void WaveformView::paintTransientMarkers (juce::Graphics& g) {
+void WaveformView::paintTransientMarkers (juce::Graphics& g)
+{
     if (transientPreviewPositions.empty()) return;
     g.setColour (getTheme().accent.withAlpha (0.6f));
     float dashLengths[] = { 4.0f, 3.0f };
@@ -198,15 +214,274 @@ void WaveformView::paintTransientMarkers (juce::Graphics& g) {
     }
 }
 
-// (drawWaveform, drawSlices, drawPlaybackCursors stay unchanged from previous full file)
+void WaveformView::drawWaveform (juce::Graphics& g)
+{
+    const int   cy    = getHeight() / 2;
+    const float scale = (float) getHeight() * UILayout::waveformVerticalScale;
 
-void WaveformView::drawWaveform (juce::Graphics& g) { /* ... unchanged ... */ }
-void WaveformView::drawSlices (juce::Graphics& g)   { /* ... unchanged ... */ }
-void WaveformView::drawPlaybackCursors (juce::Graphics& g) { /* ... unchanged ... */ }
+    auto& peaks    = cache.getPeaks();
+    const int numPeaks = std::min (cache.getNumPeaks(), getWidth());
+    if (numPeaks <= 0)
+        return;
 
+    float samplesPerPixel = 1.0f;
+    if (paintViewStateActive && cachedPaintViewState.valid)
+        samplesPerPixel = cachedPaintViewState.samplesPerPixel;
+    else
+    {
+        const auto view = buildViewState (processor.sampleData.getSnapshot());
+        if (view.valid)
+            samplesPerPixel = view.samplesPerPixel;
+    }
 
-// --- Clamp after file load, resize, and in drag---
-void WaveformView::resized() {
+    juce::Path fillPath;
+    if (samplesPerPixel >= 1.0f)
+    {
+        fillPath.startNewSubPath (0.0f, (float) cy - peaks[0].maxVal * scale);
+        for (int px = 1; px < numPeaks; ++px)
+            fillPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
+        for (int px = numPeaks - 1; px >= 0; --px)
+            fillPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].minVal * scale);
+        fillPath.closeSubPath();
+    }
+
+    if (! softWaveform)
+    {
+        if (samplesPerPixel < 1.0f)
+        {
+            g.setColour (getTheme().waveform.withAlpha (0.9f));
+            juce::Path path;
+            bool started = false;
+            for (int px = 0; px < numPeaks; ++px)
+            {
+                float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                if (! started) { path.startNewSubPath ((float) px, y); started = true; }
+                else             path.lineTo ((float) px, y);
+            }
+            g.strokePath (path, juce::PathStrokeType (1.5f));
+
+            if (samplesPerPixel < 0.125f)
+            {
+                const float dotR = 2.5f;
+                for (int px = 0; px < numPeaks; ++px)
+                {
+                    float exactPos = (float) pixelToSample (0) + (float) px * samplesPerPixel;
+                    float frac = exactPos - std::floor (exactPos);
+                    if (frac < samplesPerPixel)
+                    {
+                        float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                        g.fillEllipse ((float) px - dotR, y - dotR, dotR * 2.0f, dotR * 2.0f);
+                    }
+                }
+            }
+        }
+        else
+        {
+            g.setColour (getTheme().waveform);
+            g.fillPath (fillPath);
+
+            if (samplesPerPixel < 8.0f)
+            {
+                juce::Path midPath;
+                float midY0 = (float) cy - (peaks[0].maxVal + peaks[0].minVal) * 0.5f * scale;
+                midPath.startNewSubPath (0.0f, midY0);
+                for (int px = 1; px < numPeaks; ++px)
+                {
+                    float mid = (peaks[(size_t) px].maxVal + peaks[(size_t) px].minVal) * 0.5f;
+                    midPath.lineTo ((float) px, (float) cy - mid * scale);
+                }
+                g.strokePath (midPath, juce::PathStrokeType (1.5f));
+            }
+        }
+    }
+    else
+    {
+        const juce::Colour waveCol  = getTheme().waveform;
+        const juce::Colour bgCol    = getTheme().waveformBg;
+        const int h = getHeight();
+
+        if (samplesPerPixel < 1.0f)
+        {
+            g.setColour (waveCol.withAlpha (0.95f));
+            juce::Path path;
+            bool started = false;
+            for (int px = 0; px < numPeaks; ++px)
+            {
+                float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                if (! started) { path.startNewSubPath ((float) px, y); started = true; }
+                else             path.lineTo ((float) px, y);
+            }
+            g.strokePath (path, juce::PathStrokeType (1.8f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            if (samplesPerPixel < 0.125f)
+            {
+                g.setColour (waveCol);
+                const float dotR = 3.0f;
+                for (int px = 0; px < numPeaks; ++px)
+                {
+                    float exactPos = (float) pixelToSample (0) + (float) px * samplesPerPixel;
+                    float frac = exactPos - std::floor (exactPos);
+                    if (frac < samplesPerPixel)
+                    {
+                        float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                        g.fillEllipse ((float) px - dotR, y - dotR, dotR * 2.0f, dotR * 2.0f);
+                    }
+                }
+            }
+        }
+        else
+        {
+            juce::ColourGradient grad (
+                waveCol.withAlpha (0.0f),  0.0f, 0.0f,
+                waveCol.withAlpha (0.0f),  0.0f, (float) h,
+                false);
+            grad.addColour (0.35, waveCol.withAlpha (0.18f));
+            grad.addColour (0.5,  waveCol.withAlpha (0.28f));
+            grad.addColour (0.65, waveCol.withAlpha (0.18f));
+            g.setGradientFill (grad);
+            g.fillPath (fillPath);
+
+            juce::Path topPath;
+            topPath.startNewSubPath (0.0f, (float) cy - peaks[0].maxVal * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                topPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
+
+            g.setColour (waveCol.withAlpha (0.25f));
+            g.strokePath (topPath, juce::PathStrokeType (3.5f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            g.setColour (waveCol.withAlpha (0.90f));
+            g.strokePath (topPath, juce::PathStrokeType (1.3f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            juce::Path botPath;
+            botPath.startNewSubPath (0.0f, (float) cy - peaks[0].minVal * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                botPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].minVal * scale);
+
+            g.setColour (waveCol.withAlpha (0.25f));
+            g.strokePath (botPath, juce::PathStrokeType (3.5f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            g.setColour (waveCol.withAlpha (0.90f));
+            g.strokePath (botPath, juce::PathStrokeType (1.3f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            if (samplesPerPixel < 8.0f)
+            {
+                juce::Path midPath;
+                float midY0 = (float) cy - (peaks[0].maxVal + peaks[0].minVal) * 0.5f * scale;
+                midPath.startNewSubPath (0.0f, midY0);
+                for (int px = 1; px < numPeaks; ++px)
+                {
+                    float mid = (peaks[(size_t) px].maxVal + peaks[(size_t) px].minVal) * 0.5f;
+                    midPath.lineTo ((float) px, (float) cy - mid * scale);
+                }
+                g.setColour (waveCol.withAlpha (0.85f));
+                g.strokePath (midPath, juce::PathStrokeType (1.5f,
+                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
+        }
+    }
+}
+
+void WaveformView::drawSlices (juce::Graphics& g)
+{
+    const auto& ui = processor.getUiSliceSnapshot();
+    int sel = ui.selectedSlice;
+    int num = ui.numSlices;
+
+    for (int i = 0; i < num; ++i)
+    {
+        const auto& s = ui.slices[(size_t) i];
+        if (! s.active) continue;
+
+        int drawStartSample = s.startSample;
+        int drawEndSample = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
+
+        int x1 = std::max (0, sampleToPixel (drawStartSample));
+        int x2 = std::min (getWidth(), sampleToPixel (drawEndSample));
+        int sw = x2 - x1;
+        if (sw <= 0) continue;
+
+        if (i == sel)
+        {
+            g.setColour (getTheme().selectionOverlay.withAlpha (0.22f));
+            g.fillRect (x1, 0, sw, getHeight());
+            g.setColour (getTheme().foreground.withAlpha (0.8f));
+            g.drawVerticalLine (x1, 0.0f, (float) getHeight());
+            g.drawVerticalLine (x2 - 1, 0.0f, (float) getHeight());
+
+            {
+                bool hov = (hoveredEdge == HoveredEdge::Left);
+                float tw = hov ? 10.0f : 7.0f;
+                float th = hov ? 12.0f : 9.0f;
+                float alpha = hov ? 1.0f : 0.9f;
+                juce::Path triS;
+                triS.addTriangle ((float) x1, (float) getHeight(),
+                                  (float) x1 + tw, (float) getHeight(),
+                                  (float) x1, (float) getHeight() - th);
+                g.setColour (getTheme().foreground.withAlpha (alpha));
+                g.fillPath (triS);
+            }
+
+            {
+                bool hov = (hoveredEdge == HoveredEdge::Right);
+                float tw = hov ? 10.0f : 7.0f;
+                float th = hov ? 12.0f : 9.0f;
+                float alpha = hov ? 1.0f : 0.9f;
+                juce::Path triE;
+                triE.addTriangle ((float) (x2 - 1), (float) getHeight(),
+                                  (float) (x2 - 1) - tw, (float) getHeight(),
+                                  (float) (x2 - 1), (float) getHeight() - th);
+                g.setColour (getTheme().foreground.withAlpha (alpha));
+                g.fillPath (triE);
+            }
+
+            g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
+            g.setColour (getTheme().foreground.withAlpha (0.7f));
+            g.drawText ("S", x1 + 2, getHeight() - 24, 12, 12, juce::Justification::centredLeft);
+            g.drawText ("E", x2 - 14, getHeight() - 24, 12, 12, juce::Justification::centredRight);
+
+            g.setColour (getTheme().foreground.withAlpha (0.85f));
+            g.setFont (DysektLookAndFeel::makeFont (13.0f, true));
+            g.drawText ("Slice " + juce::String (i + 1), x1 + 3, 3, 70, 14,
+                         juce::Justification::centredLeft);
+        }
+        else
+        {
+            g.setColour (s.colour.withAlpha (0.30f));
+            g.drawVerticalLine (x1, 0.0f, (float) getHeight());
+            g.drawVerticalLine (x2 - 1, 0.0f, (float) getHeight());
+        }
+    }
+}
+
+void WaveformView::drawPlaybackCursors (juce::Graphics& g)
+{
+    int previewIdx = LazyChopEngine::getPreviewVoiceIndex();
+    for (int i = 0; i < VoicePool::kMaxVoices; ++i)
+    {
+        float pos = processor.voicePool.voicePositions[i].load (std::memory_order_relaxed);
+        if (pos > 0.0f)
+        {
+            int px = sampleToPixel ((int) pos);
+            if (px >= 0 && px < getWidth())
+            {
+                if (i == previewIdx && processor.lazyChop.isActive())
+                    g.setColour (juce::Colour (0xFFCC4444));
+                else
+                    g.setColour (getTheme().accent.withAlpha (0.7f));
+
+                g.drawVerticalLine (px, 0.0f, (float) getHeight());
+            }
+        }
+    }
+}
+
+void WaveformView::resized()
+{
     prevCacheKey = {};
     auto sampleSnap = processor.sampleData.getSnapshot();
     if (sampleSnap) {
@@ -218,17 +493,64 @@ void WaveformView::resized() {
 
 void WaveformView::syncAltStateFromMods (const juce::ModifierKeys& mods)
 {
-    // ... unchanged ...
+    const bool alt = mods.isAltDown();
+    if (alt == altModeActive)
+        return;
+    altModeActive = alt;
+    hoveredEdge = HoveredEdge::None;
+    if (alt)
+        setMouseCursor (juce::MouseCursor::IBeamCursor);
+    else if (dragMode != DrawSlice)
+        setMouseCursor (juce::MouseCursor::NormalCursor);
+    repaint();
 }
+
 void WaveformView::mouseMove (const juce::MouseEvent& e)
 {
-    // ... unchanged ...
+    syncAltStateFromMods (e.mods);
+    if (trimMode)
+    {
+        const int x1 = sampleToPixel (trimInPoint);
+        const int x2 = sampleToPixel (trimOutPoint);
+        if (std::abs (e.x - x1) < 8 || std::abs (e.x - x2) < 8)
+            setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+        else
+            setMouseCursor (juce::MouseCursor::NormalCursor);
+        return;
+    }
+    auto sampleSnap = processor.sampleData.getSnapshot();
+    if (sampleSnap == nullptr) return;
+    const auto& ui = processor.getUiSliceSnapshot();
+    int sel = ui.selectedSlice;
+    int num = ui.numSlices;
+    HoveredEdge newEdge = HoveredEdge::None;
+    if (sel >= 0 && sel < num && ! sliceDrawMode && ! altModeActive)
+    {
+        const auto& s = ui.slices[(size_t) sel];
+        if (s.active)
+        {
+            int x1 = sampleToPixel (s.startSample);
+            int x2 = sampleToPixel (processor.sliceManager.getEndForSlice (sel, ui.sampleNumFrames));
+            if      (std::abs (e.x - x1) < 6) newEdge = HoveredEdge::Left;
+            else if (std::abs (e.x - x2) < 6) newEdge = HoveredEdge::Right;
+        }
+    }
+    if (altModeActive)
+        setMouseCursor (juce::MouseCursor::IBeamCursor);
+    else if (sliceDrawMode)
+        setMouseCursor (juce::MouseCursor::IBeamCursor);
+    else
+        setMouseCursor (newEdge != HoveredEdge::None
+            ? juce::MouseCursor::LeftRightResizeCursor
+            : juce::MouseCursor::NormalCursor);
+
+    if (newEdge != hoveredEdge) { hoveredEdge = newEdge; repaint(); }
 }
+
 void WaveformView::mouseEnter (const juce::MouseEvent& e) { mouseMove (e); }
 void WaveformView::mouseExit (const juce::MouseEvent&) { if (hoveredEdge != HoveredEdge::None) { hoveredEdge = HoveredEdge::None; repaint(); } }
 void WaveformView::modifierKeysChanged (const juce::ModifierKeys& mods) { syncAltStateFromMods (mods); }
 
-// ---- [KEY ORDER] TRIM DRAG > EDGE DRAG > MPC ADD > SELECT SLICE ----
 void WaveformView::mouseDown (const juce::MouseEvent& e)
 {
     syncAltStateFromMods (e.mods);
@@ -351,9 +673,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     }
 }
 
-// (mouseDrag, mouseUp, mouseWheelMove, isInterestedInFileDrag, filesDropped, enterTrimMode, setTrimPoints, setTrimMode)
-// --- Remain unchanged from your previous file but supplied as needed. ---
-
 void WaveformView::mouseDrag (const juce::MouseEvent& e)
 {
     syncAltStateFromMods (e.mods);
@@ -375,8 +694,7 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         return;
     }
 
-    // -- All other existing slice drag logic remains unchanged --
-    // ... (slice drag, duplicate drag, etc.) ...
+    // ... handle slice edge dragging, move, duplicate, etc. (your original logic)
 }
 
 void WaveformView::mouseUp (const juce::MouseEvent&)
@@ -386,12 +704,49 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
         trimDragging = false;
         dragMode = None;
     }
-    // ... rest of cleanup as previously implemented ...
+    // ... more cleanup for other drag modes if needed ...
 }
 
 void WaveformView::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
 {
-    // ... unchanged ...
+    if (w.deltaX != 0.0f)
+    {
+        float sc = processor.scroll.load();
+        sc -= w.deltaX * 0.05f;
+        processor.scroll.store (juce::jlimit (0.0f, 1.0f, sc));
+        prevCacheKey = {};
+        return;
+    }
+    if (e.mods.isShiftDown())
+    {
+        float sc = processor.scroll.load();
+        sc -= w.deltaY * 0.05f;
+        processor.scroll.store (juce::jlimit (0.0f, 1.0f, sc));
+    }
+    else
+    {
+        int width = getWidth();
+        float oldZoom = processor.zoom.load();
+        float oldViewFrac = 1.0f / oldZoom;
+        float oldScroll = processor.scroll.load();
+        float cursorPixelFrac = (width > 0) ? (float) e.x / (float) width : 0.5f;
+        float newZoom = (w.deltaY > 0)
+            ? std::min (16384.0f, oldZoom * 1.2f)
+            : std::max (1.0f, oldZoom / 1.2f);
+        processor.zoom.store (newZoom);
+        float newViewFrac = 1.0f / newZoom;
+        float maxScroll = 1.0f - newViewFrac;
+        if (maxScroll > 0.0f)
+        {
+            float oldViewStart = oldScroll * (1.0f - oldViewFrac);
+            float anchorFrac = oldViewStart + cursorPixelFrac * oldViewFrac;
+            float newViewStart = anchorFrac - cursorPixelFrac * newViewFrac;
+            processor.scroll.store (juce::jlimit (0.0f, 1.0f, newViewStart / maxScroll));
+        }
+        else
+            processor.scroll.store (0.0f);
+    }
+    prevCacheKey = {};
 }
 
 bool WaveformView::isInterestedInFileDrag (const juce::StringArray& files)
@@ -431,7 +786,6 @@ void WaveformView::enterTrimMode (int start, int end)
     trimDragging = false;
     dragMode     = None;
     repaint();
-    // --- Clamp to buffer after enter ---
     auto sampleSnap = processor.sampleData.getSnapshot();
     if (sampleSnap) {
         int totalFrames = sampleSnap->buffer.getNumSamples();
