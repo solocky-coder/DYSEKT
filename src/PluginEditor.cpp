@@ -1,26 +1,24 @@
 #include "PluginEditor.h"
 #include <algorithm>
 
+// Layout constants
 static constexpr int kBaseW      = 1130;
-static constexpr int kLogoH      = 52;    // single combined header bar
-static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LCD row + padding
-static constexpr int kSliceLaneH = 36;   // 30 body + 6 ADSR dot strip
+static constexpr int kLogoH      = 52;
+static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12;
+static constexpr int kSliceLaneH = 36;
 static constexpr int kScrollbarH = 28;
 static constexpr int kSliceCtrlH = 72;
 static constexpr int kActionH    = 22;
-static constexpr int kTrimBarH   = 34;   // height of inline trim bar
-static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
+static constexpr int kTrimBarH   = 34;
+static constexpr int kCtrlFrameW = 180;
 
 static constexpr int kBrowserH    = 170;
 static constexpr int kMargin      = 8;
-// Fixed panel slot — same height used for both mixer and browser.
-// Mixer is taller so we cap it; browser gets the full slot.
 static constexpr int kPanelSlotH  = 200;
 static constexpr int kBaseHCore   = kLogoH + kLcdRowH + kSliceLaneH
                                   + kScrollbarH + kSliceCtrlH + kActionH
-                                  + 120; // minimum waveform height
-// Total height is FIXED — panel slot always reserved, window never resizes.
-static constexpr int kTotalH      = kBaseHCore + kPanelSlotH + 16; // 16 = frame padding
+                                  + 120;
+static constexpr int kTotalH      = kBaseHCore + kPanelSlotH + 16;
 
 static juce::File getSettingsDir()
 {
@@ -30,7 +28,7 @@ static juce::File getSettingsDir()
 static juce::File getUserSettingsFile() { return getSettingsDir().getChildFile ("settings.yaml"); }
 static juce::File getThemesDir()        { return getSettingsDir().getChildFile ("themes"); }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// Main Editor constructor
 DysektEditor::DysektEditor (DysektProcessor& p)
     : AudioProcessorEditor (p),
       processor (p),
@@ -43,7 +41,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       waveformOverview (p),
       sliceControlBar(p),
       actionPanel    (p, waveformView),
-
       browserPanel   (p),
       mixerPanel     (p),
       shortcutsPanel (p)
@@ -53,12 +50,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     addAndMakeVisible (logoBar);
     addAndMakeVisible (headerBar);
-
-    // v8: dual LCD row
     addAndMakeVisible (sliceLcd);
     addAndMakeVisible (sliceWaveformLcd);
-    // Control frame (icons + knobs) is a child of headerBar — exposed via
-    // headerBar.getControlFrame() and laid out in resized().
     if (auto* cf = headerBar.getControlFrame())
         addAndMakeVisible (*cf);
 
@@ -79,21 +72,15 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     sliceLane.setWaveformView (&waveformView);
 
-    // Auto-close browser when a file is loaded via double-click
     browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
-
-    // Route file loads from the browser panel through the trim dialog
     browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
-
-    // Route file drops on the waveform through the trim dialog
     waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
 
-    // Handle trim apply / cancel callbacks from WaveformView
     waveformView.onTrimApplied = [this] (int s, int e)
     {
         processor.applyTrimToCurrentSample (s, e);
         processor.trimModeActive.store (false, std::memory_order_relaxed);
-        waveformView.setTrimMode (false);   // clear trim overlay
+        waveformView.setTrimMode (false);
         trimSession.reset();
         trimDialog.reset();
         resized();
@@ -101,27 +88,21 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     waveformView.onTrimCancelled = [this]
     {
         processor.trimModeActive.store (false, std::memory_order_relaxed);
-        waveformView.setTrimMode (false);   // clear trim overlay
+        waveformView.setTrimMode (false);
         trimSession.reset();
         trimDialog.reset();
         resized();
     };
 
-    // TRIM button path: ActionPanel delegates here so PluginEditor owns
-    // trim lifecycle, enterTrimMode, and TrimDialog placement.
-
-    // FIL / WA / CH now live in headerBar — wire their callbacks there
-    headerBar.onBodeToggle      = [this] { toggleMixerPanel(); };
-    headerBar.onBrowserToggle   = [this] { toggleBrowserPanel(); };
-    headerBar.onWaveToggle      = [this] { toggleSoftWave(); };
+    headerBar.onBodeToggle       = [this] { toggleMixerPanel(); };
+    headerBar.onBrowserToggle    = [this] { toggleBrowserPanel(); };
+    headerBar.onWaveToggle       = [this] { toggleSoftWave(); };
     headerBar.onMidiFollowToggle = [this] { toggleMidiFollow(); };
-    headerBar.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
+    headerBar.onShortcutsToggle  = [this] { toggleShortcutsPanel(); };
 
-    // Keep actionPanel callbacks as no-ops (buttons removed from action bar)
     ensureDefaultThemes();
     loadUserSettings();
 
-    // Load default sample (Empty.wav) if no DAW preset has already provided one
     if (processor.sampleData.getSnapshot() == nullptr)
         processor.loadDefaultSampleIfNeeded();
 
@@ -135,7 +116,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     setWantsKeyboardFocus (true);
     setResizable (true, true);
     setResizeLimits (600, 500, 1920, 1200);
-    setSize (kBaseW, kTotalH);  // Fixed window — Kontakt style
+    setSize (kBaseW, kTotalH);
     lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
     startTimerHz (30);
 }
@@ -146,24 +127,18 @@ DysektEditor::~DysektEditor()
     setLookAndFeel (nullptr);
 }
 
-int DysektEditor::computeTotalHeight() const
-{
-    return kTotalH;  // Fixed — Kontakt style, window never resizes
-}
-
+int DysektEditor::computeTotalHeight() const { return kTotalH; }
 
 void DysektEditor::toggleBrowserPanel()
 {
     if (browserOpen)
     {
-        // Close browser
         browserOpen = false;
         browserPanel.setVisible (false);
         headerBar.setBrowserActive (false);
     }
     else
     {
-        // Open browser, close mixer if open (one panel at a time)
         if (mixerOpen)
         {
             mixerOpen = false;
@@ -174,18 +149,14 @@ void DysektEditor::toggleBrowserPanel()
         browserPanel.setVisible (true);
         headerBar.setBrowserActive (true);
     }
-    // Window size never changes — just re-layout
     resized();
     repaint();
     resized();
-    repaint();   // redraw editor frame for browser panel
+    repaint();
 }
-
-// ── Trim workflow ─────────────────────────────────────────────────────────────
 
 void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
 {
-    // Skip trim for relinks and soundfonts
     if (isRelink)
     {
         processor.loadFileAsync (file);
@@ -199,7 +170,6 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
         return;
     }
 
-    // Route based on trim preference set in settings panel
     const int pref = processor.trimPreference.load (std::memory_order_relaxed);
     if (pref == DysektProcessor::TrimPrefNever)
     {
@@ -210,7 +180,6 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
     }
     if (pref == DysektProcessor::TrimPrefAsk)
     {
-        // Trim only long samples (>= 5 seconds)
         juce::AudioFormatManager fm;
         fm.registerBasicFormats();
         std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
@@ -225,13 +194,11 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
             return;
         }
     }
-    // TrimPrefAlways, or long sample in TrimPrefAsk mode
     showTrimMode (file);
 }
 
 void DysektEditor::showTrimMode (const juce::File& file)
 {
-    // Store session so the timer callback knows to enter trim mode on load
     trimSession = std::make_unique<TrimSession>();
     trimSession->file   = file;
     trimSession->active = false;
@@ -260,7 +227,6 @@ void DysektEditor::toggleMidiFollow()
     headerBar.setMidiFollowActive (newVal);
 }
 
-
 void DysektEditor::toggleShortcutsPanel()
 {
     const bool show = ! shortcutsPanel.isVisible();
@@ -277,15 +243,12 @@ void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
 
-    // ── Waveform frame — exact same style as SliceLcdDisplay / SliceWaveformLcd ──
     if (actionPanel.isVisible() && waveformView.isVisible() && waveformOverview.isVisible())
     {
         const auto& abnd = actionPanel.getBounds();
         const auto& sbnd = waveformOverview.getBounds();
         const auto  ac   = getTheme().accent;
 
-        // Outer frame rect — kMargin inset on left/right, spanning actionPanel
-        // top to waveformOverview bottom.  Must match resized() exactly.
         const int kFrameInset = 4;
         const int kFrameX     = kMargin;
         const int kFrameW     = getWidth() - kMargin * 2;
@@ -293,90 +256,64 @@ void DysektEditor::paint (juce::Graphics& g)
             (float) kFrameX,   (float) abnd.getY() - kFrameInset,
             (float) kFrameW,   (float) (sbnd.getBottom() - abnd.getY() + kFrameInset * 2));
 
-        // 1. Outer gradient fill
         juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
-                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
+                                        juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
         g.setGradientFill (outerGrad);
         g.fillRoundedRectangle (outerF, 4.0f);
 
-        // 2. Outer accent border
         g.setColour (ac.withAlpha (0.20f));
         g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.0f);
 
-        // 3. Inner screen
         const auto screenF = outerF.reduced (4.0f);
         g.setColour (getTheme().darkBar.darker (0.55f));
         g.fillRoundedRectangle (screenF, 2.0f);
 
-        // 4. Scanlines every 2px
         g.setColour (juce::Colours::black.withAlpha (0.18f));
         for (int y = juce::roundToInt (screenF.getY()); y < juce::roundToInt (screenF.getBottom()); y += 2)
             g.drawHorizontalLine (y, screenF.getX(), screenF.getRight());
 
-        // 5. Phosphor glow at top
         juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, screenF.getY(),
-                                    juce::Colours::transparentBlack, 0.f, screenF.getY() + 20.f, false);
+                                   juce::Colours::transparentBlack, 0.f, screenF.getY() + 20.f, false);
         g.setGradientFill (glow);
         g.fillRoundedRectangle (screenF, 2.0f);
 
-        // 6. Inner accent border
         g.setColour (ac.withAlpha (0.12f));
         g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
 
-        // 7. Subtle divider between action bar and slice lane
         const auto& lbnd = sliceLane.getBounds();
         g.setColour (ac.withAlpha (0.08f));
         g.drawHorizontalLine (lbnd.getY(),
                               screenF.getX() + 4.f, screenF.getRight() - 4.f);
     }
-
 }
 
 void DysektEditor::resized()
 {
     auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
 
-    // 1. Combined header bar (logo left + UNDO/REDO/PANIC/UI right)
-    //    LogoBar and HeaderBar share the same horizontal strip.
     {
         auto headerStrip = area.removeFromTop (kLogoH);
-        // LogoBar takes a fixed width on the left; HeaderBar gets the rest.
         logoBar.setBounds (headerStrip.removeFromLeft (220));
         headerBar.setBounds (headerStrip);
     }
-
-    // 2. Dual LCD row — LCD1 | CtrlFrame | LCD2
     {
         auto lcdRow = area.removeFromTop (kLcdRowH).reduced (kMargin, 6);
-
-        // Left LCD — slice data
         const int lcdW = (lcdRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
         sliceLcd.setBounds (lcdRow.removeFromLeft (lcdW));
-
-        lcdRow.removeFromLeft (kMargin);  // gap
-
-        // Centre control frame (icons top row + knobs bottom row)
+        lcdRow.removeFromLeft (kMargin);
         if (auto* cf = headerBar.getControlFrame())
             cf->setBounds (lcdRow.removeFromLeft (kCtrlFrameW));
-
-        lcdRow.removeFromLeft (kMargin);  // gap
-
-        // Right LCD — slice mini waveform
+        lcdRow.removeFromLeft (kMargin);
         sliceWaveformLcd.setBounds (lcdRow);
     }
-
-    // 2b. Reserve the action panel height — it becomes the TOP of the LCD frame.
     auto actionArea = area.removeFromTop (kActionH);
-
-    // Shared width — all frames (waveform, SCB, mixer, browser) align to this.
     const int kFX = kMargin;
     const int kFW = getWidth() - kMargin * 2;
 
-    // ── Panel slot — always reserved, Kontakt style ─────────────────────────
     {
-        area.removeFromBottom (kMargin);                        // gap: window bottom → panel bottom
+        area.removeFromBottom (kMargin);
         auto slot = area.removeFromBottom (kPanelSlotH);
-        area.removeFromBottom (kMargin);                        // gap: panel top → SCB bottom
+        area.removeFromBottom (kMargin);
 
         if (mixerOpen)
         {
@@ -398,67 +335,44 @@ void DysektEditor::resized()
             browserPanel.setBounds ({});
         }
     }
-
-    // Slice control bar — aligned to waveform frame width, 4px below waveform frame
     {
         auto scbArea = area.removeFromBottom (kSliceCtrlH);
         sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, kSliceCtrlH));
     }
+    area.removeFromBottom (kMargin);
 
-    area.removeFromBottom (kMargin);  // gap: waveform frame bottom → SCB top
-
-    // ── LCD frame outer rect ─────────────────────────────────────────────────
-    // The full outer rect spans actionArea.top → area.bottom, kMargin inset
-    // on left/right.  paint() draws the frame border over this rect.
-    // Components sit inside the "screen" — reduced by 4px on all sides —
-    // just like the LCD panels do with b.reduced(4).
-    const int kFrameInset = 4;  // matches LCD b.reduced(4)
+    const int kFrameInset = 4;
     const int kFrameX     = kFX;
     const int kFrameW     = kFW;
-
-    // Full outer frame rect (used by paint() — computed identically there)
     const int frameTop    = actionArea.getY();
     const int frameBot    = area.getBottom();
-
-    // Inner screen rect — components live here
     const int screenX     = kFrameX  + kFrameInset;
     const int screenW     = kFrameW  - kFrameInset * 2;
     const int screenTop   = frameTop + kFrameInset;
     const int screenBot   = frameBot - kFrameInset;
     const int screenH     = screenBot - screenTop;
 
-    // Scrollbar — bottom of screen
     {
         auto r = juce::Rectangle<int> (screenX, screenBot - kScrollbarH, screenW, kScrollbarH);
         waveformOverview.setBounds (r);
     }
-
-    // Action panel — top of screen
     {
         auto r = juce::Rectangle<int> (screenX, screenTop, screenW, kActionH);
         actionPanel.setBounds (r);
     }
-
-    // Slice lane — just below action panel
     {
         int y = screenTop + kActionH;
         auto r = juce::Rectangle<int> (screenX, y, screenW, kSliceLaneH);
         sliceLane.setBounds (r);
     }
-
-    // Waveform — fills remaining space between slice lane and scrollbar
-    // Shrinks when trim bar is active so the bar sits below without overlapping.
     {
         int y      = screenTop + kActionH + kSliceLaneH;
         int trimH  = (trimDialog != nullptr) ? kTrimBarH : 0;
         int h      = screenBot - kScrollbarH - trimH - y;
         waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
-
         if (trimDialog != nullptr)
             trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
     }
-
-    // ShortcutsPanel covers the whole editor as an overlay
     if (shortcutsPanel.isVisible())
         shortcutsPanel.setBounds (getLocalBounds());
 }
@@ -473,7 +387,6 @@ void DysektEditor::toggleMixerPanel()
     }
     else
     {
-        // Open mixer, close browser if open (one panel at a time)
         if (browserOpen)
         {
             browserOpen = false;
@@ -487,10 +400,9 @@ void DysektEditor::toggleMixerPanel()
     resized();
     repaint();
     resized();
-    repaint();   // redraw editor frame for mixer panel
+    repaint();
 }
 
-// ── Key shortcuts ─────────────────────────────────────────────────────────────
 bool DysektEditor::keyPressed (const juce::KeyPress& key)
 {
     auto mods = key.getModifiers();
@@ -500,17 +412,11 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
     { DysektProcessor::Command c; c.type = DysektProcessor::CmdRedo; processor.pushCommand (c); return true; }
     if (code == 'Z' && mods.isCommandDown())
     { DysektProcessor::Command c; c.type = DysektProcessor::CmdUndo; processor.pushCommand (c); return true; }
-
-    // ⌘? — toggle keyboard shortcuts panel
     if ((code == '?' || code == '/') && mods.isCommandDown())
     { toggleShortcutsPanel(); return true; }
-
     if (mods.isCommandDown() || mods.isAltDown()) return false;
-
-    // Esc closes shortcuts panel if open
     if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
     { toggleShortcutsPanel(); return true; }
-
     if (code == 'A') { waveformView.setSliceDrawMode (! waveformView.isSliceDrawModeActive()); repaint(); return true; }
     if (code == 'L')
     {
@@ -526,9 +432,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
         { DysektProcessor::Command c; c.type = DysektProcessor::CmdDeleteSlice; c.intParam1 = ui.selectedSlice; processor.pushCommand (c); }
         return true;
     }
-    // 'Z' snap shortcut removed — snap-to-zero always on
     if (code == 'F') { toggleMidiFollow(); return true; }
-
     if (code == juce::KeyPress::rightKey || (code == juce::KeyPress::tabKey && ! mods.isShiftDown()))
     {
         const auto& ui = processor.getUiSliceSnapshot();
@@ -546,7 +450,6 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
-// ── Timer ─────────────────────────────────────────────────────────────────────
 void DysektEditor::timerCallback()
 {
     bool uiChanged = false, viewportChanged = false;
@@ -557,14 +460,10 @@ void DysektEditor::timerCallback()
     const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
     if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
 
-    // ── MIDI follow: always sync icon to processor state ─────────────────────
-    // (processor can change it independently via LazyChop or state restore)
     {
         const bool procState = processor.midiSelectsSlice.load (std::memory_order_relaxed);
         headerBar.setMidiFollowActive (procState);
     }
-
-    // ── Auto-enable MIDI follow on first slice creation ────────────────────
     {
         const int curSlices = processor.sliceManager.getNumSlices();
         if (lastNumSlices == 0 && curSlices > 0)
@@ -574,10 +473,8 @@ void DysektEditor::timerCallback()
         }
         lastNumSlices = curSlices;
     }
-
     const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
     if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
-
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
     if (scaleDirty || scale != lastScale)
     {
@@ -602,7 +499,6 @@ void DysektEditor::timerCallback()
     lastWaveformAnimating = waveformAnimating;
     lastPreviewActive     = previewActive;
 
-    // ── Trim session: enter trim mode once the async load completes ───────────
     if (trimSession != nullptr && ! trimSession->active)
     {
         auto snap = processor.sampleData.getSnapshot();
@@ -612,25 +508,20 @@ void DysektEditor::timerCallback()
             const int totalFrames = snap->buffer.getNumSamples();
             waveformView.enterTrimMode (0, totalFrames);
 
-            // Enable chromatic playback over the trim region
             processor.trimModeActive.store (true, std::memory_order_relaxed);
             processor.trimRegionStart.store (0,           std::memory_order_relaxed);
             processor.trimRegionEnd  .store (totalFrames, std::memory_order_relaxed);
 
-            // Show the trim bar overlay
             if (trimDialog == nullptr)
             {
                 trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
                 addAndMakeVisible (*trimDialog);
                 trimDialog->toFront (false);
-                        resized();   // re-layout: waveform shrinks, trim bar placed below
+                resized();
             }
         }
     }
 
-    // Sync trim handles: proc → view, but only when the user is NOT dragging.
-    // While dragging, WaveformView is the authority and writes proc directly.
-    // When MIDI or other proc writes move the handles, the timer propagates them to the view.
     if (processor.trimModeActive.load (std::memory_order_relaxed)
         && ! waveformView.isTrimDragging())
     {
@@ -646,7 +537,6 @@ void DysektEditor::timerCallback()
     if (waveformNeedsRepaint) waveformView.repaint();
     if (laneNeedsRepaint)     sliceLane.repaint();
     if (rulerNeedsRepaint)    waveformOverview.repaint();
-    // v8: refresh both LCD panels
     sliceLcd.repaintLcd();
     sliceWaveformLcd.repaintLcd();
     if (mixerOpen) mixerPanel.repaint();
@@ -657,7 +547,7 @@ void DysektEditor::timerCallback()
     if (mixerOpen) mixerPanel.updateFromSnapshot();
 }
 
-// ── Theme helpers (unchanged) ─────────────────────────────────────────────────
+// Theme helpers
 void DysektEditor::ensureDefaultThemes()
 {
     auto dir = getThemesDir(); dir.createDirectory();
@@ -743,20 +633,12 @@ void DysektEditor::loadUserSettings()
     }
     applyTheme (themeName);
 
-    // Apply persisted wave style
     waveformView.setSoftWaveform (softWave);
     actionPanel.setWaveActive (softWave);
 
-    // Sync MIDI follow button with processor state (restored from project)
     headerBar.setMidiFollowActive (processor.midiSelectsSlice.load());
-
 }
 
-// =============================================================================
-//  FileDragAndDropTarget  — catches file drops anywhere on the editor window
-//  This is the critical top-level handler; WaveformView's handler only fires
-//  when the cursor is precisely over that child component.
-// =============================================================================
 bool DysektEditor::isInterestedInFileDrag (const juce::StringArray& files)
 {
     for (auto& f : files)
