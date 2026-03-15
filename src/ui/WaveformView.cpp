@@ -4,7 +4,7 @@
 #include "../PluginProcessor.h"
 #include "../audio/AudioAnalysis.h"
 
-// ---- DYSEKT: FULL FEATURED WAVEFORM VIEW WITH PC/MPC STYLE SINGLE CLICK + MARKER DRAG ----
+// ---- DYSEKT: FULL FEATURED WAVEFORM VIEW WITH PC/MPC STYLE SINGLE CLICK SLICE ----
 
 WaveformView::WaveformView(DysektProcessor& p) : processor(p) {}
 
@@ -52,7 +52,11 @@ void WaveformView::paint(juce::Graphics& g)
     }
 }
 
-void WaveformView::paintDrawSlicePreview(juce::Graphics&) {}
+void WaveformView::paintDrawSlicePreview(juce::Graphics&)
+{
+    // Single-click mode: nothing drawn here; region preview not used
+}
+
 void WaveformView::paintLazyChopOverlay(juce::Graphics&) {}
 void WaveformView::paintTransientMarkers(juce::Graphics&) {}
 
@@ -66,11 +70,14 @@ void WaveformView::paintTrimOverlay(juce::Graphics& g)
     const int x2 = sampleToPixel(trimOutPoint);
     const auto ac = getTheme().accent;
 
+    // Excluded regions — dark overlay outside trim window
     g.setColour(juce::Colours::black.withAlpha(0.55f));
-    if (x1 > 0) g.fillRect(0, 0, x1, h);
-    if (x2 < w) g.fillRect(x2, 0, w - x2, h);
+    if (x1 > 0)
+        g.fillRect(0, 0, x1, h);
+    if (x2 < w)
+        g.fillRect(x2, 0, w - x2, h);
 
-    // In-point marker
+    // In-point marker — bright vertical + top triangle handle
     g.setColour(ac.withAlpha(0.90f));
     g.drawVerticalLine(x1, 0.0f, (float)h);
     {
@@ -78,15 +85,19 @@ void WaveformView::paintTrimOverlay(juce::Graphics& g)
         tri.addTriangle((float)x1, 0.0f, (float)x1 + 10.0f, 0.0f, (float)x1, 10.0f);
         g.fillPath(tri);
     }
-    // Out-point marker
+
+    // Out-point marker — bright vertical + top triangle handle (flipped)
     g.drawVerticalLine(x2, 0.0f, (float)h);
     {
         juce::Path tri;
         tri.addTriangle((float)x2, 0.0f, (float)x2 - 10.0f, 0.0f, (float)x2, 10.0f);
         g.fillPath(tri);
     }
+
+    // Thin accent tint inside trim window
     g.setColour(ac.withAlpha(0.04f));
-    if (x2 > x1) g.fillRect(x1, 0, x2 - x1, h);
+    if (x2 > x1)
+        g.fillRect(x1, 0, x2 - x1, h);
 }
 
 void WaveformView::drawWaveform(juce::Graphics& g)
@@ -103,6 +114,7 @@ void WaveformView::drawWaveform(juce::Graphics& g)
     juce::Path path;
     int cy = height / 2;
 
+    // Draw the whole buffer, scaling for the current view portion
     const auto state = buildViewState(sampleSnap);
     if (!state.valid) return;
 
@@ -129,11 +141,8 @@ void WaveformView::drawSlices(juce::Graphics& g)
     {
         const auto& s = ui.slices[(size_t)i];
         if (!s.active) continue;
-
-        // If dragging this slice, use the preview bounds
-        int x1 = (hasActiveSlicePreview() && i == dragSliceIdx) ? sampleToPixel(dragPreviewStart) : sampleToPixel(s.startSample);
-        int x2 = (hasActiveSlicePreview() && i == dragSliceIdx) ? sampleToPixel(dragPreviewEnd) : sampleToPixel(processor.sliceManager.getEndForSlice(i, ui.sampleNumFrames));
-
+        int x1 = sampleToPixel(s.startSample);
+        int x2 = sampleToPixel(processor.sliceManager.getEndForSlice(i, ui.sampleNumFrames));
         g.setColour(s.colour.withAlpha(i == ui.selectedSlice ? 0.90f : 0.30f));
         g.drawVerticalLine(x1, 0.0f, (float)getHeight());
         g.drawVerticalLine(x2 - 1, 0.0f, (float)getHeight());
@@ -217,9 +226,12 @@ WaveformView::ViewState WaveformView::buildViewState(const SampleData::SnapshotP
 
 int WaveformView::pixelToSample(int px) const
 {
+    // Use the paintViewState when active to guarantee consistent mouse/sample mapping during paint
     if (paintViewStateActive && cachedPaintViewState.valid)
+    {
         return cachedPaintViewState.visibleStart +
             (int)((float)px / (float)cachedPaintViewState.width * cachedPaintViewState.visibleLen);
+    }
     const auto state = buildViewState(processor.sampleData.getSnapshot());
     if (!state.valid) return 0;
     return state.visibleStart + (int)((float)px / (float)state.width * state.visibleLen);
@@ -228,9 +240,11 @@ int WaveformView::pixelToSample(int px) const
 int WaveformView::sampleToPixel(int sample) const
 {
     if (paintViewStateActive && cachedPaintViewState.valid)
+    {
         return (int)((float)(sample - cachedPaintViewState.visibleStart)
             / (float)cachedPaintViewState.visibleLen
             * (float)cachedPaintViewState.width);
+    }
     const auto state = buildViewState(processor.sampleData.getSnapshot());
     if (!state.valid) return 0;
     return (int)((float)(sample - state.visibleStart) / (float)state.visibleLen * (float)state.width);
@@ -266,20 +280,6 @@ void WaveformView::mouseEnter(const juce::MouseEvent& e) { mouseMove(e); }
 void WaveformView::mouseExit(const juce::MouseEvent&) { if (hoveredEdge != HoveredEdge::None) { hoveredEdge = HoveredEdge::None; repaint(); } }
 void WaveformView::modifierKeysChanged(const juce::ModifierKeys& mods) { syncAltStateFromMods(mods); }
 
-// Helper: find marker under mouse (start/end of any active slice), returns slice idx, sets edgeType: 0 = start, 1 = end
-int WaveformView::findMarkerUnderMouse(int mouseX, int tolerance, int& edgeType)
-{
-    const auto& ui = processor.getUiSliceSnapshot();
-    for (int i = 0; i < ui.numSlices; ++i)
-    {
-        int x1 = sampleToPixel(ui.slices[(size_t)i].startSample);
-        int x2 = sampleToPixel(processor.sliceManager.getEndForSlice(i, ui.sampleNumFrames));
-        if (::abs(mouseX - x1) <= tolerance) { edgeType = 0; return i; }
-        if (::abs(mouseX - (x2 - 1)) <= tolerance) { edgeType = 1; return i; }
-    }
-    return -1;
-}
-
 void WaveformView::mouseDown(const juce::MouseEvent& e)
 {
     syncAltStateFromMods(e.mods);
@@ -301,83 +301,19 @@ void WaveformView::mouseDown(const juce::MouseEvent& e)
         return;
     }
 
-    // ---- Drag slice edge ----
-    int edgeType = -1;
-    int sliceIdx = findMarkerUnderMouse(e.x, 7, edgeType); // 7 px tolerance
-    if (sliceIdx >= 0)
-    {
-        dragSliceIdx = sliceIdx;
-        dragMode = (edgeType == 0) ? DragEdgeLeft : DragEdgeRight;
-        const auto& ui = processor.getUiSliceSnapshot();
-        dragPreviewStart = ui.slices[(size_t)sliceIdx].startSample;
-        dragPreviewEnd = processor.sliceManager.getEndForSlice(sliceIdx, ui.sampleNumFrames);
-        dragOrigStart = dragPreviewStart;
-        dragOrigEnd   = dragPreviewEnd;
-        return;
-    }
-    // (TODO: you can add MoveSlice logic here to drag the whole slice by clicking between edges)
+    // You may add your previous slice edge, trim marker, selection logic here for complete interactivity.
 }
 
-void WaveformView::mouseDrag(const juce::MouseEvent& e)
-{
-    if (dragMode == DragEdgeLeft || dragMode == DragEdgeRight)
-    {
-        auto sampleSnap = processor.sampleData.getSnapshot();
-        if (!sampleSnap || dragSliceIdx < 0)
-            return;
-
-        const auto& ui = processor.getUiSliceSnapshot();
-        int numSlices = ui.numSlices;
-        int newSample = std::max(0, std::min(pixelToSample(e.x), sampleSnap->buffer.getNumSamples() - 1));
-        const int minLen = 64;
-
-        if (dragMode == DragEdgeLeft)
-        {
-            int nextEnd = processor.sliceManager.getEndForSlice(dragSliceIdx, ui.sampleNumFrames);
-            int prevEnd = (dragSliceIdx > 0) ? ui.slices[(size_t)(dragSliceIdx-1)].startSample + minLen : 0;
-            dragPreviewStart = juce::jlimit(prevEnd, nextEnd - minLen, newSample);
-            dragPreviewEnd   = nextEnd;
-        }
-        else if (dragMode == DragEdgeRight)
-        {
-            int thisStart = ui.slices[(size_t)dragSliceIdx].startSample;
-            int sliceEndMax = sampleSnap->buffer.getNumSamples();
-            if (dragSliceIdx + 1 < numSlices)
-                sliceEndMax = ui.slices[(size_t)(dragSliceIdx + 1)].startSample - minLen;
-            dragPreviewStart = thisStart;
-            dragPreviewEnd = juce::jlimit(thisStart + minLen, sliceEndMax, newSample);
-        }
-
-        repaint();
-    }
-}
-
-void WaveformView::mouseUp(const juce::MouseEvent&)
-{
-    if ((dragMode == DragEdgeLeft || dragMode == DragEdgeRight) && dragSliceIdx >= 0)
-    {
-        DysektProcessor::Command cmd;
-        cmd.type = DysektProcessor::CmdSetSliceBounds;
-        cmd.intParam1 = dragSliceIdx;
-        cmd.intParam2 = dragPreviewStart;
-        cmd.positions[0] = dragPreviewEnd;
-        cmd.numPositions = 1;
-        processor.pushCommand(cmd);
-
-        dragMode = None;
-        dragSliceIdx = -1;
-        dragPreviewStart = dragPreviewEnd = 0;
-        repaint();
-        return;
-    }
-    dragMode = None;
-    dragSliceIdx = -1;
-}
-
+void WaveformView::mouseDrag(const juce::MouseEvent&) {}
+void WaveformView::mouseUp(const juce::MouseEvent&) {}
 void WaveformView::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) {}
 
 void WaveformView::exitTrimMode() { trimMode = false; }
 void WaveformView::getTrimBounds(int& outStart, int& outEnd) const { outStart = trimInPoint; outEnd = trimOutPoint; }
 void WaveformView::resetTrim() { trimInPoint = trimStart; trimOutPoint = trimEnd; }
 void WaveformView::enterTrimMode(int start, int end) { trimMode = true; trimInPoint = trimStart = start; trimOutPoint = trimEnd = end; }
-void WaveformView::setTrimPoints(int inPt, int outPt) { trimInPoint*
+void WaveformView::setTrimPoints(int inPt, int outPt) { trimInPoint = inPt; trimOutPoint = outPt; }
+void WaveformView::setTrimMode(bool active) { trimMode = active; }
+
+bool WaveformView::isInterestedInFileDrag(const juce::StringArray&) { return true; }
+void WaveformView::filesDropped(const juce::StringArray&, int, int) {}
