@@ -1,6 +1,20 @@
 #include "PluginEditor.h"
 #include <algorithm>
 
+// ==== [ RESTORE LAYOUT CONSTANTS ] ====
+static constexpr int kBaseW      = 1130;
+static constexpr int kLogoH      = 52;
+static constexpr int kLcdRowH    = 56;
+static constexpr int kSliceLaneH = 36;
+static constexpr int kScrollbarH = 28;
+static constexpr int kSliceCtrlH = 72;
+static constexpr int kActionH    = 22;
+static constexpr int kTrimBarH   = 34;
+static constexpr int kCtrlFrameW = 180;
+static constexpr int kBrowserH   = 170;
+static constexpr int kMargin     = 8;
+static constexpr int kPanelSlotH = 200;
+
 // [ ... other code unchanged ... ]
 
 void DysektEditor::resized()
@@ -81,8 +95,6 @@ void DysektEditor::resized()
     const int screenTop   = frameTop + kFrameInset;
     const int screenBot   = frameBot - kFrameInset;
     const int screenH     = screenBot - screenTop;
-
-    // ----------- REMOVE ZOOMBAR SETUP COMPLETELY ------------
 
     // Scrollbar (now just the waveformOverview)
     {
