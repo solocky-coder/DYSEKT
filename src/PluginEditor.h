@@ -10,6 +10,7 @@
 #include "ui/WaveformOverview.h"
 #include "ui/ActionPanel.h"
 #include "ui/ShortcutsPanel.h"
+
 #include "ui/FileBrowserPanel.h"
 #include "ui/MixerPanel.h"
 #include "ui/TrimDialog.h"
