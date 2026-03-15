@@ -1,20 +1,38 @@
 #pragma once
-#include <juce_audio_basics/juce_audio_basics.h>
-#include "../audio/SampleData.h"
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
 class WaveformCache
 {
 public:
-    struct Peak { float maxVal = 0.0f; float minVal = 0.0f; };
+    struct CacheKey {
+        int visibleStart = 0;
+        int visibleLen = 0;
+        int width = 0;
+        int numFrames = 0;
+        const void* sampleSnapPtr = nullptr;
 
-    void rebuild (const juce::AudioBuffer<float>& buffer,
-                  const std::array<SampleData::PeakMipmap, SampleData::kNumMipmapLevels>& mipmaps,
-                  int numFrames, float zoom, float scroll, int widthPixels);
+        bool operator==(const CacheKey& o) const noexcept {
+            return visibleStart == o.visibleStart
+                && visibleLen == o.visibleLen
+                && width == o.width
+                && numFrames == o.numFrames
+                && sampleSnapPtr == o.sampleSnapPtr;
+        }
+        bool operator!=(const CacheKey& o) const noexcept { return !(*this == o); }
+    };
 
-    const std::vector<Peak>& getPeaks() const { return peaks; }
-    int getNumPeaks() const { return (int) peaks.size(); }
+    WaveformCache() = default;
+    ~WaveformCache() = default;
+
+    // Example interface -- adapt to your real implementation:
+    void clear();
+    void update(const juce::AudioSampleBuffer* buf, const CacheKey& key);
+    // ... Other waveform cache logic and member functions ...
 
 private:
-    std::vector<Peak> peaks;
+    // Example private data members -- adapt as needed
+    juce::Image cachedImage;
+    CacheKey cachedKey;
+    // ... Any additional members for your actual cache logic ...
 };
