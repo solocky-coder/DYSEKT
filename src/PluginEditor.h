@@ -68,24 +68,21 @@ private:
     bool mixerOpen   = false;
     bool softWave    = false;
 
+    // All these need to be constructed with processor/&dependencies
     WaveformOverview waveformOverview;
     std::unique_ptr<TrimSession> trimSession;
     std::unique_ptr<TrimDialog>  trimDialog;
 
     DysektLookAndFeel lnf;
-
     LogoBar         logoBar;
     HeaderBar       headerBar;
-
     // v8 dual LCD row
     SliceLcdDisplay  sliceLcd;
     SliceWaveformLcd sliceWaveformLcd;
-
     SliceLane       sliceLane;
     WaveformView    waveformView;
     SliceControlBar sliceControlBar;
     ActionPanel     actionPanel;
-
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;
     ShortcutsPanel   shortcutsPanel;

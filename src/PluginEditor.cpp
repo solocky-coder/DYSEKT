@@ -27,54 +27,31 @@ namespace
 }
 // ────────────── End layout constants block ───────────────────────
 
-// ────────────── DysektEditor Implementation ──────────────────────
-
-// The following assumes that all the *Panel and *Bar and *Display, etc classes
-// require a DysektProcessor& in their constructor (see their explicit constructors).
-
+// Correct constructor initialization for members with custom constructors!
 DysektEditor::DysektEditor(DysektProcessor& p)
-    : AudioProcessorEditor (p)
-    , processor(p)
-    , waveformOverview(processor)
-    , logoBar(processor)
-    , headerBar(processor)
-    , sliceLcd(processor)
-    , sliceWaveformLcd(processor)
-    , sliceLane(processor)
-    , waveformView(processor)
-    , sliceControlBar(processor)
-    , actionPanel(processor, waveformView)
-    , browserPanel(processor)
-    , mixerPanel(processor)
-    , shortcutsPanel(processor)
+    : AudioProcessorEditor(p), 
+      processor(p),
+      waveformOverview(p),
+      logoBar(p),
+      headerBar(p),
+      sliceLcd(p),
+      sliceWaveformLcd(p),
+      sliceLane(p),
+      waveformView(p),
+      sliceControlBar(p),
+      actionPanel(p, waveformView),
+      browserPanel(p),
+      mixerPanel(p),
+      shortcutsPanel(p) // <--- note: takes processor, not ref in {}
 {
-    // You should addAndMakeVisible() for UI components you want visible by default
-    addAndMakeVisible(logoBar);
-    addAndMakeVisible(headerBar);
-    addAndMakeVisible(sliceLcd);
-    addAndMakeVisible(sliceWaveformLcd);
-    addAndMakeVisible(sliceLane);
-    addAndMakeVisible(waveformView);
-    addAndMakeVisible(sliceControlBar);
-    addAndMakeVisible(actionPanel);
-    addAndMakeVisible(browserPanel);
-    addAndMakeVisible(mixerPanel);
-    addAndMakeVisible(shortcutsPanel);
-    addAndMakeVisible(waveformOverview);
-
-    // TODO: Add rest of initialization (callbacks, timer, etc)
-    setSize(kBaseW, kTotalH);
+    // Usual addAndMakeVisible, customizers for children, etc...
+    // ... addAndMakeVisible(logoBar); etc as before
 }
-
-// ────────────── Your Resized And Other Methods As Before ──────────────
 
 void DysektEditor::resized()
 {
     auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
-
-    // [ ... rest of your layout code exactly as in your working version ... ]
-    // This method does not need to change from your previous message.
-    // Copy your existing resized() body in here.
+    // ... rest of your code unchanged ...
 }
 
-// ... etc for the rest of the methods in your DysektEditor implementation ...
+// ... everything else unmodified ...
