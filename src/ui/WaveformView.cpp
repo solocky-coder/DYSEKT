@@ -858,4 +858,34 @@ void WaveformView::filesDropped (const juce::StringArray& files, int, int)
 void WaveformView::enterTrimMode (int start, int end)
 {
     trimMode     = true;
-    trim*
+    trimStart    = start;
+    trimEnd      = end;
+    trimInPoint  = start;
+    trimOutPoint = end;
+    trimDragging = false;
+    dragMode     = None;
+    repaint();
+    auto sampleSnap = processor.sampleData.getSnapshot();
+    if (sampleSnap) {
+        int totalFrames = sampleSnap->buffer.getNumSamples();
+        trimInPoint  = juce::jlimit(0, totalFrames - 1, trimInPoint);
+        trimOutPoint = juce::jlimit(trimInPoint + 1, totalFrames, trimOutPoint);
+    }
+}
+
+void WaveformView::setTrimPoints (int inPt, int outPt)
+{
+    trimInPoint  = inPt;
+    trimOutPoint = outPt;
+    repaint();
+}
+
+void WaveformView::setTrimMode (bool active)
+{
+    trimMode = active;
+    if (! active)
+    {
+        dragMode = None;
+    }
+    repaint();
+}
