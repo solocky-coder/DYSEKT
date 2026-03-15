@@ -5,31 +5,43 @@
 namespace
 {
     static constexpr int kBaseW      = 1130;
-    static constexpr int kLogoH      = 52;
-    static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12;
-    static constexpr int kSliceLaneH = 36;
+    static constexpr int kLogoH      = 52;    // single combined header bar
+    static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LCD row + padding
+    static constexpr int kSliceLaneH = 36;   // 30 body + 6 ADSR dot strip
     static constexpr int kScrollbarH = 28;
     static constexpr int kSliceCtrlH = 72;
     static constexpr int kActionH    = 22;
-    static constexpr int kTrimBarH   = 34;
-    static constexpr int kCtrlFrameW    = 180;
+    static constexpr int kTrimBarH   = 34;   // height of inline trim bar
+    static constexpr int kCtrlFrameW    = 180; // width of the centre control frame
+
     static constexpr int kBrowserH    = 170;
     static constexpr int kMargin      = 8;
     static constexpr int kPanelSlotH  = 200;
     static constexpr int kBaseHCore   = kLogoH + kLcdRowH + kSliceLaneH
                                       + kScrollbarH + kSliceCtrlH + kActionH
-                                      + 120;
-    static constexpr int kTotalH      = kBaseHCore + kPanelSlotH + 16;
+                                      + 120; // minimum waveform height
+    static constexpr int kTotalH      = kBaseHCore + kPanelSlotH + 16; // 16 = frame padding
 }
+// ────────────── End layout constants block ──────────────────────
 
-// ────────────── DysektEditor Implementation ──────────────────────
-
+// CORRECT: Properly initialize all member components in the initialization list!
 DysektEditor::DysektEditor (DysektProcessor& p)
-    : juce::AudioProcessorEditor (p)
-    , processor (p)
-    , shortcutsPanel (processor)
+    : AudioProcessorEditor (&p)
+    , processor            (p)
+    , waveformOverview     ()
+    , logoBar              (p)
+    , headerBar            (p)
+    , sliceLcd             (p)
+    , sliceWaveformLcd     (p)
+    , sliceLane            (p)
+    , waveformView         (p)
+    , sliceControlBar      (p)
+    , actionPanel          (p, waveformView)
+    , browserPanel         (p)
+    , mixerPanel           (p)
+    , shortcutsPanel       (p)
 {
-    // Add and make visible all top-level GUI components
+    // Add all child components here
     addAndMakeVisible (logoBar);
     addAndMakeVisible (headerBar);
     addAndMakeVisible (sliceLcd);
@@ -38,37 +50,31 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addAndMakeVisible (waveformView);
     addAndMakeVisible (sliceControlBar);
     addAndMakeVisible (actionPanel);
-    addAndMakeVisible (waveformOverview);
     addAndMakeVisible (browserPanel);
     addAndMakeVisible (mixerPanel);
     addAndMakeVisible (shortcutsPanel);
+    addAndMakeVisible (waveformOverview);
 
-    // Tooltip window is already created in member initializer
-    // LookAndFeel setup if needed:
-    setLookAndFeel (&lnf);
-
-    // Size the editor
     setSize (kBaseW, kTotalH);
 
-    // Start timer if you use it
-    startTimerHz (timerHz);
+    // Connect child component dependencies, callbacks, etc. if needed:
+    // sliceLane.setWaveformView(&waveformView); // Example if setWaveformView exists
+
+    // If your custom panels require extra initialization, do it here.
 }
 
-DysektEditor::~DysektEditor()
-{
-    setLookAndFeel (nullptr);
-}
+DysektEditor::~DysektEditor() {}
 
 void DysektEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colours::darkgrey);// Replace or theme as needed
+    g.fillAll (juce::Colours::black);
 }
 
 void DysektEditor::resized()
 {
     auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
 
-    // 1. Combined header bar (logo left + UNDO/REDO/PANIC/UI right)
+    // 1. Combined header bar
     {
         auto headerStrip = area.removeFromTop (kLogoH);
         logoBar.setBounds (headerStrip.removeFromLeft (220));
@@ -84,6 +90,7 @@ void DysektEditor::resized()
 
         if (auto* cf = headerBar.getControlFrame())
             cf->setBounds (lcdRow.removeFromLeft (kCtrlFrameW));
+
         lcdRow.removeFromLeft (kMargin);
         sliceWaveformLcd.setBounds (lcdRow);
     }
@@ -139,6 +146,8 @@ void DysektEditor::resized()
     const int screenBot   = frameBot - kFrameInset;
     const int screenH     = screenBot - screenTop;
 
+    // ----------- REMOVE ZOOMBAR SETUP COMPLETELY ------------
+
     // Scrollbar (now just the waveformOverview)
     {
         auto r = juce::Rectangle<int> (screenX, screenBot - kScrollbarH, screenW, kScrollbarH);
@@ -172,3 +181,7 @@ void DysektEditor::resized()
     if (shortcutsPanel.isVisible())
         shortcutsPanel.setBounds (getLocalBounds());
 }
+
+// Other methods unchanged...
+
+// Implement remaining DysektEditor methods as in your existing source, just ensure initialization list matches!

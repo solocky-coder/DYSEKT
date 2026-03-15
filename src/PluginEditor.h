@@ -10,7 +10,6 @@
 #include "ui/WaveformOverview.h"
 #include "ui/ActionPanel.h"
 #include "ui/ShortcutsPanel.h"
-
 #include "ui/FileBrowserPanel.h"
 #include "ui/MixerPanel.h"
 #include "ui/TrimDialog.h"
@@ -69,7 +68,6 @@ private:
     bool softWave    = false;
 
     WaveformOverview waveformOverview;
-
     std::unique_ptr<TrimSession> trimSession;
     std::unique_ptr<TrimDialog>  trimDialog;
 
@@ -89,7 +87,7 @@ private:
 
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;
-    ShortcutsPanel   shortcutsPanel { processor };
+    ShortcutsPanel   shortcutsPanel;
 
     juce::TooltipWindow tooltipWindow { this, 500 };
 
