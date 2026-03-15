@@ -130,10 +130,7 @@ void WaveformView::paint (juce::Graphics& g)
     }
 }
 
-void WaveformView::paintDrawSlicePreview (juce::Graphics& g)
-{
-    // You can implement region preview here if ever needed.
-}
+void WaveformView::paintDrawSlicePreview (juce::Graphics& g) {}
 
 void WaveformView::paintLazyChopOverlay (juce::Graphics& g)
 {
@@ -400,6 +397,28 @@ void WaveformView::drawSlices (juce::Graphics& g)
         int drawStartSample = s.startSample;
         int drawEndSample = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
 
+        // Live preview during drag:
+        if (i == sel && dragSliceIdx == i &&
+            (dragMode == DragEdgeLeft || dragMode == DragEdgeRight || dragMode == MoveSlice))
+        {
+            drawStartSample = dragPreviewStart;
+            drawEndSample = dragPreviewEnd;
+        }
+        else if (i == linkedSliceIdx && linkedSliceIdx >= 0 && dragMode != None)
+        {
+            drawStartSample = linkedPreviewStart;
+            drawEndSample   = linkedPreviewEnd;
+        }
+        else if (dragMode == None)
+        {
+            const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
+            if (liveIdx == i)
+            {
+                drawStartSample = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
+                drawEndSample   = processor.liveDragBoundsEnd.load   (std::memory_order_relaxed);
+            }
+        }
+
         int x1 = std::max (0, sampleToPixel (drawStartSample));
         int x2 = std::min (getWidth(), sampleToPixel (drawEndSample));
         int sw = x2 - x1;
@@ -558,7 +577,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     if (sampleSnap == nullptr) return;
     int samplePos = std::max (0, std::min (pixelToSample (e.x), sampleSnap->buffer.getNumSamples()));
 
-    // ==== TRIM MARKER DRAG: always takes priority ====
     if (trimMode)
     {
         int w = getWidth();
@@ -580,7 +598,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // ==== NORMAL SLICE EDGE DRAG ====
     const auto& ui = processor.getUiSliceSnapshot();
     int sel = ui.selectedSlice;
     int num = ui.numSlices;
@@ -646,7 +663,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         }
     }
 
-    // ==== MPC-STYLE: Click adds marker in Add/Alt Slice Mode ====
     if (sliceDrawMode || altModeActive)
     {
         DysektProcessor::Command cmd;
@@ -657,7 +673,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // ==== Default: select slice by clicking its region ====
     for (int i = 0; i < num; ++i)
     {
         const auto& sl = ui.slices[(size_t) i];
@@ -679,13 +694,11 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
     auto sampleSnap = processor.sampleData.getSnapshot();
     if (sampleSnap == nullptr) return;
 
-    // --- TRIM DRAG ---
     if (trimMode && trimDragging && (dragMode == DragTrimIn || dragMode == DragTrimOut))
     {
         int totalFrames = sampleSnap->buffer.getNumSamples();
         int minLen = 1;
         int newSample = juce::jlimit(0, totalFrames, pixelToSample(e.x));
-
         if (dragMode == DragTrimIn)
             trimInPoint = juce::jlimit(0, trimOutPoint - minLen, newSample);
         else if (dragMode == DragTrimOut)
@@ -694,17 +707,83 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         return;
     }
 
-    // ... handle slice edge dragging, move, duplicate, etc. (your original logic)
+    // Slice edge dragging (visual preview)
+    if (dragMode == DragEdgeLeft && dragSliceIdx >= 0)
+    {
+        if (processor.snapToZeroCrossing.load())
+            dragPreviewStart = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, pixelToSample(e.x));
+        else
+            dragPreviewStart = juce::jlimit(0, dragPreviewEnd - 64, pixelToSample(e.x));
+        if (linkedSliceIdx >= 0)
+            linkedPreviewEnd = dragPreviewStart;
+        repaint();
+    }
+    else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
+    {
+        if (processor.snapToZeroCrossing.load())
+            dragPreviewEnd = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, pixelToSample(e.x));
+        else
+            dragPreviewEnd = juce::jlimit(dragPreviewStart + 64, sampleSnap->buffer.getNumSamples(), pixelToSample(e.x));
+        if (linkedSliceIdx >= 0)
+            linkedPreviewStart = dragPreviewEnd;
+        repaint();
+    }
+    // TODO: add MoveSlice/other modes if needed
 }
 
 void WaveformView::mouseUp (const juce::MouseEvent&)
 {
+    // ---- TRIM MODE: commit new in/out points ----
     if (trimMode)
     {
         trimDragging = false;
         dragMode = None;
+
+        // Commit the new trim points globally so they stick!
+        if (onTrimApplied)
+            onTrimApplied(trimInPoint, trimOutPoint);
+        processor.trimRegionStart.store (trimInPoint, std::memory_order_relaxed);
+        processor.trimRegionEnd.store   (trimOutPoint, std::memory_order_relaxed);
+        repaint();
+        return;
     }
-    // ... more cleanup for other drag modes if needed ...
+
+    // ---- SLICE EDGE DRAG: commit marker move ----
+    if ((dragMode == DragEdgeLeft || dragMode == DragEdgeRight || dragMode == MoveSlice) && dragSliceIdx >= 0)
+    {
+        DysektProcessor::Command cmd;
+        cmd.type = DysektProcessor::CmdSetSliceBounds;
+        cmd.intParam1 = dragSliceIdx;
+        cmd.intParam2 = dragPreviewStart;
+        cmd.positions[0] = dragPreviewEnd;
+        cmd.numPositions = 1;
+        processor.pushCommand(cmd);
+
+        // Also commit the linked adjacent slice so boundaries stay flush
+        if (linkedSliceIdx >= 0)
+        {
+            DysektProcessor::Command lCmd;
+            lCmd.type = DysektProcessor::CmdSetSliceBounds;
+            lCmd.intParam1 = linkedSliceIdx;
+            lCmd.intParam2 = linkedPreviewStart;
+            lCmd.positions[0] = linkedPreviewEnd;
+            lCmd.numPositions = 1;
+            processor.pushCommand(lCmd);
+        }
+    }
+
+    // Deactivate live drag so the audio thread stops overriding slice bounds.
+    processor.liveDragSliceIdx.store (-1, std::memory_order_release);
+
+    // Clear drag state
+    dragMode     = None;
+    dragSliceIdx = -1;
+    linkedSliceIdx = -1;
+    trimDragging = false;
+    dragPreviewStart = 0;
+    dragPreviewEnd = 0;
+    drawStartedFromAlt = false;
+    repaint();
 }
 
 void WaveformView::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
@@ -779,34 +858,4 @@ void WaveformView::filesDropped (const juce::StringArray& files, int, int)
 void WaveformView::enterTrimMode (int start, int end)
 {
     trimMode     = true;
-    trimStart    = start;
-    trimEnd      = end;
-    trimInPoint  = start;
-    trimOutPoint = end;
-    trimDragging = false;
-    dragMode     = None;
-    repaint();
-    auto sampleSnap = processor.sampleData.getSnapshot();
-    if (sampleSnap) {
-        int totalFrames = sampleSnap->buffer.getNumSamples();
-        trimInPoint  = juce::jlimit(0, totalFrames - 1, trimInPoint);
-        trimOutPoint = juce::jlimit(trimInPoint + 1, totalFrames, trimOutPoint);
-    }
-}
-
-void WaveformView::setTrimPoints (int inPt, int outPt)
-{
-    trimInPoint  = inPt;
-    trimOutPoint = outPt;
-    repaint();
-}
-
-void WaveformView::setTrimMode (bool active)
-{
-    trimMode = active;
-    if (! active)
-    {
-        dragMode = None;
-    }
-    repaint();
-}
+    trim*
