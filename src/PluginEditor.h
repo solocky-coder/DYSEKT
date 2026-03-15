@@ -62,30 +62,36 @@ private:
     bool     lastPreviewActive     = false;
     float    savedScale            = -1.0f;
     uint32_t lastUiSnapshotVersion = 0;
-    int      lastNumSlices         = -1;
+    int      lastNumSlices         = -1;  // for auto-enable midi follow on first slice
 
     bool browserOpen = false;
     bool mixerOpen   = false;
     bool softWave    = false;
 
-    // All these need to be constructed with processor/&dependencies
+    // Frame rects set in resized() and drawn in paint() — include padding so borders never clip
     WaveformOverview waveformOverview;
+
     std::unique_ptr<TrimSession> trimSession;
     std::unique_ptr<TrimDialog>  trimDialog;
 
     DysektLookAndFeel lnf;
+
     LogoBar         logoBar;
     HeaderBar       headerBar;
+
     // v8 dual LCD row
     SliceLcdDisplay  sliceLcd;
     SliceWaveformLcd sliceWaveformLcd;
+
     SliceLane       sliceLane;
     WaveformView    waveformView;
+    // waveformOverview declared above with frame rects
     SliceControlBar sliceControlBar;
     ActionPanel     actionPanel;
+
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;
-    ShortcutsPanel   shortcutsPanel;
+    ShortcutsPanel   shortcutsPanel { processor };
 
     juce::TooltipWindow tooltipWindow { this, 500 };
 

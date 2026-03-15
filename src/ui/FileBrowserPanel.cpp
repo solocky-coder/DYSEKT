@@ -16,12 +16,16 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     browser.setLookAndFeel (&smallLAF);
     addAndMakeVisible (browser);
 
-    // Audio preview setup
+    // ── Audio preview setup ───────────────────────────────────────────────────
+    // Device manager is intentionally NOT initialised here — opening an audio
+    // device inside a plugin constructor conflicts with the DAW's audio thread
+    // and causes the waveform view to jump on any UI interaction.
+    // It is opened lazily in startPreview() and closed in stopPreview().
     formatManager.registerBasicFormats();
     sourcePlayer.setSource (&transport);
     transport.addChangeListener (this);
 
-    // Play/Stop button
+    // ── Play/Stop button ──────────────────────────────────────────────────────
     playStopBtn.setColour (juce::TextButton::buttonColourId,
                            getTheme().accent.withAlpha (0.35f));
     playStopBtn.setColour (juce::TextButton::textColourOffId,
@@ -35,13 +39,15 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     };
     addChildComponent (playStopBtn);
 
-    // Volume slider
+    // ── Volume slider ─────────────────────────────────────────────────────────
     volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
     volumeSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     volumeSlider.setRange (0.0, 1.0);
     volumeSlider.setValue (0.8);
-    volumeSlider.setColour (juce::Slider::thumbColourId, getTheme().accent);
-    volumeSlider.setColour (juce::Slider::trackColourId, getTheme().accent.withAlpha (0.25f));
+    volumeSlider.setColour (juce::Slider::thumbColourId,
+                            getTheme().accent);
+    volumeSlider.setColour (juce::Slider::trackColourId,
+                            getTheme().accent.withAlpha (0.25f));
     volumeSlider.onValueChange = [this]
     {
         transport.setGain ((float) volumeSlider.getValue());
@@ -49,15 +55,16 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     transport.setGain (0.8f);
     addChildComponent (volumeSlider);
 
-    // File name label
+    // ── File name label ───────────────────────────────────────────────────────
     fileNameLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
     fileNameLabel.setColour (juce::Label::textColourId, getTheme().accent);
     fileNameLabel.setColour (juce::Label::backgroundColourId, juce::Colour (0x00000000));
     fileNameLabel.setMinimumHorizontalScale (0.5f);
-    fileNameLabel.setEditable (false, false, false);
+    fileNameLabel.setEditable (false, false, false);  // read-only: never editable
     addChildComponent (fileNameLabel);
 
-    // Make browser text/panels read-only
+    // Make the FileBrowserComponent's built-in filename TextEditor and path bar
+    // read-only with black background — walk ALL descendants recursively.
     auto enforceReadOnly = [this]
     {
         std::function<void(juce::Component*)> walk = [&](juce::Component* comp)
@@ -85,7 +92,7 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     };
 
     juce::Timer::callAfterDelay (100,  [enforceReadOnly] { enforceReadOnly(); });
-    juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });
+    juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });  // catch lazy-init children
 }
 
 FileBrowserPanel::~FileBrowserPanel()
@@ -102,7 +109,7 @@ FileBrowserPanel::~FileBrowserPanel()
     ioThread.stopThread (2000);
 }
 
-// ---- Layout ----
+// ── Layout ────────────────────────────────────────────────────────────────────
 
 void FileBrowserPanel::resized()
 {
@@ -110,9 +117,16 @@ void FileBrowserPanel::resized()
 
     if (previewVisible)
     {
+        // Reserve bar at the bottom
         auto bar = bounds.removeFromBottom (kBarH);
+
+        // Play/stop button — square on the left
         playStopBtn.setBounds (bar.removeFromLeft (kBarH).reduced (4));
+
+        // Volume slider — fixed width on the right
         volumeSlider.setBounds (bar.removeFromRight (90).reduced (4, 8));
+
+        // File name label fills the rest
         fileNameLabel.setBounds (bar.reduced (6, 4));
     }
 
@@ -121,33 +135,35 @@ void FileBrowserPanel::resized()
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
-    // LCD/sys theme for the browser panel
-    const auto ac = getTheme().accent;
-    auto b = getLocalBounds();
+    // ── LCD-style frame — matches waveform + LCD screen aesthetic ────────────
+    {
+        const auto ac = getTheme().accent;
+        auto b = getLocalBounds();
 
-    juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
-                                     juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
-    g.setGradientFill (outerGrad);
-    g.fillRoundedRectangle (b.toFloat(), 4.0f);
+        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
+                                         juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+        g.setGradientFill (outerGrad);
+        g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
-    g.setColour (ac.withAlpha (0.20f));
-    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
+        g.setColour (ac.withAlpha (0.20f));
+        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
-    auto screen = b.reduced (4);
-    g.setColour (getTheme().darkBar.darker (0.55f));
-    g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+        auto screen = b.reduced (4);
+        g.setColour (getTheme().darkBar.darker (0.55f));
+        g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-    g.setColour (juce::Colours::black.withAlpha (0.18f));
-    for (int y = screen.getY(); y < screen.getBottom(); y += 2)
-        g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
+        g.setColour (juce::Colours::black.withAlpha (0.18f));
+        for (int y = screen.getY(); y < screen.getBottom(); y += 2)
+            g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
 
-    juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
-                                juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
-    g.setGradientFill (glow);
-    g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+        juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
+                                    juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
+        g.setGradientFill (glow);
+        g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-    g.setColour (ac.withAlpha (0.12f));
-    g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
+        g.setColour (ac.withAlpha (0.12f));
+        g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
+    }
 
     // Preview bar at bottom
     if (previewVisible)
@@ -161,7 +177,7 @@ void FileBrowserPanel::paint (juce::Graphics& g)
     }
 }
 
-// ---- FileBrowserListener ----
+// ── FileBrowserListener ───────────────────────────────────────────────────────
 
 void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&)
 {
@@ -173,6 +189,9 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
 
     fileNameLabel.setText (f.getFileName(), juce::dontSendNotification);
 
+    // Stop any current preview and update button — but do NOT auto-start.
+    // Auto-play on single click caused the deviceManager to conflict with
+    // the DAW audio thread, making the waveform view jump on slice clicks.
     stopPreview();
     updatePlayButton();
 
@@ -195,38 +214,33 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
 
     if (ext == ".sf2" || ext == ".sfz")
     {
-        // SF2/SFZ loading
+        // SF2/SFZ loading: hand off to the processor's soundfont loader
         processor.loadSoundFontAsync (f);
-        // Always reset zoom/scroll after file load
-        processor.zoom.store(1.0f);
-        processor.scroll.store(0.0f);
         if (onFileLoaded) onFileLoaded();
         return;
     }
 
-    // Route audio files to waveform: always reset zoom/scroll after file load
+    // Route regular audio files through the trim dialog if wired up
     if (onLoadRequest)
     {
         onLoadRequest (f);
-        processor.zoom.store(1.0f);
-        processor.scroll.store(0.0f);
         if (onFileLoaded) onFileLoaded();
     }
     else
     {
         processor.loadFileAsync (f);
-        processor.zoom.store(1.0f);
-        processor.scroll.store(0.0f);
         if (onFileLoaded) onFileLoaded();
     }
 }
 
-// ---- Preview engine ----
+// ── Preview engine ────────────────────────────────────────────────────────────
 
 void FileBrowserPanel::startPreview (const juce::File& f)
 {
     if (! f.existsAsFile()) return;
 
+    // Open the audio device lazily on first use — never during constructor
+    // so we don't conflict with the DAW's audio thread at load time.
     if (deviceManager.getCurrentAudioDevice() == nullptr)
     {
         deviceManager.initialise (0, 2, nullptr, true, {}, nullptr);
@@ -274,8 +288,10 @@ void FileBrowserPanel::updatePlayButton()
 
 void FileBrowserPanel::changeListenerCallback (juce::ChangeBroadcaster*)
 {
+    // Called on audio thread — use async to safely update UI
     juce::MessageManager::callAsync ([this]
     {
+        // Auto-stop UI when playback reaches end naturally
         if (! transport.isPlaying())
             updatePlayButton();
     });

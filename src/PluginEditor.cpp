@@ -43,6 +43,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       waveformOverview (p),
       sliceControlBar(p),
       actionPanel    (p, waveformView),
+
       browserPanel   (p),
       mixerPanel     (p),
       shortcutsPanel (p)
@@ -149,6 +150,7 @@ int DysektEditor::computeTotalHeight() const
 {
     return kTotalH;  // Fixed — Kontakt style, window never resizes
 }
+
 
 void DysektEditor::toggleBrowserPanel()
 {
@@ -327,6 +329,7 @@ void DysektEditor::paint (juce::Graphics& g)
         g.drawHorizontalLine (lbnd.getY(),
                               screenF.getX() + 4.f, screenF.getRight() - 4.f);
     }
+
 }
 
 void DysektEditor::resized()
@@ -620,7 +623,7 @@ void DysektEditor::timerCallback()
                 trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
                 addAndMakeVisible (*trimDialog);
                 trimDialog->toFront (false);
-                resized();   // re-layout: waveform shrinks, trim bar placed below
+                        resized();   // re-layout: waveform shrinks, trim bar placed below
             }
         }
     }
@@ -746,6 +749,7 @@ void DysektEditor::loadUserSettings()
 
     // Sync MIDI follow button with processor state (restored from project)
     headerBar.setMidiFollowActive (processor.midiSelectsSlice.load());
+
 }
 
 // =============================================================================
@@ -759,4 +763,19 @@ bool DysektEditor::isInterestedInFileDrag (const juce::StringArray& files)
     {
         auto ext = juce::File (f).getFileExtension().toLowerCase();
         if (ext == ".wav"  || ext == ".aif"  || ext == ".aiff" ||
-            ext == ".ogg
+            ext == ".ogg"  || ext == ".flac"  || ext == ".mp3"  ||
+            ext == ".sf2"  || ext == ".sfz")
+            return true;
+    }
+    return false;
+}
+
+void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
+{
+    if (files.isEmpty()) return;
+
+    juce::File f (files[0]);
+    processor.zoom.store (1.0f);
+    processor.scroll.store (0.0f);
+    showTrimDialog (f);
+}
