@@ -12,28 +12,21 @@ class SmallListLookAndFeel : public juce::LookAndFeel_V4
 public:
     SmallListLookAndFeel() {}
 
-    // Call this whenever the theme changes to push new colours through
     void refreshTheme()
     {
         const auto& t = getTheme();
-        setColour (juce::ListBox::backgroundColourId,
-                   t.darkBar.darker (0.3f));
-        setColour (juce::DirectoryContentsDisplayComponent::textColourId,
-                   t.foreground.withAlpha (0.75f));
-        setColour (juce::DirectoryContentsDisplayComponent::highlightColourId,
-                   t.accent.withAlpha (0.12f));
-        setColour (juce::DirectoryContentsDisplayComponent::highlightedTextColourId,
-                   t.accent);
-        setColour (juce::FileChooserDialogBox::titleTextColourId,
-                   t.foreground.withAlpha (0.75f));
-        setColour (juce::TextEditor::backgroundColourId,  t.darkBar.darker (0.3f));
-        setColour (juce::TextEditor::textColourId,        t.accent);
-        setColour (juce::TextEditor::outlineColourId,     t.separator);
-        setColour (juce::Label::backgroundColourId,       t.darkBar.darker (0.3f));
-        setColour (juce::Label::textColourId,             t.foreground.withAlpha (0.75f));
+        setColour (juce::ListBox::backgroundColourId, t.darkBar.darker (0.3f));
+        setColour (juce::DirectoryContentsDisplayComponent::textColourId, t.foreground.withAlpha (0.75f));
+        setColour (juce::DirectoryContentsDisplayComponent::highlightColourId, t.accent.withAlpha (0.12f));
+        setColour (juce::DirectoryContentsDisplayComponent::highlightedTextColourId, t.accent);
+        setColour (juce::FileChooserDialogBox::titleTextColourId, t.foreground.withAlpha (0.75f));
+        setColour (juce::TextEditor::backgroundColourId, t.darkBar.darker (0.3f));
+        setColour (juce::TextEditor::textColourId, t.accent);
+        setColour (juce::TextEditor::outlineColourId, t.separator);
+        setColour (juce::Label::backgroundColourId, t.darkBar.darker (0.3f));
+        setColour (juce::Label::textColourId, t.foreground.withAlpha (0.75f));
     }
 
-    // ── Override popup menu drawing — no unicode symbols ─────────────────────
     void drawPopupMenuBackground (juce::Graphics& g, int w, int h) override
     {
         g.fillAll (getTheme().darkBar);
@@ -75,22 +68,14 @@ public:
                     juce::Justification::centredLeft);
     }
 
-    juce::Font getPopupMenuFont() override
-    {
-        return juce::Font (juce::FontOptions{}.withHeight (13.0f));
-    }
+    juce::Font getPopupMenuFont() override { return juce::Font (juce::FontOptions{}.withHeight (13.0f)); }
 
     void drawFileBrowserRow (juce::Graphics& g, int width, int height,
-                             const juce::File& /*file*/,
-                             const juce::String& filename,
-                             juce::Image* /*icon*/,
-                             const juce::String& fileSizeDescription,
-                             const juce::String& /*fileTimeDescription*/,
-                             bool /*isDirectory*/, bool isItemSelected,
-                             int /*itemIndex*/,
-                             juce::DirectoryContentsDisplayComponent& /*dcc*/) override
+                             const juce::File&, const juce::String& filename,
+                             juce::Image*, const juce::String& fileSizeDescription,
+                             const juce::String&, bool, bool isItemSelected,
+                             int, juce::DirectoryContentsDisplayComponent&) override
     {
-        // Read live from theme — always current regardless of when theme changed
         const auto& t = getTheme();
         const auto bgHighlight  = t.accent.withAlpha (0.12f);
         const auto textNormal   = t.foreground.withAlpha (0.75f);
@@ -111,13 +96,60 @@ public:
         {
             g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f)));
             g.setColour (textCol.withAlpha (0.6f));
-            g.drawText (fileSizeDescription,
-                        width - 80, 0, 78, height,
+            g.drawText (fileSizeDescription, width - 80, 0, 78, height,
                         juce::Justification::centredRight, true);
         }
     }
 
     int smallRowHeight() const { return 18; }
+};
+
+// ── Play/Stop icon button ─────────────────────────────────────
+class IconButton : public juce::Button
+{
+public:
+    IconButton() : juce::Button ("IconButton") {}
+    void paintButton (juce::Graphics& g, bool isMouseOver, bool isButtonDown) override
+    {
+        auto area = getLocalBounds().toFloat().reduced (5.0f);
+
+        // Background hover/press effect
+        if (isButtonDown)
+            g.setColour (getTheme().accent.withAlpha (0.18f));
+        else if (isMouseOver)
+            g.setColour (getTheme().accent.withAlpha (0.12f));
+        else
+            g.setColour (getTheme().accent.withAlpha (0.08f));
+        g.fillEllipse (area);
+
+        // Icon color
+        g.setColour (getTheme().accent.withAlpha (0.95f));
+
+        if (state == Playing)
+        {
+            // Draw stop icon (square)
+            float iconSize = std::min (area.getWidth(), area.getHeight()) * 0.50f;
+            juce::Rectangle<float> r = area.withSizeKeepingCentre (iconSize, iconSize);
+            g.fillRect (r);
+        }
+        else
+        {
+            // Draw play icon (triangle)
+            juce::Path triangle;
+            auto cx = area.getCentreX();
+            auto cy = area.getCentreY();
+            float s = std::min (area.getWidth(), area.getHeight()) * 0.58f;
+            triangle.addTriangle (cx - s/3.1f, cy - s/2.0f,
+                                  cx - s/3.1f, cy + s/2.0f,
+                                  cx + s/1.5f, cy);
+            g.fillPath (triangle);
+        }
+    }
+    enum IconState { Stopped, Playing };
+    void setState (IconState s) { state = s; repaint(); }
+    IconState getState() const { return state; }
+private:
+    IconState state = Stopped;
 };
 
 class FileBrowserPanel : public juce::Component,
@@ -131,7 +163,6 @@ public:
     void resized() override;
     void paint   (juce::Graphics& g) override;
 
-    // Refresh all theme-dependent colours — call whenever theme changes
     void refreshTheme();
 
     // Called after double-click load so editor can close the panel
@@ -173,7 +204,7 @@ private:
     juce::File                     previewFile;
     bool                           previewVisible = false;
 
-    juce::TextButton               playStopBtn { "PLAY" };
+    IconButton                     playStopBtn;
     juce::Slider                   volumeSlider;
     juce::Label                    fileNameLabel;
 

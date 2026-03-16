@@ -17,19 +17,12 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     addAndMakeVisible (browser);
 
     // ── Audio preview setup ───────────────────────────────────────────────────
-    // Device manager is intentionally NOT initialised here — opening an audio
-    // device inside a plugin constructor conflicts with the DAW's audio thread
-    // and causes the waveform view to jump on any UI interaction.
-    // It is opened lazily in startPreview() and closed in stopPreview().
     formatManager.registerBasicFormats();
     sourcePlayer.setSource (&transport);
     transport.addChangeListener (this);
 
-    // ── Play/Stop button ──────────────────────────────────────────────────────
-    playStopBtn.setColour (juce::TextButton::buttonColourId,
-                           getTheme().accent.withAlpha (0.35f));
-    playStopBtn.setColour (juce::TextButton::textColourOffId,
-                           getTheme().foreground);
+    // ── Play/Stop icon button ─────────────────────────────────────────────────
+    playStopBtn.setTooltip ("Preview");
     playStopBtn.onClick = [this]
     {
         if (transport.isPlaying())
@@ -44,10 +37,8 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     volumeSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     volumeSlider.setRange (0.0, 1.0);
     volumeSlider.setValue (0.8);
-    volumeSlider.setColour (juce::Slider::thumbColourId,
-                            getTheme().accent);
-    volumeSlider.setColour (juce::Slider::trackColourId,
-                            getTheme().accent.withAlpha (0.25f));
+    volumeSlider.setColour (juce::Slider::thumbColourId, getTheme().accent);
+    volumeSlider.setColour (juce::Slider::trackColourId, getTheme().accent.withAlpha (0.25f));
     volumeSlider.onValueChange = [this]
     {
         transport.setGain ((float) volumeSlider.getValue());
@@ -60,11 +51,10 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     fileNameLabel.setColour (juce::Label::textColourId, getTheme().accent);
     fileNameLabel.setColour (juce::Label::backgroundColourId, juce::Colour (0x00000000));
     fileNameLabel.setMinimumHorizontalScale (0.5f);
-    fileNameLabel.setEditable (false, false, false);  // read-only: never editable
+    fileNameLabel.setEditable (false, false, false);  // read-only
     addChildComponent (fileNameLabel);
 
-    // Make the FileBrowserComponent's built-in filename TextEditor and path bar
-    // read-only with black background — walk ALL descendants recursively.
+    // Hide browser filename bar & set read-only for all editors (defensive)
     auto enforceReadOnly = [this]
     {
         std::function<void(juce::Component*)> walk = [&](juce::Component* comp)
@@ -74,16 +64,17 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
                 te->setReadOnly (true);
                 te->setCaretVisible (false);
                 te->setMouseCursor (juce::MouseCursor::NormalCursor);
-                te->setColour (juce::TextEditor::backgroundColourId,    juce::Colour (0xFF000000));
-                te->setColour (juce::TextEditor::outlineColourId,       getTheme().separator);
+                te->setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xFF000000));
+                te->setColour (juce::TextEditor::outlineColourId, getTheme().separator);
                 te->setColour (juce::TextEditor::focusedOutlineColourId, getTheme().accent.withAlpha (0.5f));
-                te->setColour (juce::TextEditor::textColourId,          getTheme().accent);
+                te->setColour (juce::TextEditor::textColourId, getTheme().accent);
+                te->setVisible (false); // <--- HIDE IT!
             }
             if (auto* lb = dynamic_cast<juce::Label*> (comp))
             {
                 lb->setEditable (false, false, false);
                 lb->setColour (juce::Label::backgroundColourId, juce::Colour (0xFF000000));
-                lb->setColour (juce::Label::textColourId,       getTheme().accent);
+                lb->setColour (juce::Label::textColourId, getTheme().accent);
             }
             for (int i = 0; i < comp->getNumChildComponents(); ++i)
                 walk (comp->getChildComponent (i));
@@ -109,18 +100,18 @@ FileBrowserPanel::~FileBrowserPanel()
     ioThread.stopThread (2000);
 }
 
-// ── Layout ────────────────────────────────────────────────────────────────────
+// ── Layout ─────────────────────────────────────────────────────────────
 
 void FileBrowserPanel::resized()
 {
     auto bounds = getLocalBounds();
 
+    // Preview bar at the bottom if a file is selected
     if (previewVisible)
     {
-        // Reserve bar at the bottom
         auto bar = bounds.removeFromBottom (kBarH);
 
-        // Play/stop button — square on the left
+        // Play/stop icon button (square)
         playStopBtn.setBounds (bar.removeFromLeft (kBarH).reduced (4));
 
         // Volume slider — fixed width on the right
@@ -130,42 +121,41 @@ void FileBrowserPanel::resized()
         fileNameLabel.setBounds (bar.reduced (6, 4));
     }
 
+    // Browser fills full vertical space above the preview bar
     browser.setBounds (bounds);
 }
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
     // ── LCD-style frame — matches waveform + LCD screen aesthetic ────────────
-    {
-        const auto ac = getTheme().accent;
-        auto b = getLocalBounds();
+    const auto ac = getTheme().accent;
+    auto b = getLocalBounds();
 
-        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
-                                         juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
-        g.setGradientFill (outerGrad);
-        g.fillRoundedRectangle (b.toFloat(), 4.0f);
+    juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
+                                     juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+    g.setGradientFill (outerGrad);
+    g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
-        g.setColour (ac.withAlpha (0.20f));
-        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
+    g.setColour (ac.withAlpha (0.20f));
+    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
-        auto screen = b.reduced (4);
-        g.setColour (getTheme().darkBar.darker (0.55f));
-        g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+    auto screen = b.reduced (4);
+    g.setColour (getTheme().darkBar.darker (0.55f));
+    g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-        g.setColour (juce::Colours::black.withAlpha (0.18f));
-        for (int y = screen.getY(); y < screen.getBottom(); y += 2)
-            g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
+    g.setColour (juce::Colours::black.withAlpha (0.18f));
+    for (int y = screen.getY(); y < screen.getBottom(); y += 2)
+        g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
 
-        juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
-                                    juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
-        g.setGradientFill (glow);
-        g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+    juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
+                                juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
+    g.setGradientFill (glow);
+    g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
-        g.setColour (ac.withAlpha (0.12f));
-        g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
-    }
+    g.setColour (ac.withAlpha (0.12f));
+    g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
 
-    // Preview bar at bottom
+    // Preview bar background
     if (previewVisible)
     {
         auto bar = getLocalBounds().removeFromBottom (kBarH);
@@ -189,9 +179,7 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
 
     fileNameLabel.setText (f.getFileName(), juce::dontSendNotification);
 
-    // Stop any current preview and update button — but do NOT auto-start.
-    // Auto-play on single click caused the deviceManager to conflict with
-    // the DAW audio thread, making the waveform view jump on slice clicks.
+    // Stop any current preview and update icon — but do NOT auto-start.
     stopPreview();
     updatePlayButton();
 
@@ -214,7 +202,6 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
 
     if (ext == ".sf2" || ext == ".sfz")
     {
-        // SF2/SFZ loading: hand off to the processor's soundfont loader
         processor.loadSoundFontAsync (f);
         if (onFileLoaded) onFileLoaded();
         return;
@@ -233,14 +220,12 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
     }
 }
 
-// ── Preview engine ────────────────────────────────────────────────────────────
+// ── Preview engine ──────────────────────────────────────────────────────────
 
 void FileBrowserPanel::startPreview (const juce::File& f)
 {
     if (! f.existsAsFile()) return;
 
-    // Open the audio device lazily on first use — never during constructor
-    // so we don't conflict with the DAW's audio thread at load time.
     if (deviceManager.getCurrentAudioDevice() == nullptr)
     {
         deviceManager.initialise (0, 2, nullptr, true, {}, nullptr);
@@ -273,26 +258,23 @@ void FileBrowserPanel::stopPreview()
 void FileBrowserPanel::updatePlayButton()
 {
     if (transport.isPlaying())
-    {
-        playStopBtn.setButtonText ("STOP");
-        playStopBtn.setColour (juce::TextButton::buttonColourId,
-                               getTheme().accent.withAlpha (0.55f));
-    }
+        playStopBtn.setState (IconButton::Playing);
     else
-    {
-        playStopBtn.setButtonText ("PLAY");
-        playStopBtn.setColour (juce::TextButton::buttonColourId,
-                               getTheme().accent.withAlpha (0.25f));
-    }
+        playStopBtn.setState (IconButton::Stopped);
 }
 
 void FileBrowserPanel::changeListenerCallback (juce::ChangeBroadcaster*)
 {
-    // Called on audio thread — use async to safely update UI
     juce::MessageManager::callAsync ([this]
     {
-        // Auto-stop UI when playback reaches end naturally
         if (! transport.isPlaying())
             updatePlayButton();
     });
+}
+
+void FileBrowserPanel::refreshTheme()
+{
+    smallLAF.refreshTheme();
+    repaint();
+    browser.repaint();
 }
