@@ -51,25 +51,21 @@ void TrimDialog::resized()
 
 void TrimDialog::onApply()
 {
-    processor.trimInSample.store(waveformView.getTrimIn());
-    processor.trimOutSample.store(waveformView.getTrimOut());
+    // Commit the current trim marker positions to the processor
+    processor.trimInSample.store  (waveformView.getTrimIn());
+    processor.trimOutSample.store (waveformView.getTrimOut());
 
-    if (waveformView.onTrimApplied)
-        waveformView.onTrimApplied(waveformView.getTrimIn(), waveformView.getTrimOut());
+    waveformView.setTrimMode (false);
 
-    waveformView.setTrimMode(false);
-
+    // Remove this dialog from its parent (ActionPanel will reset the unique_ptr)
     if (auto* parent = getParentComponent())
-        parent->removeChildComponent(this);
+        parent->removeChildComponent (this);
 }
 
 void TrimDialog::onCancel()
 {
-    if (waveformView.onTrimCancelled)
-        waveformView.onTrimCancelled();
-
-    waveformView.setTrimMode(false);
+    waveformView.setTrimMode (false);
 
     if (auto* parent = getParentComponent())
-        parent->removeChildComponent(this);
+        parent->removeChildComponent (this);
 }
