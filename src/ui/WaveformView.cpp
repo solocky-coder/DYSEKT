@@ -739,9 +739,8 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
         trimDragging = false;
         dragMode = None;
 
-        // Commit the new trim points globally so they stick!
-        if (onTrimApplied)
-            onTrimApplied(trimInPoint, trimOutPoint);
+        // Only update internal trim points and visual state;
+        // do NOT trigger 'onTrimApplied' here. Apply is done by 'APPLY' button.
         processor.trimRegionStart.store (trimInPoint, std::memory_order_relaxed);
         processor.trimRegionEnd.store   (trimOutPoint, std::memory_order_relaxed);
         repaint();
