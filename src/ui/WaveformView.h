@@ -2,7 +2,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <functional>
 #include "WaveformCache.h"
-#include "SampleData.h"
+#include "audio/SampleData.h"
 
 // Forward declaration
 class DysektProcessor;
