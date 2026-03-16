@@ -2,7 +2,7 @@
 #include <juce_graphics/juce_graphics.h>
 #include <vector>
 #include <memory>
-#include "SampleData.h"
+#include "audio/SampleData.h"
 
 class WaveformCache
 {
