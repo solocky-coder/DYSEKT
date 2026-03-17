@@ -1,12 +1,22 @@
 #include "PluginEditor.h"
-#include "PluginProcessor.h"
-#include "params/ParamIds.h"
-#include "ui/LogoBar.h"
-#include "ui/HeaderBar.h"
 #include <algorithm>
 
-// (all your static constants remain unchanged)
+// ========================== STATIC CONSTANTS ==========================
+static constexpr int kBaseW      = 1130;
+static constexpr int kLogoH      = 52;    // single combined header bar
+static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LCD row + padding
+static constexpr int kSliceLaneH = 36;   // 30 body + 6 ADSR dot strip
+static constexpr int kScrollbarH = 28;
+static constexpr int kSliceCtrlH = 72;
+static constexpr int kActionH    = 22;
+static constexpr int kTrimBarH   = 34;   // height of inline trim bar
+static constexpr int kCtrlFrameW = 180;  // width of the centre control frame
+static constexpr int kPanelSlotH = 200;
+static constexpr int kBaseHCore  = kLogoH + kLcdRowH + kSliceLaneH + kScrollbarH + kSliceCtrlH + kActionH + 120;
+static constexpr int kTotalH     = kBaseHCore + kPanelSlotH + 16; // 16 = frame padding
+static constexpr int kMargin     = 8;
 
+// ========================== FILEPATH HELPERS ==========================
 static juce::File getSettingsDir()
 {
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
@@ -15,6 +25,7 @@ static juce::File getSettingsDir()
 static juce::File getUserSettingsFile() { return getSettingsDir().getChildFile ("settings.yaml"); }
 static juce::File getThemesDir()        { return getSettingsDir().getChildFile ("themes"); }
 
+// ========================= CLASS CONSTRUCTOR ==========================
 DysektEditor::DysektEditor (DysektProcessor& p)
     : AudioProcessorEditor (p),
       processor (p),
@@ -320,6 +331,10 @@ void DysektEditor::resized()
         trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
     if (shortcutsPanel.isVisible())
         shortcutsPanel.setBounds (getLocalBounds());
+
+    // ---- NEW MIDI LEARN DIALOG LAYOUT ----
+    if (midiLearnDialog)
+        midiLearnDialog->setBounds(getLocalBounds().reduced(40));
 }
 
 void DysektEditor::toggleMixerPanel()
@@ -409,14 +424,216 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
-// ===== ALL OTHER METHODS UNCHANGED BELOW! (trimmed for readability) =====
+void DysektEditor::timerCallback()
+{
+    bool uiChanged = false, viewportChanged = false;
+    const bool previewActive      = waveformView.hasActiveSlicePreview();
+    const bool waveformInteracting = waveformView.isInteracting();
+    const bool rulerDragging      = waveformOverview.isDraggingNow();
 
-void DysektEditor::timerCallback() { /* unchanged, from your source */ }
-// ...
-void DysektEditor::ensureDefaultThemes() {/* unchanged */}
-juce::StringArray DysektEditor::getAvailableThemes() {/* unchanged */}
-void DysektEditor::applyTheme (const juce::String& themeName) {/* unchanged */}
-void DysektEditor::saveUserSettings (float scale, const juce::String& themeName) {/* unchanged */}
-void DysektEditor::loadUserSettings(){/* unchanged */}
-bool DysektEditor::isInterestedInFileDrag (const juce::StringArray& files){/* unchanged */}
-void DysektEditor::filesDropped (const juce::StringArray& files, int, int){/* unchanged */}
+    const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
+    if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
+
+    {
+        const bool procState = processor.midiSelectsSlice.load (std::memory_order_relaxed);
+        headerBar.setMidiFollowActive (procState);
+    }
+
+    {
+        const int curSlices = processor.sliceManager.getNumSlices();
+        if (lastNumSlices == 0 && curSlices > 0)
+        {
+            processor.midiSelectsSlice.store (true, std::memory_order_relaxed);
+            headerBar.setMidiFollowActive (true);
+        }
+        lastNumSlices = curSlices;
+    }
+
+    const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
+    if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
+
+    float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+    if (scaleDirty || scale != lastScale)
+    {
+        scaleDirty = false; lastScale = scale;
+        setTransform (juce::AffineTransform::scale (scale));
+        DysektLookAndFeel::setMenuScale (scale);
+        saveUserSettings (scale, getTheme().name);
+        uiChanged = true;
+    }
+
+    const bool playbackActive = std::any_of (processor.voicePool.voicePositions.begin(),
+                                             processor.voicePool.voicePositions.end(),
+                                             [] (const std::atomic<float>& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
+
+    const bool waveformAnimating = waveformInteracting || rulerDragging || previewActive
+                                 || playbackActive || processor.lazyChop.isActive()
+                                 || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
+    const bool waveformNeedsRepaint = uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating;
+    const bool laneNeedsRepaint     = uiChanged || viewportChanged || previewActive || lastPreviewActive;
+    const bool rulerNeedsRepaint    = uiChanged || viewportChanged || rulerDragging;
+
+    lastWaveformAnimating = waveformAnimating;
+    lastPreviewActive     = previewActive;
+
+    if (trimSession != nullptr && ! trimSession->active)
+    {
+        auto snap = processor.sampleData.getSnapshot();
+        if (snap != nullptr && snap->filePath == trimSession->file.getFullPathName())
+        {
+            trimSession->active = true;
+            const int totalFrames = snap->buffer.getNumSamples();
+            waveformView.enterTrimMode (0, totalFrames);
+
+            processor.trimModeActive.store (true, std::memory_order_relaxed);
+            processor.trimRegionStart.store (0,           std::memory_order_relaxed);
+            processor.trimRegionEnd  .store (totalFrames, std::memory_order_relaxed);
+
+            if (trimDialog == nullptr)
+            {
+                trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+                addAndMakeVisible (*trimDialog);
+                trimDialog->toFront (false);
+                resized();
+            }
+        }
+    }
+
+    if (processor.trimModeActive.load (std::memory_order_relaxed)
+        && ! waveformView.isTrimDragging())
+    {
+        const int procStart = processor.trimRegionStart.load (std::memory_order_relaxed);
+        const int procEnd   = processor.trimRegionEnd  .load (std::memory_order_relaxed);
+        if (procStart != waveformView.getTrimIn() || procEnd != waveformView.getTrimOut())
+            waveformView.setTrimPoints (procStart, procEnd);
+    }
+
+    const int targetHz = waveformAnimating ? 60 : 30;
+    if (targetHz != timerHz) { startTimerHz (targetHz); timerHz = targetHz; }
+
+    if (waveformNeedsRepaint) waveformView.repaint();
+    if (laneNeedsRepaint)     sliceLane.repaint();
+    if (rulerNeedsRepaint)    waveformOverview.repaint();
+    sliceLcd.repaintLcd();
+    sliceWaveformLcd.repaintLcd();
+    if (mixerOpen) mixerPanel.repaint();
+
+    headerBar.repaint();
+    sliceControlBar.repaint();
+    if (uiChanged) actionPanel.repaint();
+    if (mixerOpen) mixerPanel.updateFromSnapshot();
+}
+
+void DysektEditor::ensureDefaultThemes()
+{
+    auto dir = getThemesDir(); dir.createDirectory();
+    auto write = [&] (const juce::String& name, const ThemeData& t)
+    {
+        auto f = dir.getChildFile (name + ".dysektstyle");
+        if (! f.existsAsFile()) f.replaceWithText (t.toThemeFile());
+    };
+    write ("dark",  ThemeData::darkTheme());
+    write ("shell", ThemeData::shellTheme());
+    write ("lazy",  ThemeData::lazyTheme());
+    write ("snow",  ThemeData::snowTheme());
+    write ("ghost", ThemeData::ghostTheme());
+    write ("hack",  ThemeData::hackTheme());
+}
+
+juce::StringArray DysektEditor::getAvailableThemes()
+{
+    juce::StringArray names;
+    for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
+    {
+        auto t = ThemeData::fromThemeFile (f.loadFileAsString());
+        if (t.name.isNotEmpty()) names.add (t.name);
+    }
+    if (names.isEmpty()) { names.add ("dark"); names.add ("shell"); }
+    return names;
+}
+
+void DysektEditor::applyTheme (const juce::String& themeName)
+{
+    for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
+    {
+        auto t = ThemeData::fromThemeFile (f.loadFileAsString());
+        if (t.name == themeName)
+        {
+            setTheme (t);
+            processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+            saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
+            repaint(); return;
+        }
+    }
+    if      (themeName == "shell") setTheme (ThemeData::shellTheme());
+    else if (themeName == "lazy")  setTheme (ThemeData::lazyTheme());
+    else if (themeName == "snow")  setTheme (ThemeData::snowTheme());
+    else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
+    else if (themeName == "hack")  setTheme (ThemeData::hackTheme());
+    else                           setTheme (ThemeData::darkTheme());
+    processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+    saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
+    repaint();
+}
+
+void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)
+{
+    auto file = getUserSettingsFile();
+    file.getParentDirectory().createDirectory();
+
+    file.replaceWithText ("uiScale: " + juce::String (scale, 2)
+                        + "\ntheme: " + themeName
+                        + "\nwaveStyle: " + (softWave ? "soft" : "hard") + "\n");
+}
+
+void DysektEditor::loadUserSettings()
+{
+    savedScale = -1.0f;
+    juce::String themeName = "dark";
+    auto file = getUserSettingsFile();
+    if (file.existsAsFile())
+    {
+        for (auto line : juce::StringArray::fromLines (file.loadFileAsString()))
+        {
+            line = line.trim();
+            if (line.startsWith ("uiScale:"))
+            { float v = line.fromFirstOccurrenceOf (":", false, false).trim().getFloatValue(); if (v >= 0.5f && v <= 3.0f) savedScale = v; }
+            else if (line.startsWith ("theme:"))
+            { themeName = line.fromFirstOccurrenceOf (":", false, false).trim(); }
+            else if (line.startsWith ("waveStyle:"))
+            {
+                auto val = line.fromFirstOccurrenceOf (":", false, false).trim();
+                softWave = (val == "soft");
+            }
+        }
+    }
+    applyTheme (themeName);
+
+    waveformView.setSoftWaveform (softWave);
+    actionPanel.setWaveActive (softWave);
+
+    headerBar.setMidiFollowActive (processor.midiSelectsSlice.load());
+}
+
+bool DysektEditor::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (auto& f : files)
+    {
+        auto ext = juce::File (f).getFileExtension().toLowerCase();
+        if (ext == ".wav"  || ext == ".aif"  || ext == ".aiff" ||
+            ext == ".ogg"  || ext == ".flac"  || ext == ".mp3"  ||
+            ext == ".sf2"  || ext == ".sfz")
+            return true;
+    }
+    return false;
+}
+
+void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
+{
+    if (files.isEmpty()) return;
+
+    juce::File f (files[0]);
+    processor.zoom.store (1.0f);
+    processor.scroll.store (0.0f);
+    showTrimDialog (f);
+}
