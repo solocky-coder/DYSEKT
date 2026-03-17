@@ -1,11 +1,9 @@
 #pragma once
-#include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
-
-#include "DysektProcessor.h"
-#include "ui/LogoBar.h"
+#include "PluginProcessor.h"
+#include "ui/DysektLookAndFeel.h"
 #include "ui/HeaderBar.h"
-#include "params/ParamIds.h"
+#include "ui/LogoBar.h"
 #include "ui/SliceLane.h"
 #include "ui/SliceControlBar.h"
 #include "ui/WaveformView.h"
@@ -18,6 +16,7 @@
 #include "TrimSession.h"
 #include "ui/SliceLcdDisplay.h"
 #include "ui/SliceWaveformLcd.h"
+#include "ui/MidiLearnDialog.h" // MIDI Learn system
 
 class DysektEditor : public juce::AudioProcessorEditor,
                      public juce::FileDragAndDropTarget,
@@ -94,9 +93,11 @@ private:
     void toggleMixerPanel();
     void toggleShortcutsPanel();
 
+    // MIDI Learn dialog system
+    std::unique_ptr<MidiLearnDialog> midiLearnDialog;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektEditor)
 
-    // --- static layout constants for sizing/layout ---
     static constexpr int kBaseW      = 1130;
     static constexpr int kLogoH      = 52;
     static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12;
