@@ -51,10 +51,10 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     fileNameLabel.setColour (juce::Label::textColourId, getTheme().accent);
     fileNameLabel.setColour (juce::Label::backgroundColourId, juce::Colour (0x00000000));
     fileNameLabel.setMinimumHorizontalScale (0.5f);
-    fileNameLabel.setEditable (false, false, false);  // read-only
+    fileNameLabel.setEditable (false, false, false);
     addChildComponent (fileNameLabel);
 
-    // Hide browser filename bar & set read-only for all editors (defensive)
+    // Hiding browser filename bar & making editors read-only for safety
     auto enforceReadOnly = [this]
     {
         std::function<void(juce::Component*)> walk = [&](juce::Component* comp)
@@ -68,7 +68,7 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
                 te->setColour (juce::TextEditor::outlineColourId, getTheme().separator);
                 te->setColour (juce::TextEditor::focusedOutlineColourId, getTheme().accent.withAlpha (0.5f));
                 te->setColour (juce::TextEditor::textColourId, getTheme().accent);
-                te->setVisible (false); // <--- HIDE IT!
+                te->setVisible (false);
             }
             if (auto* lb = dynamic_cast<juce::Label*> (comp))
             {
@@ -83,7 +83,7 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     };
 
     juce::Timer::callAfterDelay (100,  [enforceReadOnly] { enforceReadOnly(); });
-    juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });  // catch lazy-init children
+    juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });
 }
 
 FileBrowserPanel::~FileBrowserPanel()
@@ -106,33 +106,28 @@ void FileBrowserPanel::resized()
 {
     auto bounds = getLocalBounds();
 
-    // Preview bar at the bottom if a file is selected
+    // -- Preview bar at the bottom if visible
     if (previewVisible)
     {
         auto bar = bounds.removeFromBottom (kBarH);
 
-        // Play/stop icon button (square)
         playStopBtn.setBounds (bar.removeFromLeft (kBarH).reduced (4));
-
-        // Volume slider — fixed width on the right
         volumeSlider.setBounds (bar.removeFromRight (90).reduced (4, 8));
-
-        // File name label fills the rest
         fileNameLabel.setBounds (bar.reduced (6, 4));
     }
 
-    // Browser fills full vertical space above the preview bar
-    browser.setBounds (bounds);
+    // Browser fills all space above preview bar (or all if not visible)
+    browser.setBounds(bounds);
 }
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
-    // ── LCD-style frame — matches waveform + LCD screen aesthetic ────────────
+    // LCD frame
     const auto ac = getTheme().accent;
     auto b = getLocalBounds();
 
     juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
-                                     juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+                                    juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
     g.setGradientFill (outerGrad);
     g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
@@ -155,7 +150,7 @@ void FileBrowserPanel::paint (juce::Graphics& g)
     g.setColour (ac.withAlpha (0.12f));
     g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
 
-    // Preview bar background
+    // Preview bar background when visible
     if (previewVisible)
     {
         auto bar = getLocalBounds().removeFromBottom (kBarH);
@@ -167,7 +162,7 @@ void FileBrowserPanel::paint (juce::Graphics& g)
     }
 }
 
-// ── FileBrowserListener ───────────────────────────────────────────────────────
+// -- FileBrowserListener ----------------------------------------------------
 
 void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&)
 {
@@ -179,7 +174,7 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
 
     fileNameLabel.setText (f.getFileName(), juce::dontSendNotification);
 
-    // Stop any current preview and update icon — but do NOT auto-start.
+    // Stop preview & update icon (don’t auto-play)
     stopPreview();
     updatePlayButton();
 
@@ -207,7 +202,6 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
         return;
     }
 
-    // Route regular audio files through the trim dialog if wired up
     if (onLoadRequest)
     {
         onLoadRequest (f);
@@ -220,7 +214,7 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
     }
 }
 
-// ── Preview engine ──────────────────────────────────────────────────────────
+// -- Preview engine ---------------------------------------------------------
 
 void FileBrowserPanel::startPreview (const juce::File& f)
 {

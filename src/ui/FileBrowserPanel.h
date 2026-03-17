@@ -165,19 +165,15 @@ public:
 
     void refreshTheme();
 
-    // Called after double-click load so editor can close the panel
     std::function<void()> onFileLoaded;
-    // Called when user double-clicks an audio file (not SF2/SFZ); editor wires this to showTrimDialog
     std::function<void (const juce::File&)> onLoadRequest;
 
 private:
-    // FileBrowserListener
     void selectionChanged() override {}
     void fileClicked       (const juce::File& f, const juce::MouseEvent&) override;
     void fileDoubleClicked (const juce::File& f) override;
     void browserRootChanged (const juce::File&) override {}
 
-    // ChangeListener (transport state changes)
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
 
     void startPreview (const juce::File& f);
@@ -186,21 +182,18 @@ private:
 
     DysektProcessor& processor;
 
-    // File browser
     SmallListLookAndFeel           smallLAF;
     juce::WildcardFileFilter       fileFilter;
     juce::TimeSliceThread          ioThread  { "FileBrowserIO" };
     juce::DirectoryContentsList    dirList;
     juce::FileBrowserComponent     browser;
 
-    // Preview audio engine
     juce::AudioDeviceManager       deviceManager;
     juce::AudioFormatManager       formatManager;
     juce::AudioTransportSource     transport;
     juce::AudioSourcePlayer        sourcePlayer;
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
 
-    // Preview UI bar (shown when a file is selected)
     juce::File                     previewFile;
     bool                           previewVisible = false;
 
