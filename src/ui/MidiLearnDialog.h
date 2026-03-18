@@ -24,12 +24,12 @@ private:
     juce::TextButton closeButton { "Close" };
 
     // Per-row encoder mode selectors
-    struct EncoderModeSelector : public juce::ComboBox
-    {
-        EncoderModeSelector();
-        void setField(int fieldId, MidiLearnManager::EncoderMode mode);
-        int fieldId { -1 };
-    };
+   struct EncoderModeSelector : public juce::ComboBox, public juce::ReferenceCountedObject
+{
+    EncoderModeSelector();
+    void setField(int fieldId, MidiLearnManager::EncoderMode mode);
+    int fieldId { -1 };
+};
     juce::ReferenceCountedArray<EncoderModeSelector> rowSelectors;
 
     void encoderModeChanged(EncoderModeSelector*);

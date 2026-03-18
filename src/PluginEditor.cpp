@@ -1,20 +1,8 @@
 #include "PluginEditor.h"
 #include <algorithm>
-
+#include "ui/PluginEditorConstants.h"
 // ========================== STATIC CONSTANTS ==========================
-static constexpr int kBaseW      = 1130;
-static constexpr int kLogoH      = 52;    // single combined header bar
-static constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12; // LCD row + padding
-static constexpr int kSliceLaneH = 36;   // 30 body + 6 ADSR dot strip
-static constexpr int kScrollbarH = 28;
-static constexpr int kSliceCtrlH = 72;
-static constexpr int kActionH    = 22;
-static constexpr int kTrimBarH   = 34;   // height of inline trim bar
-static constexpr int kCtrlFrameW = 180;  // width of the centre control frame
-static constexpr int kPanelSlotH = 200;
-static constexpr int kBaseHCore  = kLogoH + kLcdRowH + kSliceLaneH + kScrollbarH + kSliceCtrlH + kActionH + 120;
-static constexpr int kTotalH     = kBaseHCore + kPanelSlotH + 16; // 16 = frame padding
-static constexpr int kMargin     = 8;
+
 
 // ========================== FILEPATH HELPERS ==========================
 static juce::File getSettingsDir()
