@@ -4,6 +4,7 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 #include "../audio/GrainEngine.h"
+#include "../PluginEditor.h"
 
 // ── Fixed ADSR knob colours — match LCD node colours, theme-independent ───────
 static const juce::Colour kAdsrAttack  { 0xFF00FF87 };   // Toxic Lime
