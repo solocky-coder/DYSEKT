@@ -37,6 +37,9 @@ struct VoiceStartParams
     float globalPan         = 0.0f;     // -1..+1
     float globalFilterCutoff = 20000.0f; // Hz
     float globalFilterRes   = 0.0f;     // 0..1
+
+    // ── Chromatic legato ──────────────────────────────────────────────────────
+    bool  chromaticLegatoTrigger = false; // when true: steal prior legato voices, force Stretch pitch-only
 };
 
 class VoicePool
@@ -87,7 +90,8 @@ public:
     static void initStretcher (Voice& v, float pitchSemis, double sr,
                                float tonalityHz, float formantSemis, bool formantComp,
                                const SampleData& sample);
-    static void initBungee (Voice& v, float pitchSemis, double sr, int grainMode);
+
+    void killVoicesForChromaticLegato (int sliceIdx);
 
     // Atomic voice positions for UI cursor display
     std::array<std::atomic<float>, kMaxVoices> voicePositions;

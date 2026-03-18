@@ -26,47 +26,6 @@ else()
                    "Run: git submodule add https://github.com/sfztools/sfizz.git sfizz")
 endif()
 
-# --- Bungee (built as static library) ---
-set(BUNGEE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/bungee)
-
-# pffft (C library used by Bungee)
-add_library(pffft STATIC EXCLUDE_FROM_ALL
-    ${BUNGEE_ROOT}/submodules/pffft/pffft.c
-    ${BUNGEE_ROOT}/submodules/pffft/fftpack.c
-)
-set_target_properties(pffft PROPERTIES POSITION_INDEPENDENT_CODE ON)
-if (MSVC)
-    target_compile_options(pffft PRIVATE /fp:fast)
-    target_compile_definitions(pffft PRIVATE _USE_MATH_DEFINES)
-else()
-    target_compile_options(pffft PRIVATE -ffast-math -fno-finite-math-only -fno-exceptions)
-endif()
-
-# Bungee library
-file(GLOB BUNGEE_SOURCES "${BUNGEE_ROOT}/src/*.cpp")
-add_library(bungee_lib STATIC EXCLUDE_FROM_ALL ${BUNGEE_SOURCES})
-set_target_properties(bungee_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(bungee_lib PRIVATE
-    ${BUNGEE_ROOT}/submodules/eigen
-    ${BUNGEE_ROOT}/submodules
-    ${BUNGEE_ROOT}
-    $<$<CXX_COMPILER_ID:MSVC>:${CMAKE_CURRENT_SOURCE_DIR}/src/audio/msvc_compat>
-)
-target_include_directories(bungee_lib PUBLIC ${BUNGEE_ROOT})
-target_compile_definitions(bungee_lib PRIVATE
-    BUNGEE_SELF_TEST=0
-    eigen_assert=BUNGEE_ASSERT1
-    EIGEN_DONT_PARALLELIZE=1
-    BUNGEE_VERSION="0.0.0"
-)
-if (MSVC)
-    target_compile_options(bungee_lib PRIVATE /W0
-        /FI${CMAKE_CURRENT_SOURCE_DIR}/src/audio/bungee_msvc_compat.h)
-    target_compile_definitions(bungee_lib PRIVATE _USE_MATH_DEFINES)
-else()
-    target_compile_options(bungee_lib PRIVATE -fwrapv -w)
-endif()
-target_link_libraries(bungee_lib PRIVATE pffft)
 
 juce_add_plugin(Dysekt
     COMPANY_NAME "DunSoft"
@@ -110,6 +69,7 @@ target_sources(Dysekt PRIVATE
     src/ui/FileBrowserPanel.cpp
     src/ui/SliceLcdDisplay.cpp              
     src/ui/TrimDialog.cpp
+    src/ui/MidiLearnDialog.cpp
     src/ui/MixerPanel.cpp
     src/ui/ShortcutsPanel.cpp
     src/ui/SliceWaveformLcd.cpp
@@ -120,7 +80,6 @@ target_include_directories(Dysekt PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/signalsmith-stretch
     ${CMAKE_CURRENT_SOURCE_DIR}/signalsmith-linear
-    ${BUNGEE_ROOT}
 )
 
 target_compile_definitions(Dysekt PUBLIC
@@ -135,7 +94,6 @@ target_link_libraries(Dysekt
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
-        bungee_lib
         DysektFonts
         $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:sfizz::sfizz>
         $<$<PLATFORM_ID:Linux>:asound>

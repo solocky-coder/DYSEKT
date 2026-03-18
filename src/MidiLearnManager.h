@@ -28,7 +28,7 @@
  *  -------------
  *  ccForSlot[], encodingForSlot[] — std::atomic<int> arrays.
  *                Audio thread reads; UI thread writes.
- *  armedSlot   — UI-thread only.
+ *  armedSlot   — std::atomic<int>. UI thread writes; audio thread reads in processCc().
  */
 
 static constexpr int kMidiLearnNumSlots = 32;
@@ -49,9 +49,9 @@ public:
     // ----------------------------------------------------------------
 
     /** Arm slot by SliceParamField int. Pass -1 to cancel. */
-    void armLearn (int fieldId) noexcept { armedSlot = fieldId; }
-    int  getArmedSlot() const noexcept   { return armedSlot; }
-    bool isArmed()      const noexcept   { return armedSlot >= 0; }
+    void armLearn (int fieldId) noexcept { armedSlot.store (fieldId, std::memory_order_relaxed); }
+    int  getArmedSlot() const noexcept   { return armedSlot.load (std::memory_order_relaxed); }
+    bool isArmed()      const noexcept   { return armedSlot.load (std::memory_order_relaxed) >= 0; }
 
     void clearMapping (int fieldId) noexcept
     {
@@ -66,7 +66,7 @@ public:
     {
         for (auto& a : ccForSlot)       a.store (-1, std::memory_order_relaxed);
         for (auto& a : encodingForSlot) a.store (kAbsolute, std::memory_order_relaxed);
-        armedSlot = -1;
+        armedSlot.store (-1, std::memory_order_relaxed);
     }
 
     int getMappedCC (int fieldId) const noexcept
@@ -124,10 +124,10 @@ public:
     {
         outIsRelative = false;
 
-        if (armedSlot >= 0 && armedSlot < kMidiLearnNumSlots)
+        if (armedSlot.load (std::memory_order_relaxed) >= 0 && armedSlot.load (std::memory_order_relaxed) < kMidiLearnNumSlots)
         {
-            ccForSlot[armedSlot].store (cc, std::memory_order_relaxed);
-            armedSlot = -1;
+            ccForSlot[armedSlot.load (std::memory_order_relaxed)].store (cc, std::memory_order_relaxed);
+            armedSlot.store (-1, std::memory_order_relaxed);
             return false;
         }
 
@@ -214,5 +214,5 @@ public:
 private:
     std::array<std::atomic<int>, kMidiLearnNumSlots> ccForSlot;
     std::array<std::atomic<int>, kMidiLearnNumSlots> encodingForSlot;
-    int armedSlot { -1 };
+    std::atomic<int> armedSlot { -1 };
 };

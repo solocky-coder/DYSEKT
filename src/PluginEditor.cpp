@@ -332,9 +332,8 @@ void DysektEditor::resized()
     if (shortcutsPanel.isVisible())
         shortcutsPanel.setBounds (getLocalBounds());
 
-    // ---- NEW MIDI LEARN DIALOG LAYOUT ----
-    if (midiLearnDialog)
-        midiLearnDialog->setBounds(getLocalBounds().reduced(40));
+    if (midiLearnDialog != nullptr)
+        midiLearnDialog->setBounds (getLocalBounds().reduced (40));
 }
 
 void DysektEditor::toggleMixerPanel()
@@ -369,6 +368,27 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
 
     if ((code == '?' || code == '/') && mods.isCommandDown())
     { toggleShortcutsPanel(); return true; }
+
+    // ⌘M — toggle MIDI Learn assignments dialog
+    if (code == 'M' && mods.isCommandDown())
+    {
+        if (midiLearnDialog != nullptr)
+        {
+            midiLearnDialog.reset();
+            resized();
+        }
+        else
+        {
+            midiLearnDialog = std::make_unique<MidiLearnDialog> (
+                processor.midiLearn,
+                [this] { midiLearnDialog.reset(); resized(); }
+            );
+            addAndMakeVisible (*midiLearnDialog);
+            midiLearnDialog->toFront (true);
+            resized();
+        }
+        return true;
+    }
 
     if (mods.isCommandDown() || mods.isAltDown()) return false;
 
@@ -406,20 +426,6 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
         { DysektProcessor::Command c; c.type = DysektProcessor::CmdSelectSlice; c.intParam1 = juce::jlimit (0, ui.numSlices-1, ui.selectedSlice-1); processor.pushCommand (c); repaint(); }
         return true;
     }
-
-    // ======= NEW MIDI LEARN DIALOG SHORTCUT =======
-    if (code == 'M' && mods.isCommandDown())
-    {
-        if (!midiLearnDialog)
-        {
-            midiLearnDialog = std::make_unique<MidiLearnDialog>(processor.midiLearn, [this]{ midiLearnDialog.reset(); resized(); });
-            addAndMakeVisible(*midiLearnDialog);
-            midiLearnDialog->toFront(true);
-            resized();
-        }
-        return true;
-    }
-    // ======= END MIDI LEARN SHORTCUT =======
 
     return false;
 }

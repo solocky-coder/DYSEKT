@@ -28,7 +28,7 @@ public:
     /** Width of each knob column. */
     static constexpr int kKnobColW    = 84;
     /** Number of knob columns (GAIN PAN FCUT PRES MUTE CHRO OUT — meter is after). */
-    static constexpr int kNumCols     = 7;
+    static constexpr int kNumCols     = 8;
     /** Width of the horizontal peak meter column after OUT. */
     static constexpr int kMeterColW   = 120;
 
@@ -64,7 +64,7 @@ public:
 
 private:
     // ── Column layout ─────────────────────────────────────────────────────
-    enum Col { ColGain=0, ColPan, ColFcut, ColPres, ColMute, ColChro, ColOut };
+    enum Col { ColGain=0, ColPan, ColFcut, ColPres, ColMute, ColChro, ColLegato, ColOut };
 
     // ── Hit-test cell ─────────────────────────────────────────────────────
     struct Cell {

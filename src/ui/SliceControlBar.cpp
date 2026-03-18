@@ -100,9 +100,15 @@ void SliceControlBar::drawKnob (juce::Graphics& g,
     const juce::Colour base = tintOverride.isTransparent() ? getTheme().accent
                                                             : tintOverride;
 
+    // For ADSR knobs (tintOverride set), always keep the fixed colour — even when
+    // locked. Lock state is shown via the lock icon; the colour identity must not
+    // change to a theme colour.
+    const bool hasTint = ! tintOverride.isTransparent();
+
     juce::Colour arcCol = armed  ? base
                         : mapped ? base.withAlpha (0.7f)
-                        : locked ? getTheme().lockActive.withAlpha (0.85f)
+                        : locked ? (hasTint ? base.withAlpha (0.75f)
+                                            : getTheme().lockActive.withAlpha (0.85f))
                                  : base.withAlpha (0.55f);
 
     juce::Path arc;
@@ -195,9 +201,11 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
     const bool hasAdsr = ! adsr.isTransparent();
 
     g.setFont (DysektLookAndFeel::makeFont (10.0f));
-    g.setColour (locked    ? getTheme().lockActive.withAlpha (0.8f)
-                : hasAdsr  ? adsr.withAlpha (0.70f)
-                           : getTheme().foreground.withAlpha (0.42f));
+    // ADSR label always uses the fixed ADSR colour — even when locked.
+    // Non-ADSR locked params use lockActive; everything else uses foreground.
+    g.setColour (locked && ! hasAdsr ? getTheme().lockActive.withAlpha (0.8f)
+                : hasAdsr            ? adsr.withAlpha (0.70f)
+                                     : getTheme().foreground.withAlpha (0.42f));
     g.drawText (label, textX, y + 2,  textW, 12, juce::Justification::centredLeft);
 
     g.setFont (DysektLookAndFeel::makeFont (11.0f));
@@ -476,11 +484,11 @@ void SliceControlBar::paint (juce::Graphics& g)
 
     // ALGO — choice
     {
-        juce::String algoNames[] = { "Repitch", "Stretch", "Bungee" };
+        juce::String algoNames[] = { "Repitch", "Stretch" };
         drawParamCell (g, x, row1y, "ALGO",
-                       algoNames[juce::jlimit (0, 2, algoVal)],
+                       algoNames[juce::jlimit (0, 1, algoVal)],
                        algoLocked, kLockAlgorithm, F::FieldAlgorithm,
-                       0.f, 2.f, 1.f, false, true, cw);
+                       0.f, 1.f, 1.f, false, true, cw);
         x += cw + 4;
     }
 
@@ -512,19 +520,6 @@ void SliceControlBar::paint (juce::Graphics& g)
                        0.f, 1.f, 1.f, true, false, cw);
         x += cw + 4;
     }
-    else if (algoVal == 2)
-    {
-        int gGM   = (int) processor.apvts.getRawParameterValue (ParamIds::defaultGrainMode)->load();
-        bool locked = (s.lockMask & kLockGrainMode) != 0;
-        int gmVal   = locked ? s.grainMode : gGM;
-        juce::String gmNames[] = { "Fast", "Normal", "Smooth" };
-        drawParamCell (g, x, row1y, "GRAIN",
-                       gmNames[juce::jlimit (0, 2, gmVal)],
-                       locked, kLockGrainMode, F::FieldGrainMode,
-                       0.f, 2.f, 1.f, false, true, cw);
-        x += cw + 4;
-    }
-
     // STRETCH — boolean
     {
         bool locked = (s.lockMask & kLockStretch) != 0;

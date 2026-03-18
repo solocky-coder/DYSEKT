@@ -15,6 +15,7 @@
 #include "ui/FileBrowserPanel.h"
 #include "ui/MixerPanel.h"
 #include "ui/TrimDialog.h"
+#include "ui/MidiLearnDialog.h"
 #include "TrimSession.h"
 #include "ui/SliceLcdDisplay.h"
 #include "ui/SliceWaveformLcd.h"
@@ -74,8 +75,9 @@ private:
 
     WaveformOverview waveformOverview;
 
-    std::unique_ptr<TrimSession> trimSession;
-    std::unique_ptr<TrimDialog>  trimDialog;
+    std::unique_ptr<TrimSession>     trimSession;
+    std::unique_ptr<TrimDialog>      trimDialog;
+    std::unique_ptr<MidiLearnDialog> midiLearnDialog;
 
     DysektLookAndFeel lnf;
 

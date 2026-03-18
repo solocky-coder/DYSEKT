@@ -41,11 +41,9 @@ void LazyChopEngine::startPreview (VoicePool& voicePool, int fromPos)
     v.pingPong      = false;
     v.muteGroup     = 0;
     v.stretchActive = false;
-    v.bungeeActive  = false;
     v.looping       = true;
     v.releaseTail   = false;
     v.oneShot       = false;
-    v.bungeePPFade  = 0;
     v.volume        = 1.0f;
     v.speed         = 1.0;
 
@@ -61,16 +59,6 @@ void LazyChopEngine::startPreview (VoicePool& voicePool, int fromPos)
         {
             // Repitch: speed change (pitch is consequence)
             v.speed = speedRatio;
-        }
-        else if (algo == 2 && p.sample != nullptr)
-        {
-            // Bungee
-            v.bungeeActive = true;
-            v.speed = 1.0;
-            v.bungeeSpeed = (double) speedRatio;
-            v.bungeeSrcPos = fromPos;
-            int hopAdj = juce::jlimit (-1, 1, p.grainMode - 1);
-            VoicePool::initBungee (v, p.pitch, p.sampleRate, hopAdj);
         }
         else if (p.sample != nullptr)
         {
@@ -95,16 +83,6 @@ void LazyChopEngine::startPreview (VoicePool& voicePool, int fromPos)
         VoicePool::initStretcher (v, p.pitch, p.sampleRate,
                                   p.tonality, p.formant, p.formantComp, *p.sample);
     }
-    else if (algo == 2 && p.sample != nullptr)
-    {
-        // Bungee algo, no stretch — pitch only
-        v.bungeeActive = true;
-        v.speed = 1.0;
-        v.bungeeSpeed = 1.0;
-        v.bungeeSrcPos = fromPos;
-        int hopAdj = juce::jlimit (-1, 1, p.grainMode - 1);
-        VoicePool::initBungee (v, p.pitch, p.sampleRate, hopAdj);
-    }
     else
     {
         // Repitch: apply pitch ratio to speed
@@ -121,7 +99,6 @@ void LazyChopEngine::stop (VoicePool& voicePool, SliceManager& /*sliceMgr*/)
     auto& v = voicePool.getVoice (getPreviewVoiceIndex());
     v.active = false;
     v.stretchActive = false;
-    v.bungeeActive = false;
 
     active = false;
     playing = false;
@@ -172,7 +149,6 @@ int LazyChopEngine::onNote (int note, VoicePool& voicePool, SliceManager& sliceM
     // Subsequent unassigned note — place slice boundary at playhead
     auto& v = voicePool.getVoice (getPreviewVoiceIndex());
     double rawPos = v.stretchActive ? v.stretchSrcPos
-                  : v.bungeeActive  ? v.bungeeSrcPos
                   :                   v.position;
     int playhead = (int) std::floor (rawPos);
 

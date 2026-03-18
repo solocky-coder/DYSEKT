@@ -3,16 +3,11 @@
 // Include Signalsmith Stretch
 #include "signalsmith-stretch.h"
 
-// Include Bungee
-#include "bungee/Bungee.h"
-
 #include <algorithm>
 #include <cmath>
 
 static constexpr int kStretchBlockSize = 128;        // required block size for Signalsmith Stretch processing
 static constexpr int kMaxStretchInputSamples = 8192; // max pre-roll/input feed size (empirically tuned)
-static constexpr int kMaxBungeeInputFrames = 8192;
-static constexpr int kMaxBungeeOutputFrames = 8192;
 
 static inline float dbToLinear (float dB)
 {
@@ -31,11 +26,6 @@ VoicePool::VoicePool()
         v.stretchInBufR.resize (kMaxStretchInputSamples);
         v.stretchOutBufL.resize (kStretchBlockSize);
         v.stretchOutBufR.resize (kStretchBlockSize);
-        v.bungeeInputBuf.resize ((size_t) kMaxBungeeInputFrames * 2);
-        v.bungeeOutBufL.resize (kMaxBungeeOutputFrames);
-        v.bungeeOutBufR.resize (kMaxBungeeOutputFrames);
-        v.bungeePPFadeL.resize ((size_t) v.bungeePPFadeLen);
-        v.bungeePPFadeR.resize ((size_t) v.bungeePPFadeLen);
     }
 }
 
@@ -130,21 +120,6 @@ void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
     }
 }
 
-void VoicePool::initBungee (Voice& v, float pitchSemis, double sr, int grainMode)
-{
-    Bungee::SampleRates rates;
-    rates.input  = (int) sr;
-    rates.output = (int) sr;
-
-    int hopAdj = juce::jlimit (-1, 1, grainMode);
-    v.bungeeStretcher = std::make_shared<Bungee::Stretcher<Bungee::Basic>> (rates, 2, hopAdj);
-
-    v.bungeePitch = std::pow (2.0, (double) pitchSemis / 12.0);
-    v.bungeeOutReadPos = 0;
-    v.bungeeOutAvail = 0;
-    v.bungeePPFade = 0;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  startVoiceUnsliced — chromatic playback with explicit bounds, no slice needed.
 //  Used for trim-mode and unsliced-sample playback. All params come from globals.
@@ -194,7 +169,6 @@ void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
 
     // Algorithm
     v.stretchActive = false;
-    v.bungeeActive  = false;
 
     const int algo = p.globalAlgorithm;
     if (algo == 0)
@@ -210,13 +184,8 @@ void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
         const bool  fComp    = p.globalFormantComp;
         initStretcher (v, pitchSt, sampleRate, tonality, formant, fComp, sample);
     }
-    else if (algo == 2)
-    {
-        // Formant Comp — Bungee
-        initBungee (v, pitchSt, sampleRate, p.globalGrainMode);
-    }
 
-    if (! v.stretchActive && ! v.bungeeActive)
+    if (! v.stretchActive)
         v.speed = (double) pitchRatio;
 }
 
@@ -308,12 +277,9 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
                                   p.globalOneShot ? 1.0f : 0.0f) > 0.5f;
     v.bufferEnd = sample.getNumFrames();
 
-    // Reset stretch state and ping-pong fade (guard against stale data from stolen voices)
+    // Reset stretch state (guard against stale data from stolen voices)
     v.stretchActive  = false;
-    v.bungeeActive   = false;
-    v.bungeePPFade   = 0;
-    std::fill (v.bungeePPFadeL.begin(), v.bungeePPFadeL.end(), 0.0f);
-    std::fill (v.bungeePPFadeR.begin(), v.bungeePPFadeR.end(), 0.0f);
+    v.startedViaChromaticLegato = p.chromaticLegatoTrigger;
 
     if (stretchOn && p.dawBpm > 0.0f && sliceBpm > 0.0f)
     {
@@ -323,16 +289,6 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
         {
             // Repitch: BPM ratio drives speed (pitch is a consequence of speed)
             v.speed = speedRatio;
-        }
-        else if (algo == 2)
-        {
-            // Bungee: independent pitch + time
-            v.bungeeActive = true;
-            v.speed = 1.0;
-            v.bungeeSpeed = rev ? -(double) speedRatio : (double) speedRatio;
-            v.bungeeSrcPos = rev ? (sliceEnd - 1) : s.startSample;
-
-            initBungee (v, pitch, sampleRate, hopAdj);
         }
         else
         {
@@ -348,9 +304,10 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     }
     else
     {
-        if (algo == 1)
+        if (algo == 1 || p.chromaticLegatoTrigger)
         {
-            // Stretch algo but no stretch enabled — use Signalsmith for pitch only
+            // Stretch algo with no BPM stretch, or chromatic legato override:
+            // use Signalsmith for pitch-only (time stays constant — no Mickey Mouse)
             v.stretchActive = true;
             v.speed = 1.0;
             v.stretchTimeRatio = 1.0f;
@@ -358,16 +315,6 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
             v.stretchSrcPos = rev ? (sliceEnd - 1) : s.startSample;
 
             initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
-        }
-        else if (algo == 2)
-        {
-            // Bungee algo but no stretch — use Bungee for pitch only
-            v.bungeeActive = true;
-            v.speed = 1.0;
-            v.bungeeSpeed = rev ? -1.0 : 1.0;
-            v.bungeeSrcPos = rev ? (sliceEnd - 1) : s.startSample;
-
-            initBungee (v, pitch, sampleRate, hopAdj);
         }
         else
         {
@@ -409,6 +356,18 @@ void VoicePool::killAll()
     for (int i = 0; i < maxActive; ++i)
         if (voices[i].active)
             voices[i].envelope.forceRelease (kKillReleaseSec, sampleRate);
+}
+
+void VoicePool::killVoicesForChromaticLegato (int sliceIdx)
+{
+    // Steal only voices that were themselves started by a chromatic legato
+    // trigger on this same slice. Normal (non-chromatic) voices are left alone.
+    for (int i = 0; i < maxActive; ++i)
+    {
+        auto& v = voices[i];
+        if (v.active && v.sliceIdx == sliceIdx && v.startedViaChromaticLegato)
+            v.envelope.forceRelease (kKillReleaseSec, sampleRate);
+    }
 }
 
 void VoicePool::muteGroup (int group, int exceptVoice)
@@ -518,134 +477,6 @@ static void fillStretchBlock (Voice& v, const SampleData& sample)
     v.stretchOutAvail = outputSamples;
 }
 
-static void fillBungeeBlock (Voice& v, const SampleData& sample)
-{
-    if (! v.bungeeStretcher)
-        return;
-
-    // Boundary checks before requesting next grain
-    if (v.pingPong)
-    {
-        if (v.bungeeSpeed > 0.0 && v.bungeeSrcPos >= v.endSample)
-        {
-            v.bungeeSrcPos = v.endSample - 1;
-            v.bungeeSpeed = -std::abs (v.bungeeSpeed);
-        }
-        else if (v.bungeeSpeed < 0.0 && v.bungeeSrcPos <= v.startSample)
-        {
-            v.bungeeSrcPos = v.startSample;
-            v.bungeeSpeed = std::abs (v.bungeeSpeed);
-        }
-    }
-    else if (v.looping)
-    {
-        if (v.bungeeSpeed > 0.0 && v.bungeeSrcPos >= v.endSample)
-            v.bungeeSrcPos = v.startSample;
-        else if (v.bungeeSpeed < 0.0 && v.bungeeSrcPos <= v.startSample)
-            v.bungeeSrcPos = v.endSample - 1;
-    }
-
-    auto& stretcher = *v.bungeeStretcher;
-
-    // Set up the request for this grain
-    Bungee::Request request;
-    request.position = v.bungeeSrcPos;
-    request.speed = v.bungeeSpeed;
-    request.pitch = v.bungeePitch;
-    request.reset = (v.bungeeOutAvail == 0 && v.bungeeOutReadPos == 0) || v.bungeeResetNeeded;
-    request.resampleMode = resampleMode_autoOut;
-    v.bungeeResetNeeded = false;
-
-    if (request.reset)
-        stretcher.preroll (request);
-
-    // Process grains until we have output
-    stretcher.next (request);
-
-    Bungee::InputChunk inputChunk = stretcher.specifyGrain (request);
-
-    int numFrames = inputChunk.end - inputChunk.begin;
-    const int maxIn = std::min (stretcher.maxInputFrameCount(),
-                                (int) (v.bungeeInputBuf.size() / 2));
-    if (maxIn <= 0 || numFrames <= 0)
-    {
-        v.bungeeOutReadPos = 0;
-        v.bungeeOutAvail = 0;
-        return;
-    }
-    if (numFrames > maxIn)
-    {
-        numFrames = maxIn;
-        inputChunk.end = inputChunk.begin + numFrames;
-    }
-
-    // Determine effective end for reading (release tail allows reading past slice end)
-    int effectiveEnd = v.releaseTail && !v.pingPong ? v.bufferEnd : v.endSample;
-
-    // Fill input buffer (non-interleaved: ch0 then ch1)
-    for (int i = 0; i < numFrames; ++i)
-    {
-        double pos = inputChunk.begin + i;
-
-        float sL = 0.0f, sR = 0.0f;
-        if (pos >= v.startSample && pos < effectiveEnd)
-        {
-            sL = sample.getInterpolatedSample (pos, 0);
-            sR = sample.getInterpolatedSample (pos, 1);
-        }
-        v.bungeeInputBuf[(size_t) i] = sL;
-        v.bungeeInputBuf[(size_t)(maxIn + i)] = sR;
-    }
-
-    // Compute mute counts
-    int muteHead = 0, muteTail = 0;
-    if (inputChunk.begin < v.startSample)
-        muteHead = v.startSample - inputChunk.begin;
-    if (inputChunk.end > effectiveEnd)
-        muteTail = inputChunk.end - effectiveEnd;
-
-    stretcher.analyseGrain (v.bungeeInputBuf.data(), (intptr_t) maxIn, muteHead, muteTail);
-
-    Bungee::OutputChunk outputChunk;
-    stretcher.synthesiseGrain (outputChunk);
-
-    int outFrames = outputChunk.frameCount;
-    if (outFrames > 0)
-    {
-        const float* outData = outputChunk.data;
-        intptr_t stride = outputChunk.channelStride;
-        const int outCapacity = std::min ((int) v.bungeeOutBufL.size(),
-                                          (int) v.bungeeOutBufR.size());
-        const int framesToCopy = std::min (outFrames, outCapacity);
-
-        for (int i = 0; i < framesToCopy; ++i)
-        {
-            v.bungeeOutBufL[(size_t) i] = outData[i];
-            v.bungeeOutBufR[(size_t) i] = outData[stride + i];
-        }
-
-        v.bungeeOutReadPos = 0;
-        v.bungeeOutAvail = framesToCopy;
-    }
-    else
-    {
-        v.bungeeOutReadPos = 0;
-        v.bungeeOutAvail = 0;
-    }
-
-    // Advance source position
-    v.bungeeSrcPos = request.position;
-
-    // Clamp to slice boundaries to prevent playhead overshoot
-    if (v.pingPong)
-    {
-        if (v.bungeeSrcPos > v.endSample)
-            v.bungeeSrcPos = v.endSample;
-        if (v.bungeeSrcPos < v.startSample)
-            v.bungeeSrcPos = v.startSample;
-    }
-}
-
 void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr*/,
                                      float& outL, float& outR)
 {
@@ -713,79 +544,6 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
         }
 
         voicePositions[i].store ((float) v.stretchSrcPos, std::memory_order_relaxed);
-    }
-    else if (v.bungeeActive)
-    {
-        // Bungee Stretch processing
-        float env = v.envelope.processSample();
-
-        if (v.envelope.isDone())
-        {
-            v.active = false;
-            voicePositions[i].store (0.0f, std::memory_order_relaxed);
-            return;
-        }
-
-        // Fill output buffer if empty
-        if (v.bungeeOutReadPos >= v.bungeeOutAvail)
-        {
-            bool pastEnd = (v.bungeeSpeed > 0.0)
-                ? (v.bungeeSrcPos >= v.endSample)
-                : (v.bungeeSrcPos <= v.startSample);
-
-            if (pastEnd && !v.pingPong)
-            {
-                if (v.looping)
-                {
-                    if (v.bungeeSpeed > 0.0)
-                        v.bungeeSrcPos = v.startSample;
-                    else
-                        v.bungeeSrcPos = v.endSample - 1;
-                    v.bungeeResetNeeded = true;
-                    fillBungeeBlock (v, sample);
-                }
-                else if (v.releaseTail && v.bungeeSrcPos < v.bufferEnd && v.bungeeSrcPos >= 0)
-                {
-                    if (v.envelope.getState() != AdsrEnvelope::Release)
-                        v.envelope.noteOff();
-                    fillBungeeBlock (v, sample);
-                }
-                else
-                {
-                    if (v.envelope.getState() != AdsrEnvelope::Release)
-                        v.envelope.noteOff();
-                }
-            }
-            else
-            {
-                fillBungeeBlock (v, sample);
-            }
-        }
-
-        if (v.bungeeOutReadPos < v.bungeeOutAvail)
-        {
-            voiceL = v.bungeeOutBufL[(size_t) v.bungeeOutReadPos] * env * v.velocity * v.volume;
-            voiceR = v.bungeeOutBufR[(size_t) v.bungeeOutReadPos] * env * v.velocity * v.volume;
-
-            // Crossfade during ping-pong direction change
-            if (v.bungeePPFade > 0)
-            {
-                int fadeIdx = v.bungeePPFadeLen - v.bungeePPFade;
-                float fadeIn = (float) fadeIdx / (float) v.bungeePPFadeLen;
-                float fadeOut = 1.0f - fadeIn;
-
-                if (fadeIdx < (int) v.bungeePPFadeL.size())
-                {
-                    voiceL = voiceL * fadeIn + v.bungeePPFadeL[(size_t) fadeIdx] * env * v.velocity * v.volume * fadeOut;
-                    voiceR = voiceR * fadeIn + v.bungeePPFadeR[(size_t) fadeIdx] * env * v.velocity * v.volume * fadeOut;
-                }
-                v.bungeePPFade--;
-            }
-
-            v.bungeeOutReadPos++;
-        }
-
-        voicePositions[i].store ((float) v.bungeeSrcPos, std::memory_order_relaxed);
     }
     else
     {
@@ -928,10 +686,6 @@ void VoicePool::startShiftPreview (int startSample, int bufferSize,
     v.stretchActive = false;
     v.stretchOutReadPos = 0;
     v.stretchOutAvail = 0;
-    v.bungeeActive = false;
-    v.bungeeOutReadPos = 0;
-    v.bungeeOutAvail = 0;
-    v.bungeePPFade = 0;
     v.envelope.noteOn (0.002f, 0.0f, 1.0f, 0.05f, sr);
     voicePositions[i].store ((float) startSample, std::memory_order_relaxed);
 }

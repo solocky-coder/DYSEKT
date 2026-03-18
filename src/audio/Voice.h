@@ -8,10 +8,8 @@ namespace signalsmith { namespace stretch {
     template<typename Sample, class RandomEngine> struct SignalsmithStretch;
 }}
 
-namespace Bungee {
-    struct Basic;
-    template<class Edition> struct Stretcher;
-}
+
+
 
 struct Voice
 {
@@ -55,20 +53,6 @@ struct Voice
     float        stretchTimeRatio   = 1.0f;
     float        stretchPitchSemis  = 0.0f;
 
-    // Bungee stretch fields
-    bool         bungeeActive       = false;
-    std::shared_ptr<Bungee::Stretcher<Bungee::Basic>> bungeeStretcher;
-    std::vector<float> bungeeInputBuf;   // interleaved per-channel input buffer
-    std::vector<float> bungeeOutBufL, bungeeOutBufR;
-    int          bungeeOutReadPos   = 0;
-    int          bungeeOutAvail     = 0;
-    double       bungeeSrcPos       = 0.0;
-    double       bungeePitch        = 1.0;
-    double       bungeeSpeed        = 1.0;
-    bool         bungeeResetNeeded  = false;
 
-    // Bungee ping-pong crossfade fields
-    int          bungeePPFade       = 0;
-    int          bungeePPFadeLen    = 64;
-    std::vector<float> bungeePPFadeL, bungeePPFadeR;
+    bool         startedViaChromaticLegato = false; // used by legato voice stealing
 };

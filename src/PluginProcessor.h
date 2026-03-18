@@ -56,6 +56,7 @@ public:
         FieldFilterCutoff, // 24 - per-slice LP filter cutoff Hz
         FieldFilterRes,    // 25 - per-slice LP filter resonance 0..1
         FieldChromaticChannel, // 26 - per-slice chromatic MIDI channel (0=off, 1-16)
+        FieldChromaticLegato,  // 27 - per-slice chromatic legato (bool)
     };
 
     // ── Command types ────────────────────────────────────────────────────────

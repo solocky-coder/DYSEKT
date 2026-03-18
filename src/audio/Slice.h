@@ -28,6 +28,7 @@ enum LockBit : uint32_t
     kLockPan           = 2097152,   // bit 21
     kLockFilter        = 4194304,   // bit 22
     kLockChromaticChannel = 8388608, // bit 23
+    kLockChromaticLegato  = 16777216, // bit 24
 };
 
 struct Slice
@@ -40,7 +41,7 @@ struct Slice
     int      midiNote       = 36;
     float    bpm            = 120.0f;
     float    pitchSemitones = 0.0f;
-    int      algorithm      = 0;        // 0=Repitch, 1=Stretch, 2=Bungee
+    int      algorithm      = 0;        // 0=Repitch, 1=Stretch
     float    attackSec      = 0.005f;
     float    decaySec       = 0.1f;
     float    sustainLevel   = 1.0f;
@@ -51,7 +52,7 @@ struct Slice
     float    tonalityHz     = 0.0f;
     float    formantSemitones = 0.0f;
     bool     formantComp    = false;
-    int      grainMode      = 0;        // Bungee: 0=Fast, 1=Normal, 2=Smooth
+    int      grainMode      = 0;        // reserved (was Bungee grain mode — kept for preset compat)
     float    volume         = 0.0f;     // dB, -100..+24
     bool     releaseTail    = false;
     bool     reverse        = false;
@@ -62,6 +63,7 @@ struct Slice
     float    filterCutoff   = 20000.0f; // low-pass cutoff Hz: 20..20000
     float    filterRes      = 0.0f;     // resonance: 0..1
     int      chromaticChannel = 0;     // 0=off, 1-16 = receive chromatic play on this MIDI channel
+    bool     chromaticLegato  = false; // when true: pitch-only (no speed change), monophonic voice steal
     int      rrCounter      = 0;        // round-robin playback counter (not saved)
 
     uint32_t lockMask       = 0;

@@ -212,7 +212,7 @@ void MixerPanel::drawHeader (juce::Graphics& g) const
     g.drawText ("SLICE", 10, 0, kNameColW - 10, kHeaderH, juce::Justification::centredLeft);
 
     // Knob column headers
-    const char* labels[kNumCols] = { "GAIN", "PAN", "FCUT", "PRES", "MUTE GRP", "CHRO", "OUT" };
+    const char* labels[kNumCols] = { "GAIN", "PAN", "FCUT", "PRES", "MUTE GRP", "CHRO", "LEGATO", "OUT" };
     for (int i = 0; i < kNumCols; ++i)
     {
         g.setColour (i < 4 ? theme.accent.withAlpha (0.55f)
@@ -439,6 +439,19 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
         drawChroBadge (g, cx, kcy, sl.chromaticChannel, chromaLocked);
     }
 
+    // LEGATO — chromatic legato toggle
+    {
+        const bool legatoLocked = (sl.lockMask & kLockChromaticLegato) != 0;
+        const int x  = colX (ColLegato);
+        const bool on = sl.chromaticLegato;
+        const auto& T = getTheme();
+        juce::Colour col = on ? T.accent : T.foreground.withAlpha (0.28f);
+        if (legatoLocked) col = T.lockActive;
+        g.setFont (DysektLookAndFeel::makeFont (10.f));
+        g.setColour (col);
+        g.drawText (on ? "ON" : "OFF", x, ry, kKnobColW, kRowH, juce::Justification::centred);
+    }
+
     // OUT
     {
         const bool outLocked = (sl.lockMask & kLockOutputBus) != 0;
@@ -647,6 +660,30 @@ void MixerPanel::mouseDown (const juce::MouseEvent& e)
     }
 
     // OUT — cycle on click
+    if (c.col == ColLegato)
+    {
+        if (!c.isMaster)
+        {
+            const auto& sl = snap.slices[(size_t) c.row];
+            if (e.mods.isRightButtonDown())
+            {
+                DysektProcessor::Command cmd;
+                cmd.type      = DysektProcessor::CmdToggleLock;
+                cmd.intParam1 = (int) kLockChromaticLegato;
+                processor.pushCommand (cmd);
+            }
+            else
+            {
+                DysektProcessor::Command cmd;
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = DysektProcessor::FieldChromaticLegato;
+                cmd.floatParam1 = sl.chromaticLegato ? 0.0f : 1.0f;
+                processor.pushCommand (cmd);
+            }
+        }
+        repaint(); return;
+    }
+
     if (c.col == ColOut)
     {
         if (!c.isMaster)
@@ -756,7 +793,7 @@ void MixerPanel::mouseUp (const juce::MouseEvent&)
 void MixerPanel::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const Cell c = hitTest (e.getPosition());
-    if (c.col == ColMute || c.col == ColOut) return;
+    if (c.col == ColMute || c.col == ColOut || c.col == ColLegato) return;
     if (!c.isMaster && (c.row < 0)) return;
     if (c.isMaster && c.col >= ColFcut) return;
 

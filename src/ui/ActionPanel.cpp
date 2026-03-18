@@ -71,8 +71,8 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
     shortcutsBtn.setTooltip ("Keyboard Shortcuts (⌘?)");
-    addSliceBtn.setTooltip ("Add Slice (A / hold Alt)");
-    lazyChopBtn.setTooltip ("MIDI Slice)");
+    addSliceBtn.setTooltip ("Add Slice(Left Mouse Click)");
+    lazyChopBtn.setTooltip ("MIDI Slice");
 
     addSliceBtn.setButtonText ("");
     lazyChopBtn.setButtonText ("");

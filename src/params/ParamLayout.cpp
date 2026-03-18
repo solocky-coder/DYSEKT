@@ -28,7 +28,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParamIds::defaultAlgorithm, 1 },
         "Sample Algorithm",
-        juce::StringArray { "Repitch", "Stretch", "Bungee" },
+        juce::StringArray { "Repitch", "Stretch" },
         0));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (

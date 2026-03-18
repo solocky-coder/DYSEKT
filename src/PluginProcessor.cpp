@@ -66,7 +66,7 @@ static Slice sanitiseRestoredSlice (Slice s)
     s.midiNote = juce::jlimit (0, 127, s.midiNote);
     s.bpm = juce::jlimit (20.0f, 999.0f, s.bpm);
     s.pitchSemitones = juce::jlimit (-48.0f, 48.0f, s.pitchSemitones);
-    s.algorithm = juce::jlimit (0, 2, s.algorithm);
+    s.algorithm = juce::jlimit (0, 1, s.algorithm == 2 ? 1 : s.algorithm);
     s.attackSec = juce::jlimit (0.0f, 1.0f, s.attackSec);
     s.decaySec = juce::jlimit (0.0f, 5.0f, s.decaySec);
     s.sustainLevel = juce::jlimit (0.0f, 1.0f, s.sustainLevel);
@@ -739,7 +739,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockPan)          s.pan               = panParam->load();
                     else if (bit == kLockFilter)       { s.filterCutoff    = filterCutoffParam->load();
                                                          s.filterRes       = filterResParam->load(); }
-                    else if (bit == kLockChromaticChannel) s.chromaticChannel = 0; // default off
+                    else if (bit == kLockChromaticChannel) s.chromaticChannel = 0;
+                    else if (bit == kLockChromaticLegato)  s.chromaticLegato  = false;
                     // kLockOutputBus: no global default param — slice default (0) is correct
                 }
 
@@ -826,6 +827,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldFilterCutoff:  s.filterCutoff   = val;       s.lockMask |= kLockFilter;      break;
                     case FieldFilterRes:       s.filterRes       = val;       s.lockMask |= kLockFilter;      break;
                     case FieldChromaticChannel: s.chromaticChannel = juce::jlimit (0, 16, (int) val); break;
+                    case FieldChromaticLegato:  s.chromaticLegato  = (val > 0.5f); break;
                     case FieldMidiNote:
                         s.midiNote = juce::jlimit (0, 127, (int) val);
                         sliceManager.rebuildMidiMap();
@@ -1349,10 +1351,18 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                                                     (float) cs.muteGroup,
                                                                     (float) p.globalMuteGroup);
                         voicePool.muteGroup (mg, voiceIdx);
+
+                        // Legato: steal prior chromatic voices on this slice, force pitch-only
+                        const bool legato = cs.chromaticLegato;
+                        if (legato)
+                            voicePool.killVoicesForChromaticLegato (ci);
+
                         p.sliceIdx    = ci;
                         const float savedGlobalPitch = p.globalPitch;
                         p.globalPitch = savedGlobalPitch + semitoneOffset;
+                        p.chromaticLegatoTrigger = legato;
                         voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
+                        p.chromaticLegatoTrigger = false;
                         p.globalPitch = savedGlobalPitch;
 
                         if (midiSelectsSlice.load (std::memory_order_relaxed))
@@ -1722,7 +1732,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (18);
+    stream.writeInt (19);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -1782,6 +1792,8 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
         stream.writeFloat (s.filterRes);
         // v18 fields
         stream.writeInt (s.chromaticChannel);
+        // v19 fields
+        stream.writeBool (s.chromaticLegato);
     }
 
     // v9: store file path only (no PCM)
@@ -1800,7 +1812,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version < 16 || version > 18)
+    if (version < 16 || version > 19)
         return;
 
     // APVTS state
@@ -1861,6 +1873,8 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         parsed.filterRes         = (version >= 17) ? stream.readFloat() : 0.0f;
         // v18 fields
         parsed.chromaticChannel  = (version >= 18) ? stream.readInt() : 0;
+        // v19 fields
+        parsed.chromaticLegato   = (version >= 19) ? stream.readBool() : false;
 
         if (i < validatedNumSlices)
             sliceManager.getSlice (i) = sanitiseRestoredSlice (parsed);
