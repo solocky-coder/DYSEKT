@@ -1,4 +1,46 @@
 #include "MidiLearnDialog.h"
+// --- MIDI Learn slot => parameter name lookup ---
+// The order must exactly match your SliceParamField/kMidiLearnNumSlots!
+// If you add more slots, update here and in your enum in PluginProcessor.h.
+
+static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
+    "BPM",                 // 0
+    "Pitch",
+    "Algorithm",
+    "Attack",
+    "Decay",
+    "Sustain",
+    "Release",
+    "Mute Group",
+    "Stretch Enabled",
+    "Tonality",
+    "Formant",
+    "Formant Compensation",
+    "Grain Mode",
+    "Volume",
+    "Release Tail",
+    "Reverse",
+    "Output Bus",
+    "Loop",
+    "One Shot",
+    "Cents Detune",
+    "MIDI Note",
+    "Slice Start",         // 21
+    "Slice End",           // 22
+    "Pan",
+    "Filter Cutoff",
+    "Filter Resonance",
+    "Chromatic Channel",
+    "Chromatic Legato",
+    "", "", "", ""         // 28-31 (unused/empty)
+};
+
+static juce::String getSlotParameterName(int fieldId)
+{
+    if (fieldId >= 0 && fieldId < kMidiLearnNumSlots && juce::String(gSlotParamNames[fieldId]).isNotEmpty())
+        return gSlotParamNames[fieldId];
+    return juce::String("Param ") + juce::String(fieldId);
+}
 
 MidiLearnDialog::MidiLearnDialog(MidiLearnManager& ml, std::function<void()> onClose)
     : midiLearn(ml), onCloseCallback(onClose)
@@ -38,7 +80,7 @@ void MidiLearnDialog::paintListBoxItem(int row, juce::Graphics& g, int width, in
     g.setColour(juce::Colours::white);
 
     // For better UI: Map fieldId to parameter (see next step)
-    juce::String pname = "Param " + juce::String(row);
+    juce::String pname = getSlotParameterName(row);
     g.drawText(pname, 8, 0, width / 3, height, juce::Justification::centredLeft);
 
     juce::String ccText = midiLearn.getLabelText(row);
