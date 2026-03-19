@@ -1145,30 +1145,156 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
                 if (sel >= 0 && sel < sliceManager.getNumSlices())
                 {
-                    // Convert normalised 0-1 CC value to the native range for each field
-                    float nativeVal = outNorm;
-                    switch (outFieldId)
+                    const auto& sl = sliceManager.getSlice (sel);
+
+                    // ── Sensitivity table for endless encoders ────────────────
+                    // outNorm is a signed step count (+1 = one click CW).
+                    // Each entry is native-units-per-click (fine; hold Shift
+                    // for coarse is a future improvement).
+                    auto getRelSensitivity = [](int fid) -> float
                     {
-                        case FieldBpm:         nativeVal = 20.0f + outNorm * (999.0f - 20.0f); break;
-                        case FieldPitch:       nativeVal = -24.0f + outNorm * 48.0f;           break;
-                        case FieldCentsDetune: nativeVal = -100.0f + outNorm * 200.0f;           break;
-                        case FieldPan:         nativeVal = -1.0f + outNorm * 2.0f;               break;
-                        case FieldFilterCutoff: nativeVal = 20.0f + outNorm * (20000.0f - 20.0f); break;
-                        case FieldFilterRes:   nativeVal = outNorm;                               break;
-                        case FieldTonality:    nativeVal = outNorm * 8000.0f;                  break;
-                        case FieldFormant:     nativeVal = -24.0f + outNorm * 48.0f;           break;
-                        case FieldAttack:      nativeVal = outNorm * 1.0f;                     break;
-                        case FieldDecay:       nativeVal = outNorm * 5.0f;                     break;
-                        case FieldSustain:     nativeVal = outNorm;                            break;
-                        case FieldRelease:     nativeVal = outNorm * 5.0f;                     break;
-                        case FieldMuteGroup:   nativeVal = std::round (outNorm * 32.0f);       break;
-                        case FieldMidiNote:    nativeVal = std::round (outNorm * 127.0f);      break;
-                        case FieldVolume:      nativeVal = -100.0f + outNorm * 124.0f;         break;
-                        case FieldOutputBus:   nativeVal = std::round (outNorm * 15.0f);       break;
-                        case FieldAlgorithm:   nativeVal = std::round (outNorm * 2.0f);        break;
-                        case FieldLoop:        nativeVal = std::round (outNorm * 2.0f);        break;
-                        case FieldGrainMode:   nativeVal = std::round (outNorm * 2.0f);        break;
-                        default: break;
+                        switch (fid)
+                        {
+                            case FieldBpm:          return 0.5f;    // 0.5 BPM/click
+                            case FieldPitch:        return 0.5f;    // 0.5 semitone/click
+                            case FieldCentsDetune:  return 1.0f;    // 1 cent/click
+                            case FieldPan:          return 0.02f;   // 2%/click
+                            case FieldFilterCutoff: return 100.0f;  // 100 Hz/click
+                            case FieldFilterRes:    return 0.01f;   // 1%/click
+                            case FieldTonality:     return 100.0f;  // 100 Hz/click
+                            case FieldFormant:      return 0.5f;    // 0.5 semitone/click
+                            case FieldAttack:       return 0.002f;  // 2 ms/click
+                            case FieldDecay:        return 0.010f;  // 10 ms/click
+                            case FieldSustain:      return 0.01f;   // 1%/click
+                            case FieldRelease:      return 0.010f;  // 10 ms/click
+                            case FieldVolume:       return 0.5f;    // 0.5 dB/click
+                            case FieldMuteGroup:    return 1.0f;
+                            case FieldMidiNote:     return 1.0f;
+                            case FieldOutputBus:    return 1.0f;
+                            default:                return 1.0f;
+                        }
+                    };
+
+                    // ── Read current native value for relative delta ──────────
+                    auto getCurrentNative = [&](int fid) -> float
+                    {
+                        switch (fid)
+                        {
+                            case FieldBpm:          return (sl.lockMask & kLockBpm)         ? sl.bpm              : apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
+                            case FieldPitch:        return (sl.lockMask & kLockPitch)        ? sl.pitchSemitones   : apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
+                            case FieldCentsDetune:  return (sl.lockMask & kLockCentsDetune)  ? sl.centsDetune      : apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load();
+                            case FieldPan:          return (sl.lockMask & kLockPan)          ? sl.pan              : apvts.getRawParameterValue (ParamIds::defaultPan)->load();
+                            case FieldFilterCutoff: return (sl.lockMask & kLockFilter)       ? sl.filterCutoff     : apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load();
+                            case FieldFilterRes:    return (sl.lockMask & kLockFilter)       ? sl.filterRes        : apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
+                            case FieldTonality:     return (sl.lockMask & kLockTonality)     ? sl.tonalityHz       : apvts.getRawParameterValue (ParamIds::defaultTonality)->load();
+                            case FieldFormant:      return (sl.lockMask & kLockFormant)      ? sl.formantSemitones : apvts.getRawParameterValue (ParamIds::defaultFormant)->load();
+                            case FieldAttack:       return (sl.lockMask & kLockAttack)       ? sl.attackSec        : apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.0f;
+                            case FieldDecay:        return (sl.lockMask & kLockDecay)        ? sl.decaySec         : apvts.getRawParameterValue (ParamIds::defaultDecay)->load()  / 1000.0f;
+                            case FieldSustain:      return (sl.lockMask & kLockSustain)      ? sl.sustainLevel     : apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.0f;
+                            case FieldRelease:      return (sl.lockMask & kLockRelease)      ? sl.releaseSec       : apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.0f;
+                            case FieldVolume:       return (sl.lockMask & kLockVolume)       ? sl.volume           : apvts.getRawParameterValue (ParamIds::masterVolume)->load();
+                            case FieldMuteGroup:    return (float)((sl.lockMask & kLockMuteGroup)   ? sl.muteGroup  : (int) apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load());
+                            case FieldMidiNote:     return (float) sl.midiNote;
+                            case FieldOutputBus:    return (float)((sl.lockMask & kLockOutputBus)   ? sl.outputBus  : 0);
+                            default:                return 0.0f;
+                        }
+                    };
+
+                    // ── Convert CC to native value ────────────────────────────
+                    // Relative: current + (step * sensitivity) — no jump, ever.
+                    // Absolute: map 0-1 to full range, with pickup gating.
+                    float nativeVal = outNorm;
+
+                    if (outIsRelative)
+                    {
+                        // Endless encoder: add scaled delta to current value
+                        const float cur  = getCurrentNative (outFieldId);
+                        const float sens = getRelSensitivity (outFieldId);
+                        const float raw  = cur + outNorm * sens;
+
+                        // Clamp to parameter range
+                        switch (outFieldId)
+                        {
+                            case FieldBpm:          nativeVal = juce::jlimit (20.0f,   999.0f, raw); break;
+                            case FieldPitch:        nativeVal = juce::jlimit (-48.0f,   48.0f, raw); break;
+                            case FieldCentsDetune:  nativeVal = juce::jlimit (-100.0f, 100.0f, raw); break;
+                            case FieldPan:          nativeVal = juce::jlimit (-1.0f,     1.0f, raw); break;
+                            case FieldFilterCutoff: nativeVal = juce::jlimit (20.0f, 20000.0f, raw); break;
+                            case FieldFilterRes:    nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
+                            case FieldTonality:     nativeVal = juce::jlimit (0.0f,  8000.0f,  raw); break;
+                            case FieldFormant:      nativeVal = juce::jlimit (-24.0f,   24.0f, raw); break;
+                            case FieldAttack:       nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
+                            case FieldDecay:        nativeVal = juce::jlimit (0.0f,     5.0f,  raw); break;
+                            case FieldSustain:      nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
+                            case FieldRelease:      nativeVal = juce::jlimit (0.0f,     5.0f,  raw); break;
+                            case FieldVolume:       nativeVal = juce::jlimit (-100.0f,  24.0f, raw); break;
+                            case FieldMuteGroup:    nativeVal = std::round (juce::jlimit (0.0f, 32.0f, raw)); break;
+                            case FieldMidiNote:     nativeVal = std::round (juce::jlimit (0.0f, 127.0f, raw)); break;
+                            case FieldOutputBus:    nativeVal = std::round (juce::jlimit (0.0f,  15.0f, raw)); break;
+                            default: nativeVal = raw; break;
+                        }
+                    }
+                    else
+                    {
+                        // Absolute knob: map 0-1 to full native range.
+                        // Pickup gate: ignore until the knob reaches the current value.
+                        const float curNative = getCurrentNative (outFieldId);
+                        if (outFieldId >= 0 && outFieldId < (int) ccPickedUp.size()
+                            && ! ccPickedUp[(size_t) outFieldId])
+                        {
+                            // Compute what native value outNorm would map to
+                            float mappedNative = outNorm;
+                            switch (outFieldId)
+                            {
+                                case FieldBpm:          mappedNative = 20.0f + outNorm * (999.0f - 20.0f); break;
+                                case FieldPitch:        mappedNative = -24.0f + outNorm * 48.0f;           break;
+                                case FieldCentsDetune:  mappedNative = -100.0f + outNorm * 200.0f;         break;
+                                case FieldPan:          mappedNative = -1.0f + outNorm * 2.0f;             break;
+                                case FieldFilterCutoff: mappedNative = 20.0f + outNorm * (20000.0f-20.0f); break;
+                                case FieldVolume:       mappedNative = -100.0f + outNorm * 124.0f;         break;
+                                default:                mappedNative = outNorm; break;
+                            }
+                            // Allow 4% of range as pickup dead-zone
+                            const float rangeSpan = [&] {
+                                switch (outFieldId) {
+                                    case FieldBpm:          return 979.0f;
+                                    case FieldPitch:        return 96.0f;
+                                    case FieldCentsDetune:  return 200.0f;
+                                    case FieldPan:          return 2.0f;
+                                    case FieldFilterCutoff: return 19980.0f;
+                                    case FieldVolume:       return 124.0f;
+                                    default:                return 1.0f;
+                                }
+                            }();
+                            if (std::abs (mappedNative - curNative) <= rangeSpan * 0.04f)
+                                ccPickedUp[(size_t) outFieldId] = true;
+                            else
+                                goto skipCcParam;  // not picked up yet — suppress
+                        }
+
+                        switch (outFieldId)
+                        {
+                            case FieldBpm:          nativeVal = 20.0f + outNorm * (999.0f - 20.0f); break;
+                            case FieldPitch:        nativeVal = -24.0f + outNorm * 48.0f;           break;
+                            case FieldCentsDetune:  nativeVal = -100.0f + outNorm * 200.0f;         break;
+                            case FieldPan:          nativeVal = -1.0f + outNorm * 2.0f;             break;
+                            case FieldFilterCutoff: nativeVal = 20.0f + outNorm * (20000.0f-20.0f); break;
+                            case FieldFilterRes:    nativeVal = outNorm;                            break;
+                            case FieldTonality:     nativeVal = outNorm * 8000.0f;                 break;
+                            case FieldFormant:      nativeVal = -24.0f + outNorm * 48.0f;          break;
+                            case FieldAttack:       nativeVal = outNorm * 1.0f;                    break;
+                            case FieldDecay:        nativeVal = outNorm * 5.0f;                    break;
+                            case FieldSustain:      nativeVal = outNorm;                           break;
+                            case FieldRelease:      nativeVal = outNorm * 5.0f;                    break;
+                            case FieldMuteGroup:    nativeVal = std::round (outNorm * 32.0f);      break;
+                            case FieldMidiNote:     nativeVal = std::round (outNorm * 127.0f);     break;
+                            case FieldVolume:       nativeVal = -100.0f + outNorm * 124.0f;        break;
+                            case FieldOutputBus:    nativeVal = std::round (outNorm * 15.0f);      break;
+                            case FieldAlgorithm:    nativeVal = std::round (outNorm * 2.0f);       break;
+                            case FieldLoop:         nativeVal = std::round (outNorm * 2.0f);       break;
+                            case FieldGrainMode:    nativeVal = std::round (outNorm * 2.0f);       break;
+                            default: break;
+                        }
                     }
 
                     // ── Slice start/end boundary (non-trim mode only) ────────
@@ -1252,6 +1378,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         handleCommand (ccCmd);
                     }
                     uiSnapshotDirty.store (true, std::memory_order_release);
+                    skipCcParam:;
                 }
             }
         }
