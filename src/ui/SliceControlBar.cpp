@@ -742,6 +742,21 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
+    // PAN — knob (-1 = full left, 0 = centre, +1 = full right)
+    {
+        float gPanVal = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
+        bool locked   = (s.lockMask & kLockPan) != 0;
+        float pv      = locked ? s.pan : gPanVal;
+        int   pct     = juce::jlimit (-100, 100, (int) std::round (pv * 100.f));
+        juce::String panStr = (pct == 0) ? juce::String ("C")
+                            : (pct  < 0) ? ("L" + juce::String (-pct))
+                                         : ("R" + juce::String ( pct));
+        drawKnobCell (g, x, row2y, "PAN", panStr,
+                      toNorm (F::FieldPan, pv),
+                      locked, kLockPan, F::FieldPan, -1.f, 1.f, 0.01f, cw);
+        x += cw + 4;
+    }
+
     // OUT — choice popup
     {
         bool locked = (s.lockMask & kLockOutputBus) != 0;
