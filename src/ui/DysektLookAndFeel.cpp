@@ -8,31 +8,54 @@ void setTheme (const ThemeData& t) { globalTheme = t; }
 
 juce::Typeface::Ptr DysektLookAndFeel::sRegularTypeface;
 juce::Typeface::Ptr DysektLookAndFeel::sBoldTypeface;
+juce::Typeface::Ptr DysektLookAndFeel::sMonoTypeface;
+juce::Typeface::Ptr DysektLookAndFeel::sMonoBoldTypeface;
 float DysektLookAndFeel::sMenuScale = 1.0f;
 
 DysektLookAndFeel::DysektLookAndFeel()
 {
     setColour (juce::ResizableWindow::backgroundColourId, getTheme().background);
 
+    // Labels / UI text — Barlow Condensed (sharp, narrow, technical)
     regularTypeface = juce::Typeface::createSystemTypefaceFor (
-        BinaryData::IBMPlexSansRegular_ttf, BinaryData::IBMPlexSansRegular_ttfSize);
+        BinaryData::BarlowCondensedRegular_ttf, BinaryData::BarlowCondensedRegular_ttfSize);
     boldTypeface = juce::Typeface::createSystemTypefaceFor (
-        BinaryData::IBMPlexSansBold_ttf, BinaryData::IBMPlexSansBold_ttfSize);
+        BinaryData::BarlowCondensedSemiBold_ttf, BinaryData::BarlowCondensedSemiBold_ttfSize);
 
-    sRegularTypeface = regularTypeface;
-    sBoldTypeface = boldTypeface;
+    // Values / numbers — JetBrains Mono (monospaced, digits never jump width)
+    monoTypeface = juce::Typeface::createSystemTypefaceFor (
+        BinaryData::JetBrainsMonoRegular_ttf, BinaryData::JetBrainsMonoRegular_ttfSize);
+    monoBoldTypeface = juce::Typeface::createSystemTypefaceFor (
+        BinaryData::JetBrainsMonoBold_ttf, BinaryData::JetBrainsMonoBold_ttfSize);
+
+    sRegularTypeface  = regularTypeface;
+    sBoldTypeface     = boldTypeface;
+    sMonoTypeface     = monoTypeface;
+    sMonoBoldTypeface = monoBoldTypeface;
 }
 
 juce::Font DysektLookAndFeel::makeFont (float pointSize, bool bold)
 {
+    // Barlow Condensed — used for labels, button text, headers
     auto tf = bold ? sBoldTypeface : sRegularTypeface;
     if (tf != nullptr)
         return juce::Font (juce::FontOptions().withTypeface (tf).withPointHeight (pointSize));
     return juce::Font (juce::FontOptions().withHeight (pointSize));
 }
 
+juce::Font DysektLookAndFeel::makeMonoFont (float pointSize, bool bold)
+{
+    // JetBrains Mono — used for numeric values, dB, Hz, note names, CC readouts
+    auto tf = bold ? sMonoBoldTypeface : sMonoTypeface;
+    if (tf != nullptr)
+        return juce::Font (juce::FontOptions().withTypeface (tf).withPointHeight (pointSize));
+    return makeFont (pointSize, bold);  // fallback to Barlow if mono not loaded
+}
+
 juce::Typeface::Ptr DysektLookAndFeel::getTypefaceForFont (const juce::Font& f)
 {
+    if (f.isMonospaced())
+        return f.isBold() ? monoBoldTypeface : monoTypeface;
     if (f.isBold())
         return boldTypeface;
     return regularTypeface;

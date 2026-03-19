@@ -69,7 +69,7 @@ void SliceControlBar::drawParamCell (juce::Graphics& g, int x, int y,
                         : getTheme().foreground.withAlpha (0.45f));
     g.drawText (label, x + kParamCellTextX, y + 2,  kParamCellTextWidth, 13, juce::Justification::centredLeft);
 
-    g.setFont (DysektLookAndFeel::makeFont (14.0f));
+    g.setFont (DysektLookAndFeel::makeMonoFont (13.0f));
     g.setColour (locked ? getTheme().foreground
                         : getTheme().foreground.withAlpha (0.4f));
     g.drawText (value, x + kParamCellTextX, y + 15, kParamCellTextWidth, 14, juce::Justification::centredLeft);
@@ -209,7 +209,7 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
                                      : getTheme().foreground.withAlpha (0.42f));
     g.drawText (label, textX, y + 2,  textW, 12, juce::Justification::centredLeft);
 
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
+    g.setFont (DysektLookAndFeel::makeMonoFont (11.0f));
     g.setColour (locked ? getTheme().foreground
                         : getTheme().foreground.withAlpha (0.38f));
     g.drawText (valueText, textX, y + 14, textW, 14, juce::Justification::centredLeft);
@@ -303,7 +303,7 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
     juce::String panStr = (pct == 0) ? "C"
                         : (pct  < 0) ? ("L" + juce::String (-pct))
                                      : ("R" + juce::String ( pct));
-    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setFont (DysektLookAndFeel::makeMonoFont (10.0f));
     g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.55f));
     g.drawText (panStr, x, trackY + trackH + 1, cellW, 10,
                 juce::Justification::centred);
@@ -348,7 +348,7 @@ void SliceControlBar::drawMidiLearnCell (juce::Graphics& g, int x, int y,
                          : getTheme().foreground.withAlpha (0.38f));
     g.drawText (label, x + 5, y + 2, cellW - 6, 13, juce::Justification::centredLeft);
 
-    g.setFont (DysektLookAndFeel::makeFont (14.0f));
+    g.setFont (DysektLookAndFeel::makeMonoFont (13.0f));
     g.setColour (armed   ? getTheme().accent
                 : mapped ? getTheme().foreground
                          : getTheme().foreground.withAlpha (0.28f));
@@ -451,7 +451,7 @@ void SliceControlBar::paint (juce::Graphics& g)
         g.setColour (editable ? getTheme().accent.withAlpha (0.7f)
                               : getTheme().foreground.withAlpha (0.35f));
         g.drawText ("ROOT", rnX, row2y + 2, rnW, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeFont (14.0f));
+        g.setFont (DysektLookAndFeel::makeMonoFont (14.0f));
         g.setColour (editable ? getTheme().foreground.withAlpha (0.6f)
                               : getTheme().foreground.withAlpha (0.4f));
         g.drawText (juce::String (rn), rnX, row2y + 15, rnW, 14, juce::Justification::right);
@@ -460,7 +460,7 @@ void SliceControlBar::paint (juce::Graphics& g)
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (getTheme().foreground.withAlpha (0.35f));
         g.drawText ("SLICES", slcX, row2y + 2, slcW, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeFont (14.0f));
+        g.setFont (DysektLookAndFeel::makeMonoFont (14.0f));
         g.setColour (getTheme().foreground.withAlpha (0.4f));
         g.drawText (juce::String (numSlices), slcX, row2y + 15, slcW, 14, juce::Justification::right);
     }
