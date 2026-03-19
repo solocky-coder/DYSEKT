@@ -1653,11 +1653,15 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (! v.active) continue;
             const int si = v.sliceIdx;
             if (si < 0 || si >= kMaxMeterSlices) continue;
-            // Approximate: use voice linear volume as peak proxy
-            // (per-sample decomposition not available in single-out fast path)
+            // Approximate L/R peaks by applying the voice pan coefficients to
+            // the linear volume — accurate enough for a meter display.
             const float vol = juce::jlimit (0.0f, 1.0f, v.volume);
-            float cur = slicePeakL[si].load (std::memory_order_relaxed);
-            if (vol > cur) slicePeakL[si].store (vol, std::memory_order_relaxed);
+            const float pkL = vol * v.panL;
+            const float pkR = vol * v.panR;
+            float curL = slicePeakL[si].load (std::memory_order_relaxed);
+            float curR = slicePeakR[si].load (std::memory_order_relaxed);
+            if (pkL > curL) slicePeakL[si].store (pkL, std::memory_order_relaxed);
+            if (pkR > curR) slicePeakR[si].store (pkR, std::memory_order_relaxed);
         }
     }
     else
@@ -1680,9 +1684,12 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 const int si = voicePool.getVoice (vi).sliceIdx;
                 if (si >= 0 && si < kMaxMeterSlices)
                 {
-                    const float pk = std::max (std::abs (vL), std::abs (vR));
-                    float cur = slicePeakL[si].load (std::memory_order_relaxed);
-                    if (pk > cur) slicePeakL[si].store (pk, std::memory_order_relaxed);
+                    const float pkL = std::abs (vL);
+                    const float pkR = std::abs (vR);
+                    float curL = slicePeakL[si].load (std::memory_order_relaxed);
+                    float curR = slicePeakR[si].load (std::memory_order_relaxed);
+                    if (pkL > curL) slicePeakL[si].store (pkL, std::memory_order_relaxed);
+                    if (pkR > curR) slicePeakR[si].store (pkR, std::memory_order_relaxed);
                 }
             }
 
