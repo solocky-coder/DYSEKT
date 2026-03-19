@@ -54,8 +54,6 @@ juce::Font DysektLookAndFeel::makeMonoFont (float pointSize, bool bold)
 
 juce::Typeface::Ptr DysektLookAndFeel::getTypefaceForFont (const juce::Font& f)
 {
-    if (f.isMonospaced())
-        return f.isBold() ? monoBoldTypeface : monoTypeface;
     if (f.isBold())
         return boldTypeface;
     return regularTypeface;
