@@ -980,7 +980,9 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             }
             DysektProcessor::Command gc; gc.type = DysektProcessor::CmdBeginGesture;
             processor.pushCommand (gc);
-            activeDragCell = i; dragStartY = pos.y;
+            activeDragCell = i;
+            // Pan slider is horizontal — store x; all others store y
+            dragStartY = (cell.fieldId == DysektProcessor::FieldPan) ? pos.x : pos.y;
 
             // Activate live drag for slice boundary knobs
             if (cell.fieldId == DysektProcessor::FieldSliceStart || cell.fieldId == DysektProcessor::FieldSliceEnd)
@@ -1255,9 +1257,19 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
     }
     else
     {
-        newNative = UIHelpers::computeDragValue (dragStartValue, deltaY,
-                                                 cell.minVal, cell.maxVal,
-                                                 e.mods.isShiftDown());
+        // Pan slider responds to horizontal drag — all other params use vertical
+        const float delta = (cell.fieldId == F::FieldPan)
+            ? (float)(e.x - dragStartY)   // dragStartY stores startX for pan
+            : deltaY;
+        const float sensitivity = (cell.fieldId == F::FieldPan)
+            ? (e.mods.isShiftDown() ? 0.002f : 0.01f)  // 100px = full L→R sweep, shift=fine
+            : 1.0f;
+        if (cell.fieldId == F::FieldPan)
+            newNative = juce::jlimit (-1.f, 1.f, dragStartValue + delta * sensitivity);
+        else
+            newNative = UIHelpers::computeDragValue (dragStartValue, delta,
+                                                     cell.minVal, cell.maxVal,
+                                                     e.mods.isShiftDown());
     }
 
     DysektProcessor::Command cmd;

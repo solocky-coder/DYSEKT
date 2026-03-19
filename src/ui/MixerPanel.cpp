@@ -358,6 +358,12 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
         g.fillRect (0, ry, getWidth(), kRowH);
     }
 
+    // ── Full-lane slice colour tint ──────────────────────────────────────
+    // Subtle wash across the entire row so each slice is immediately
+    // identifiable at a glance, matching the waveform lane colours.
+    g.setColour (sl.colour.withAlpha (selected ? 0.09f : 0.05f));
+    g.fillRect (kNameColW, ry, getWidth() - kNameColW, kRowH);
+
     // Row bottom divider
     g.setColour (theme.separator.withAlpha (0.35f));
     g.drawHorizontalLine (ry + kRowH - 1, (float) kNameColW * 0.3f, (float) getWidth());
@@ -788,7 +794,7 @@ void MixerPanel::mouseDown (const juce::MouseEvent& e)
     drag.isMaster = c.isMaster;
     drag.sliceIdx = c.row;
     drag.col      = c.col;
-    drag.startY   = e.getScreenPosition().y;
+    drag.startY   = (c.col == ColPan) ? e.getScreenPosition().x : e.getScreenPosition().y;
 
     if (c.isMaster)
     {
@@ -815,6 +821,7 @@ void MixerPanel::mouseDrag (const juce::MouseEvent& e)
     if (!drag.active) return;
 
     const float dy       = (float)(drag.startY - e.getScreenPosition().y);
+    const float dx       = (float)(e.getScreenPosition().x - drag.startY);  // for pan slider
     const bool  fine     = e.mods.isShiftDown();
     const float fineMult = fine ? 0.1f : 1.0f;
 
@@ -829,7 +836,7 @@ void MixerPanel::mouseDrag (const juce::MouseEvent& e)
         }
         else if (drag.col == ColPan)
         {
-            newVal = juce::jlimit (-1.f, 1.f, drag.startVal + dy * 0.01f * fineMult);
+            newVal = juce::jlimit (-1.f, 1.f, drag.startVal + dx * 0.01f * fineMult);
             processor.apvts.getRawParameterValue (ParamIds::defaultPan)->store (newVal);
         }
         repaint(); return;
@@ -845,7 +852,7 @@ void MixerPanel::mouseDrag (const juce::MouseEvent& e)
             cmd.intParam1 = DysektProcessor::FieldVolume;
             break;
         case ColPan:
-            newVal = juce::jlimit (-1.f, 1.f, drag.startVal + dy * 0.01f * fineMult);
+            newVal = juce::jlimit (-1.f, 1.f, drag.startVal + dx * 0.01f * fineMult);
             cmd.intParam1 = DysektProcessor::FieldPan;
             break;
         case ColFcut:
