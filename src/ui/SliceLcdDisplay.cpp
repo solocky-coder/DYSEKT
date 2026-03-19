@@ -372,7 +372,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
 
     // Centre the vertical stack in the screen height
     int fy = screen.getY() + (screen.getHeight() - totalFlagsH) / 2;
-    const int fx = screen.getRight() - flagW - 4;  // right-edge inset
+    const int fx = screen.getRight() - flagW - kScrollW - 4;  // right-edge inset, clear of scrollbar
 
     struct Flag { juce::String text; bool on; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
