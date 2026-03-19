@@ -367,7 +367,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     const int flagW  = 34;   // fixed pill width
     const int flagH  = 12;   // pill height
     const int flagGap = 3;   // gap between pills
-    const int numFlags = 4;
+    const int numFlags = 7;
     const int totalFlagsH = numFlags * flagH + (numFlags - 1) * flagGap;
 
     // Centre the vertical stack in the screen height
@@ -381,6 +381,9 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
         { loopStr, data.loopMode > 0 },
         { "1SH",  data.oneShot },
         { "MUT:" + (data.muteGroup > 0 ? juce::String (data.muteGroup) : juce::String ("-")), data.muteGroup > 0 },
+        { "STR",  data.stretchEnabled },
+        { "TAIL", data.releaseTail },
+        { "FMC",  data.formantComp },
     };
 
     g.setFont (flagFont);
@@ -634,44 +637,6 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         juce::String outStr = "OUT:" + juce::String (data.outputBus + 1);
         juce::String bpmStr = "BPM:" + juce::String (data.bpm, 1);
         drawRowPair (g, 9, outStr, bpmStr);
-    }
-
-    // ── Row 9 right-side toggle flags (STRETCH / TAIL / FMNT C) ──────────────
-    // Drawn inline as small text badges after BPM on row 9
-    {
-        const auto pal2 = LcdColours::fromTheme();
-        auto b2 = getLocalBounds().reduced (4);
-        const int rowH2  = kRowH;
-        const int y9     = b2.getY() + 4 + 9 * rowH2 - scrollOffsetPx;
-        if (y9 < b2.getBottom() - 4 && y9 + rowH2 > b2.getY() + 4)
-        {
-            const juce::Font flagFont2 = DysektLookAndFeel::makeFont (8.5f, true);
-            const int pad2 = 3;
-            const int fh   = rowH2 - 4;
-            int fx2 = b2.getX() + b2.getWidth() / 4;  // start after left column
-
-            struct TFlag { juce::String text; bool on; };
-            TFlag tflags[] = {
-                { "STR", data.stretchEnabled },
-                { "TAIL", data.releaseTail  },
-                { "FMC", data.formantComp   },
-            };
-            g.setFont (flagFont2);
-            for (auto& tf : tflags)
-            {
-                int fw2 = flagFont2.getStringWidth (tf.text) + pad2 * 2 + 4;
-                juce::Rectangle<int> box2 (fx2, y9 + 2, fw2, fh);
-                g.setColour (tf.on ? pal2.phosphor.withAlpha (0.15f) : pal2.flagBg);
-                g.fillRoundedRectangle (box2.toFloat(), 1.5f);
-                g.setColour (tf.on ? pal2.flagOn : pal2.flagOff);
-                g.drawRoundedRectangle (box2.toFloat(), 1.5f, 1.0f);
-                g.setColour (tf.on ? pal2.flagOn : pal2.flagOff);
-                g.drawText (tf.text, box2.getX() + pad2, box2.getY(),
-                            box2.getWidth() - pad2 * 2, box2.getHeight(),
-                            juce::Justification::centred, false);
-                fx2 += fw2 + 4;
-            }
-        }
     }
 
     // ── Floating flags — right-edge vertical column (always visible) ──────────
