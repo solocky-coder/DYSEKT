@@ -52,7 +52,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     addChildComponent (mixerPanel);
     shortcutsPanel.setVisible (false);
     addChildComponent (shortcutsPanel);
-    shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
+    shortcutsPanel.onDismiss      = [this] { toggleShortcutsPanel(); };
+    shortcutsPanel.onThemeRequest = [this] { headerBar.showThemePopup(); };
 
     sliceLane.setWaveformView (&waveformView);
 
