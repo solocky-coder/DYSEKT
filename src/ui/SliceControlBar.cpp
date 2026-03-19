@@ -226,99 +226,6 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
 }
 
 // =============================================================================
-//  drawPanSliderCell  — horizontal bipolar slider for PAN
-// =============================================================================
-void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
-                                          float panValue,   // -1..+1
-                                          bool locked, int& outWidth)
-{
-    const int cellW  = kParamCellWidth;
-    const int cellH  = 32;
-    const auto& theme = getTheme();
-    const auto ac     = theme.accent;
-
-    const bool armed  = (processor.midiLearn.getArmedSlot() == DysektProcessor::FieldPan);
-    const bool mapped = processor.midiLearn.isMapped (DysektProcessor::FieldPan);
-
-    if (armed)
-    {
-        g.setColour (ac.withAlpha (0.11f));
-        g.fillRoundedRectangle ((float) x, (float) y, (float) cellW, (float) cellH, 2.f);
-    }
-
-    // ── Label ──────────────────────────────────────────────────────────────
-    g.setFont (DysektLookAndFeel::makeFont (10.0f));
-    g.setColour (locked ? theme.lockActive.withAlpha (0.8f)
-                        : theme.foreground.withAlpha (0.42f));
-    g.drawText ("PAN", x, y + 2, cellW, 12, juce::Justification::centredLeft);
-
-    // MIDI-learn label
-    if (armed || mapped)
-    {
-        g.setFont (DysektLookAndFeel::makeFont (8.0f));
-        g.setColour (ac.withAlpha (armed ? 1.0f : 0.65f));
-        g.drawText (armed ? "ARM" : processor.midiLearn.getLabelText (DysektProcessor::FieldPan),
-                    x, y + cellH - 10, cellW, 10, juce::Justification::centredLeft);
-    }
-
-    // ── Slider track ───────────────────────────────────────────────────────
-    const int trackY  = y + 18;
-    const int trackH  = 6;
-    const int trackX  = x + 2;
-    const int trackW  = cellW - 4;
-
-    // Track background
-    g.setColour (theme.darkBar.darker (0.3f));
-    g.fillRoundedRectangle ((float) trackX, (float) trackY,
-                             (float) trackW, (float) trackH, 2.f);
-
-    // Centre line
-    const int centreX = trackX + trackW / 2;
-    g.setColour (theme.foreground.withAlpha (0.18f));
-    g.drawVerticalLine (centreX, (float) trackY, (float) (trackY + trackH));
-
-    // Fill from centre toward current position
-    const float norm    = juce::jlimit (0.f, 1.f, (panValue + 1.f) * 0.5f);
-    const int   thumbX  = trackX + (int) (norm * (float) trackW);
-    const juce::Colour fillCol = locked ? theme.lockActive : ac;
-
-    if (std::abs (panValue) > 0.005f)
-    {
-        const int fillX = (panValue < 0.f) ? thumbX : centreX;
-        const int fillW = std::abs (thumbX - centreX);
-        if (fillW > 0)
-        {
-            g.setColour (fillCol.withAlpha (locked ? 0.55f : 0.40f));
-            g.fillRect (fillX, trackY + 1, fillW, trackH - 2);
-        }
-    }
-
-    // Thumb
-    g.setColour (locked ? theme.lockActive : (armed ? ac.brighter (0.4f) : ac));
-    g.fillRoundedRectangle ((float) (thumbX - 2), (float) (trackY - 1),
-                             4.f, (float) (trackH + 2), 1.5f);
-
-    // ── Value text ─────────────────────────────────────────────────────────
-    const int pct = juce::jlimit (-100, 100, (int) std::round (panValue * 100.f));
-    juce::String panStr = (pct == 0) ? "C"
-                        : (pct  < 0) ? ("L" + juce::String (-pct))
-                                     : ("R" + juce::String ( pct));
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
-    g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.38f));
-    g.drawText (panStr, x, y + 14, cellW, 14, juce::Justification::centredRight);
-
-    // ── Register cell ──────────────────────────────────────────────────────
-    outWidth = cellW;
-    ParamCell c{};
-    c.x = x; c.y = y; c.w = cellW; c.h = cellH;
-    c.lockBit = kLockPan; c.fieldId = DysektProcessor::FieldPan;
-    c.minVal = -1.f; c.maxVal = 1.f; c.step = 0.01f;
-    c.isKnob = true; c.isMidiLearnable = true;
-    c.knobNorm = norm;
-    cells.push_back (c);
-}
-
-// =============================================================================
 //  drawMidiLearnCell  — START / END slice boundary buttons
 // =============================================================================
 void SliceControlBar::drawMidiLearnCell (juce::Graphics& g, int x, int y,
@@ -830,12 +737,18 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // PAN — horizontal bipolar slider (-1 = full left, 0 = centre, +1 = full right)
+    // PAN — knob (-1 = full left, 0 = centre, +1 = full right)
     {
         float gPanVal = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
         bool locked   = (s.lockMask & kLockPan) != 0;
         float pv      = locked ? s.pan : gPanVal;
-        drawPanSliderCell (g, x, row2y, pv, locked, cw);
+        int   pct     = juce::jlimit (-100, 100, (int) std::round (pv * 100.f));
+        juce::String panStr = (pct == 0) ? juce::String ("C")
+                            : (pct  < 0) ? ("L" + juce::String (-pct))
+                                         : ("R" + juce::String ( pct));
+        drawKnobCell (g, x, row2y, "PAN", panStr,
+                      toNorm (F::FieldPan, pv),
+                      locked, kLockPan, F::FieldPan, -1.f, 1.f, 0.01f, cw);
         x += cw + 4;
     }
 
