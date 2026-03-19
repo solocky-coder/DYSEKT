@@ -1,10 +1,8 @@
 #include "MidiLearnDialog.h"
-// --- MIDI Learn slot => parameter name lookup ---
-// The order must exactly match your SliceParamField/kMidiLearnNumSlots!
-// If you add more slots, update here and in your enum in PluginProcessor.h.
 
+// ── Parameter name table (must match SliceParamField order) ──────────────────
 static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
-    "BPM",                 // 0
+    "BPM",                  // 0
     "Pitch",
     "Algorithm",
     "Attack",
@@ -25,105 +23,120 @@ static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
     "One Shot",
     "Cents Detune",
     "MIDI Note",
-    "Slice Start",         // 21
-    "Slice End",           // 22
+    "Slice Start",          // 21
+    "Slice End",            // 22
     "Pan",
     "Filter Cutoff",
     "Filter Resonance",
     "Chromatic Channel",
     "Chromatic Legato",
-    "", "", "", ""         // 28-31 (unused/empty)
+    "", "", "", ""          // 28-31 (unused)
 };
 
-static juce::String getSlotParameterName(int fieldId)
+static juce::String getSlotParameterName (int fieldId)
 {
-    if (fieldId >= 0 && fieldId < kMidiLearnNumSlots && juce::String(gSlotParamNames[fieldId]).isNotEmpty())
+    if (fieldId >= 0 && fieldId < kMidiLearnNumSlots
+        && juce::String (gSlotParamNames[fieldId]).isNotEmpty())
         return gSlotParamNames[fieldId];
-    return juce::String("Param ") + juce::String(fieldId);
+    return juce::String ("Param ") + juce::String (fieldId);
 }
 
-MidiLearnDialog::MidiLearnDialog(MidiLearnManager& ml, std::function<void()> onClose)
-    : midiLearn(ml), onCloseCallback(onClose)
+// ── Constructor ───────────────────────────────────────────────────────────────
+
+MidiLearnDialog::MidiLearnDialog (MidiLearnManager& ml, std::function<void()> onClose)
+    : midiLearn (ml), onCloseCallback (onClose)
 {
-    addAndMakeVisible(mappingList);
-    addAndMakeVisible(closeButton);
+    addAndMakeVisible (mappingList);
+    addAndMakeVisible (closeButton);
 
     closeButton.onClick = [this] { close(); };
-    mappingList.setModel(this);
 
-    setSize(420, 340);
+    // Column header row height + item row height
+    mappingList.setRowHeight (24);
+    mappingList.setModel (this);
+    mappingList.setColour (juce::ListBox::backgroundColourId,
+                           juce::Colour (0xFF111418));
+    mappingList.setColour (juce::ListBox::outlineColourId,
+                           juce::Colours::transparentBlack);
+
+    setSize (520, 420);
 }
 
-void MidiLearnDialog::paint(juce::Graphics& g)
+// ── Paint ─────────────────────────────────────────────────────────────────────
+
+void MidiLearnDialog::paint (juce::Graphics& g)
 {
-    g.fillAll(juce::Colours::darkslategrey);
-    g.setColour(juce::Colours::white);
-    g.setFont(17.0f);
-    g.drawText("MIDI Learn Assignments", 0, 8, getWidth(), 24, juce::Justification::centred);
+    // Background
+    g.fillAll (juce::Colour (0xFF1A2024));
+
+    // Title bar
+    g.setColour (juce::Colour (0xFF263036));
+    g.fillRect (0, 0, getWidth(), 36);
+    g.setColour (juce::Colours::white);
+    g.setFont (juce::Font (15.f, juce::Font::bold));
+    g.drawText ("MIDI Learn Assignments", 0, 0, getWidth(), 36,
+                juce::Justification::centred);
+
+    // Column headers
+    const int hdrY  = 38;
+    const int hdrH  = 20;
+    const int w     = getWidth() - 20;   // list inset
+    const int col1  = (int)(w * 0.32f);
+    const int col2  = (int)(w * 0.22f);
+    g.setColour (juce::Colour (0xFF263036));
+    g.fillRect (10, hdrY, w, hdrH);
+    g.setColour (juce::Colours::white.withAlpha (0.55f));
+    g.setFont (juce::Font (10.f, juce::Font::bold));
+    g.drawText ("PARAMETER",  18,          hdrY, col1,      hdrH, juce::Justification::centredLeft);
+    g.drawText ("CC / VALUE",  10 + col1,  hdrY, col2,      hdrH, juce::Justification::centredLeft);
+    g.drawText ("ENCODER MODE", 10 + col1 + col2, hdrY,
+                w - col1 - col2, hdrH, juce::Justification::centredLeft);
 }
 
 void MidiLearnDialog::resized()
 {
-    mappingList.setBounds(10, 38, getWidth() - 20, getHeight() - 68);
-    closeButton.setBounds((getWidth() - 90) / 2, getHeight() - 26, 90, 22);
+    mappingList.setBounds (10, 60, getWidth() - 20, getHeight() - 96);
+    closeButton.setBounds ((getWidth() - 90) / 2, getHeight() - 30, 90, 24);
 }
+
+// ── ListBoxModel ──────────────────────────────────────────────────────────────
 
 int MidiLearnDialog::getNumRows()
 {
     return kMidiLearnNumSlots;
 }
 
-void MidiLearnDialog::paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected)
+void MidiLearnDialog::paintListBoxItem (int /*row*/, juce::Graphics& g,
+                                        int width, int height, bool selected)
 {
+    // Row background only — text/controls drawn by refreshComponentForRow
     if (selected)
-        g.fillAll(juce::Colours::deepskyblue.withAlpha(0.15f));
-    g.setColour(juce::Colours::white);
-
-    // For better UI: Map fieldId to parameter (see next step)
-    juce::String pname = getSlotParameterName(row);
-    g.drawText(pname, 8, 0, width / 3, height, juce::Justification::centredLeft);
-
-    juce::String ccText = midiLearn.getLabelText(row);
-    g.drawText(ccText, width / 3 + 8, 0, width / 3, height, juce::Justification::centredLeft);
+    {
+        g.setColour (juce::Colours::deepskyblue.withAlpha (0.18f));
+        g.fillAll();
+    }
+    // Bottom divider
+    g.setColour (juce::Colours::white.withAlpha (0.05f));
+    g.drawHorizontalLine (height - 1, 0.f, (float) width);
 }
 
-juce::Component* MidiLearnDialog::refreshComponentForRow(int row, bool, juce::Component* existing)
+juce::Component* MidiLearnDialog::refreshComponentForRow (int row, bool /*selected*/,
+                                                           juce::Component* existing)
 {
-    auto* selector = dynamic_cast<EncoderModeSelector*>(existing);
-    if (!selector)
-        selector = new EncoderModeSelector();
+    auto* comp = dynamic_cast<MappingRowComponent*> (existing);
+    if (! comp)
+        comp = new MappingRowComponent();
 
-    selector->setField(row, midiLearn.getEncoderMode(row));
-    selector->onChange = [this, selector] { encoderModeChanged(selector); };
-    return selector;
+    comp->update (row, midiLearn, getSlotParameterName (row));
+    return comp;
 }
 
-void MidiLearnDialog::encoderModeChanged(EncoderModeSelector* s)
-{
-    if (s && s->fieldId >= 0)
-        midiLearn.setEncoderMode(s->fieldId, (MidiLearnManager::EncoderMode)(s->getSelectedId() - 1));
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 void MidiLearnDialog::close()
 {
     if (onCloseCallback)
         onCloseCallback();
     else if (auto* parent = getParentComponent())
-        parent->removeChildComponent(this);
-}
-
-// =============== EncoderModeSelector ================
-MidiLearnDialog::EncoderModeSelector::EncoderModeSelector()
-{
-    addItem("Absolute", MidiLearnManager::kAbsolute + 1);
-    addItem("Relative 2'sComp", MidiLearnManager::kRelTwosComp + 1);
-    addItem("Relative SignBit", MidiLearnManager::kRelSignBit + 1);
-    addItem("Relative BinOffset", MidiLearnManager::kRelBinOffset + 1);
-    setJustificationType(juce::Justification::centred);
-}
-
-void MidiLearnDialog::EncoderModeSelector::setField(int field, MidiLearnManager::EncoderMode mode)
-{
-    fieldId = field;
-    setSelectedId((int)mode + 1, juce::dontSendNotification);
+        parent->removeChildComponent (this);
 }
