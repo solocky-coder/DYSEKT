@@ -412,9 +412,54 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     const bool gainLocked = (sl.lockMask & kLockVolume) != 0;
     drawCol (ColGain, toNormGain (sl.volume), gainLocked, fmtGain (sl.volume));
 
-    // PAN
-    const bool panLocked = (sl.lockMask & kLockPan) != 0;
-    drawCol (ColPan, toNormPan (sl.pan), panLocked, fmtPan (sl.pan));
+    // PAN — horizontal bipolar slider
+    {
+        const int     x      = colX (ColPan);
+        const int     sliderX = x + 6;
+        const int     sliderW = kKnobColW - 12;
+        const int     sliderY = kcy - 3;
+        const int     sliderH = 6;
+        const float   pan     = sl.pan;
+        const float   norm    = toNormPan (pan);
+        const int     thumbX  = sliderX + (int)(norm * (float)sliderW);
+        const int     centreX = sliderX + sliderW / 2;
+        const auto    fillCol = panLocked ? theme.lockActive : theme.accent;
+
+        // Track bg
+        g.setColour (theme.darkBar.darker (0.3f));
+        g.fillRoundedRectangle ((float)sliderX, (float)sliderY,
+                                 (float)sliderW, (float)sliderH, 2.f);
+
+        // Centre tick
+        g.setColour (theme.foreground.withAlpha (0.18f));
+        g.drawVerticalLine (centreX, (float)sliderY, (float)(sliderY + sliderH));
+
+        // Fill from centre
+        if (std::abs (pan) > 0.005f)
+        {
+            const int fillX = (pan < 0.f) ? thumbX : centreX;
+            const int fillW = std::abs (thumbX - centreX);
+            if (fillW > 0)
+            {
+                g.setColour (fillCol.withAlpha (panLocked ? 0.55f : 0.35f));
+                g.fillRect (fillX, sliderY + 1, fillW, sliderH - 2);
+            }
+        }
+
+        // Thumb
+        g.setColour (fillCol.withAlpha (panLocked ? 1.0f : 0.85f));
+        g.fillRoundedRectangle ((float)(thumbX - 2), (float)(sliderY - 1),
+                                 4.f, (float)(sliderH + 2), 1.5f);
+
+        // Value label
+        const int tx = x + kKnobColW / 2 + 8;
+        const int tw = kKnobColW - (tx - x) - 2;
+        g.setFont (DysektLookAndFeel::makeFont (10.f));
+        g.setColour (panLocked ? theme.foreground.withAlpha (0.90f)
+                               : theme.foreground.withAlpha (0.40f));
+        g.drawText (fmtPan (pan), tx, ry + 1, tw, kRowH - 2,
+                    juce::Justification::centredLeft);
+    }
 
     // FCUT
     const bool filterLocked = (sl.lockMask & kLockFilter) != 0;
@@ -510,7 +555,45 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
     };
 
     drawMasterCol (ColGain, toNormGain (masterDb),  fmtGain (masterDb));
-    drawMasterCol (ColPan,  toNormPan  (masterPan), fmtPan  (masterPan));
+
+    // Master PAN — horizontal bipolar slider
+    {
+        const int   x       = colX (ColPan);
+        const int   sliderX = x + 6;
+        const int   sliderW = kKnobColW - 12;
+        const int   sliderY = kcy - 3;
+        const int   sliderH = 6;
+        const float norm    = toNormPan (masterPan);
+        const int   thumbX  = sliderX + (int)(norm * (float)sliderW);
+        const int   centreX = sliderX + sliderW / 2;
+        const auto  fillCol = theme.accent;
+
+        g.setColour (theme.darkBar.darker (0.3f));
+        g.fillRoundedRectangle ((float)sliderX, (float)sliderY,
+                                 (float)sliderW, (float)sliderH, 2.f);
+        g.setColour (theme.foreground.withAlpha (0.18f));
+        g.drawVerticalLine (centreX, (float)sliderY, (float)(sliderY + sliderH));
+
+        if (std::abs (masterPan) > 0.005f)
+        {
+            const int fillX = (masterPan < 0.f) ? thumbX : centreX;
+            const int fillW = std::abs (thumbX - centreX);
+            if (fillW > 0)
+            {
+                g.setColour (fillCol.withAlpha (0.35f));
+                g.fillRect (fillX, sliderY + 1, fillW, sliderH - 2);
+            }
+        }
+        g.setColour (fillCol.withAlpha (0.85f));
+        g.fillRoundedRectangle ((float)(thumbX - 2), (float)(sliderY - 1),
+                                 4.f, (float)(sliderH + 2), 1.5f);
+
+        const int tx = x + kKnobColW / 2 + 8;
+        g.setFont (DysektLookAndFeel::makeFont (9.f));
+        g.setColour (theme.accent.withAlpha (0.55f));
+        g.drawText (fmtPan (masterPan), tx, ry + 1, kKnobColW - (tx - x) - 2,
+                    kMasterH - 2, juce::Justification::centredLeft);
+    }
 
     // Remaining columns — dimmed dashes
     g.setFont (DysektLookAndFeel::makeFont (8.f));
