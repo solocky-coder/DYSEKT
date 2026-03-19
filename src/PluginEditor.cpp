@@ -23,7 +23,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
       sliceWaveformLcd (p),
       sliceLane      (p),
       waveformView   (p),
-      waveformOverview (p),
       sliceControlBar(p),
       actionPanel    (p, waveformView),
 
@@ -44,7 +43,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     addAndMakeVisible (sliceLane);
     addAndMakeVisible (waveformView);
-    addAndMakeVisible (waveformOverview);
     addAndMakeVisible (sliceControlBar);
     addAndMakeVisible (actionPanel);
 
@@ -213,10 +211,10 @@ void DysektEditor::toggleShortcutsPanel()
 void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
-    if (actionPanel.isVisible() && waveformView.isVisible() && waveformOverview.isVisible())
+    if (actionPanel.isVisible() && waveformView.isVisible())
     {
         const auto& abnd = actionPanel.getBounds();
-        const auto& sbnd = waveformOverview.getBounds();
+        const auto& sbnd = waveformView.getBounds();
         const auto  ac   = getTheme().accent;
 
         const int kFrameInset = 4;
@@ -307,13 +305,12 @@ void DysektEditor::resized()
     const int screenBot   = frameBot - kFrameInset;
     const int screenH     = screenBot - screenTop;
 
-    waveformOverview.setBounds (juce::Rectangle<int> (screenX, screenBot - kScrollbarH, screenW, kScrollbarH));
     actionPanel.setBounds (juce::Rectangle<int> (screenX, screenTop, screenW, kActionH));
     int y = screenTop + kActionH;
     sliceLane.setBounds (juce::Rectangle<int> (screenX, y, screenW, kSliceLaneH));
     y      = screenTop + kActionH + kSliceLaneH;
     int trimH  = (trimDialog != nullptr) ? kTrimBarH : 0;
-    int h      = screenBot - kScrollbarH - trimH - y;
+    int h      = screenBot - trimH - y;
     waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
     if (trimDialog != nullptr)
         trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
@@ -423,7 +420,6 @@ void DysektEditor::timerCallback()
     bool uiChanged = false, viewportChanged = false;
     const bool previewActive      = waveformView.hasActiveSlicePreview();
     const bool waveformInteracting = waveformView.isInteracting();
-    const bool rulerDragging      = waveformOverview.isDraggingNow();
 
     const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
     if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
@@ -460,12 +456,11 @@ void DysektEditor::timerCallback()
                                              processor.voicePool.voicePositions.end(),
                                              [] (const std::atomic<float>& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
 
-    const bool waveformAnimating = waveformInteracting || rulerDragging || previewActive
+    const bool waveformAnimating = waveformInteracting || previewActive
                                  || playbackActive || processor.lazyChop.isActive()
                                  || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
     const bool waveformNeedsRepaint = uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating;
     const bool laneNeedsRepaint     = uiChanged || viewportChanged || previewActive || lastPreviewActive;
-    const bool rulerNeedsRepaint    = uiChanged || viewportChanged || rulerDragging;
 
     lastWaveformAnimating = waveformAnimating;
     lastPreviewActive     = previewActive;
@@ -507,7 +502,6 @@ void DysektEditor::timerCallback()
 
     if (waveformNeedsRepaint) waveformView.repaint();
     if (laneNeedsRepaint)     sliceLane.repaint();
-    if (rulerNeedsRepaint)    waveformOverview.repaint();
     sliceLcd.repaintLcd();
     sliceWaveformLcd.repaintLcd();
     if (mixerOpen) mixerPanel.repaint();

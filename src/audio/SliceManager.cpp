@@ -50,7 +50,7 @@ void SliceManager::sortByStart()
 }
 
 // =============================================================================
-//  assignDefaults / assignColour
+//  assignDefaults / assignColor
 // =============================================================================
 
 void SliceManager::assignDefaults (Slice& s, int idx)
@@ -69,10 +69,20 @@ void SliceManager::assignDefaults (Slice& s, int idx)
     s.loopMode       = 0;
 }
 
-void SliceManager::assignColour (Slice& s, int idx)
+void SliceManager::assignColor (Slice& s, int idx)
 {
     const auto* p = palette.load (std::memory_order_relaxed);
-    s.colour = p ? p[idx % 16] : juce::Colour (0xFF4D8C99);
+    if (p)
+    {
+        s.colour = p[idx % 16];
+    }
+    else
+    {
+        // No palette loaded — generate a perceptually-spread hue via the
+        // golden-ratio method so consecutive slices never share a colour.
+        const float hue = std::fmod ((float) idx * 0.618033988f, 1.0f);
+        s.colour = juce::Colour::fromHSV (hue, 0.60f, 0.78f, 1.0f);
+    }
 }
 
 // =============================================================================
@@ -124,7 +134,7 @@ int SliceManager::insertMarker (int markerPos, int totalFrames)
             ns             = Slice{};
             ns.startSample = markerPos;
             assignDefaults (ns, newIdx);
-            assignColour   (ns, newIdx);
+            assignColor   (ns, newIdx);
             ++numSlices;
             rebuildMidiMap();
             return newIdx;
@@ -142,7 +152,7 @@ int SliceManager::insertMarker (int markerPos, int totalFrames)
     Slice rightSlice       = slices[(size_t) splitIdx]; // copy all params
     rightSlice.startSample = markerPos;
     rightSlice.midiNote    = std::min (rootNote.load() + numSlices, 127);
-    assignColour (rightSlice, numSlices);
+    assignColor (rightSlice, numSlices);
 
     // Append to end of array, then sort to put it in the correct position.
     slices[(size_t) numSlices] = rightSlice;
@@ -208,7 +218,7 @@ int SliceManager::createSlice (int start, int end)
     ns             = Slice{};
     ns.startSample = start;
     assignDefaults (ns, newIdx);
-    assignColour   (ns, newIdx);
+    assignColor   (ns, newIdx);
     ++numSlices;
 
     sortByStart();
