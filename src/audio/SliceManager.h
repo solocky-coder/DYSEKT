@@ -78,7 +78,7 @@ public:
 
 private:
     void assignDefaults (Slice& s, int idx);
-    void assignColour   (Slice& s, int idx);
+    void assignColor   (Slice& s, int idx);
 
     /** Raw append used internally — does NOT sort or rebuild MIDI map. */
     int  appendSlice (int start);
