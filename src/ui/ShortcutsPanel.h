@@ -22,6 +22,9 @@ public:
     /// Called when the panel should be dismissed.
     std::function<void()> onDismiss;
 
+    /// Called when the user clicks "Theme & Scale" — fires HeaderBar::showThemePopup().
+    std::function<void()> onThemeRequest;
+
 private:
     DysektProcessor& processor;
 
@@ -29,6 +32,7 @@ private:
     struct ShortcutCategory { juce::String title; std::vector<ShortcutEntry> entries; };
 
     juce::TextButton closeBtn { "×" };
+    juce::TextButton themeBtn { "Theme & Scale\xe2\x80\xa6" };  // "Theme & Scale…"
     juce::TextEditor searchBox;
     juce::Label      titleLabel;
 

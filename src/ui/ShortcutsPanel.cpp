@@ -18,6 +18,12 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     closeBtn.onClick = [this] { if (onDismiss) onDismiss(); };
     addAndMakeVisible (closeBtn);
 
+    themeBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
+    themeBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
+    themeBtn.setTooltip ("Change theme or UI scale");
+    themeBtn.onClick = [this] { if (onThemeRequest) onThemeRequest(); };
+    addAndMakeVisible (themeBtn);
+
     searchBox.setTextToShowWhenEmpty ("Search shortcuts...", getTheme().foreground.withAlpha (0.4f));
     searchBox.setFont (DysektLookAndFeel::makeFont (11.0f));
     searchBox.setColour (juce::TextEditor::backgroundColourId, getTheme().background.withAlpha (0.6f));
@@ -252,7 +258,9 @@ void ShortcutsPanel::resized()
     auto header = panel.reduced (14, 6);
 
     auto titleRow = header.removeFromTop (30);
-    closeBtn.setBounds (titleRow.removeFromRight (30));
+    closeBtn.setBounds  (titleRow.removeFromRight (30));
+    themeBtn.setBounds  (titleRow.removeFromRight (110));
+    titleRow.removeFromRight (6);   // gap between label and theme button
     titleLabel.setBounds (titleRow);
 
     header.removeFromTop (8);
