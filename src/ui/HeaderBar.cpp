@@ -12,7 +12,7 @@ HeaderBar::HeaderBar (DysektProcessor& p)
       controlFrame (p)
 {
     // Standard buttons
-    for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn, &shortcutsBtn })
+    for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &shortcutsBtn })
     {
         btn->setAlwaysOnTop (true);
         btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
@@ -21,7 +21,9 @@ HeaderBar::HeaderBar (DysektProcessor& p)
         addAndMakeVisible (*btn);
     }
 
-    shortcutsBtn.setTooltip ("Keyboard Shortcuts");
+    // Cogwheel icon — U+2699 GEAR, UTF-8: E2 9A 99
+    shortcutsBtn.setButtonText (juce::String::fromUTF8 ("\xe2\x9a\x99"));
+    shortcutsBtn.setTooltip ("Settings");
     shortcutsBtn.onClick = [this] { if (onShortcutsToggle) onShortcutsToggle(); };
 
     panicBtn.setTooltip ("Panic: kill all sound");
@@ -44,8 +46,6 @@ HeaderBar::HeaderBar (DysektProcessor& p)
         cmd.type = DysektProcessor::CmdRedo;
         processor.pushCommand (cmd);
     };
-
-    themeBtn.onClick = [this] { showThemePopup(); };
 
     // Wire control frame callbacks → forward to PluginEditor via HeaderBar's lambdas
     controlFrame.onBrowserToggle   = [this] { if (onBrowserToggle)   onBrowserToggle(); };
@@ -74,15 +74,11 @@ void HeaderBar::resized()
     const int gap  = 4;
     int right = getWidth() - 8;
 
-    // Right to left: [?] [UI] [PANIC] [REDO][UNDO]
+    // Right to left: [⚙] [PANIC] [REDO][UNDO]
 
-    // ? shortcuts button — rightmost
+    // ⚙ settings button — rightmost
     shortcutsBtn.setBounds (right - 22, btnY, 22, btnH);
     right -= 26;
-
-    // UI / theme button
-    themeBtn.setBounds (right - 26, btnY, 26, btnH);
-    right -= 30;
 
     // PANIC
     const int panicW = 52;
@@ -101,7 +97,7 @@ void HeaderBar::resized()
 void HeaderBar::paint (juce::Graphics& g)
 {
     // Refresh standard button colours to follow theme
-    for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &themeBtn, &shortcutsBtn })
+    for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &shortcutsBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
         btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);      // on = accent
@@ -111,7 +107,7 @@ void HeaderBar::paint (juce::Graphics& g)
     g.fillAll (getTheme().header);
 
     // ── Frame around the button group ─────────────────────────────────────────
-    // Compute a tight bounding rect around all 5 buttons with 2px padding
+    // Tight bounding rect around all 4 buttons with 2px padding
     const int frameX1 = undoBtn.getX() - 2;
     const int frameY1 = undoBtn.getY() - 2;
     const int frameX2 = shortcutsBtn.getRight() + 2;
@@ -188,7 +184,7 @@ void HeaderBar::showThemePopup()
 
     auto* topLevel = getTopLevelComponent();
     float ms2 = DysektLookAndFeel::getMenuScale();
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&themeBtn)
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&shortcutsBtn)
                             .withParentComponent (topLevel)
                             .withStandardItemHeight ((int) (24 * ms2)),
         [this, editor, themes] (int result) {

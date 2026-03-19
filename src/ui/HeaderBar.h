@@ -35,13 +35,14 @@ public:
     juce::TextButton undoBtn      { "UNDO"  };
     juce::TextButton redoBtn      { "REDO"  };
     juce::TextButton panicBtn     { "PANIC" };
-    juce::TextButton themeBtn     { "UI"    };
-    juce::TextButton shortcutsBtn { "?"     };
+    juce::TextButton shortcutsBtn;   // cogwheel — label set in constructor
 
     std::function<void()> onShortcutsToggle;
 
-private:
+    // Exposed so PluginEditor can wire it into the settings panel
     void showThemePopup();
+
+private:
     void adjustScale (float delta);
     void openRelinkBrowser();
 
