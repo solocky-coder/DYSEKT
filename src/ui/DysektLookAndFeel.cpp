@@ -197,15 +197,15 @@ void DysektLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
     g.setColour (box.hasKeyboardFocus (false) ? t.accent.withAlpha (0.5f) : t.separator);
     g.drawRect (0, 0, width, height, 1);
 
-    // Dropdown arrow: two short diagonal lines forming a ˅ shape — no unicode
+    // Dropdown arrow — centred vertically and in the button zone
     const int arrowCX = buttonX + (width - buttonX) / 2;
     const int arrowCY = height / 2;
-    const int arrowHalf = (int) (4 * sMenuScale);
-    g.setColour (t.foreground.withAlpha (0.7f));
-    g.drawLine ((float) (arrowCX - arrowHalf), (float) (arrowCY - 2),
-                (float) arrowCX,               (float) (arrowCY + 2), 1.5f);
-    g.drawLine ((float) arrowCX,               (float) (arrowCY + 2),
-                (float) (arrowCX + arrowHalf), (float) (arrowCY - 2), 1.5f);
+    const int arrowHalf = 4;
+    g.setColour (t.foreground.withAlpha (0.85f));
+    g.drawLine ((float)(arrowCX - arrowHalf), (float)(arrowCY - 2),
+                (float)(arrowCX),              (float)(arrowCY + 2), 1.5f);
+    g.drawLine ((float)(arrowCX),              (float)(arrowCY + 2),
+                (float)(arrowCX + arrowHalf),  (float)(arrowCY - 2), 1.5f);
 }
 
 juce::Font DysektLookAndFeel::getComboBoxFont (juce::ComboBox&)
