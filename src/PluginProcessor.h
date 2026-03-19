@@ -248,6 +248,12 @@ public:
     // Reset when the selected slice changes or a new CC is learned.
     // Audio-thread write, audio-thread read only.
     std::array<bool, kMidiLearnNumSlots> ccPickedUp {};   // zero-init = all false
+
+    // Per-slot smoothed values for CC — prevents audible steps on absolute knobs.
+    // Target is set in processMidi(); smoother is stepped each processBlock().
+    std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>,
+               kMidiLearnNumSlots> ccSmoothers;
+    std::array<bool, kMidiLearnNumSlots> ccSmootherActive {};
     std::atomic<float> sliceEndPublished      { -1.0f };
 
     // Shift-preview request (-2 = idle, -1 = stop, >= 0 = start at position)

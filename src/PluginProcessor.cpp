@@ -195,6 +195,10 @@ void DysektProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
     currentSampleRate = sampleRate;
     voicePool.setSampleRate (sampleRate);
     std::fill (std::begin (heldNotes), std::end (heldNotes), false);
+
+    // Initialise CC smoothers — 20 ms ramp gives silky response on absolute knobs
+    for (auto& s : ccSmoothers)
+        s.reset (sampleRate, 0.020);
 }
 
 void DysektProcessor::releaseResources() {}
@@ -1043,6 +1047,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 juce::jlimit (-1, juce::jmax (-1, sliceManager.getNumSlices() - 1), cmd.intParam1),
                 std::memory_order_relaxed);
             ccPickedUp.fill (false);  // new slice — absolute knobs must pick up again
+            ccSmootherActive.fill (false);
             break;
 
         case CmdSetSliceColour:
@@ -1207,8 +1212,14 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
 
                     if (outIsRelative)
                     {
-                        // Endless encoder: add scaled delta to current value
-                        const float cur  = getCurrentNative (outFieldId);
+                        // For relative encoders: use the smoother's current TARGET
+                        // as the base, not the committed slice value.  This way rapid
+                        // turns accumulate correctly into the pending target instead of
+                        // stacking deltas on top of a stale (not-yet-smoothed) value.
+                        const float cur = (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
+                                           && ccSmootherActive[(size_t) outFieldId])
+                                          ? ccSmoothers[(size_t) outFieldId].getTargetValue()
+                                          : getCurrentNative (outFieldId);
                         const float sens = getRelSensitivity (outFieldId);
                         const float raw  = cur + outNorm * sens;
 
@@ -1371,11 +1382,14 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     }
                     else
                     {
-                        Command ccCmd;
-                        ccCmd.type        = CmdSetSliceParam;
-                        ccCmd.intParam1   = outFieldId;
-                        ccCmd.floatParam1 = nativeVal;
-                        handleCommand (ccCmd);
+                        // Feed the target into the per-slot smoother.
+                        // processBlock() will step it and fire CmdSetSliceParam
+                        // each buffer, giving a smooth ~20 ms glide to the target.
+                        if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots)
+                        {
+                            ccSmoothers[(size_t) outFieldId].setTargetValue (nativeVal);
+                            ccSmootherActive[(size_t) outFieldId] = true;
+                        }
                     }
                     uiSnapshotDirty.store (true, std::memory_order_release);
                     skipCcParam:;
@@ -1727,6 +1741,28 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 
     processMidi (midi);
+
+    // ── Step CC smoothers ─────────────────────────────────────────────────────
+    // Each active smoother advances toward its target over ~20 ms.
+    // We fire CmdSetSliceParam once per buffer with the current smoothed value.
+    {
+        const int numSamples = buffer.getNumSamples();
+        for (int i = 0; i < kMidiLearnNumSlots; ++i)
+        {
+            if (! ccSmootherActive[i]) continue;
+
+            ccSmoothers[(size_t) i].skip (numSamples);
+            Command smoothCmd;
+            smoothCmd.type        = CmdSetSliceParam;
+            smoothCmd.intParam1   = i;
+            smoothCmd.floatParam1 = ccSmoothers[(size_t) i].getCurrentValue();
+            handleCommand (smoothCmd);
+            uiSnapshotDirty.store (true, std::memory_order_release);
+
+            if (! ccSmoothers[(size_t) i].isSmoothing())
+                ccSmootherActive[i] = false;
+        }
+    }
 
     if (uiSnapshotDirty.exchange (false, std::memory_order_acq_rel))
         publishUiSliceSnapshot();
