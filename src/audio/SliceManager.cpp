@@ -74,12 +74,11 @@ void SliceManager::assignColor (Slice& s, int idx)
     const auto* p = palette.load (std::memory_order_relaxed);
     if (p)
     {
-        s.colour = p[idx % 16];
+        s.colour = p[juce::Random::getSystemRandom().nextInt (16)];
     }
     else
     {
-        // No palette loaded — generate a perceptually-spread hue via the
-        // golden-ratio method so consecutive slices never share a colour.
+        // No palette — golden-ratio hue spread
         const float hue = std::fmod ((float) idx * 0.618033988f, 1.0f);
         s.colour = juce::Colour::fromHSV (hue, 0.60f, 0.78f, 1.0f);
     }
