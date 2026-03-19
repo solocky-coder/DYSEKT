@@ -298,14 +298,15 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
     g.fillRoundedRectangle ((float) (thumbX - 2), (float) (trackY - 1),
                              4.f, (float) (trackH + 2), 1.5f);
 
-    // ── Value text ─────────────────────────────────────────────────────────
+    // ── Value text — below the slider track, centred ──────────────────────────
     const int pct = juce::jlimit (-100, 100, (int) std::round (panValue * 100.f));
     juce::String panStr = (pct == 0) ? "C"
                         : (pct  < 0) ? ("L" + juce::String (-pct))
                                      : ("R" + juce::String ( pct));
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
-    g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.38f));
-    g.drawText (panStr, x, y + 14, cellW, 14, juce::Justification::centredRight);
+    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.55f));
+    g.drawText (panStr, x, trackY + trackH + 1, cellW, 10,
+                juce::Justification::centred);
 
     // ── Register cell ──────────────────────────────────────────────────────
     outWidth = cellW;

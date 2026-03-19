@@ -458,14 +458,12 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
         g.fillRoundedRectangle ((float)(thumbX - 2), (float)(sliderY - 1),
                                  4.f, (float)(sliderH + 2), 1.5f);
 
-        // Value label
-        const int tx = x + kKnobColW / 2 + 8;
-        const int tw = kKnobColW - (tx - x) - 2;
+        // Value label — below the slider track, centred in column
         g.setFont (DysektLookAndFeel::makeFont (10.f));
         g.setColour (panLocked ? theme.foreground.withAlpha (0.90f)
                                : theme.foreground.withAlpha (0.40f));
-        g.drawText (fmtPan (pan), tx, ry + 1, tw, kRowH - 2,
-                    juce::Justification::centredLeft);
+        g.drawText (fmtPan (pan), x, sliderY + sliderH + 2, kKnobColW, 10,
+                    juce::Justification::centred);
     }
 
     // FCUT
@@ -598,8 +596,8 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
         const int tx = x + kKnobColW / 2 + 8;
         g.setFont (DysektLookAndFeel::makeFont (9.f));
         g.setColour (theme.accent.withAlpha (0.55f));
-        g.drawText (fmtPan (masterPan), tx, ry + 1, kKnobColW - (tx - x) - 2,
-                    kMasterH - 2, juce::Justification::centredLeft);
+        g.drawText (fmtPan (masterPan), x, sliderY + sliderH + 2, kKnobColW, 10,
+                    juce::Justification::centred);
     }
 
     // Remaining columns — dimmed dashes
