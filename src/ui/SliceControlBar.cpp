@@ -401,21 +401,16 @@ void SliceControlBar::paint (juce::Graphics& g)
     int cw;
     using F = DysektProcessor;
 
-    // ── Row 1 right: slice info ───────────────────────────────────────
+    int filterGroupX1 = 0, filterGroupX2 = 0;  // FCUT / FRES bracket
+
+    // ── Row 1 right: slice index label ───────────────────────────────────────
     {
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (getTheme().accent.withAlpha (0.7f));
         g.drawText ("SLICE " + juce::String (idx + 1),
                     8, row1y + 2, rightEdge - 8, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeFont (14.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.5f));
-        double srate = processor.getSampleRate();
-        if (srate <= 0) srate = 44100.0;
-        const int sliceEnd1 = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
-        double lenSec = (sliceEnd1 - s.startSample) / srate;
-        g.drawText (juce::String (s.startSample) + "-" + juce::String (sliceEnd1)
-                    + " (" + juce::String (lenSec, 2) + "s)",
-                    8, row1y + 15, rightEdge - 8, 14, juce::Justification::right);
+        // Sample range + length is shown in full on the LCD (ST / END / LEN rows)
+        // so the duplicate read-only text here has been removed.
     }
 
     // ── Row 1 params ──────────────────────────────────────────────────
@@ -769,12 +764,36 @@ void SliceControlBar::paint (juce::Graphics& g)
         mixGroupX2 = x - 4;
     }
 
-    // MIDI — knob (always per-slice, lockBit=0)
+    // FCUT — filter cutoff knob (log-scaled, 20–20000 Hz)
     {
-        drawKnobCell (g, x, row2y, "MIDI",
-                      juce::String (s.midiNote),
-                      toNorm (F::FieldMidiNote, (float) s.midiNote),
-                      true, 0, F::FieldMidiNote, 0.f, 127.f, 1.f, cw);
+        filterGroupX1 = x;
+        float gFCut = processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load();
+        bool locked = (s.lockMask & kLockFilter) != 0;
+        float fv    = locked ? s.filterCutoff : gFCut;
+        juce::String fStr = (fv >= 1000.f)
+            ? (juce::String (fv / 1000.f, 1) + "k")
+            : (juce::String ((int) fv) + "Hz");
+        drawKnobCell (g, x, row2y, "FCUT", fStr,
+                      toNorm (F::FieldFilterCutoff, fv),
+                      locked, kLockFilter, F::FieldFilterCutoff,
+                      20.f, 20000.f, 1.f, cw);
+        x += cw + 4;
+    }
+
+    // FRES — filter resonance knob (0–1, display as 0–100%)
+    {
+        float gFRes = processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
+        bool locked = (s.lockMask & kLockFilter) != 0;
+        float rv    = locked ? s.filterRes : gFRes;
+        drawKnobCell (g, x, row2y, "FRES",
+                      juce::String ((int) (rv * 100.f)) + "%",
+                      toNorm (F::FieldFilterRes, rv),
+                      locked, kLockFilter, F::FieldFilterRes,
+                      0.f, 1.f, 0.01f, cw);
+        x += cw + 4;
+        filterGroupX2 = x - 4;
+        // MIDI note is always visible on the LCD (NOTE row) and is set
+        // via pad assignment, not per-session tweaking — removed from SCB.
     }
 
     // ── Group bracket labels ───────────────────────────────────────────
@@ -797,8 +816,9 @@ void SliceControlBar::paint (juce::Graphics& g)
                         juce::Justification::centredLeft);
         };
 
-        if (adsrGroupX2 > adsrGroupX1) drawGroupLabel (adsrGroupX1, adsrGroupX2, "ADSR");
-        if (mixGroupX2  > mixGroupX1)  drawGroupLabel (mixGroupX1,  mixGroupX2,  "MIX");
+        if (adsrGroupX2   > adsrGroupX1)   drawGroupLabel (adsrGroupX1,   adsrGroupX2,   "ADSR");
+        if (mixGroupX2    > mixGroupX1)    drawGroupLabel (mixGroupX1,    mixGroupX2,    "MIX");
+        if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "FILTER");
     }
 }
 
