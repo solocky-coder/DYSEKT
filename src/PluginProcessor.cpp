@@ -1123,28 +1123,43 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         const int curStart = trimRegionStart.load (std::memory_order_relaxed);
                         const int curEnd   = trimRegionEnd  .load (std::memory_order_relaxed);
 
-                        if (outFieldId == FieldSliceStart)
+                        if (outIsRelative)
                         {
-                            const int cur  = curStart;
-                            const int next = outIsRelative
-                                ? juce::jlimit (0, curEnd - 64, cur + (int)(outNorm * stepSamples))
-                                : juce::jlimit (0, curEnd - 64, (int)(outNorm * (float)total));
-                            trimRegionStart.store (next, std::memory_order_relaxed);
+                            // Relative: immediate delta — inherently smooth (small steps)
+                            if (outFieldId == FieldSliceStart)
+                            {
+                                const int next = juce::jlimit (0, curEnd - 64,
+                                    curStart + (int)(outNorm * stepSamples));
+                                trimRegionStart.store (next, std::memory_order_relaxed);
+                            }
+                            else
+                            {
+                                const int next = juce::jlimit (curStart + 64, total,
+                                    curEnd + (int)(outNorm * stepSamples));
+                                trimRegionEnd.store (next, std::memory_order_relaxed);
+                            }
+                            uiSnapshotDirty.store (true, std::memory_order_release);
                         }
                         else
                         {
-                            const int cur  = curEnd;
-                            const int next = outIsRelative
-                                ? juce::jlimit (curStart + 64, total, cur + (int)(outNorm * stepSamples))
+                            // Absolute: feed smoother so the marker glides instead of jumping.
+                            // processBlock() steps the smoother and writes to the correct
+                            // target (trim atomics or CmdSetSliceBounds) based on trim mode.
+                            const int cur    = (outFieldId == FieldSliceStart) ? curStart : curEnd;
+                            const int target = (outFieldId == FieldSliceStart)
+                                ? juce::jlimit (0, curEnd - 64,       (int)(outNorm * (float)total))
                                 : juce::jlimit (curStart + 64, total, (int)(outNorm * (float)total));
-                            trimRegionEnd.store (next, std::memory_order_relaxed);
+
+                            if (! ccSmootherActive[(size_t) outFieldId])
+                                ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
+                            ccSmoothers[(size_t) outFieldId].setTargetValue ((float) target);
+                            ccSmootherActive[(size_t) outFieldId] = true;
                         }
-                        uiSnapshotDirty.store (true, std::memory_order_release);
                     }
 
-                    // If not in trim mode also move slice boundary (handled below in slice guard)
+                    // If in trim mode the CC is fully consumed here — skip slice path
                     if (trimModeActive.load (std::memory_order_relaxed))
-                        continue;  // trim mode: CC consumed, skip slice path
+                        continue;
                 }
 
                 const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
@@ -1320,63 +1335,50 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             const int stepSamples = juce::jmax (1, (int) (total * kEndlessSamplesPerStep));
 
                             auto& sl = sliceManager.getSlice (sel);
-                            Command ccCmd;
-                            ccCmd.type = CmdSetSliceBounds;
-                            ccCmd.intParam1 = sel;
-                            bool doEnqueue = true;
 
-                            if (outFieldId == FieldSliceStart)
+                            if (outIsRelative)
                             {
-                                const int slEnd = sliceManager.getEndForSlice (sel, total);
-                                const int cur   = sl.startSample;
-                                if (! outIsRelative)
+                                // Relative: immediate enqueue — inherently smooth
+                                if (outFieldId == FieldSliceStart)
                                 {
-                                    const float curNorm = (float) cur / (float) total;
-                                    if (! ccPickedUp[(size_t) outFieldId])
-                                    {
-                                        if (std::abs (outNorm - curNorm) <= 0.04f)
-                                            ccPickedUp[(size_t) outFieldId] = true;
-                                        else
-                                            doEnqueue = false;
-                                    }
+                                    const int slEnd    = sliceManager.getEndForSlice (sel, total);
+                                    const int newStart = juce::jlimit (0, slEnd - 64,
+                                        sl.startSample + (int)(outNorm * stepSamples));
+                                    Command ccCmd;
+                                    ccCmd.type = CmdSetSliceBounds; ccCmd.intParam1 = sel;
+                                    ccCmd.intParam2 = newStart; ccCmd.positions[0] = slEnd;
+                                    ccCmd.numPositions = 1;
+                                    enqueueCoalescedCommand (ccCmd);
                                 }
-                                if (doEnqueue)
+                                else
                                 {
-                                    const int newStart = outIsRelative
-                                        ? juce::jlimit (0, slEnd - 64, cur + (int)(outNorm * stepSamples))
-                                        : juce::jlimit (0, slEnd - 64, (int)(outNorm * (float)total));
-                                    ccCmd.intParam2    = newStart;
-                                    ccCmd.positions[0] = slEnd;
+                                    const int cur    = sliceManager.getEndForSlice (sel, total);
+                                    const int newEnd = juce::jlimit (sl.startSample + 64, total,
+                                        cur + (int)(outNorm * stepSamples));
+                                    Command ccCmd;
+                                    ccCmd.type = CmdSetSliceBounds; ccCmd.intParam1 = sel;
+                                    ccCmd.intParam2 = sl.startSample; ccCmd.positions[0] = newEnd;
+                                    ccCmd.numPositions = 1;
+                                    enqueueCoalescedCommand (ccCmd);
                                 }
                             }
                             else
                             {
-                                const int cur = sliceManager.getEndForSlice (sel, total);
-                                if (! outIsRelative)
-                                {
-                                    const float curNorm = (float) cur / (float) total;
-                                    if (! ccPickedUp[(size_t) outFieldId])
-                                    {
-                                        if (std::abs (outNorm - curNorm) <= 0.04f)
-                                            ccPickedUp[(size_t) outFieldId] = true;
-                                        else
-                                            doEnqueue = false;
-                                    }
-                                }
-                                if (doEnqueue)
-                                {
-                                    const int newEnd = outIsRelative
-                                        ? juce::jlimit (sl.startSample + 64, total, cur + (int)(outNorm * stepSamples))
-                                        : juce::jlimit (sl.startSample + 64, total, (int)(outNorm * (float)total));
-                                    ccCmd.intParam2    = sl.startSample;
-                                    ccCmd.positions[0] = newEnd;
-                                }
-                            }
+                                // Absolute: feed smoother — processBlock steps it and
+                                // fires CmdSetSliceBounds each buffer for a smooth glide.
+                                const int cur = (outFieldId == FieldSliceStart)
+                                    ? sl.startSample
+                                    : sliceManager.getEndForSlice (sel, total);
+                                const int slEnd = (outFieldId == FieldSliceStart)
+                                    ? sliceManager.getEndForSlice (sel, total) : total;
+                                const int target = (outFieldId == FieldSliceStart)
+                                    ? juce::jlimit (0, slEnd - 64,           (int)(outNorm * (float)total))
+                                    : juce::jlimit (sl.startSample + 64, total, (int)(outNorm * (float)total));
 
-                            if (doEnqueue)
-                            {
-                                ccCmd.numPositions = 1;
-                                enqueueCoalescedCommand (ccCmd);
+                                if (! ccSmootherActive[(size_t) outFieldId])
+                                    ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
+                                ccSmoothers[(size_t) outFieldId].setTargetValue ((float) target);
+                                ccSmootherActive[(size_t) outFieldId] = true;
                             }
                         }
                     }
@@ -1744,20 +1746,72 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // ── Step CC smoothers ─────────────────────────────────────────────────────
     // Each active smoother advances toward its target over ~20 ms.
-    // We fire CmdSetSliceParam once per buffer with the current smoothed value.
+    // FieldSliceStart/End write to trim atomics or CmdSetSliceBounds depending
+    // on trim mode. All other slots fire CmdSetSliceParam.
     {
         const int numSamples = buffer.getNumSamples();
+        const int total      = sampleData.getNumFrames();
+        const int sel        = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+        const bool inTrim    = trimModeActive.load (std::memory_order_relaxed);
+
         for (int i = 0; i < kMidiLearnNumSlots; ++i)
         {
             if (! ccSmootherActive[i]) continue;
 
             ccSmoothers[(size_t) i].skip (numSamples);
-            Command smoothCmd;
-            smoothCmd.type        = CmdSetSliceParam;
-            smoothCmd.intParam1   = i;
-            smoothCmd.floatParam1 = ccSmoothers[(size_t) i].getCurrentValue();
-            handleCommand (smoothCmd);
-            uiSnapshotDirty.store (true, std::memory_order_release);
+            const float smoothed = ccSmoothers[(size_t) i].getCurrentValue();
+
+            if (i == FieldSliceStart || i == FieldSliceEnd)
+            {
+                // Boundary smoother — target depends on mode
+                if (inTrim)
+                {
+                    // Write smoothed position to trim atomics
+                    const int curStart = trimRegionStart.load (std::memory_order_relaxed);
+                    const int curEnd   = trimRegionEnd  .load (std::memory_order_relaxed);
+                    if (i == FieldSliceStart)
+                        trimRegionStart.store (
+                            juce::jlimit (0, curEnd - 64, (int) smoothed),
+                            std::memory_order_relaxed);
+                    else
+                        trimRegionEnd.store (
+                            juce::jlimit (curStart + 64, total, (int) smoothed),
+                            std::memory_order_relaxed);
+                    uiSnapshotDirty.store (true, std::memory_order_release);
+                }
+                else if (sel >= 0 && sel < sliceManager.getNumSlices() && total > 1)
+                {
+                    // Fire CmdSetSliceBounds with smoothed position
+                    auto& sl = sliceManager.getSlice (sel);
+                    Command smoothCmd;
+                    smoothCmd.type      = CmdSetSliceBounds;
+                    smoothCmd.intParam1 = sel;
+                    smoothCmd.numPositions = 1;
+                    if (i == FieldSliceStart)
+                    {
+                        const int slEnd = sliceManager.getEndForSlice (sel, total);
+                        smoothCmd.intParam2    = juce::jlimit (0, slEnd - 64, (int) smoothed);
+                        smoothCmd.positions[0] = slEnd;
+                    }
+                    else
+                    {
+                        smoothCmd.intParam2    = sl.startSample;
+                        smoothCmd.positions[0] = juce::jlimit (sl.startSample + 64, total, (int) smoothed);
+                    }
+                    handleCommand (smoothCmd);
+                    uiSnapshotDirty.store (true, std::memory_order_release);
+                }
+            }
+            else
+            {
+                // All other params — CmdSetSliceParam
+                Command smoothCmd;
+                smoothCmd.type        = CmdSetSliceParam;
+                smoothCmd.intParam1   = i;
+                smoothCmd.floatParam1 = smoothed;
+                handleCommand (smoothCmd);
+                uiSnapshotDirty.store (true, std::memory_order_release);
+            }
 
             if (! ccSmoothers[(size_t) i].isSmoothing())
                 ccSmootherActive[i] = false;
