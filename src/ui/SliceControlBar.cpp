@@ -439,31 +439,7 @@ void SliceControlBar::paint (juce::Graphics& g)
     int numSlices = ui.numSlices;
     int rightEdge = getWidth() - 8;
     int row1y = 2, row2y = 36;
-
-    // ── Row 2 right: SLICES / ROOT (always visible) ───────────────────
-    {
-        int rn = ui.rootNote;
-        bool editable = (numSlices == 0);
-        int rnW = 55, rnX = rightEdge - rnW;
-        rootNoteArea = { rnX, row2y, rnW, 30 };
-
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (editable ? getTheme().accent.withAlpha (0.7f)
-                              : getTheme().foreground.withAlpha (0.35f));
-        g.drawText ("ROOT", rnX, row2y + 2, rnW, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeMonoFont (14.0f));
-        g.setColour (editable ? getTheme().foreground.withAlpha (0.6f)
-                              : getTheme().foreground.withAlpha (0.4f));
-        g.drawText (juce::String (rn), rnX, row2y + 15, rnW, 14, juce::Justification::right);
-
-        int slcW = 55, slcX = rnX - slcW - 4;
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.35f));
-        g.drawText ("SLICES", slcX, row2y + 2, slcW, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeMonoFont (14.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.4f));
-        g.drawText (juce::String (numSlices), slcX, row2y + 15, slcW, 14, juce::Justification::right);
-    }
+    rootNoteArea = {};   // no longer drawn — LCD shows ROOT and SLICES
 
     if (idx < 0 || idx >= numSlices)
     {
@@ -616,96 +592,6 @@ void SliceControlBar::paint (juce::Graphics& g)
                        locked, kLockStretch, F::FieldStretchEnabled,
                        0.f, 1.f, 1.f, true, false, cw);
         x += cw + 4;
-    }
-
-    // ONE SHOT / HOLD — two adjacent pill-style toggle cells
-    {
-        bool gOS    = processor.apvts.getRawParameterValue (ParamIds::defaultOneShot)->load() > 0.5f;
-        bool locked = (s.lockMask & kLockOneShot) != 0;
-        bool isOS   = locked ? s.oneShot : gOS;   // true = one-shot, false = hold
-
-        // Pill dimensions: match row1 cell height (~30px), not full bar
-        const int pillW  = 48;
-        const int pillH  = 28;   // same height as other row1 cells
-        const int py     = row1y + 1;
-        const int totalW = pillW * 2 + 2;  // both pills + 2px gap
-
-        const auto& theme = getTheme();
-        const auto  accent = theme.accent;
-
-        // ONE SHOT pill (left)
-        {
-            const bool active = isOS;
-            g.setColour (active ? accent.withAlpha (0.22f) : theme.darkBar.withAlpha (0.55f));
-            g.fillRoundedRectangle ((float)x, (float)py, (float)pillW, (float)pillH, 3.0f);
-            if (active) {
-                g.setColour (accent.withAlpha (0.70f));
-                g.drawRoundedRectangle ((float)x + 0.5f, (float)py + 0.5f,
-                                        (float)pillW - 1.f, (float)pillH - 1.f, 3.0f, 1.0f);
-            }
-            g.setFont (DysektLookAndFeel::makeFont (active ? 8.5f : 8.0f));
-            g.setColour (active ? accent : theme.foreground.withAlpha (0.35f));
-            g.drawText ("1-SHOT", x, py, pillW, pillH, juce::Justification::centred);
-        }
-
-        // HOLD pill (right)
-        {
-            const int rx     = x + pillW + 2;
-            const bool active = !isOS;
-            g.setColour (active ? accent.withAlpha (0.22f) : theme.darkBar.withAlpha (0.55f));
-            g.fillRoundedRectangle ((float)rx, (float)py, (float)pillW, (float)pillH, 3.0f);
-            if (active) {
-                g.setColour (accent.withAlpha (0.70f));
-                g.drawRoundedRectangle ((float)rx + 0.5f, (float)py + 0.5f,
-                                        (float)pillW - 1.f, (float)pillH - 1.f, 3.0f, 1.0f);
-            }
-            g.setFont (DysektLookAndFeel::makeFont (active ? 8.5f : 8.0f));
-            g.setColour (active ? accent : theme.foreground.withAlpha (0.35f));
-            g.drawText ("HOLD", rx, py, pillW, pillH, juce::Justification::centred);
-        }
-
-        // Register ONE cell spanning both pills — mouseDown splits by centre X
-        cells.push_back ({ x, py, totalW, pillH,
-                           kLockOneShot, (int)DysektProcessor::FieldOneShot,
-                           0.f, 1.f, 1.f,
-                           /*isBoolean=*/ true, /*isChoice=*/ false });
-
-        x += totalW + 4;
-    }
-
-    // START / END knobs
-    {
-        g.setColour (getTheme().separator);
-        g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
-        x += 8;
-
-        // START knob — normalised 0-1 over sample length
-        {
-            float startNorm = (ui.numSlices > 0 && idx >= 0)
-                ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames)
-                : 0.f;
-            juce::String startStr = juce::String (s.startSample);
-            drawKnobCell (g, x, row1y, "START", startStr,
-                          startNorm, false, 0,
-                          F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
-            cells.back().isMidiLearnable = true;
-            x += cw + 4;
-        }
-
-        // END knob
-        {
-            const int sliceEnd2 = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
-            float endNorm = (ui.numSlices > 0 && idx >= 0)
-                ? (float) sliceEnd2 / (float) juce::jmax (1, ui.sampleNumFrames)
-                : 1.f;
-            juce::String endStr = juce::String (sliceEnd2);
-            drawKnobCell (g, x, row1y, "END", endStr,
-                          endNorm, false, 0,
-                          F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
-            cells.back().isMidiLearnable = true;
-            x += cw + 4;
-        }
-
     }
 
     // ── Separator ─────────────────────────────────────────────────────
@@ -870,8 +756,36 @@ void SliceControlBar::paint (juce::Graphics& g)
                       0.f, 1.f, 0.01f, cw);
         x += cw + 4;
         filterGroupX2 = x - 4;
-        // MIDI note is always visible on the LCD (NOTE row) and is set
-        // via pad assignment, not per-session tweaking — removed from SCB.
+    }
+
+    // START / END — slice boundary knobs in row 2
+    {
+        g.setColour (getTheme().separator.withAlpha (0.5f));
+        g.drawVerticalLine (x + 2, (float) row2y + 4, (float) row2y + 28);
+        x += 8;
+
+        // START
+        {
+            float startNorm = (ui.numSlices > 0 && idx >= 0)
+                ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames) : 0.f;
+            drawKnobCell (g, x, row2y, "START", juce::String (s.startSample),
+                          startNorm, false, 0,
+                          F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
+            cells.back().isMidiLearnable = true;
+            x += cw + 4;
+        }
+
+        // END
+        {
+            const int sliceEnd2 = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
+            float endNorm = (ui.numSlices > 0 && idx >= 0)
+                ? (float) sliceEnd2 / (float) juce::jmax (1, ui.sampleNumFrames) : 1.f;
+            drawKnobCell (g, x, row2y, "END", juce::String (sliceEnd2),
+                          endNorm, false, 0,
+                          F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
+            cells.back().isMidiLearnable = true;
+            x += cw + 4;
+        }
     }
 
     // ── Group bracket labels ───────────────────────────────────────────
