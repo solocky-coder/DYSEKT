@@ -618,14 +618,50 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // ── Separator ─────────────────────────────────────────────────────
+    // GAIN, PAN, OUT — mix group in row 1
+    {
+        g.setColour (getTheme().separator.withAlpha (0.5f));
+        g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
+        x += 8;
+
+        // GAIN
+        {
+            float gGainDb = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
+            bool locked   = (s.lockMask & kLockVolume) != 0;
+            float gv      = locked ? s.volume : gGainDb;
+            drawKnobCell (g, x, row1y, "GAIN",
+                          (gv >= 0.f ? "+" : "") + juce::String (gv, 1) + "dB",
+                          toNorm (F::FieldVolume, gv),
+                          locked, kLockVolume, F::FieldVolume, -100.f, 24.f, 0.1f, cw);
+            x += cw + 4;
+        }
+
+        // PAN
+        {
+            float gPanVal = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
+            bool locked   = (s.lockMask & kLockPan) != 0;
+            float pv      = locked ? s.pan : gPanVal;
+            drawPanSliderCell (g, x, row1y, pv, locked, cw);
+            x += cw + 4;
+        }
+
+        // OUT
+        {
+            bool locked = (s.lockMask & kLockOutputBus) != 0;
+            int ov      = locked ? s.outputBus : 0;
+            const juce::String outLabel = (ov == 0) ? juce::String ("MAIN") : ("AUX " + juce::String (ov));
+            drawParamCell (g, x, row1y, "OUT", outLabel,
+                           locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f,
+                           false, true, cw);
+            x += cw + 4;
+        }
+    }
     g.setColour (getTheme().separator);
     g.drawHorizontalLine (34, 8.0f, (float) getWidth() - 8.0f);
 
     // ── Row 2 ─────────────────────────────────────────────────────────
     x = 8;
-    int adsrGroupX1 = x, adsrGroupX2 = x;   // filled below
-    int mixGroupX1  = x, mixGroupX2  = x;
+    int adsrGroupX1 = x, adsrGroupX2 = x;
 
     // ATK — knob (stored seconds, display ms)
     {
@@ -673,40 +709,6 @@ void SliceControlBar::paint (juce::Graphics& g)
         adsrGroupX2 = x - 4;
     }
 
-    // GAIN — knob
-    {
-        mixGroupX1 = x;
-        float gGainDb = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
-        bool locked   = (s.lockMask & kLockVolume) != 0;
-        float gv      = locked ? s.volume : gGainDb;
-        drawKnobCell (g, x, row2y, "GAIN",
-                      (gv >= 0.f ? "+" : "") + juce::String (gv, 1) + "dB",
-                      toNorm (F::FieldVolume, gv),
-                      locked, kLockVolume, F::FieldVolume, -100.f, 24.f, 0.1f, cw);
-        x += cw + 4;
-    }
-
-    // PAN — horizontal bipolar slider (-1 = full left, 0 = centre, +1 = full right)
-    {
-        float gPanVal = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
-        bool locked   = (s.lockMask & kLockPan) != 0;
-        float pv      = locked ? s.pan : gPanVal;
-        drawPanSliderCell (g, x, row2y, pv, locked, cw);
-        x += cw + 4;
-    }
-
-    // OUT — choice popup
-    {
-        bool locked = (s.lockMask & kLockOutputBus) != 0;
-        int ov      = locked ? s.outputBus : 0;
-        const juce::String outLabel = (ov == 0) ? juce::String ("MAIN") : ("AUX " + juce::String (ov));
-        drawParamCell (g, x, row2y, "OUT", outLabel,
-                       locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f,
-                       /*isBoolean=*/ false, /*isChoice=*/ true, cw);
-        x += cw + 4;
-        mixGroupX2 = x - 4;
-    }
-
     // FCUT — filter cutoff knob (log-scaled, 20–20000 Hz)
     {
         filterGroupX1 = x;
@@ -737,28 +739,93 @@ void SliceControlBar::paint (juce::Graphics& g)
         filterGroupX2 = x - 4;
     }
 
-    // ── Group bracket labels ───────────────────────────────────────────
+    // METER — waveform activity pulse after FRES
+    // Shows peak level as a glowing fill + playback cursor for the selected slice
+    if (idx >= 0 && idx < DysektProcessor::kMaxMeterSlices)
     {
-        const int  gy  = row2y - 1;           // 1px above cells
-        const int  gh  = 32;                  // wraps cells (30px high)
-        const float r  = 2.5f;
+        const int meterX = x + 4;
+        const int meterW = juce::jmax (40, rightEdge - meterX - 4);
+        const int meterY = row2y + 4;
+        const int meterH = 22;
+
+        // Background track
+        g.setColour (juce::Colour (0xFF080808));
+        g.fillRect (meterX, meterY, meterW, meterH);
+        g.setColour (juce::Colour (0xFF1A1A1A));
+        g.drawRect (meterX, meterY, meterW, meterH);
+
+        // Peak level bars (L top half, R bottom half)
+        const float pkL = processor.slicePeakL[(size_t) idx].load (std::memory_order_relaxed);
+        const float pkR = processor.slicePeakR[(size_t) idx].load (std::memory_order_relaxed);
+        const int barH  = (meterH - 2) / 2;
+
+        auto phosphorCol = [&] (float pos) -> juce::Colour
+        {
+            const auto base = getTheme().accent;
+            if (pos < 0.70f) return base.withAlpha (0.25f + (pos / 0.70f) * 0.60f);
+            if (pos < 0.85f) return base.interpolatedWith (juce::Colour (0xFFFFE000),
+                                    (pos - 0.70f) / 0.15f).withAlpha (0.88f);
+            return juce::Colour (0xFFFF2222).withAlpha (0.80f);
+        };
+
+        auto drawBar = [&] (int barY, float pk)
+        {
+            const float fill = std::sqrt (juce::jlimit (0.0f, 1.0f, pk));
+            const int litW   = juce::roundToInt (fill * (float)(meterW - 4));
+            if (litW <= 0) return;
+            for (int px = 0; px < litW; ++px)
+            {
+                const float pos = (float) px / (float)(meterW - 4);
+                g.setColour (phosphorCol (pos));
+                g.fillRect (meterX + 2 + px, barY, 1, barH);
+            }
+        };
+
+        drawBar (meterY + 1,           pkL);
+        drawBar (meterY + 1 + barH + 1, pkR);
+
+        // Playback cursor — scan all voices for one playing this slice
+        const int sliceStart = s.startSample;
+        const int sliceEnd   = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
+        const int sliceLen   = juce::jmax (1, sliceEnd - sliceStart);
+
+        for (int vi = 0; vi < VoicePool::kMaxVoices; ++vi)
+        {
+            const float vpos = processor.voicePool.voicePositions[vi].load (std::memory_order_relaxed);
+            if (vpos <= 0.0f) continue;
+            const int ipos = (int) vpos;
+            if (ipos < sliceStart || ipos >= sliceEnd) continue;
+
+            // Map position within slice to meter width
+            const float frac = (float)(ipos - sliceStart) / (float) sliceLen;
+            const int cursorX = meterX + 2 + juce::roundToInt (frac * (float)(meterW - 4));
+
+            // Bright glowing cursor line
+            g.setColour (getTheme().foreground.withAlpha (0.90f));
+            g.fillRect (cursorX, meterY + 1, 1, meterH - 2);
+            g.setColour (getTheme().foreground.withAlpha (0.25f));
+            g.fillRect (cursorX - 1, meterY + 1, 1, meterH - 2);
+            g.fillRect (cursorX + 1, meterY + 1, 1, meterH - 2);
+            break; // first active voice wins
+        }
+
+        // Label
+        g.setFont (DysektLookAndFeel::makeFont (7.0f, true));
+        g.setColour (getTheme().foreground.withAlpha (0.30f));
+        g.drawText ("OUT", meterX, row2y, 22, 8, juce::Justification::centredLeft);
+    }
+    {
+        g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
+        g.setColour (getTheme().foreground.withAlpha (0.40f));
 
         auto drawGroupLabel = [&] (int x1, int x2, const char* label)
         {
-            juce::Rectangle<float> bracket ((float)x1 - 2, (float)gy,
-                                             (float)(x2 - x1) + 4, (float)gh);
-            g.setColour (getTheme().separator.withAlpha (0.35f));
-            g.drawRoundedRectangle (bracket, r, 0.8f);
-
-            // Label inside top-left of bracket — never draws outside component bounds
-            g.setFont (DysektLookAndFeel::makeFont (7.0f, true));
-            g.setColour (getTheme().foreground.withAlpha (0.38f));
-            g.drawText (label, (int)bracket.getX() + 2, (int)bracket.getY() + 1, 36, 9,
-                        juce::Justification::centredLeft);
+            // Draw label centred over the group, sitting on the separator line
+            g.drawText (label, x1, 26, x2 - x1, 9,
+                        juce::Justification::centred);
         };
 
         if (adsrGroupX2   > adsrGroupX1)   drawGroupLabel (adsrGroupX1,   adsrGroupX2,   "ADSR");
-        if (mixGroupX2    > mixGroupX1)    drawGroupLabel (mixGroupX1,    mixGroupX2,    "MIX");
         if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "FILTER");
     }
 }
