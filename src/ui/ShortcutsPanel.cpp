@@ -64,9 +64,9 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory nav;
         nav.title = "Navigation";
         nav.entries = {
-            { "← / →",     "Select previous / next slice" },
-            { "Tab",       "Select next slice" },
-            { "Shift+Tab", "Select previous slice" },
+            { "Left / Right", "Select previous / next slice" },
+            { "Tab",          "Select next slice" },
+            { "Shift+Tab",    "Select previous slice" },
         };
         categories.push_back (std::move (nav));
     }
@@ -75,9 +75,9 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory editing;
         editing.title = "Editing";
         editing.entries = {
-            { "⌘Z",  "Undo" },
-            { "⌘⇧Z", "Redo" },
-            { "F",   "Toggle MIDI-selects-slice mode" },
+            { "Ctrl+Z",       "Undo" },
+            { "Ctrl+Shift+Z", "Redo" },
+            { "F",            "Toggle MIDI-selects-slice mode" },
         };
         categories.push_back (std::move (editing));
     }
@@ -86,8 +86,8 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory misc;
         misc.title = "General";
         misc.entries = {
-            { "⌘?", "Toggle this panel" },
-            { "Esc", "Close panel / cancel operation" },
+            { "Ctrl+/", "Toggle this panel" },
+            { "Esc",    "Close panel / cancel operation" },
         };
         categories.push_back (std::move (misc));
     }

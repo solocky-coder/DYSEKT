@@ -32,7 +32,7 @@ private:
     struct ShortcutCategory { juce::String title; std::vector<ShortcutEntry> entries; };
 
     juce::TextButton closeBtn { "×" };
-    juce::TextButton themeBtn { "Theme & Scale\xe2\x80\xa6" };  // "Theme & Scale…"
+    juce::TextButton themeBtn { "Theme & Scale..." };
     juce::TextEditor searchBox;
     juce::Label      titleLabel;
 
