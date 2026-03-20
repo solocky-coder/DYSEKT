@@ -132,22 +132,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         juce::NormalisableRange<float> (0.5f, 3.0f, 0.25f),
         1.0f));
 
-    // ── Selected slice boundary ────────────────────────────────────────────────
-    // Normalised 0..1 position within the loaded sample.
-    // Reflects the selected slice's start/end; automatable and MIDI-learnable.
-
-    params.push_back (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { ParamIds::sliceStart, 1 },
-        "Slice Start",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f),
-        0.0f));
-
-    params.push_back (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { ParamIds::sliceEnd, 1 },
-        "Slice End",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f),
-        1.0f));
-
     // ── v17: Pan, Filter ──────────────────────────────────────────────────────
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParamIds::defaultPan, 1 },
