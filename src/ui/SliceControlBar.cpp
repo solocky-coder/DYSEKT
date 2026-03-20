@@ -825,8 +825,8 @@ void SliceControlBar::paint (juce::Graphics& g)
                         juce::Justification::centred);
         };
 
-        if (adsrGroupX2   > adsrGroupX1)   drawGroupLabel (adsrGroupX1,   adsrGroupX2,   "ADSR");
-        if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "FILTER");
+        if (adsrGroupX2   > adsrGroupX1)   drawGroupLabel (adsrGroupX1,   adsrGroupX2,   "");
+        if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "");
     }
 }
 
