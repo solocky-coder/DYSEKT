@@ -9,6 +9,7 @@
 #include "ui/SliceLane.h"
 #include "ui/SliceControlBar.h"
 #include "ui/WaveformView.h"
+#include "ui/WaveformOverview.h"
 #include "ui/ActionPanel.h"
 #include "ui/ShortcutsPanel.h"
 #include "ui/FileBrowserPanel.h"
@@ -67,10 +68,13 @@ private:
     float    savedScale            = -1.0f;
     uint32_t lastUiSnapshotVersion = 0;
     int      lastNumSlices         = -1;
+    bool     lastTrimActive        = false;
 
     bool browserOpen = false;
     bool mixerOpen   = false;
     bool softWave    = false;
+
+    WaveformOverview waveformOverview;
 
     std::unique_ptr<TrimSession>     trimSession;
     std::unique_ptr<TrimDialog>      trimDialog;

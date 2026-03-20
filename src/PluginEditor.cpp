@@ -443,6 +443,16 @@ void DysektEditor::timerCallback()
     const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
     if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
 
+    // Sync trim mode state to ActionPanel — disables/re-enables slice buttons
+    {
+        const bool trimNow = processor.trimModeActive.load (std::memory_order_relaxed);
+        if (trimNow != lastTrimActive)
+        {
+            lastTrimActive = trimNow;
+            actionPanel.setTrimActive (trimNow);
+        }
+    }
+
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
     if (scaleDirty || scale != lastScale)
     {
