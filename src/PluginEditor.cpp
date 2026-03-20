@@ -99,7 +99,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     setWantsKeyboardFocus (true);
     setResizable (true, true);
-    setResizeLimits (600, 500, 1920, 1200);
+    setResizeLimits (kBaseW, 650, 3840, 2160);
     setSize (kBaseW, kTotalH);  
     lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
     startTimerHz (30);
@@ -311,7 +311,7 @@ void DysektEditor::resized()
     sliceLane.setBounds (juce::Rectangle<int> (screenX, y, screenW, kSliceLaneH));
     y      = screenTop + kActionH + kSliceLaneH;
     int trimH  = (trimDialog != nullptr) ? kTrimBarH : 0;
-    int h      = screenBot - trimH - y;
+    int h      = juce::jmax (80, screenBot - trimH - y);
     waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
     if (trimDialog != nullptr)
         trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
