@@ -594,6 +594,36 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
+    // START / END — slice boundary knobs in row 1
+    {
+        g.setColour (getTheme().separator.withAlpha (0.5f));
+        g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
+        x += 8;
+
+        // START
+        {
+            float startNorm = (ui.numSlices > 0 && idx >= 0)
+                ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames) : 0.f;
+            drawKnobCell (g, x, row1y, "START", juce::String (s.startSample),
+                          startNorm, false, 0,
+                          F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
+            cells.back().isMidiLearnable = true;
+            x += cw + 4;
+        }
+
+        // END
+        {
+            const int sliceEnd2 = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
+            float endNorm = (ui.numSlices > 0 && idx >= 0)
+                ? (float) sliceEnd2 / (float) juce::jmax (1, ui.sampleNumFrames) : 1.f;
+            drawKnobCell (g, x, row1y, "END", juce::String (sliceEnd2),
+                          endNorm, false, 0,
+                          F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
+            cells.back().isMidiLearnable = true;
+            x += cw + 4;
+        }
+    }
+
     // ── Separator ─────────────────────────────────────────────────────
     g.setColour (getTheme().separator);
     g.drawHorizontalLine (34, 8.0f, (float) getWidth() - 8.0f);
@@ -649,54 +679,9 @@ void SliceControlBar::paint (juce::Graphics& g)
         adsrGroupX2 = x - 4;
     }
 
-    // TAIL — boolean
-    {
-        bool gTail = processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load() > 0.5f;
-        bool locked = (s.lockMask & kLockReleaseTail) != 0;
-        bool tv = locked ? s.releaseTail : gTail;
-        drawParamCell (g, x, row2y, "TAIL", tv ? "ON" : "OFF",
-                       locked, kLockReleaseTail, F::FieldReleaseTail,
-                       0.f, 1.f, 1.f, true, false, cw);
-        x += cw + 4;
-    }
-
-    // REV — boolean
-    {
-        bool gRev = processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load() > 0.5f;
-        bool locked = (s.lockMask & kLockReverse) != 0;
-        bool rv = locked ? s.reverse : gRev;
-        drawParamCell (g, x, row2y, "REV", rv ? "ON" : "OFF",
-                       locked, kLockReverse, F::FieldReverse,
-                       0.f, 1.f, 1.f, true, false, cw);
-        x += cw + 4;
-    }
-
-    // LOOP — choice
-    {
-        bool locked = (s.lockMask & kLockLoop) != 0;
-        int lv = locked ? s.loopMode : gLoopMode;
-        juce::String loopNames[] = { "OFF", "LOOP", "PP" };
-        drawParamCell (g, x, row2y, "LOOP",
-                       loopNames[juce::jlimit (0, 2, lv)],
-                       locked, kLockLoop, F::FieldLoop,
-                       0.f, 2.f, 1.f, false, true, cw);
-        x += cw + 4;
-    }
-
-    // MUTE — choice popup
-    {
-        mixGroupX1 = x;
-        bool locked = (s.lockMask & kLockMuteGroup) != 0;
-        int mv = locked ? s.muteGroup : gMG;
-        const juce::String muteLabel = (mv == 0) ? juce::String ("OFF") : juce::String (mv);
-        drawParamCell (g, x, row2y, "MUTE", muteLabel,
-                       locked, kLockMuteGroup, F::FieldMuteGroup, 0.f, 32.f, 1.f,
-                       /*isBoolean=*/ false, /*isChoice=*/ true, cw);
-        x += cw + 4;
-    }
-
     // GAIN — knob
     {
+        mixGroupX1 = x;
         float gGainDb = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
         bool locked   = (s.lockMask & kLockVolume) != 0;
         float gv      = locked ? s.volume : gGainDb;
@@ -756,36 +741,6 @@ void SliceControlBar::paint (juce::Graphics& g)
                       0.f, 1.f, 0.01f, cw);
         x += cw + 4;
         filterGroupX2 = x - 4;
-    }
-
-    // START / END — slice boundary knobs in row 2
-    {
-        g.setColour (getTheme().separator.withAlpha (0.5f));
-        g.drawVerticalLine (x + 2, (float) row2y + 4, (float) row2y + 28);
-        x += 8;
-
-        // START
-        {
-            float startNorm = (ui.numSlices > 0 && idx >= 0)
-                ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames) : 0.f;
-            drawKnobCell (g, x, row2y, "START", juce::String (s.startSample),
-                          startNorm, false, 0,
-                          F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
-            cells.back().isMidiLearnable = true;
-            x += cw + 4;
-        }
-
-        // END
-        {
-            const int sliceEnd2 = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
-            float endNorm = (ui.numSlices > 0 && idx >= 0)
-                ? (float) sliceEnd2 / (float) juce::jmax (1, ui.sampleNumFrames) : 1.f;
-            drawKnobCell (g, x, row2y, "END", juce::String (sliceEnd2),
-                          endNorm, false, 0,
-                          F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
-            cells.back().isMidiLearnable = true;
-            x += cw + 4;
-        }
     }
 
     // ── Group bracket labels ───────────────────────────────────────────
