@@ -247,7 +247,13 @@ public:
     // Pickup mode state — one flag per MIDI learn slot.
     // Reset when the selected slice changes or a new CC is learned.
     // Audio-thread write, audio-thread read only.
-    std::array<bool, kMidiLearnNumSlots> ccPickedUp {};   // zero-init = all false
+    std::array<bool, kMidiLearnNumSlots> ccPickedUp {};
+
+    // NRPN decoder state (audio thread only — no atomics needed)
+    int nrpnMSB     = -1;
+    int nrpnLSB     = -1;
+    int nrpnDataMSB = -1;
+    int nrpnDataLSB = -1;   // zero-init = all false
 
     // Per-slot smoothed values for CC — prevents audible steps on absolute knobs.
     // Target is set in processMidi(); smoother is stepped each processBlock().

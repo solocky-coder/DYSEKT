@@ -1098,6 +1098,99 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
     {
         const auto msg = metadata.getMessage();
 
+        // ── NRPN decoder ─────────────────────────────────────────────
+        // NRPN sequence: CC99 (MSB) → CC98 (LSB) → CC6 (value MSB) + CC38 (value LSB)
+        // Relative: CC96 (increment) / CC97 (decrement) instead of CC6/CC38
+        // DYSEKT NRPN map:
+        //   NRPN 0 = Slice Start   (FieldSliceStart)
+        //   NRPN 1 = Slice End     (FieldSliceEnd)
+        if (msg.isController())
+        {
+            const int cc  = msg.getControllerNumber();
+            const int val = msg.getControllerValue();
+
+            if (cc == 99) { nrpnMSB = val; nrpnLSB = -1; }
+            else if (cc == 98) { nrpnLSB = val; }
+            else if ((cc == 6 || cc == 38 || cc == 96 || cc == 97)
+                     && nrpnMSB == 0 && nrpnLSB >= 0 && nrpnLSB <= 1)
+            {
+                // Valid NRPN for slice boundary
+                const int fieldId = (nrpnLSB == 0) ? FieldSliceStart : FieldSliceEnd;
+                const int total   = sampleData.getNumFrames();
+
+                if (total > 1)
+                {
+                    const int curStart = trimRegionStart.load (std::memory_order_relaxed);
+                    const int curEnd   = trimRegionEnd  .load (std::memory_order_relaxed);
+                    const bool inTrim  = trimModeActive.load (std::memory_order_relaxed);
+                    // Step size: 1/16384 of total for 14-bit absolute, 1/512 for relative
+                    static constexpr float kNrpnAbsStep = 1.0f / 16383.0f;
+                    static constexpr float kNrpnRelStep = 1.0f / 512.0f;
+
+                    if (cc == 96 || cc == 97)
+                    {
+                        // Relative: CC96 = increment, CC97 = decrement
+                        const int step = (int)((cc == 96 ? 1.0f : -1.0f) * (float)total * kNrpnRelStep);
+                        if (inTrim)
+                        {
+                            if (fieldId == FieldSliceStart)
+                                trimRegionStart.store (juce::jlimit (0, curEnd - 64, curStart + step), std::memory_order_relaxed);
+                            else
+                                trimRegionEnd.store (juce::jlimit (curStart + 64, total, curEnd + step), std::memory_order_relaxed);
+                            uiSnapshotDirty.store (true, std::memory_order_release);
+                        }
+                        else
+                        {
+                            const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+                            if (sel >= 0 && sel < sliceManager.getNumSlices())
+                            {
+                                auto& sl = sliceManager.getSlice (sel);
+                                Command cmd; cmd.type = CmdSetSliceBounds; cmd.intParam1 = sel; cmd.numPositions = 1;
+                                if (fieldId == FieldSliceStart)
+                                {
+                                    const int slEnd = sliceManager.getEndForSlice (sel, total);
+                                    cmd.intParam2 = juce::jlimit (0, slEnd - 64, sl.startSample + step);
+                                    cmd.positions[0] = slEnd;
+                                }
+                                else
+                                {
+                                    const int cur = sliceManager.getEndForSlice (sel, total);
+                                    cmd.intParam2 = sl.startSample;
+                                    cmd.positions[0] = juce::jlimit (sl.startSample + 64, total, cur + step);
+                                }
+                                enqueueCoalescedCommand (cmd);
+                                uiSnapshotDirty.store (true, std::memory_order_release);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Absolute 14-bit: CC6 = MSB, CC38 = LSB
+                        if (cc == 6)  nrpnDataMSB = val;
+                        if (cc == 38) nrpnDataLSB = val;
+                        if (cc == 6 || (cc == 38 && nrpnDataMSB >= 0))
+                        {
+                            const int raw14 = (nrpnDataMSB << 7) | (nrpnDataLSB >= 0 ? nrpnDataLSB : 0);
+                            const float norm = (float)raw14 * kNrpnAbsStep;
+                            const int target = juce::roundToInt (norm * (float)total);
+
+                            if (! ccSmootherActive[(size_t)fieldId])
+                            {
+                                const int cur = (fieldId == FieldSliceStart)
+                                    ? (inTrim ? curStart : (sliceManager.getNumSlices() > 0
+                                        ? sliceManager.getSlice (sliceManager.selectedSlice.load()).startSample : 0))
+                                    : (inTrim ? curEnd : total);
+                                ccSmoothers[(size_t)fieldId].setCurrentAndTargetValue ((float)cur);
+                            }
+                            ccSmoothers[(size_t)fieldId].setTargetValue ((float)target);
+                            ccSmootherActive[(size_t)fieldId] = true;
+                        }
+                    }
+                }
+                continue;  // NRPN consumed — skip standard CC path
+            }
+        }
+
         // ── MIDI Learn CC dispatch ────────────────────────────────────
         if (msg.isController())
         {
