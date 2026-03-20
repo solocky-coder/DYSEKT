@@ -453,7 +453,12 @@ void SliceControlBar::paint (juce::Graphics& g)
         return;
     }
 
-    const auto& s = ui.slices[(size_t) idx];
+    // Read live slice values directly from sliceManager — not the UI snapshot.
+    // The snapshot lags by one processBlock cycle; sliceManager has the current
+    // committed value which the smoother writes to immediately.
+    const auto& s = (processor.sliceManager.getNumSlices() > idx && idx >= 0)
+                    ? processor.sliceManager.getSlice (idx)
+                    : ui.slices[(size_t) juce::jmax (0, idx)];
 
     float gBpm      = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
     float gPitch    = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
