@@ -190,7 +190,7 @@ void MixerPanel::drawMuteBadge (juce::Graphics& g, int cx, int cy,
                         : theme.foreground.withAlpha (0.25f));
     g.drawRoundedRectangle (r, 2.5f, 0.8f);
 
-    g.setFont (DysektLookAndFeel::makeFont (8.0f));
+    g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.setColour (active ? (locked ? theme.lockActive : theme.accent)
                         : theme.foreground.withAlpha (0.3f));
     g.drawText (juce::String (muteGroup), r.toNearestInt(), juce::Justification::centred);
@@ -207,7 +207,7 @@ void MixerPanel::drawHeader (juce::Graphics& g) const
     g.drawHorizontalLine (kHeaderH - 1, 0.f, (float) getWidth());
 
     // Slice column
-    g.setFont (DysektLookAndFeel::makeFont (7.5f));
+    g.setFont (DysektLookAndFeel::makeFont (12.0f));
     g.setColour (theme.accent.withAlpha (0.5f));
     g.drawText ("SLICE", 10, 0, kNameColW - 10, kHeaderH, juce::Justification::centredLeft);
 
@@ -237,7 +237,7 @@ void MixerPanel::drawChroBadge (juce::Graphics& g, int cx, int cy, int channel, 
                         : (locked ? theme.lockActive.withAlpha (0.5f) : theme.foreground.withAlpha (0.25f)));
     g.drawRoundedRectangle (r, 2.5f, 0.8f);
 
-    g.setFont (DysektLookAndFeel::makeFont (8.0f));
+    g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.setColour (active ? (locked ? theme.lockActive : theme.accent)
                         : (locked ? theme.lockActive.withAlpha (0.5f) : theme.foreground.withAlpha (0.3f)));
     g.drawText (active ? juce::String (channel) : "-", r.toNearestInt(), juce::Justification::centred);
@@ -380,7 +380,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     g.fillRect (3, ry, kNameColW - 4, kRowH);
 
     // Slice number — larger font, brighter
-    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setFont (DysektLookAndFeel::makeFont (12.0f));
     g.setColour (dot.withAlpha (selected ? 0.95f : 0.65f));
     g.drawText (juce::String (idx + 1).paddedLeft ('0', 2),
                 8, ry, 30, kRowH, juce::Justification::centredLeft);
@@ -389,7 +389,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     const double srate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
     const int end = processor.sliceManager.getEndForSlice (idx, snap.sampleNumFrames);
     const double lenSec = (end - sl.startSample) / srate;
-    g.setFont (DysektLookAndFeel::makeFont (8.0f));
+    g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.setColour (theme.foreground.withAlpha (0.30f));
     g.drawText (juce::String (lenSec, 2) + "s",
                 40, ry, kNameColW - 42, kRowH, juce::Justification::centredLeft);
@@ -408,7 +408,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
 
         const int tx = cx + kKnobR + 4;
         const int tw = kKnobColW - (tx - x) - 2;
-        g.setFont (DysektLookAndFeel::makeFont (10.f));
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (locked ? theme.foreground.withAlpha (0.90f)
                             : theme.foreground.withAlpha (0.40f));
         g.drawText (valStr, tx, ry + 1, tw, kRowH - 2, juce::Justification::centredLeft);
@@ -459,7 +459,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
                                  4.f, (float)(sliderH + 2), 1.5f);
 
         // Value label — below the slider track, centred in column
-        g.setFont (DysektLookAndFeel::makeFont (10.f));
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (panLocked ? theme.foreground.withAlpha (0.90f)
                                : theme.foreground.withAlpha (0.40f));
         g.drawText (fmtPan (pan), x, sliderY + sliderH + 2, kKnobColW, 10,
@@ -497,7 +497,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
         const auto& T = getTheme();
         juce::Colour col = on ? T.accent : T.foreground.withAlpha (0.28f);
         if (legatoLocked) col = T.lockActive;
-        g.setFont (DysektLookAndFeel::makeFont (10.f));
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (col);
         g.drawText (on ? "ON" : "OFF", x, ry, kKnobColW, kRowH, juce::Justification::centred);
     }
@@ -507,7 +507,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
         const bool outLocked = (sl.lockMask & kLockOutputBus) != 0;
         const int x = colX (ColOut);
         const int cx = x + kKnobColW / 2 - 6;
-        g.setFont (DysektLookAndFeel::makeFont (10.f));
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (outLocked ? theme.foreground.withAlpha (0.85f)
                                : theme.foreground.withAlpha (0.32f));
         g.drawText (fmtOut (sl.outputBus), cx, ry, kKnobColW - 4, kRowH,
@@ -538,7 +538,7 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
     g.drawHorizontalLine (ry, 0.f, (float) getWidth());
 
     // Label
-    g.setFont (DysektLookAndFeel::makeFont (8.0f, true));
+    g.setFont (DysektLookAndFeel::makeFont (11.0f, true));
     g.setColour (theme.accent.withAlpha (0.6f));
     g.drawText ("MASTER", 10, ry, kNameColW - 10, kMasterH, juce::Justification::centredLeft);
 
@@ -554,7 +554,7 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
         drawKnobInRow (g, cx, kcy, norm, false, true);
         const int tx = cx + kKnobR + 4;
         const int tw = kKnobColW - (tx - x) - 2;
-        g.setFont (DysektLookAndFeel::makeFont (9.f));
+        g.setFont (DysektLookAndFeel::makeFont (11.0f));
         g.setColour (theme.accent.withAlpha (0.55f));
         g.drawText (valStr, tx, ry + 1, tw, kMasterH - 2, juce::Justification::centredLeft);
     };
@@ -594,14 +594,14 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
                                  4.f, (float)(sliderH + 2), 1.5f);
 
         const int tx = x + kKnobColW / 2 + 8;
-        g.setFont (DysektLookAndFeel::makeFont (9.f));
+        g.setFont (DysektLookAndFeel::makeFont (11.0f));
         g.setColour (theme.accent.withAlpha (0.55f));
         g.drawText (fmtPan (masterPan), x, sliderY + sliderH + 2, kKnobColW, 10,
                     juce::Justification::centred);
     }
 
     // Remaining columns — dimmed dashes
-    g.setFont (DysektLookAndFeel::makeFont (8.f));
+    g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.setColour (theme.foreground.withAlpha (0.15f));
     for (int i = ColFcut; i < kNumCols; ++i)
         g.drawText ("—", colX ((Col)i), ry, kKnobColW, kMasterH, juce::Justification::centred);
@@ -665,7 +665,7 @@ void MixerPanel::paint (juce::Graphics& g)
         const int mx = colX (ColOut) + kKnobColW;
         g.setColour (theme.accent.withAlpha (0.12f));
         g.drawVerticalLine (mx + 2, (float) kHeaderH, (float) getHeight());
-        g.setFont (DysektLookAndFeel::makeFont (7.5f));
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
         g.setColour (theme.foreground.withAlpha (0.22f));
         g.drawText ("METER", mx + 6, 0, kMeterColW - 8, kHeaderH, juce::Justification::centredLeft);
     }
@@ -918,7 +918,7 @@ void MixerPanel::mouseDoubleClick (const juce::MouseEvent& e)
     textEditor->setBounds (cellBounds.getX() + kKnobR * 2 + 12,
                            cellBounds.getY() + cellBounds.getHeight() / 2 - 8,
                            cellBounds.getWidth() - kKnobR * 2 - 16, 16);
-    textEditor->setFont (DysektLookAndFeel::makeFont (9.0f));
+    textEditor->setFont (DysektLookAndFeel::makeFont (11.0f));
     const auto& theme = getTheme();
     textEditor->setColour (juce::TextEditor::backgroundColourId, theme.darkBar.brighter (0.15f));
     textEditor->setColour (juce::TextEditor::textColourId,       theme.foreground);

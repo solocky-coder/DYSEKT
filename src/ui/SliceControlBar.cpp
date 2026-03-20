@@ -750,10 +750,10 @@ void SliceControlBar::paint (juce::Graphics& g)
             g.setColour (getTheme().separator.withAlpha (0.35f));
             g.drawRoundedRectangle (bracket, r, 0.8f);
 
-            // Label in top-left corner, raised slightly above bracket
-            g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
+            // Label inside top-left of bracket — never draws outside component bounds
+            g.setFont (DysektLookAndFeel::makeFont (7.0f, true));
             g.setColour (getTheme().foreground.withAlpha (0.38f));
-            g.drawText (label, (int)bracket.getX() + 2, (int)bracket.getY() - 8, 28, 9,
+            g.drawText (label, (int)bracket.getX() + 2, (int)bracket.getY() + 1, 36, 9,
                         juce::Justification::centredLeft);
         };
 
