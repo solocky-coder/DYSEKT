@@ -1951,6 +1951,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 markerIdleCounter  = 0;
             }
         }
+    }  // end smoother block
 
     if (uiSnapshotDirty.exchange (false, std::memory_order_acq_rel))
         publishUiSliceSnapshot();
