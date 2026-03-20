@@ -70,6 +70,37 @@ public:
 
     juce::Font getPopupMenuFont() override { return juce::Font (juce::FontOptions{}.withHeight (13.0f)); }
 
+    void drawComboBox (juce::Graphics& g, int width, int height, bool,
+                       int buttonX, int, int, int, juce::ComboBox& box) override
+    {
+        const auto& t = getTheme();
+        // Sharp background
+        g.setColour (t.darkBar.darker (0.3f));
+        g.fillRect (0, 0, width, height);
+        // Sharp border
+        g.setColour (box.hasKeyboardFocus (false) ? t.accent.withAlpha (0.5f) : t.separator);
+        g.drawRect (0, 0, width, height, 1);
+        // Centred arrow — sharp V shape, no unicode
+        const int cx = buttonX + (width - buttonX) / 2;
+        const int cy = height / 2;
+        g.setColour (t.foreground.withAlpha (0.85f));
+        g.drawLine ((float)(cx - 4), (float)(cy - 2), (float)(cx),     (float)(cy + 2), 1.5f);
+        g.drawLine ((float)(cx),     (float)(cy + 2), (float)(cx + 4), (float)(cy - 2), 1.5f);
+    }
+
+    juce::Font getComboBoxFont (juce::ComboBox&) override
+    {
+        return juce::Font (juce::FontOptions{}.withHeight (11.0f));
+    }
+
+    void positionComboBoxText (juce::ComboBox& box, juce::Label& label) override
+    {
+        label.setBounds (4, 1, box.getWidth() - 28, box.getHeight() - 2);
+        label.setFont (getComboBoxFont (box));
+        label.setColour (juce::Label::textColourId, getTheme().foreground);
+        label.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    }
+
     void drawFileBrowserRow (juce::Graphics& g, int width, int height,
                              const juce::File&, const juce::String& filename,
                              juce::Image*, const juce::String& fileSizeDescription,
