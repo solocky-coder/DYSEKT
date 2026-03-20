@@ -118,11 +118,15 @@ void SliceControlBar::drawKnob (juce::Graphics& g,
     g.strokePath (arc, juce::PathStrokeType (2.2f,
                   juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
+    // The arc uses JUCE's convention (0 = 12 o'clock, clockwise).
+    // std::cos/sin uses standard maths (0 = 3 o'clock, counter-clockwise).
+    // Offset by -π/2 so the indicator line aligns with the arc end.
+    const float lineAngle = angle - juce::MathConstants<float>::halfPi;
     float lineR = fr - 2.5f;
     g.setColour (arcCol.brighter (0.15f));
     g.drawLine (fcx, fcy,
-                fcx + lineR * std::cos (angle),
-                fcy + lineR * std::sin (angle), 1.5f);
+                fcx + lineR * std::cos (lineAngle),
+                fcy + lineR * std::sin (lineAngle), 1.5f);
 
     g.setColour (locked ? getTheme().foreground.withAlpha (0.75f)
                         : getTheme().foreground.withAlpha (0.25f));
