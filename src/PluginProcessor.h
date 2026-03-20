@@ -249,6 +249,13 @@ public:
     // Audio-thread write, audio-thread read only.
     std::array<bool, kMidiLearnNumSlots> ccPickedUp {};
 
+    // Commit-on-idle for FieldSliceStart CC — write live drag atomics during
+    // movement, commit to SliceManager only after kIdleBlocks of silence.
+    static constexpr int kMarkerIdleBlocks = 4;  // ~80ms at 512/44100
+    int  markerIdleCounter  = 0;    // counts blocks since last CC message
+    bool markerPending      = false; // true while a commit is outstanding
+    int  markerPendingSlice = -1;    // which slice the pending commit is for
+
     // NRPN decoder state (audio thread only — no atomics needed)
     int nrpnMSB     = -1;
     int nrpnLSB     = -1;

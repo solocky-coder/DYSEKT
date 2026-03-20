@@ -1048,6 +1048,10 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 std::memory_order_relaxed);
             ccPickedUp.fill (false);  // new slice — absolute knobs must pick up again
             ccSmootherActive.fill (false);
+            markerPending      = false;
+            markerPendingSlice = -1;
+            markerIdleCounter  = 0;
+            liveDragSliceIdx.store (-1, std::memory_order_release);
             break;
 
         case CmdSetSliceColour:
@@ -1431,47 +1435,56 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
 
                             if (outIsRelative)
                             {
-                                // Relative: immediate enqueue — inherently smooth
+                                // ── Commit-on-idle: write to live drag atomics (zero cost,
+                                // same visual path as mouse drag). CmdSetSliceBounds fires
+                                // only after kMarkerIdleBlocks of CC silence in processBlock.
                                 if (outFieldId == FieldSliceStart)
                                 {
-                                    const int slEnd    = sliceManager.getEndForSlice (sel, total);
+                                    const int slEnd   = sliceManager.getEndForSlice (sel, total);
+                                    // Accumulate from live position if already moving,
+                                    // otherwise start from committed slice position
+                                    const int curLive = markerPending
+                                        ? liveDragBoundsStart.load (std::memory_order_relaxed)
+                                        : sl.startSample;
                                     const int newStart = juce::jlimit (0, slEnd - 64,
-                                        sl.startSample + (int)(outNorm * stepSamples));
-                                    Command ccCmd;
-                                    ccCmd.type = CmdSetSliceBounds; ccCmd.intParam1 = sel;
-                                    ccCmd.intParam2 = newStart; ccCmd.positions[0] = slEnd;
-                                    ccCmd.numPositions = 1;
-                                    enqueueCoalescedCommand (ccCmd);
-                                }
-                                else
-                                {
-                                    const int cur    = sliceManager.getEndForSlice (sel, total);
-                                    const int newEnd = juce::jlimit (sl.startSample + 64, total,
-                                        cur + (int)(outNorm * stepSamples));
-                                    Command ccCmd;
-                                    ccCmd.type = CmdSetSliceBounds; ccCmd.intParam1 = sel;
-                                    ccCmd.intParam2 = sl.startSample; ccCmd.positions[0] = newEnd;
-                                    ccCmd.numPositions = 1;
-                                    enqueueCoalescedCommand (ccCmd);
+                                        curLive + (int)(outNorm * stepSamples));
+
+                                    liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
+                                    liveDragBoundsEnd.store   (slEnd,    std::memory_order_relaxed);
+                                    liveDragSliceIdx.store    (sel,      std::memory_order_release);
+                                    markerPending      = true;
+                                    markerPendingSlice = sel;
+                                    markerIdleCounter  = 0;
                                 }
                             }
                             else
                             {
-                                // Absolute: feed smoother — processBlock steps it and
-                                // fires CmdSetSliceBounds each buffer for a smooth glide.
-                                const int cur = (outFieldId == FieldSliceStart)
-                                    ? sl.startSample
-                                    : sliceManager.getEndForSlice (sel, total);
-                                const int slEnd = (outFieldId == FieldSliceStart)
-                                    ? sliceManager.getEndForSlice (sel, total) : total;
-                                const int target = (outFieldId == FieldSliceStart)
-                                    ? juce::jlimit (0, slEnd - 64,           (int)(outNorm * (float)total))
-                                    : juce::jlimit (sl.startSample + 64, total, (int)(outNorm * (float)total));
+                                // Absolute: same commit-on-idle but feed target position
+                                if (outFieldId == FieldSliceStart)
+                                {
+                                    const int slEnd  = sliceManager.getEndForSlice (sel, total);
+                                    const int target = juce::jlimit (0, slEnd - 64,
+                                        (int)(outNorm * (float)total));
 
-                                if (! ccSmootherActive[(size_t) outFieldId])
-                                    ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
-                                ccSmoothers[(size_t) outFieldId].setTargetValue ((float) target);
-                                ccSmootherActive[(size_t) outFieldId] = true;
+                                    liveDragBoundsStart.store (target, std::memory_order_relaxed);
+                                    liveDragBoundsEnd.store   (slEnd,  std::memory_order_relaxed);
+                                    liveDragSliceIdx.store    (sel,    std::memory_order_release);
+                                    markerPending      = true;
+                                    markerPendingSlice = sel;
+                                    markerIdleCounter  = 0;
+                                }
+                                else
+                                {
+                                    // Non-marker absolute: use smoother as before
+                                    if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots)
+                                    {
+                                        const int cur = sliceManager.getEndForSlice (sel, total);
+                                        if (! ccSmootherActive[(size_t) outFieldId])
+                                            ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
+                                        ccSmoothers[(size_t) outFieldId].setTargetValue ((float) juce::jlimit (sl.startSample + 64, total, (int)(outNorm * (float)total)));
+                                        ccSmootherActive[(size_t) outFieldId] = true;
+                                    }
+                                }
                             }
                         }
                     }
@@ -1909,7 +1922,35 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (! ccSmoothers[(size_t) i].isSmoothing())
                 ccSmootherActive[i] = false;
         }
-    }
+
+        // ── Commit-on-idle for marker CC ──────────────────────────────────────
+        // Once kMarkerIdleBlocks have passed with no new CC for FieldSliceStart,
+        // commit the live drag position to the slice manager and clear the live drag.
+        if (markerPending)
+        {
+            ++markerIdleCounter;
+            if (markerIdleCounter >= kMarkerIdleBlocks)
+            {
+                const int pendSel = markerPendingSlice;
+                if (pendSel >= 0 && pendSel < sliceManager.getNumSlices() && total > 1)
+                {
+                    const int newStart = liveDragBoundsStart.load (std::memory_order_relaxed);
+                    const int slEnd    = sliceManager.getEndForSlice (pendSel, total);
+                    Command cmd;
+                    cmd.type         = CmdSetSliceBounds;
+                    cmd.intParam1    = pendSel;
+                    cmd.intParam2    = juce::jlimit (0, slEnd - 64, newStart);
+                    cmd.positions[0] = slEnd;
+                    cmd.numPositions = 1;
+                    handleCommand (cmd);
+                    uiSnapshotDirty.store (true, std::memory_order_release);
+                }
+                // liveDragSliceIdx cleared by handleCommand after CmdSetSliceBounds
+                markerPending      = false;
+                markerPendingSlice = -1;
+                markerIdleCounter  = 0;
+            }
+        }
 
     if (uiSnapshotDirty.exchange (false, std::memory_order_acq_rel))
         publishUiSliceSnapshot();

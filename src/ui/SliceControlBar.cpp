@@ -265,15 +265,6 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
                     x, y + cellH - 10, cellW, 10, juce::Justification::centredLeft);
     }
 
-    // ── Value text — centred above the slider track ────────────────────────────
-    const int pct = juce::jlimit (-100, 100, (int) std::round (panValue * 100.f));
-    juce::String panStr = (pct == 0) ? "C"
-                        : (pct  < 0) ? ("L" + juce::String (-pct))
-                                     : ("R" + juce::String ( pct));
-    g.setFont (DysektLookAndFeel::makeMonoFont (10.0f));
-    g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.75f));
-    g.drawText (panStr, trackX, trackY - 11, trackW, 10, juce::Justification::centred);
-
     // ── Slider track ───────────────────────────────────────────────────────
     const int trackY  = y + 18;
     const int trackH  = 6;
@@ -310,6 +301,16 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
     g.setColour (locked ? theme.lockActive : (armed ? ac.brighter (0.4f) : ac));
     g.fillRoundedRectangle ((float) (thumbX - 2), (float) (trackY - 1),
                              4.f, (float) (trackH + 2), 1.5f);
+
+    // ── Value text — below the slider track, centred ──────────────────────────
+    const int pct = juce::jlimit (-100, 100, (int) std::round (panValue * 100.f));
+    juce::String panStr = (pct == 0) ? "C"
+                        : (pct  < 0) ? ("L" + juce::String (-pct))
+                                     : ("R" + juce::String ( pct));
+    g.setFont (DysektLookAndFeel::makeMonoFont (10.0f));
+    g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.55f));
+    g.drawText (panStr, x, trackY + trackH + 1, cellW, 10,
+                juce::Justification::centred);
 
     // ── Register cell ──────────────────────────────────────────────────────
     outWidth = cellW;
