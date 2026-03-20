@@ -603,34 +603,19 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // START / END — slice boundary knobs in row 1
+    // MARKER — slice boundary knob in row 1
     {
         g.setColour (getTheme().separator.withAlpha (0.5f));
         g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
         x += 8;
 
-        // START
-        {
-            float startNorm = (ui.numSlices > 0 && idx >= 0)
-                ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames) : 0.f;
-            drawKnobCell (g, x, row1y, "START", juce::String (s.startSample),
-                          startNorm, false, 0,
-                          F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
-            cells.back().isMidiLearnable = true;
-            x += cw + 4;
-        }
-
-        // END
-        {
-            const int sliceEnd2 = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
-            float endNorm = (ui.numSlices > 0 && idx >= 0)
-                ? (float) sliceEnd2 / (float) juce::jmax (1, ui.sampleNumFrames) : 1.f;
-            drawKnobCell (g, x, row1y, "END", juce::String (sliceEnd2),
-                          endNorm, false, 0,
-                          F::FieldSliceEnd, 0.f, 1.f, 0.001f, cw);
-            cells.back().isMidiLearnable = true;
-            x += cw + 4;
-        }
+        float startNorm = (ui.numSlices > 0 && idx >= 0)
+            ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames) : 0.f;
+        drawKnobCell (g, x, row1y, "MARKER", juce::String (s.startSample),
+                      startNorm, false, 0,
+                      F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
+        cells.back().isMidiLearnable = true;
+        x += cw + 4;
     }
 
     // ── Separator ─────────────────────────────────────────────────────
@@ -854,7 +839,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             dragStartY = (cell.fieldId == DysektProcessor::FieldPan) ? pos.x : pos.y;
 
             // Activate live drag for slice boundary knobs
-            if (cell.fieldId == DysektProcessor::FieldSliceStart || cell.fieldId == DysektProcessor::FieldSliceEnd)
+            if (cell.fieldId == DysektProcessor::FieldSliceStart)
             {
                 int liveSel = ui.selectedSlice;
                 if (liveSel >= 0 && liveSel < ui.numSlices)
@@ -883,7 +868,6 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
                     case F::FieldRelease:     dragStartValue = (sl.lockMask & kLockRelease)     ? sl.releaseSec           : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f; break;
                     case F::FieldMuteGroup:   dragStartValue = (float)((sl.lockMask & kLockMuteGroup)  ? sl.muteGroup  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load());   break;
                     case F::FieldSliceStart:  dragStartValue = (float) sl.startSample; break;
-                    case F::FieldSliceEnd:    dragStartValue = (float) processor.sliceManager.getEndForSlice (sIdx, ui.sampleNumFrames); break;
                     case F::FieldMidiNote:    dragStartValue = (float) sl.midiNote;              break;
                     case F::FieldVolume:      dragStartValue = (sl.lockMask & kLockVolume)      ? sl.volume               : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();            break;
                     case F::FieldOutputBus:   dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
@@ -1046,7 +1030,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
     using F = DysektProcessor;
 
     // ── Slice boundary knobs: live drag in sample space ───────────────────
-    if (cell.fieldId == F::FieldSliceStart || cell.fieldId == F::FieldSliceEnd)
+    if (cell.fieldId == F::FieldSliceStart)
     {
         const auto& ui2 = processor.getUiSliceSnapshot();
         int liveSel = ui2.selectedSlice;
@@ -1157,7 +1141,7 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
     if (activeDragCell >= 0 && activeDragCell < (int) cells.size())
     {
         const auto& cell = cells[(size_t) activeDragCell];
-        if (cell.fieldId == F::FieldSliceStart || cell.fieldId == F::FieldSliceEnd)
+        if (cell.fieldId == F::FieldSliceStart)
         {
             const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
             if (liveIdx >= 0)

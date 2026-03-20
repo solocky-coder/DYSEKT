@@ -16,7 +16,7 @@ bool WaveformView::hasActiveSlicePreview() const noexcept
 {
     if (dragSliceIdx < 0)
         return false;
-    return dragMode == DragEdgeLeft || dragMode == DragEdgeRight || dragMode == MoveSlice;
+    return dragMode == DragEdgeLeft || dragMode == MoveSlice;
 }
 
 bool WaveformView::getActiveSlicePreview (int& sliceIdx, int& startSample, int& endSample) const
@@ -399,7 +399,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
 
         // Live preview during drag:
         if (i == sel && dragSliceIdx == i &&
-            (dragMode == DragEdgeLeft || dragMode == DragEdgeRight || dragMode == MoveSlice))
+            (dragMode == DragEdgeLeft || dragMode == MoveSlice))
         {
             drawStartSample = dragPreviewStart;
             drawEndSample = dragPreviewEnd;
@@ -414,8 +414,17 @@ void WaveformView::drawSlices (juce::Graphics& g)
             const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
             if (liveIdx == i)
             {
-                drawStartSample = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
-                drawEndSample   = processor.liveDragBoundsEnd.load   (std::memory_order_relaxed);
+                const int liveStart = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
+                const int liveEnd   = processor.liveDragBoundsEnd.load   (std::memory_order_relaxed);
+                // Sanity check: only use live bounds if they form a valid region
+                // within the sample — stale atomics after smoother finishes can
+                // cause ghost markers if liveDragSliceIdx hasn't been cleared yet.
+                if (liveStart >= 0 && liveEnd > liveStart
+                    && liveEnd <= ui.sampleNumFrames)
+                {
+                    drawStartSample = liveStart;
+                    drawEndSample   = liveEnd;
+                }
             }
         }
 
@@ -430,7 +439,6 @@ void WaveformView::drawSlices (juce::Graphics& g)
             g.fillRect (x1, 0, sw, getHeight());
             g.setColour (getTheme().foreground.withAlpha (0.8f));
             g.drawVerticalLine (x1, 0.0f, (float) getHeight());
-            g.drawVerticalLine (x2 - 1, 0.0f, (float) getHeight());
 
             {
                 bool hov = (hoveredEdge == HoveredEdge::Left);
@@ -445,23 +453,9 @@ void WaveformView::drawSlices (juce::Graphics& g)
                 g.fillPath (triS);
             }
 
-            {
-                bool hov = (hoveredEdge == HoveredEdge::Right);
-                float tw = hov ? 10.0f : 7.0f;
-                float th = hov ? 12.0f : 9.0f;
-                float alpha = hov ? 1.0f : 0.9f;
-                juce::Path triE;
-                triE.addTriangle ((float) (x2 - 1), (float) getHeight(),
-                                  (float) (x2 - 1) - tw, (float) getHeight(),
-                                  (float) (x2 - 1), (float) getHeight() - th);
-                g.setColour (getTheme().foreground.withAlpha (alpha));
-                g.fillPath (triE);
-            }
-
             g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
             g.setColour (getTheme().foreground.withAlpha (0.7f));
-            g.drawText ("S", x1 + 2, getHeight() - 24, 12, 12, juce::Justification::centredLeft);
-            g.drawText ("E", x2 - 14, getHeight() - 24, 12, 12, juce::Justification::centredRight);
+            g.drawText ("M", x1 + 2, getHeight() - 24, 12, 12, juce::Justification::centredLeft);
 
             g.setColour (getTheme().foreground.withAlpha (0.85f));
             g.setFont (DysektLookAndFeel::makeFont (13.0f, true));
@@ -472,7 +466,6 @@ void WaveformView::drawSlices (juce::Graphics& g)
         {
             g.setColour (s.colour.withAlpha (0.30f));
             g.drawVerticalLine (x1, 0.0f, (float) getHeight());
-            g.drawVerticalLine (x2 - 1, 0.0f, (float) getHeight());
         }
     }
 }
@@ -549,9 +542,7 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
         if (s.active)
         {
             int x1 = sampleToPixel (s.startSample);
-            int x2 = sampleToPixel (processor.sliceManager.getEndForSlice (sel, ui.sampleNumFrames));
-            if      (std::abs (e.x - x1) < 6) newEdge = HoveredEdge::Left;
-            else if (std::abs (e.x - x2) < 6) newEdge = HoveredEdge::Right;
+            if (std::abs (e.x - x1) < 6) newEdge = HoveredEdge::Left;
         }
     }
     if (altModeActive)
@@ -608,7 +599,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         {
             const int selEnd = processor.sliceManager.getEndForSlice (sel, ui.sampleNumFrames);
             int x1 = sampleToPixel (s.startSample);
-            int x2 = sampleToPixel (selEnd);
 
             if (std::abs (e.x - x1) < 6)
             {
@@ -630,31 +620,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                         linkedSliceIdx = i;
                         linkedPreviewStart = ui.slices[(size_t) i].startSample;
                         linkedPreviewEnd   = s.startSample;
-                        break;
-                    }
-                }
-                return;
-            }
-            else if (std::abs (e.x - x2) < 6)
-            {
-                DysektProcessor::Command gestureCmd;
-                gestureCmd.type = DysektProcessor::CmdBeginGesture;
-                processor.pushCommand (gestureCmd);
-                dragMode = DragEdgeRight;
-                dragSliceIdx = sel;
-                dragPreviewStart = s.startSample;
-                dragPreviewEnd = selEnd;
-                dragOrigStart = s.startSample;
-                dragOrigEnd   = selEnd;
-                linkedSliceIdx = -1;
-                for (int i = 0; i < num; ++i)
-                {
-                    if (i == sel || ! ui.slices[(size_t) i].active) continue;
-                    if (ui.slices[(size_t) i].startSample == selEnd)
-                    {
-                        linkedSliceIdx     = i;
-                        linkedPreviewStart = selEnd;
-                        linkedPreviewEnd   = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
                         break;
                     }
                 }
@@ -718,16 +683,6 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
             linkedPreviewEnd = dragPreviewStart;
         repaint();
     }
-    else if (dragMode == DragEdgeRight && dragSliceIdx >= 0)
-    {
-        if (processor.snapToZeroCrossing.load())
-            dragPreviewEnd = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, pixelToSample(e.x));
-        else
-            dragPreviewEnd = juce::jlimit(dragPreviewStart + 64, sampleSnap->buffer.getNumSamples(), pixelToSample(e.x));
-        if (linkedSliceIdx >= 0)
-            linkedPreviewStart = dragPreviewEnd;
-        repaint();
-    }
     // TODO: add MoveSlice/other modes if needed
 }
 
@@ -748,7 +703,7 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
     }
 
     // ---- SLICE EDGE DRAG: commit marker move ----
-    if ((dragMode == DragEdgeLeft || dragMode == DragEdgeRight || dragMode == MoveSlice) && dragSliceIdx >= 0)
+    if ((dragMode == DragEdgeLeft || dragMode == MoveSlice) && dragSliceIdx >= 0)
     {
         DysektProcessor::Command cmd;
         cmd.type = DysektProcessor::CmdSetSliceBounds;
