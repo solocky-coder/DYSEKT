@@ -89,6 +89,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         "Sample Release Tail",
         false));
 
+    // defaultOneShot kept in layout for DAW preset compatibility —
+    // the global is intentionally never read; per-slice oneShot is used instead.
+    params.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParamIds::defaultOneShot, 1 },
+        "Sample One Shot",
+        false));
+
     // ── Advanced / algorithm-specific ─────────────────────────────────────────
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
