@@ -733,7 +733,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockStretch)      s.stretchEnabled    = stretchParam->load()     > 0.5f;
                     else if (bit == kLockReleaseTail)  s.releaseTail       = releaseTailParam->load() > 0.5f;
                     else if (bit == kLockReverse)      s.reverse           = reverseParam->load()     > 0.5f;
-                    else if (bit == kLockOneShot)      s.oneShot           = oneShotParam->load()     > 0.5f;
+                    else if (bit == kLockOneShot)      s.oneShot           = false;
                     else if (bit == kLockCentsDetune)  s.centsDetune       = centsDetuneParam->load();
                     else if (bit == kLockTonality)     s.tonalityHz        = tonalityParam->load();
                     else if (bit == kLockFormant)      s.formantSemitones  = formantParam->load();
@@ -775,7 +775,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     if (!(s.lockMask & kLockStretch))       s.stretchEnabled   = stretchParam->load()      > 0.5f;
                     if (!(s.lockMask & kLockReleaseTail))   s.releaseTail      = releaseTailParam->load()  > 0.5f;
                     if (!(s.lockMask & kLockReverse))       s.reverse          = reverseParam->load()      > 0.5f;
-                    if (!(s.lockMask & kLockOneShot))       s.oneShot          = oneShotParam->load()      > 0.5f;
+                    if (!(s.lockMask & kLockOneShot))       s.oneShot          = false;
                     if (!(s.lockMask & kLockCentsDetune))   s.centsDetune      = centsDetuneParam->load();
                     if (!(s.lockMask & kLockTonality))      s.tonalityHz       = tonalityParam->load();
                     if (!(s.lockMask & kLockFormant))       s.formantSemitones = formantParam->load();
@@ -1441,7 +1441,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.globalReleaseTail = releaseTailParam->load() > 0.5f;
                 p.globalReverse    = reverseParam->load()      > 0.5f;
                 p.globalLoopMode   = (int) loopParam->load();
-                p.globalOneShot    = oneShotParam->load()      > 0.5f;
+                p.globalOneShot    = false;  // One Shot is per-slice only; Hold is always the global default
                 p.globalCentsDetune  = centsDetuneParam->load();
                 p.globalPan          = panParam->load();
                 p.globalFilterCutoff = filterCutoffParam->load();
