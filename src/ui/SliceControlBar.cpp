@@ -440,6 +440,31 @@ void SliceControlBar::paint (juce::Graphics& g)
     int rightEdge = getWidth() - 8;
     int row1y = 2, row2y = 36;
 
+    // ── Row 2 right: SLICES / ROOT (always visible) ───────────────────
+    {
+        int rn = ui.rootNote;
+        bool editable = (numSlices == 0);
+        int rnW = 55, rnX = rightEdge - rnW;
+        rootNoteArea = { rnX, row2y, rnW, 30 };
+
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
+        g.setColour (editable ? getTheme().accent.withAlpha (0.7f)
+                              : getTheme().foreground.withAlpha (0.35f));
+        g.drawText ("ROOT", rnX, row2y + 2, rnW, 13, juce::Justification::right);
+        g.setFont (DysektLookAndFeel::makeMonoFont (14.0f));
+        g.setColour (editable ? getTheme().foreground.withAlpha (0.6f)
+                              : getTheme().foreground.withAlpha (0.4f));
+        g.drawText (juce::String (rn), rnX, row2y + 15, rnW, 14, juce::Justification::right);
+
+        int slcW = 55, slcX = rnX - slcW - 4;
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
+        g.setColour (getTheme().foreground.withAlpha (0.35f));
+        g.drawText ("SLICES", slcX, row2y + 2, slcW, 13, juce::Justification::right);
+        g.setFont (DysektLookAndFeel::makeMonoFont (14.0f));
+        g.setColour (getTheme().foreground.withAlpha (0.4f));
+        g.drawText (juce::String (numSlices), slcX, row2y + 15, slcW, 14, juce::Justification::right);
+    }
+
     if (idx < 0 || idx >= numSlices)
     {
         g.setFont (DysektLookAndFeel::makeFont (15.0f));
@@ -499,16 +524,6 @@ void SliceControlBar::paint (juce::Graphics& g)
                       toNorm (F::FieldBpm, bpmVal),
                       locked, kLockBpm, F::FieldBpm, 20.f, 999.f, 0.01f, cw);
         x += cw + 4;
-    }
-
-    // SET BPM
-    {
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (getTheme().accent);
-        g.drawText ("SET", x + 2, row1y + 2,  34, 13, juce::Justification::centredLeft);
-        g.drawText ("BPM", x + 2, row1y + 15, 34, 13, juce::Justification::centredLeft);
-        cells.push_back ({ x, row1y, 38, 32, 0, 0, 0.f, 0.f, 0.f, false, false, false, true });
-        x += 42;
     }
 
     // PITCH — knob
@@ -943,7 +958,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
             showMidiLearnMenu (cell.fieldId, e.getScreenPosition()); return;
         }
 
-        if (cell.isSetBpm) { showSetBpmPopup(); return; }
+        if (cell.isSetBpm) { return; }  // SET BPM removed
 
         if (cell.isReadOnly) return;
 
@@ -1409,27 +1424,4 @@ void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
 }
 
 // =============================================================================
-//  showSetBpmPopup  (unchanged)
-// =============================================================================
-void SliceControlBar::showSetBpmPopup()
-{
-    juce::PopupMenu menu;
-    menu.addItem (1, "16 bars"); menu.addItem (2, "8 bars");   menu.addItem (3, "4 bars");
-    menu.addItem (4, "2 bars");  menu.addItem (5, "1 bar");    menu.addItem (6, "1/2 note");
-    menu.addItem (7, "1/4 note"); menu.addItem (8, "1/8 note"); menu.addItem (9, "1/16 note");
-
-    auto* topLvl = getTopLevelComponent();
-    float ms = DysektLookAndFeel::getMenuScale();
-    menu.showMenuAsync (
-        juce::PopupMenu::Options()
-            .withTargetComponent (this).withParentComponent (topLvl)
-            .withStandardItemHeight ((int) (24 * ms)),
-        [this] (int result) {
-            if (result <= 0 || result > 9) return;
-            const float bars[] = { 0.f,16.f,8.f,4.f,2.f,1.f,0.5f,0.25f,0.125f,0.0625f };
-            DysektProcessor::Command cmd;
-            cmd.type = DysektProcessor::CmdStretch;
-            cmd.floatParam1 = bars[result];
-            processor.pushCommand (cmd); repaint();
-        });
-}
+//  showSetBpmPopup removed — SET BPM functionality accessible via BPM knob

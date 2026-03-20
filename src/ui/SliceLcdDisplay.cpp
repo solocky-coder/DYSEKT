@@ -372,34 +372,36 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
 
     // Centre the vertical stack in the screen height
     int fy = screen.getY() + (screen.getHeight() - totalFlagsH) / 2;
-    const int fx = screen.getRight() - flagW - kScrollW - 4;  // right-edge inset, clear of scrollbar
+    const int fx = screen.getRight() - flagW - kScrollW - 4;
 
-    struct Flag { juce::String text; bool on; };
+    struct Flag { juce::String text; bool on; int fieldId; bool isCycle; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
     Flag flags[] = {
-        { "REV",  data.reverse },
-        { loopStr, data.loopMode > 0 },
-        { "1SH",  data.oneShot },
-        { "MUT:" + (data.muteGroup > 0 ? juce::String (data.muteGroup) : juce::String ("-")), data.muteGroup > 0 },
-        { "STR",  data.stretchEnabled },
-        { "TAIL", data.releaseTail },
-        { "FMC",  data.formantComp },
+        { "REV",  data.reverse,        DysektProcessor::FieldReverse,       false },
+        { loopStr, data.loopMode > 0,  DysektProcessor::FieldLoop,          true  },
+        { "1SH",  data.oneShot,        DysektProcessor::FieldOneShot,       false },
+        { "MUT:" + (data.muteGroup > 0 ? juce::String (data.muteGroup) : juce::String ("-")),
+                  data.muteGroup > 0,  DysektProcessor::FieldMuteGroup,     true  },
+        { "STR",  data.stretchEnabled, DysektProcessor::FieldStretchEnabled, false },
+        { "TAIL", data.releaseTail,    DysektProcessor::FieldReleaseTail,   false },
+        { "FMC",  data.formantComp,    DysektProcessor::FieldFormantComp,   false },
     };
+
+    // Rebuild hit rects each paint
+    flagHitRects.clear();
 
     g.setFont (flagFont);
     for (auto& f : flags)
     {
         juce::Rectangle<int> box (fx, fy, flagW, flagH);
 
-        // Background: dark when off, faint phosphor when on
+        // Store hit rect
+        flagHitRects.push_back ({ box, f.fieldId, f.isCycle });
+
         g.setColour (f.on ? pal.phosphor.withAlpha (0.15f) : pal.flagBg);
         g.fillRoundedRectangle (box.toFloat(), 2.0f);
-
-        // Border: very dim when off, full when on
         g.setColour (f.on ? pal.flagOn : pal.flagOff);
         g.drawRoundedRectangle (box.toFloat(), 2.0f, 1.0f);
-
-        // Text: dim when off, bright when on
         g.setColour (f.on ? pal.flagOn : pal.flagOff);
         g.drawText (f.text, box.getX() + pad, box.getY(),
                     box.getWidth() - pad * 2, box.getHeight(),
@@ -408,7 +410,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
         fy += flagH + flagGap;
     }
 
-    // Filter badge below flags (only when active)
+    // Filter badge (display-only, not clickable)
     if (data.filterCutoff < 19000.0f)
     {
         juce::String fStr;
@@ -480,6 +482,56 @@ void SliceLcdDisplay::lookAndFeelChanged()
     scrollBar.setColour (juce::ScrollBar::trackColourId,
                          getTheme().darkBar.darker (0.4f));
     scrollBar.repaint();
+}
+
+void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
+{
+    if (! data.hasSlice) return;
+
+    const auto pos = e.getPosition();
+
+    for (const auto& hit : flagHitRects)
+    {
+        if (! hit.bounds.contains (pos)) continue;
+
+        using F = DysektProcessor;
+        DysektProcessor::Command cmd;
+        cmd.type      = F::CmdSetSliceParam;
+        cmd.intParam1 = hit.fieldId;
+
+        switch (hit.fieldId)
+        {
+            case F::FieldReverse:
+                cmd.floatParam1 = data.reverse ? 0.0f : 1.0f;
+                break;
+            case F::FieldLoop:
+                // Cycle: Off → Loop → Ping → Off
+                cmd.floatParam1 = (float)((data.loopMode + 1) % 3);
+                break;
+            case F::FieldOneShot:
+                cmd.floatParam1 = data.oneShot ? 0.0f : 1.0f;
+                break;
+            case F::FieldMuteGroup:
+                // Cycle: 0 → 1 → 2 → ... → 8 → 0
+                cmd.floatParam1 = (float)((data.muteGroup + 1) % 9);
+                break;
+            case F::FieldStretchEnabled:
+                cmd.floatParam1 = data.stretchEnabled ? 0.0f : 1.0f;
+                break;
+            case F::FieldReleaseTail:
+                cmd.floatParam1 = data.releaseTail ? 0.0f : 1.0f;
+                break;
+            case F::FieldFormantComp:
+                cmd.floatParam1 = data.formantComp ? 0.0f : 1.0f;
+                break;
+            default:
+                return;
+        }
+
+        processor.pushCommand (cmd);
+        repaint();
+        return;
+    }
 }
 
 void SliceLcdDisplay::paint (juce::Graphics& g)

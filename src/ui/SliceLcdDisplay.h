@@ -13,6 +13,7 @@ public:
     static constexpr int kPreferredHeight = 114;  // 7 visible rows × 14px + padding
 
     void paint    (juce::Graphics& g) override;
+    void mouseDown (const juce::MouseEvent& e) override;
 
     void mouseWheelMove (const juce::MouseEvent&,
                          const juce::MouseWheelDetails& w) override;
@@ -105,6 +106,15 @@ private:
     static juce::String formatPan    (float pan);
 
     DysektProcessor& processor;
+
+    // ── Flag hit rects (updated each paint, used by mouseDown) ───────────────
+    struct FlagHitRect
+    {
+        juce::Rectangle<int> bounds;
+        int fieldId;   // DysektProcessor::FieldXxx
+        bool isCycle;  // true = cycle through values (loopMode, muteGroup)
+    };
+    std::vector<FlagHitRect> flagHitRects;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SliceLcdDisplay)
 };
