@@ -46,6 +46,14 @@ private:
                        int fieldId, float minVal, float maxVal, float step,
                        int& outWidth);
 
+    // Horizontal bipolar slider — used for PAN
+    void drawPanSliderCell (juce::Graphics& g, int x, int y,
+                             float panValue, bool locked, int& outWidth);
+                       const juce::String& label, const juce::String& valueText,
+                       float normVal, bool locked, uint32_t lockBit,
+                       int fieldId, float minVal, float maxVal, float step,
+                       int& outWidth);
+
     // START / END slice boundary MIDI Learn buttons
     void drawMidiLearnCell (juce::Graphics& g, int x, int y,
                             const juce::String& label, int fieldId, int& outWidth);
