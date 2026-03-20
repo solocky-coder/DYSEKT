@@ -25,6 +25,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     addSliceBtn.onClick = [this, syncButtonColours]
     {
+        if (processor.trimModeActive.load (std::memory_order_relaxed)) return;
         bool addActive = addSliceBtn.getToggleState();
         bool midiActive = lazyChopBtn.getToggleState();
 
@@ -48,6 +49,7 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
     lazyChopBtn.onClick = [this, syncButtonColours]
     {
+        if (processor.trimModeActive.load (std::memory_order_relaxed)) return;
         bool midiActive = lazyChopBtn.getToggleState();
         bool addActive = addSliceBtn.getToggleState();
 
@@ -118,6 +120,17 @@ void ActionPanel::resized()
 
 void ActionPanel::paint (juce::Graphics& g)
 {
+    const bool inTrim = processor.trimModeActive.load (std::memory_order_relaxed);
+
+    if (inTrim)
+    {
+        // Grey out both buttons — slicing is unavailable in trim mode
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillRect (addSliceBtn.getBounds());
+        g.fillRect (lazyChopBtn.getBounds());
+        return;
+    }
+
     if (waveformView.isSliceDrawModeActive())
     {
         g.setColour (getTheme().accent.withAlpha (0.25f));
@@ -164,24 +177,24 @@ static constexpr float iconGap = 9.0f; // adjust for more/less space between ico
 
 void ActionPanel::paintOverChildren (juce::Graphics& g)
 {
+    const bool inTrim = processor.trimModeActive.load (std::memory_order_relaxed);
+
     // --- ADD SLICE icon: Plus + Scissors (with gap) ---
     {
         auto b  = addSliceBtn.getBounds().toFloat();
         const float cy = b.getCentreY();
         const float sz = b.getHeight() * 0.72f;
-        const float alpha = addSliceBtn.isEnabled() ? 0.92f : 0.35f;
-        const auto col = waveformView.isSliceDrawModeActive()
+        const float alpha = inTrim ? 0.20f : (addSliceBtn.isEnabled() ? 0.92f : 0.35f);
+        const auto col = (!inTrim && waveformView.isSliceDrawModeActive())
             ? getTheme().accent
-            : getTheme().foreground.withAlpha(alpha);
+            : getTheme().foreground.withAlpha (alpha);
 
-        // measure icon extents
-        const float plusW = sz * 0.70f;     // approx icon bounds (for centering)
-        const float scissorsW = sz * 0.70f; // same
+        const float plusW = sz * 0.70f;
+        const float scissorsW = sz * 0.70f;
         const float totalW = plusW + iconGap + scissorsW;
-
         const float left = b.getCentreX() - totalW/2.f;
 
-        ap_drawPlus     (g, left + plusW/2.f,            cy, sz, col);
+        ap_drawPlus     (g, left + plusW/2.f,                       cy, sz, col);
         ap_drawScissors (g, left + plusW + iconGap + scissorsW/2.f, cy, sz, col);
     }
 
@@ -190,19 +203,17 @@ void ActionPanel::paintOverChildren (juce::Graphics& g)
         auto b  = lazyChopBtn.getBounds().toFloat();
         const float cy    = b.getCentreY();
         const float sz    = b.getHeight() * 0.72f;
-        const float alpha = lazyChopBtn.isEnabled() ? 0.92f : 0.35f;
-        const auto  col   = processor.lazyChop.isActive()
+        const float alpha = inTrim ? 0.20f : (lazyChopBtn.isEnabled() ? 0.92f : 0.35f);
+        const auto  col   = (!inTrim && processor.lazyChop.isActive())
             ? getTheme().accent
-            : getTheme().foreground.withAlpha(alpha);
+            : getTheme().foreground.withAlpha (alpha);
 
-        // measure icon extents
         const float pianoW = sz * 0.70f;
         const float scissorsW = sz * 0.70f;
         const float totalW = pianoW + iconGap + scissorsW;
-
         const float left = b.getCentreX() - totalW/2.f;
 
-        ap_drawPiano    (g, left + pianoW/2.f,            cy, sz, col);
+        ap_drawPiano    (g, left + pianoW/2.f,                       cy, sz, col);
         ap_drawScissors (g, left + pianoW + iconGap + scissorsW/2.f, cy, sz, col);
     }
 }

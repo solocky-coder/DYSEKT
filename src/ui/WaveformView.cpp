@@ -165,13 +165,13 @@ void WaveformView::paintTrimOverlay (juce::Graphics& g)
     int clampedTrimIn  = juce::jlimit(0, totalFrames - 1, trimInPoint);
     int clampedTrimOut = juce::jlimit(clampedTrimIn + 1, totalFrames, trimOutPoint);
 
-    const int x1 = juce::jlimit(0, w, sampleToPixel (clampedTrimIn));
-    const int x2 = juce::jlimit(0, w, sampleToPixel (clampedTrimOut));
+    const int x1 = juce::jlimit (0, w - 1, sampleToPixel (clampedTrimIn));
+    const int x2 = juce::jlimit (x1 + 1, w - 1, sampleToPixel (clampedTrimOut));
     const auto ac = getTheme().accent;
 
     g.setColour (juce::Colours::black.withAlpha (0.55f));
     if (x1 > 0) g.fillRect (0, 0, x1, h);
-    if (x2 < w) g.fillRect (x2, 0, w - x2, h);
+    if (x2 < w - 1) g.fillRect (x2 + 1, 0, w - x2 - 1, h);
 
     g.setColour (ac.withAlpha (0.90f));
     g.drawVerticalLine (x1, 0.0f, (float) h);

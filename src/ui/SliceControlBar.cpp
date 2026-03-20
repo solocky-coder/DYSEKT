@@ -440,31 +440,6 @@ void SliceControlBar::paint (juce::Graphics& g)
     int rightEdge = getWidth() - 8;
     int row1y = 2, row2y = 36;
 
-    // ── Row 2 right: SLICES / ROOT (always visible) ───────────────────
-    {
-        int rn = ui.rootNote;
-        bool editable = (numSlices == 0);
-        int rnW = 55, rnX = rightEdge - rnW;
-        rootNoteArea = { rnX, row2y, rnW, 30 };
-
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (editable ? getTheme().accent.withAlpha (0.7f)
-                              : getTheme().foreground.withAlpha (0.35f));
-        g.drawText ("ROOT", rnX, row2y + 2, rnW, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeMonoFont (14.0f));
-        g.setColour (editable ? getTheme().foreground.withAlpha (0.6f)
-                              : getTheme().foreground.withAlpha (0.4f));
-        g.drawText (juce::String (rn), rnX, row2y + 15, rnW, 14, juce::Justification::right);
-
-        int slcW = 55, slcX = rnX - slcW - 4;
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.35f));
-        g.drawText ("SLICES", slcX, row2y + 2, slcW, 13, juce::Justification::right);
-        g.setFont (DysektLookAndFeel::makeMonoFont (14.0f));
-        g.setColour (getTheme().foreground.withAlpha (0.4f));
-        g.drawText (juce::String (numSlices), slcX, row2y + 15, slcW, 14, juce::Justification::right);
-    }
-
     if (idx < 0 || idx >= numSlices)
     {
         g.setFont (DysektLookAndFeel::makeFont (15.0f));
