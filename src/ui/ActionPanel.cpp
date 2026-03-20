@@ -85,6 +85,31 @@ ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
 
 ActionPanel::~ActionPanel() = default;
 
+void ActionPanel::setTrimActive (bool inTrim)
+{
+    addSliceBtn.setEnabled (! inTrim);
+    lazyChopBtn.setEnabled (! inTrim);
+
+    if (inTrim)
+    {
+        // Reset toggle states so slice/chop modes don't stay active
+        addSliceBtn.setToggleState (false, juce::dontSendNotification);
+        lazyChopBtn.setToggleState (false, juce::dontSendNotification);
+        waveformView.setSliceDrawMode (false);
+
+        addSliceBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button.withAlpha (0.4f));
+        addSliceBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground.withAlpha (0.2f));
+        lazyChopBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button.withAlpha (0.4f));
+        lazyChopBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground.withAlpha (0.2f));
+    }
+    else
+    {
+        updateToggleBtn (addSliceBtn, addSliceBtn.getToggleState());
+        updateToggleBtn (lazyChopBtn, lazyChopBtn.getToggleState());
+    }
+    repaint();
+}
+
 void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
 {
     if (active)
@@ -99,7 +124,7 @@ void ActionPanel::updateToggleBtn (juce::TextButton& btn, bool active)
         btn.setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
         btn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
-    btn.setEnabled(true); // Always clickable!
+    // Do NOT force-enable here — setTrimActive() controls enabled state
 }
 
 void ActionPanel::updateMidiButtonAppearance (bool /*active*/) {}

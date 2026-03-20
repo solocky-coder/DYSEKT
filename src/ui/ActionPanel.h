@@ -21,6 +21,7 @@ public:
     void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
     void setWaveActive       (bool v) { waveActive       = v; repaint(); }
     void setChromaticActive  (bool v) { chromaticActive  = v; repaint(); }
+    void setTrimActive       (bool v);   // disables/re-enables slice buttons
 
 private:
     DysektProcessor& processor;
