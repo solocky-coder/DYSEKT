@@ -2050,7 +2050,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // (already in the buffer, no action needed)
 
     // Decay all slice peak meters toward zero (60 dB/s at typical block sizes)
-    static const float kDecayPerBlock = 0.15f;  // approx 60 dB/s at 512 @ 44100
+    static const float kDecayPerBlock = 0.60f;  // approx 60 dB/s at 512 @ 44100
     for (int si = 0; si < kMaxMeterSlices; ++si)
     {
         float v = slicePeakL[si].load (std::memory_order_relaxed) * kDecayPerBlock;
