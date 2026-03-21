@@ -817,7 +817,7 @@ void SliceControlBar::paint (juce::Graphics& g)
         // Label
         g.setFont (DysektLookAndFeel::makeFont (7.0f, true));
         g.setColour (getTheme().foreground.withAlpha (0.30f));
-        g.drawText ("OUT", meterX, row2y, 22, 8, juce::Justification::centredLeft);
+        g.drawText ("", meterX, row2y, 22, 8, juce::Justification::centredLeft);
     }
     {
         g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
@@ -830,8 +830,8 @@ void SliceControlBar::paint (juce::Graphics& g)
                         juce::Justification::centred);
         };
 
-        if (adsrGroupX2   > adsrGroupX1)   drawGroupLabel (adsrGroupX1,   adsrGroupX2,   "ADSR");
-        if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "FILTER");
+        if (adsrGroupX2   > adsrGroupX1)   drawGroupLabel (adsrGroupX1,   adsrGroupX2,   "");
+        if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "");
     }
 }
 
