@@ -396,7 +396,7 @@ void DysektProcessor::publishUiSliceSnapshot()
     uiSliceSnapshotIndex.store (writeIndex, std::memory_order_release);
     uiSnapshotVersion.fetch_add (1, std::memory_order_release);
     uiSnapshotDirty.store (false, std::memory_order_release);
-
+}
     // Keep sliceStart / sliceEnd APVTS params in sync with the selected slice
     // so hosts can map them to Quick Controls and MIDI CC.
  
