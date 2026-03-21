@@ -1,4 +1,4 @@
-If you need the exact line or code snippet changed, just let me know!#include "SliceControlBar.h"
+#include "SliceControlBar.h"
 #include <cmath>
 #include "UIHelpers.h"
 #include "DysektLookAndFeel.h"
