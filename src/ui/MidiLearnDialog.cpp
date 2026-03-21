@@ -1,97 +1,164 @@
 #include "MidiLearnDialog.h"
-#include <juce_gui_extra/juce_gui_extra.h>
-#include <map>
 
-namespace
+// ── Parameter name table (must match SliceParamField order) ──────────────────
+static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
+    "BPM",                  // 0
+    "Pitch",
+    "Algorithm",
+    "Attack",
+    "Decay",
+    "Sustain",
+    "Release",
+    "Mute Group",
+    "Stretch Enabled",
+    "Tonality",
+    "Formant",
+    "Formant Compensation",
+    "Grain Mode",
+    "Volume",
+    "Release Tail",
+    "Reverse",
+    "Output Bus",
+    "Loop",
+    "One Shot",
+    "Cents Detune",
+    "MIDI Note",
+    "Marker",               // 21 - slice start / trim-in (same CC, context-aware)
+    "Slice End",            // 22
+    "Pan",
+    "Filter Cutoff",
+    "Filter Resonance",
+    "Chromatic Channel",
+    "Chromatic Legato",
+    "Trim Out",             // 28 - trim-out marker (trim mode only)
+    "", "", "", ""          // 29-31 (unused)
+};
+
+static juce::String getSlotParameterName (int fieldId)
 {
-    static juce::Font getParamFont(float size, juce::Font::FontStyleFlags style = juce::Font::plain)
-    {
-        // Modern JUCE: use the explicit constructor instead of deprecated Font(face, size, style)
-        return juce::Font(juce::Font::getDefaultSansSerifFontName(), size, style);
-    }
+    if (fieldId >= 0 && fieldId < kMidiLearnNumSlots 
+        && juce::String (gSlotParamNames[fieldId]).isNotEmpty())
+        return gSlotParamNames[fieldId];
+        
+    return juce::String ("Param ") + juce::String (fieldId);
 }
 
-//==============================================================================
-MidiLearnDialog::MidiLearnDialog(DysektProcessor& p)
-    : processor(p)
+// Map visible row index to field ID (skipping unnamed slots)
+static int rowToFieldId (int row)
 {
-    setOpaque(true);
-
-    infoFont   = getParamFont(14.0f, juce::Font::bold);
-    slotFont   = getParamFont(15.0f, juce::Font::plain);
-    ccFont     = getParamFont(14.0f, juce::Font::italic);
-
-    setSize (600, 420);
-    updateSlotDisplay();
-}
-
-void MidiLearnDialog::paint (juce::Graphics& g)
-{
-    g.fillAll (findColour (juce::ResizableWindow::backgroundColourId));
-
-    // Title
-    g.setColour (juce::Colours::orange);
-    g.setFont (infoFont);
-    g.drawFittedText ("MIDI Learn", getLocalBounds().removeFromTop(36), juce::Justification::centred, 1);
-
-    // Instructions
-    g.setColour (juce::Colours::white.withAlpha(0.90f));
-    g.setFont (ccFont);
-    g.drawFittedText (
-        "To assign a MIDI controller, click one of the slots below, "
-        "then move a knob or slider on your MIDI device.",
-        getLocalBounds().reduced (16, 48).removeFromTop(48),
-        juce::Justification::centred, 2);
-
-    // Slots
-    auto slotsArea = getLocalBounds().reduced (24, 120);
-    const int slotH = 40;
-    for (size_t i = 0; i < slotRects.size(); ++i)
+    int count = 0;
+    for (int i = 0; i < kMidiLearnNumSlots; ++i)
     {
-        auto rect = slotsArea.removeFromTop (slotH).reduced (0, 3);
-        slotRects[i] = rect;
-
-        bool isSelected = (int) i == selectedSlot;
-        g.setColour (isSelected ? juce::Colours::goldenrod : juce::Colours::darkgrey);
-        g.fillRoundedRectangle (rect.toFloat(), 6.5f);
-
-        // Param name
-        g.setColour (juce::Colours::white);
-        g.setFont (slotFont);
-        g.drawText (slotDisplayNames[i], rect.reduced (10, 0).removeFromLeft (250), juce::Justification::centredLeft);
-
-        // Midi CC number
-        juce::String ccStr;
-        if (slotDisplayCCs[i] > 0)
-            ccStr = "CC " + juce::String (slotDisplayCCs[i]);
-        else
-            ccStr = "(unassigned)";
-
-        g.setColour (juce::Colours::lightgreen);
-        g.setFont (ccFont);
-        g.drawText (ccStr, rect.reduced (10, 0).removeFromRight (100), juce::Justification::centredRight);
-    }
-}
-
-void MidiLearnDialog::mouseDown (const juce::MouseEvent& e)
-{
-    for (size_t i = 0; i < slotRects.size(); ++i)
-    {
-        if (slotRects[i].contains (e.getPosition()))
+        if (juce::String (gSlotParamNames[i]).isNotEmpty())
         {
-            selectedSlot = (int) i;
-            repaint();
-            return;
+            if (count == row) return i;
+            ++count;
         }
     }
+    return -1;
 }
 
-void MidiLearnDialog::updateSlotDisplay()
+// ── Constructor ───────────────────────────────────────────────────────────────
+MidiLearnDialog::MidiLearnDialog (MidiLearnManager& ml, std::function<void()> onClose)
+    : midiLearn (ml), onCloseCallback (onClose)
 {
-    for (size_t i = 0; i < slotDisplayNames.size(); ++i)
-    {
-        slotDisplayNames[i] = MidiLearnManager::slotName((int)i);
-        slotDisplayCCs[i]   = processor.midiLearn.getAssignedCC((int)i);
-    }
-    repaint();
+    addAndMakeVisible (mappingList);
+    addAndMakeVisible (closeButton);
+    closeButton.onClick = [this] { close(); };
+
+    mappingList.setRowHeight (24);
+    mappingList.setModel (this);
+    mappingList.setColour (juce::ListBox::backgroundColourId, juce::Colour (0xFF111418));
+    mappingList.setColour (juce::ListBox::outlineColourId, juce::Colours::transparentBlack);
+
+    setSize (520, 420);
 }
+
+// ── Paint ─────────────────────────────────────────────────────────────────────
+void MidiLearnDialog::paint (juce::Graphics& g)
+{
+    // Background
+    g.fillAll (juce::Colour (0xFF1A2024));
+
+    // Title bar
+    g.setColour (juce::Colour (0xFF263036));
+    g.fillRect (0, 0, getWidth(), 36);
+    g.setColour (juce::Colours::white);
+    g.setFont (juce::FontOptions (15.f).withStyle ("Bold"));
+    g.drawText ("MIDI Learn Assignments", 0, 0, getWidth(), 36, juce::Justification::centred);
+
+    // Column headers
+    const int hdrY = 38;
+    const int hdrH = 20;
+    const int w = getWidth() - 20;
+    
+    g.setColour (juce::Colour (0xFF263036));
+    g.fillRect (10, hdrY, w, hdrH);
+    
+    g.setColour (juce::Colours::white.withAlpha (0.55f));
+    g.setFont (juce::FontOptions (10.f).withStyle ("Bold"));
+    
+    g.drawText ("PARAMETER", 18, hdrY, (int)(w * 0.32f), hdrH, juce::Justification::centredLeft);
+    g.drawText ("CC", 10 + (int)(w * 0.32f), hdrY, (int)(w * 0.18f), hdrH, juce::Justification::centredLeft);
+    g.drawText ("ENCODER MODE", 10 + (int)(w * 0.32f) + (int)(w * 0.18f) + 88, hdrY, 
+                w - (int)(w * 0.32f) - (int)(w * 0.18f) - 92, hdrH, juce::Justification::centredLeft);
+}
+
+void MidiLearnDialog::resized()
+{
+    mappingList.setBounds (10, 60, getWidth() - 20, getHeight() - 96);
+    closeButton.setBounds ((getWidth() - 90) / 2, getHeight() - 30, 90, 24);
+}
+
+// ── ListBoxModel ──────────────────────────────────────────────────────────────
+int MidiLearnDialog::getNumRows()
+{
+    int count = 0;
+    for (int i = 0; i < kMidiLearnNumSlots; ++i)
+        if (juce::String (gSlotParamNames[i]).isNotEmpty()) ++count;
+    return count;
+}
+
+void MidiLearnDialog::paintListBoxItem (int /*row*/, juce::Graphics& g, int width, int height, bool selected)
+{
+    if (selected)
+    {
+        g.setColour (juce::Colours::deepskyblue.withAlpha (0.18f));
+        g.fillAll();
+    }
+    
+    g.setColour (juce::Colours::white.withAlpha (0.05f));
+    g.drawHorizontalLine (height - 1, 0.f, (float) width);
+}
+
+juce::Component* MidiLearnDialog::refreshComponentForRow (int row, bool /*selected*/, juce::Component* existing)
+{
+    auto* comp = dynamic_cast<MappingRowComponent*> (existing);
+    if (! comp)
+        comp = new MappingRowComponent();
+
+    const int fieldId = rowToFieldId (row);
+    if (fieldId >= 0)
+        comp->update (fieldId, midiLearn, getSlotParameterName (fieldId));
+
+    return comp;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+void MidiLearnDialog::close()
+{
+    if (onCloseCallback)
+        onCloseCallback();
+    else if (auto* parent = getParentComponent())
+        parent->removeChildComponent (this);
+}
+
+void MidiLearnDialog::encoderModeChanged (int fieldId, MidiLearnManager::EncoderMode mode)
+{
+    midiLearn.setEncoderMode (fieldId, mode);
+}
+```
+
+**Important Note:** I updated the font calls to use `juce::FontOptions` to prevent the "deprecated" warnings your compiler was throwing. 
+
+**Next Step:** Does your **`MidiLearnManager.h`** define the constant `kMidiLearnNumSlots`? If not, you will need to add that definition (typically `32`) to resolve the last potential build error.
