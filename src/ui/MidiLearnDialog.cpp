@@ -23,14 +23,14 @@ static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
     "One Shot",
     "Cents Detune",
     "MIDI Note",
-    "Slice Start",          // 21
+    "Marker",               // 21 - slice start / trim-in (same CC, context-aware)
     "Slice End",            // 22
     "Pan",
     "Filter Cutoff",
     "Filter Resonance",
     "Chromatic Channel",
     "Chromatic Legato",
-    "", "", "", ""          // 28-31 (unused)
+    "Trim Out",             // 28 - trim-out marker (trim mode only)
 };
 
 static juce::String getSlotParameterName (int fieldId)
@@ -87,10 +87,10 @@ void MidiLearnDialog::paint (juce::Graphics& g)
     g.fillRect (10, hdrY, w, hdrH);
     g.setColour (juce::Colours::white.withAlpha (0.55f));
     g.setFont (juce::Font (10.f, juce::Font::bold));
-    g.drawText ("PARAMETER",  18,          hdrY, col1,      hdrH, juce::Justification::centredLeft);
-    g.drawText ("CC / VALUE",  10 + col1,  hdrY, col2,      hdrH, juce::Justification::centredLeft);
-    g.drawText ("ENCODER MODE", 10 + col1 + col2, hdrY,
-                w - col1 - col2, hdrH, juce::Justification::centredLeft);
+    g.drawText ("PARAMETER",   18,         hdrY, (int)(w * 0.32f),       hdrH, juce::Justification::centredLeft);
+    g.drawText ("CC",          10 + (int)(w * 0.32f), hdrY, (int)(w * 0.18f), hdrH, juce::Justification::centredLeft);
+    g.drawText ("ENCODER MODE", 10 + (int)(w * 0.32f) + (int)(w * 0.18f) + 88, hdrY,
+                w - (int)(w * 0.32f) - (int)(w * 0.18f) - 92, hdrH, juce::Justification::centredLeft);
 }
 
 void MidiLearnDialog::resized()
@@ -103,7 +103,26 @@ void MidiLearnDialog::resized()
 
 int MidiLearnDialog::getNumRows()
 {
-    return kMidiLearnNumSlots;
+    // Only show named slots — skip empty entries at the end
+    int count = 0;
+    for (int i = 0; i < kMidiLearnNumSlots; ++i)
+        if (juce::String (gSlotParamNames[i]).isNotEmpty()) ++count;
+    return count;
+}
+
+// Map visible row index to field ID (skipping unnamed slots)
+static int rowToFieldId (int row)
+{
+    int count = 0;
+    for (int i = 0; i < kMidiLearnNumSlots; ++i)
+    {
+        if (juce::String (gSlotParamNames[i]).isNotEmpty())
+        {
+            if (count == row) return i;
+            ++count;
+        }
+    }
+    return -1;
 }
 
 void MidiLearnDialog::paintListBoxItem (int /*row*/, juce::Graphics& g,
@@ -127,7 +146,9 @@ juce::Component* MidiLearnDialog::refreshComponentForRow (int row, bool /*select
     if (! comp)
         comp = new MappingRowComponent();
 
-    comp->update (row, midiLearn, getSlotParameterName (row));
+    const int fieldId = rowToFieldId (row);
+    if (fieldId >= 0)
+        comp->update (fieldId, midiLearn, getSlotParameterName (fieldId));
     return comp;
 }
 
