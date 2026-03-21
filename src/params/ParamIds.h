@@ -27,7 +27,7 @@ namespace ParamIds
 
     // Selected slice boundary controls — normalised 0..1 position within sample
     inline const juce::String sliceStart          { "sliceStart" };
-    inline const juce::String sliceEnd            { "sliceEnd" };
+    
 
     // v17 additions
     inline const juce::String defaultPan          { "defaultPan" };

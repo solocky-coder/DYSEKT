@@ -159,7 +159,6 @@ DysektProcessor::DysektProcessor()
     filterCutoffParam = apvts.getRawParameterValue (ParamIds::defaultFilterCutoff);
     filterResParam    = apvts.getRawParameterValue (ParamIds::defaultFilterRes);
     sliceStartParam  = apvts.getRawParameterValue (ParamIds::sliceStart);
-    sliceEndParam    = apvts.getRawParameterValue (ParamIds::sliceEnd);
     publishUiSliceSnapshot();
 }
 

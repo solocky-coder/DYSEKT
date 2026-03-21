@@ -51,7 +51,6 @@ public:
         FieldCentsDetune,
         FieldMidiNote,
         FieldSliceStart,   // 21 - normalised 0-1 -> startSample via MIDI CC
-        FieldSliceEnd,     // 22 - normalised 0-1 -> endSample via MIDI CC
         FieldPan,          // 23 - per-slice pan -1..+1
         FieldFilterCutoff, // 24 - per-slice LP filter cutoff Hz
         FieldFilterRes,    // 25 - per-slice LP filter resonance 0..1
@@ -410,7 +409,6 @@ private:
     std::atomic<float>* filterCutoffParam { nullptr };
     std::atomic<float>* filterResParam    { nullptr };
     std::atomic<float>* sliceStartParam   { nullptr };
-    std::atomic<float>* sliceEndParam     { nullptr };
 
     // =========================================================================
     // Playback state
