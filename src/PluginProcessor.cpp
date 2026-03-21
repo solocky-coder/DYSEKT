@@ -1433,58 +1433,37 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
 
                             auto& sl = sliceManager.getSlice (sel);
 
-                            if (outIsRelative)
+                            if (outFieldId == FieldSliceStart)
                             {
-                                // ── Commit-on-idle: write to live drag atomics (zero cost,
-                                // same visual path as mouse drag). CmdSetSliceBounds fires
-                                // only after kMarkerIdleBlocks of CC silence in processBlock.
-                                if (outFieldId == FieldSliceStart)
+                                // Knob-drag emulation: CC drives the MARKER knob exactly
+                                // as a mouse drag would. Sensitivity = sampleNumFrames/300
+                                // (same as SCB mouseDrag). Writes to liveDrag atomics.
+                                // Commit fires after kMarkerIdleBlocks of CC silence.
+                                const int slEnd = sliceManager.getEndForSlice (sel, total);
+
+                                if (outIsRelative)
                                 {
-                                    const int slEnd   = sliceManager.getEndForSlice (sel, total);
-                                    // Accumulate from live position if already moving,
-                                    // otherwise start from committed slice position
+                                    const float sensitivity = (float) total / 300.0f;
                                     const int curLive = markerPending
                                         ? liveDragBoundsStart.load (std::memory_order_relaxed)
                                         : sl.startSample;
                                     const int newStart = juce::jlimit (0, slEnd - 64,
-                                        curLive + (int)(outNorm * stepSamples));
-
+                                        curLive + (int)(outNorm * sensitivity));
                                     liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
-                                    liveDragBoundsEnd.store   (slEnd,    std::memory_order_relaxed);
-                                    liveDragSliceIdx.store    (sel,      std::memory_order_release);
-                                    markerPending      = true;
-                                    markerPendingSlice = sel;
-                                    markerIdleCounter  = 0;
-                                }
-                            }
-                            else
-                            {
-                                // Absolute: same commit-on-idle but feed target position
-                                if (outFieldId == FieldSliceStart)
-                                {
-                                    const int slEnd  = sliceManager.getEndForSlice (sel, total);
-                                    const int target = juce::jlimit (0, slEnd - 64,
-                                        (int)(outNorm * (float)total));
-
-                                    liveDragBoundsStart.store (target, std::memory_order_relaxed);
-                                    liveDragBoundsEnd.store   (slEnd,  std::memory_order_relaxed);
-                                    liveDragSliceIdx.store    (sel,    std::memory_order_release);
-                                    markerPending      = true;
-                                    markerPendingSlice = sel;
-                                    markerIdleCounter  = 0;
                                 }
                                 else
                                 {
-                                    // Non-marker absolute: use smoother as before
-                                    if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots)
-                                    {
-                                        const int cur = sliceManager.getEndForSlice (sel, total);
-                                        if (! ccSmootherActive[(size_t) outFieldId])
-                                            ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
-                                        ccSmoothers[(size_t) outFieldId].setTargetValue ((float) juce::jlimit (sl.startSample + 64, total, (int)(outNorm * (float)total)));
-                                        ccSmootherActive[(size_t) outFieldId] = true;
-                                    }
+                                    const int newStart = juce::jlimit (0, slEnd - 64,
+                                        (int)(outNorm * (float) total));
+                                    liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
                                 }
+
+                                liveDragBoundsEnd.store (slEnd, std::memory_order_relaxed);
+                                liveDragSliceIdx.store  (sel,   std::memory_order_release);
+                                markerPending      = true;
+                                markerPendingSlice = sel;
+                                markerIdleCounter  = 0;
+                                uiSnapshotDirty.store (true, std::memory_order_release);
                             }
                         }
                     }
