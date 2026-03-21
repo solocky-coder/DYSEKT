@@ -1,6 +1,7 @@
 #include "ShortcutsPanel.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include "MidiLearnDialog.h"
 
 ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     : processor (proc)
@@ -18,11 +19,18 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     closeBtn.onClick = [this] { if (onDismiss) onDismiss(); };
     addAndMakeVisible (closeBtn);
 
-    themeBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
+        themeBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
     themeBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     themeBtn.setTooltip ("Change theme or UI scale");
     themeBtn.onClick = [this] { if (onThemeRequest) onThemeRequest(); };
     addAndMakeVisible (themeBtn);
+
+    // ------- INSERT MIDI LEARN BTN BLOCK HERE -------
+    midiLearnBtn.setColour (juce::TextButton::buttonColourId, getTheme().button);
+    midiLearnBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
+    midiLearnBtn.setTooltip ("Open the MIDI Learn panel to assign MIDI CCs");
+    midiLearnBtn.onClick = [this] { openMidiLearnDialog(); };
+    addAndMakeVisible (midiLearnBtn);
 
     searchBox.setTextToShowWhenEmpty ("Search shortcuts...", getTheme().foreground.withAlpha (0.4f));
     searchBox.setFont (DysektLookAndFeel::makeFont (11.0f));
@@ -260,9 +268,31 @@ void ShortcutsPanel::resized()
     auto titleRow = header.removeFromTop (30);
     closeBtn.setBounds  (titleRow.removeFromRight (30));
     themeBtn.setBounds  (titleRow.removeFromRight (110));
+    midiLearnBtn.setBounds(titleRow.removeFromRight(110));
     titleRow.removeFromRight (6);   // gap between label and theme button
     titleLabel.setBounds (titleRow);
 
     header.removeFromTop (8);
     searchBox.setBounds (header.removeFromTop (26));
+}
+
+// ...end of resized() {...}
+
+void ShortcutsPanel::openMidiLearnDialog()
+{
+    // Prevent opening multiple dialogs
+    if (auto* existing = findChildWithID ("MidiLearnDialog"))
+    {
+        existing->toFront (true);
+        return;
+    }
+
+    auto* dialog = new MidiLearnDialog(processor.midiLearn, [this] {
+        if (auto* comp = findChildWithID ("MidiLearnDialog"))
+            delete comp;
+    });
+    dialog->setComponentID ("MidiLearnDialog");
+    dialog->setBounds (70, 70, 520, 420); // Adjust as needed
+    addAndMakeVisible (dialog);
+    dialog->toFront (true);
 }
