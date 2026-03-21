@@ -265,15 +265,6 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
                     x, y + cellH - 10, cellW, 10, juce::Justification::centredLeft);
     }
 
-    // ── Value text — centred above the slider track ────────────────────────────
-    const int pct = juce::jlimit (-100, 100, (int) std::round (panValue * 100.f));
-    juce::String panStr = (pct == 0) ? "C"
-                        : (pct  < 0) ? ("L" + juce::String (-pct))
-                                     : ("R" + juce::String ( pct));
-    g.setFont (DysektLookAndFeel::makeMonoFont (10.0f));
-    g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.75f));
-    g.drawText (panStr, trackX, trackY - 11, trackW, 10, juce::Justification::centred);
-
     // ── Slider track ───────────────────────────────────────────────────────
     const int trackY  = y + 18;
     const int trackH  = 6;
@@ -310,6 +301,16 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
     g.setColour (locked ? theme.lockActive : (armed ? ac.brighter (0.4f) : ac));
     g.fillRoundedRectangle ((float) (thumbX - 2), (float) (trackY - 1),
                              4.f, (float) (trackH + 2), 1.5f);
+
+    // ── Value text — below the slider track, centred ──────────────────────────
+    const int pct = juce::jlimit (-100, 100, (int) std::round (panValue * 100.f));
+    juce::String panStr = (pct == 0) ? "C"
+                        : (pct  < 0) ? ("L" + juce::String (-pct))
+                                     : ("R" + juce::String ( pct));
+    g.setFont (DysektLookAndFeel::makeMonoFont (10.0f));
+    g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.55f));
+    g.drawText (panStr, x, trackY + trackH + 1, cellW, 10,
+                juce::Justification::centred);
 
     // ── Register cell ──────────────────────────────────────────────────────
     outWidth = cellW;
@@ -603,20 +604,14 @@ void SliceControlBar::paint (juce::Graphics& g)
     }
 
     // MARKER — slice boundary knob in row 1
-    // During MIDI CC movement, read from live drag atomics so the readout
-    // tracks the encoder in real time instead of waiting for idle commit.
     {
         g.setColour (getTheme().separator.withAlpha (0.5f));
         g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
         x += 8;
 
-        const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
-        const int markerSample = (liveIdx == idx)
-            ? processor.liveDragBoundsStart.load (std::memory_order_relaxed)
-            : s.startSample;
         float startNorm = (ui.numSlices > 0 && idx >= 0)
-            ? (float) markerSample / (float) juce::jmax (1, ui.sampleNumFrames) : 0.f;
-        drawKnobCell (g, x, row1y, "MARKER", juce::String (markerSample),
+            ? (float) s.startSample / (float) juce::jmax (1, ui.sampleNumFrames) : 0.f;
+        drawKnobCell (g, x, row1y, "MARKER", juce::String (s.startSample),
                       startNorm, false, 0,
                       F::FieldSliceStart, 0.f, 1.f, 0.001f, cw);
         cells.back().isMidiLearnable = true;
@@ -830,8 +825,8 @@ void SliceControlBar::paint (juce::Graphics& g)
                         juce::Justification::centred);
         };
 
-        if (adsrGroupX2   > adsrGroupX1)   drawGroupLabel (adsrGroupX1,   adsrGroupX2,   "ADSR");
-        if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "FILTER");
+        if (adsrGroupX2   > adsrGroupX1)   drawGroupLabel (adsrGroupX1,   adsrGroupX2,   "");
+        if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "");
     }
 }
 
