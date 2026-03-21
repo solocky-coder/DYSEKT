@@ -157,8 +157,3 @@ void MidiLearnDialog::encoderModeChanged (int fieldId, MidiLearnManager::Encoder
 {
     midiLearn.setEncoderMode (fieldId, mode);
 }
-```
-
-**Important Note:** I updated the font calls to use `juce::FontOptions` to prevent the "deprecated" warnings your compiler was throwing. 
-
-**Next Step:** Does your **`MidiLearnManager.h`** define the constant `kMidiLearnNumSlots`? If not, you will need to add that definition (typically `32`) to resolve the last potential build error.
