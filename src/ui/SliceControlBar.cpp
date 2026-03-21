@@ -1,4 +1,4 @@
-#include "SliceControlBar.h"
+If you need the exact line or code snippet changed, just let me know!#include "SliceControlBar.h"
 #include <cmath>
 #include "UIHelpers.h"
 #include "DysektLookAndFeel.h"
@@ -764,14 +764,15 @@ void SliceControlBar::paint (juce::Graphics& g)
         const float pkR = processor.slicePeakR[(size_t) idx].load (std::memory_order_relaxed);
         const int barH  = (meterH - 2) / 2;
 
-        auto phosphorCol = [&] (float pos) -> juce::Colour
-        {
-            const auto base = getTheme().accent;
-            if (pos < 0.70f) return base.withAlpha (0.25f + (pos / 0.70f) * 0.60f);
-            if (pos < 0.85f) return base.interpolatedWith (juce::Colour (0xFFFFE000),
-                                    (pos - 0.70f) / 0.15f).withAlpha (0.88f);
-            return juce::Colour (0xFFFF2222).withAlpha (0.80f);
-        };
+            auto phosphorCol = [&] (float pos) -> juce::Colour
+    {
+        const auto& sl = processor.sliceManager.getSlice(idx);
+        const auto base = sl.colour;
+        if (pos < 0.70f) return base.withAlpha (0.25f + (pos / 0.70f) * 0.60f);
+        if (pos < 0.85f) return base.interpolatedWith (juce::Colour (0xFFFFE000),
+                                (pos - 0.70f) / 0.15f).withAlpha (0.88f);
+        return juce::Colour (0xFFFF2222).withAlpha (0.80f);
+    };
 
         auto drawBar = [&] (int barY, float pk)
         {
