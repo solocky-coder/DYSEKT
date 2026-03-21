@@ -399,24 +399,7 @@ void DysektProcessor::publishUiSliceSnapshot()
 
     // Keep sliceStart / sliceEnd APVTS params in sync with the selected slice
     // so hosts can map them to Quick Controls and MIDI CC.
-    if (sliceStartParam != nullptr && sliceEndParam != nullptr)
-    {
-        const int sel     = snap.selectedSlice;
-        const int total   = snap.sampleNumFrames;
-        if (sel >= 0 && sel < snap.numSlices && total > 0)
-        {
-            const auto& sl = snap.slices[(size_t) sel];
-            const float pubStart = (float) sl.startSample / (float) total;
-            const float pubEnd   = (float) sliceManager.getEndForSlice (sel, total) / (float) total;
-            sliceStartParam->store (pubStart, std::memory_order_relaxed);
-            sliceEndParam->store   (pubEnd,   std::memory_order_relaxed);
-            sliceStartPublished.store (pubStart, std::memory_order_relaxed);
-            sliceEndPublished.store   (pubEnd,   std::memory_order_relaxed);
-            paramsSyncedForSlice.store (sel, std::memory_order_relaxed);
-        }
-    }
-}
-
+ 
 void DysektProcessor::pushCommand (Command cmd)
 {
     const bool critical = isCriticalCommand (cmd.type);
