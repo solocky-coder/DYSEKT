@@ -57,7 +57,6 @@ public:
         FieldFilterRes,    // 25 - per-slice LP filter resonance 0..1
         FieldChromaticChannel, // 26 - per-slice chromatic MIDI channel (0=off, 1-16)
         FieldChromaticLegato,  // 27 - per-slice chromatic legato (bool)
-        FieldTrimOut,          // 28 - trim-out marker position (MIDI learnable, trim mode only)
     };
 
     // ── Command types ────────────────────────────────────────────────────────
@@ -250,6 +249,13 @@ public:
     // Audio-thread write, audio-thread read only.
     std::array<bool, kMidiLearnNumSlots> ccPickedUp {};
 
+    // Commit-on-idle for FieldSliceStart CC — write live drag atomics during
+    // movement, commit to SliceManager only after kIdleBlocks of silence.
+    static constexpr int kMarkerIdleBlocks = 4;  // ~80ms at 512/44100
+    int  markerIdleCounter  = 0;    // counts blocks since last CC message
+    bool markerPending      = false; // true while a commit is outstanding
+    int  markerPendingSlice = -1;    // which slice the pending commit is for
+
     // NRPN decoder state (audio thread only — no atomics needed)
     int nrpnMSB     = -1;
     int nrpnLSB     = -1;
@@ -324,12 +330,6 @@ private:
     {
         return (std::isfinite (s) && s >= -8.0f && s <= 8.0f) ? s : 0.0f;
     }
-
-    // === marker drag state for MIDI CC slice boundary editing ===
-    bool markerPending = false;
-    int markerPendingSlice = -1;
-    int markerIdleCounter = 0;
-    static constexpr int kMarkerIdleBlocks = 3; // adjust if plugin logic expects a different value
 
     // =========================================================================
     // Command FIFO
