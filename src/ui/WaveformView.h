@@ -99,6 +99,11 @@ private:
         bool operator== (const CacheKey&) const = default;
     };
 
+    // --- Optimistic state to prevent marker 'jump' after move ---
+    int optimisticSliceIdx = -1;
+    int optimisticStartSample = -1;
+
+
     DysektProcessor& processor;
     WaveformCache cache;
     CacheKey prevCacheKey;

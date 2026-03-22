@@ -400,6 +400,15 @@ void WaveformView::drawWaveform (juce::Graphics& g)
 
 void WaveformView::drawSlices (juce::Graphics& g)
 {
+    // --- Clear optimistic state once snapshot reflects the real model ---
+    if (optimisticSliceIdx >= 0) {
+        const auto& optSlice = processor.getUiSliceSnapshot().slices[(size_t)optimisticSliceIdx];
+        if (optSlice.startSample == optimisticStartSample) {
+            optimisticSliceIdx = -1;
+            optimisticStartSample = -1;
+        }
+    }
+
     const auto& ui = processor.getUiSliceSnapshot();
     int sel = ui.selectedSlice;
     int num = ui.numSlices;
@@ -410,6 +419,11 @@ void WaveformView::drawSlices (juce::Graphics& g)
         if (! s.active) continue;
 
         int drawStartSample = s.startSample;
+
+        // --- Use optimistic start sample if we're waiting for snapshot to catch up ---
+        if (i == optimisticSliceIdx && optimisticStartSample >= 0)
+            drawStartSample = optimisticStartSample;
+
         int drawEndSample = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
 
         // Live preview during drag:
@@ -739,6 +753,10 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
             lCmd.numPositions = 1;
             processor.pushCommand(lCmd);
         }
+
+        // --- Optimistic update to prevent marker jump-back
+        optimisticSliceIdx = dragSliceIdx;
+        optimisticStartSample = dragPreviewStart;
     }
 
     // Deactivate live drag so the audio thread stops overriding slice bounds.
