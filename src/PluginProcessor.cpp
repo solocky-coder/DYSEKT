@@ -57,6 +57,8 @@ static constexpr uint32_t kValidLockMask =
     | kLockFormantComp | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
     | kLockOutputBus | kLockLoop | kLockOneShot | kLockCentsDetune
     | kLockPan | kLockFilter;
+// <<--- Place the new constant here:
+static constexpr int FieldTrimOut = 28; // MIDI Learn slot for "Trim Out"
 
 static Slice sanitiseRestoredSlice (Slice s)
 {
@@ -1107,7 +1109,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
         // Relative: CC96 (increment) / CC97 (decrement) instead of CC6/CC38
         // DYSEKT NRPN map:
         //   NRPN 0 = Slice Start   (FieldSliceStart)
-        //   NRPN 1 = Slice End     (FieldSliceEnd)
+        //   NRPN 1 = Slice End     (FieldTrimOut)
         if (msg.isController())
         {
             const int cc  = msg.getControllerNumber();
@@ -1119,7 +1121,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                      && nrpnMSB == 0 && nrpnLSB >= 0 && nrpnLSB <= 1)
             {
                 // Valid NRPN for slice boundary
-                const int fieldId = (nrpnLSB == 0) ? FieldSliceStart : FieldSliceEnd;
+                const int fieldId = (nrpnLSB == 0) ? FieldSliceStart : FieldTrimOut;
                 const int total   = sampleData.getNumFrames();
 
                 if (total > 1)
@@ -1206,10 +1208,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                      outFieldId, outNorm, outIsRelative))
             {
                 // ── Trim region CC: runs regardless of slice count ──────────
-                // FieldSliceStart / FieldSliceEnd are hardwired to trim in/out.
+                // FieldSliceStart / FieldTrimOut are hardwired to trim in/out.
                 // This block executes BEFORE the slice guard so it works in trim
                 // mode even when there are zero slices.
-                if (outFieldId == FieldSliceStart || outFieldId == FieldSliceEnd)
+                if (outFieldId == FieldSliceStart || outFieldId == FieldTrimOut)
                 {
                     const int total = sampleData.getNumFrames();
                     if (total > 1)
@@ -1423,7 +1425,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     // ── Slice start/end boundary (non-trim mode only) ────────
                     // Trim CC already handled above the slice guard; this path
                     // only runs when trim mode is inactive.
-                    if (outFieldId == FieldSliceStart || outFieldId == FieldSliceEnd)
+                    if (outFieldId == FieldSliceStart || outFieldId == FieldTrimOut)
                     {
                         const int total = sampleData.getNumFrames();
                         if (total > 1)
@@ -1846,7 +1848,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             ccSmoothers[(size_t) i].skip (numSamples);
             const float smoothed = ccSmoothers[(size_t) i].getCurrentValue();
 
-            if (i == FieldSliceStart || i == FieldSliceEnd)
+            if (i == FieldSliceStart || i == FieldTrimOut)
             {
                 // Boundary smoother — target depends on mode
                 if (inTrim)
