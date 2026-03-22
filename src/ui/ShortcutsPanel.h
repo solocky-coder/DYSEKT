@@ -34,7 +34,6 @@ private:
 
     juce::TextButton closeBtn { "×" };
     juce::TextButton themeBtn { "Theme & Scale..." };
-    juce::TextButton midiLearnBtn { "MIDI Learn..." };  // <<== ADD THIS
     juce::TextEditor searchBox;
     juce::Label      titleLabel;
 
@@ -47,7 +46,6 @@ private:
     void buildShortcutData();
     void drawTrimPrefsSection (juce::Graphics& g, juce::Rectangle<int>& area);
 
-    void openMidiLearnDialog();    // <<== ADD THIS
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShortcutsPanel)
 };
