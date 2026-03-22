@@ -400,6 +400,14 @@ void WaveformView::drawWaveform (juce::Graphics& g)
 
 void WaveformView::drawSlices (juce::Graphics& g)
 {
+    // --- Consume pending optimistic marker commit from processor (for MIDI/knob moves) ---
+    int optIdx = processor.pendingUiOptimisticIdx.exchange(-1, std::memory_order_acq_rel);
+    if (optIdx >= 0)
+    {
+        optimisticSliceIdx = optIdx;
+        optimisticStartSample = processor.pendingUiOptimisticSample.exchange(-1, std::memory_order_acq_rel);
+    }
+
     // --- Clear optimistic state once snapshot reflects the real model ---
     if (optimisticSliceIdx >= 0) {
         const auto& optSlice = processor.getUiSliceSnapshot().slices[(size_t)optimisticSliceIdx];
@@ -408,6 +416,8 @@ void WaveformView::drawSlices (juce::Graphics& g)
             optimisticStartSample = -1;
         }
     }
+
+    // ... rest of the function ...
 
     const auto& ui = processor.getUiSliceSnapshot();
     int sel = ui.selectedSlice;

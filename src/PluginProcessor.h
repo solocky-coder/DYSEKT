@@ -242,6 +242,9 @@ public:
     std::atomic<int> liveDragBoundsStart { 0 };
     std::atomic<int> liveDragBoundsEnd   { 0 };
     std::atomic<int> liveDragSliceIdx    { -1 };
+    // --- Optimistic marker commit notification for UI (set on knob/CC commit, cleared by UI) ---
+    std::atomic<int> pendingUiOptimisticIdx { -1 };
+    std::atomic<int> pendingUiOptimisticSample { -1 };
     std::atomic<int>   paramsSyncedForSlice   { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
     std::atomic<float> sliceStartPublished    { -1.0f }; // value written when syncing, used to detect real CC moves
 
