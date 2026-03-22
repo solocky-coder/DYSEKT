@@ -27,31 +27,6 @@ void WaveformView::setSliceDrawMode(bool active)
     }
 }
 
-// =========== TRIM MODE API (add these missing method implementations) ===========
-
-void WaveformView::exitTrimMode()
-{
-    trimMode = false;
-    dragMode = None;
-    trimDragging = false;
-    repaint();
-}
-
-void WaveformView::getTrimBounds(int& outStart, int& outEnd) const
-{
-    outStart = trimInPoint;
-    outEnd   = trimOutPoint;
-}
-
-void WaveformView::resetTrim()
-{
-    trimInPoint = trimStart;
-    trimOutPoint = trimEnd;
-    repaint();
-}
-
-// =========== END TRIM MODE API ===========
-
 bool WaveformView::hasActiveSlicePreview() const noexcept
 {
     if (dragSliceIdx < 0)
@@ -121,8 +96,8 @@ int WaveformView::sampleToPixel(int sample) const
 {
     if (paintViewStateActive && cachedPaintViewState.valid)
         return (int)((float)(sample - cachedPaintViewState.visibleStart)
-            / (float)cachedPaintViewState.visibleLen
-            * (float)cachedPaintViewState.width);
+                     / (float)cachedPaintViewState.visibleLen
+                     * (float)cachedPaintViewState.width);
     const auto state = buildViewState(processor.sampleData.getSnapshot());
     if (!state.valid) return 0;
     return (int)((float)(sample - state.visibleStart) / (float)state.visibleLen * (float)state.width);
@@ -136,7 +111,7 @@ void WaveformView::rebuildCacheIfNeeded()
     const CacheKey key{ view.visibleStart, view.visibleLen, view.width, view.numFrames, sampleSnap.get() };
     if (key == prevCacheKey) return;
     cache.rebuild(sampleSnap->buffer, sampleSnap->peakMipmaps,
-        view.numFrames, processor.zoom.load(), processor.scroll.load(), view.width);
+                  view.numFrames, processor.zoom.load(), processor.scroll.load(), view.width);
     prevCacheKey = key;
 }
 
@@ -294,7 +269,7 @@ void WaveformView::drawWaveform(juce::Graphics& g)
             {
                 float y = (float)cy - peaks[(size_t)px].maxVal * scale;
                 if (!started) { path.startNewSubPath((float)px, y); started = true; }
-                else             path.lineTo((float)px, y);
+                else path.lineTo((float)px, y);
             }
             g.strokePath(path, juce::PathStrokeType(1.5f));
 
@@ -347,10 +322,10 @@ void WaveformView::drawWaveform(juce::Graphics& g)
             {
                 float y = (float)cy - peaks[(size_t)px].maxVal * scale;
                 if (!started) { path.startNewSubPath((float)px, y); started = true; }
-                else             path.lineTo((float)px, y);
+                else path.lineTo((float)px, y);
             }
-            g.strokePath(path, juce::PathStrokeType(1.8f,
-                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath(path, juce::PathStrokeType(
+                1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
             if (samplesPerPixel < 0.125f)
             {
@@ -372,8 +347,7 @@ void WaveformView::drawWaveform(juce::Graphics& g)
         {
             juce::ColourGradient grad(
                 waveCol.withAlpha(0.0f), 0.0f, 0.0f,
-                waveCol.withAlpha(0.0f), 0.0f, (float)h,
-                false);
+                waveCol.withAlpha(0.0f), 0.0f, (float)h, false);
             grad.addColour(0.35, waveCol.withAlpha(0.18f));
             grad.addColour(0.5, waveCol.withAlpha(0.28f));
             grad.addColour(0.65, waveCol.withAlpha(0.18f));
@@ -388,7 +362,6 @@ void WaveformView::drawWaveform(juce::Graphics& g)
             g.setColour(waveCol.withAlpha(0.25f));
             g.strokePath(topPath, juce::PathStrokeType(3.5f,
                 juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
             g.setColour(waveCol.withAlpha(0.90f));
             g.strokePath(topPath, juce::PathStrokeType(1.3f,
                 juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
@@ -401,7 +374,6 @@ void WaveformView::drawWaveform(juce::Graphics& g)
             g.setColour(waveCol.withAlpha(0.25f));
             g.strokePath(botPath, juce::PathStrokeType(3.5f,
                 juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
             g.setColour(waveCol.withAlpha(0.90f));
             g.strokePath(botPath, juce::PathStrokeType(1.3f,
                 juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
@@ -509,14 +481,14 @@ void WaveformView::drawSlices(juce::Graphics& g)
         if (sw <= 0) continue;
 
         // --- CUBASE-STYLE SLICE OVERLAY ---
-        // Soft colored region fill
+        // Soft colored region fill (interior of the slice)
         g.setColour(s.colour.withAlpha(0.11f));
         g.fillRect(x1, 0, sw, getHeight());
 
-        // Strong colored borders: top & bottom
-        g.setColour(s.colour.withAlpha(0.65f));
-        g.drawHorizontalLine(0, (float)x1, (float)x2);                    // top
-        g.drawHorizontalLine(getHeight() - 1, (float)x1, (float)x2);      // bottom
+        // STRONG COLORED BARS AT TOP AND BOTTOM (thicker bars)
+        g.setColour(s.colour.withAlpha(0.7f));
+        g.fillRect(x1, 0, sw, 3);                              // top bar (height 3px)
+        g.fillRect(x1, getHeight() - 3, sw, 3);                // bottom bar (height 3px)
 
         // Bold colored vertical start marker
         g.setColour(s.colour.withAlpha(0.85f));
@@ -532,22 +504,12 @@ void WaveformView::drawSlices(juce::Graphics& g)
             g.fillRect(x1, 0, sw, getHeight());
         }
 
-        // Optional: slice index label
+        // Slice index label (always white, bold)
         g.setFont(juce::Font(10.0f, juce::Font::bold));
-        g.setColour(s.colour.contrasting(0.8f));
+        g.setColour(juce::Colours::white);
         g.drawText(juce::String(i + 1), x1 + 4, 3, 16, 12, juce::Justification::left);
     }
 }
-
-// =========== ADD THIS (the function the linker complains about) ===========
-
-void WaveformView::drawPlaybackCursors(juce::Graphics& g)
-{
-    // Not implemented — add drawing logic as needed
-    // (Stub to fix linker error.)
-}
-
-// ==========================================================================
 
 void WaveformView::resized()
 {
@@ -750,9 +712,6 @@ void WaveformView::mouseUp(const juce::MouseEvent&)
     {
         trimDragging = false;
         dragMode = None;
-
-        // Only update internal trim points and visual state;
-        // do NOT trigger 'onTrimApplied' here. Apply is done by 'APPLY' button.
         processor.trimRegionStart.store(trimInPoint, std::memory_order_relaxed);
         processor.trimRegionEnd.store(trimOutPoint, std::memory_order_relaxed);
         repaint();
@@ -782,15 +741,11 @@ void WaveformView::mouseUp(const juce::MouseEvent&)
             processor.pushCommand(lCmd);
         }
 
-        // --- Optimistic update to prevent marker jump-back
         optimisticSliceIdx = dragSliceIdx;
         optimisticStartSample = dragPreviewStart;
     }
 
-    // Deactivate live drag so the audio thread stops overriding slice bounds.
     processor.liveDragSliceIdx.store(-1, std::memory_order_release);
-
-    // Clear drag state
     dragMode = None;
     dragSliceIdx = -1;
     linkedSliceIdx = -1;
@@ -904,3 +859,5 @@ void WaveformView::setTrimMode(bool active)
     }
     repaint();
 }
+
+void WaveformView::drawPlaybackCursors(juce::Graphics&) {}
