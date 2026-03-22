@@ -178,21 +178,6 @@ void SliceLane::paint (juce::Graphics& g)
         labelCacheDirty   = false;
     }
 
-    g.setFont (DysektLookAndFeel::makeFont (12.0f, true));
-    for (int ci = 0; ci < cachedLabelCount; ++ci)
-    {
-        const auto& cl = cachedLabels[(size_t) ci];
-        juce::String label = juce::String (cl.sliceIdx + 1);
-        int labelW = g.getCurrentFont().getStringWidth (label) + 6;
-        bool isSel = (cl.sliceIdx == sel);
-
-        juce::Colour col { 0xFF1A8FD1 };
-        for (int i = 0; i < visCount; ++i)
-            if (vis[(size_t) i].idx == cl.sliceIdx) { col = vis[(size_t) i].col; break; }
-
-        g.setColour (isSel ? col.withAlpha (1.0f) : col.withAlpha (0.70f));
-        g.drawText (label, cl.x, 0, labelW, bodyH, juce::Justification::centredLeft);
-    }
 
     // ── ADSR lock dot strip — separate 6px zone BELOW the slice body ─────────
     // Each slice gets its own dot-zone column directly beneath it.
