@@ -72,10 +72,6 @@ private:
         bool valid = false;
     };
 
-    int previewSliceIdx = -1;
-    int previewStartSample = -1;
-
-    // ...rest of private members...
     enum DragMode { None, DragEdgeLeft, DragEdgeRight, DrawSlice, MoveSlice, DuplicateSlice,
                     TrimMarkerLeft, TrimMarkerRight, DragTrimIn, DragTrimOut };
 

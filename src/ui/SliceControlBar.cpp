@@ -1131,17 +1131,9 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
                 processor.liveDragBoundsStart.store (sl.startSample, std::memory_order_relaxed);
                 processor.liveDragBoundsEnd.store   (newEnd,         std::memory_order_relaxed);
             }
-                   processor.liveDragSliceIdx.store (liveSel, std::memory_order_release);
-
-        // --- INTERSECT-style preview marker update in WaveformView ---
-        if (waveformView)
-        {
-            waveformView->previewSliceIdx = liveSel;
-            waveformView->previewStartSample = processor.liveDragBoundsStart.load(std::memory_order_relaxed);
-            waveformView->repaint();
+            processor.liveDragSliceIdx.store (liveSel, std::memory_order_release);
         }
-    }
-    repaint(); return;
+        repaint(); return;
     }
 
     // ── All other knobs: CmdSetSliceParam ─────────────────────────────────
