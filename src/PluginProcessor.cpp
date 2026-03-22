@@ -2071,7 +2071,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         v = slicePeakR[si].load (std::memory_order_relaxed) * kDecayPerBlock;
         slicePeakR[si].store (v, std::memory_order_relaxed);
     }
-
+}
 juce::AudioProcessorEditor* DysektProcessor::createEditor()
 {
     return new DysektEditor (*this);
