@@ -11,18 +11,20 @@ void WaveformView::setSliceDrawMode (bool active)
     sliceDrawMode = active;
     setMouseCursor (active ? juce::MouseCursor::IBeamCursor : juce::MouseCursor::NormalCursor);
 
-    if (!active)
-    {
-        // --- CLEAR ALL DRAG/PREVIEW/LIVE MARKER STATES ---
-        dragMode     = None;
-        dragSliceIdx = -1;
-        linkedSliceIdx = -1;
-        dragPreviewStart = 0;
-        dragPreviewEnd = 0;
-        drawStartedFromAlt = false;
-        processor.liveDragSliceIdx.store(-1, std::memory_order_release);
-        repaint();
-    }
+if (!active)
+{
+    // --- CLEAR ALL DRAG/PREVIEW/LIVE MARKER STATES ---
+    dragMode     = None;
+    dragSliceIdx = -1;
+    linkedSliceIdx = -1;
+    dragPreviewStart = 0;
+    dragPreviewEnd = 0;
+    drawStartedFromAlt = false;
+    processor.liveDragSliceIdx.store(-1, std::memory_order_release);
+    processor.liveDragBoundsStart.store(-1, std::memory_order_release); // <--- ADD THIS LINE
+    processor.liveDragBoundsEnd.store(-1, std::memory_order_release);   // <--- ADD THIS LINE
+    repaint();
+}
 }
 
 bool WaveformView::hasActiveSlicePreview() const noexcept
