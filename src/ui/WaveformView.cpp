@@ -25,7 +25,7 @@ if (!active)
     processor.liveDragBoundsEnd.store(-1, std::memory_order_release);   // <--- ADD THIS LINE
     repaint();
 }
-}
+
 
 bool WaveformView::hasActiveSlicePreview() const noexcept
 {
@@ -510,7 +510,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
         g.drawText(juce::String(i + 1), x1 + 4, 3, 16, 12, juce::Justification::left);
     }
 }
-}
+
 
 void WaveformView::resized()
 {
