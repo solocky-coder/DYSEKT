@@ -2,6 +2,19 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "../MidiLearnManager.h"
 
+class WaveformView; // <--- ADD THIS LINE HERE
+
+class DysektProcessor;
+
+class SliceControlBar : public juce::Component
+{
+public:
+    explicit SliceControlBar (DysektProcessor& p);
+    // ... other public members ...
+
+    WaveformView* waveformView = nullptr;  // <--- ADD THIS LINE HERE if public
+    // ... rest of SliceControlBar ...
+
 class DysektProcessor;
 
 class SliceControlBar : public juce::Component

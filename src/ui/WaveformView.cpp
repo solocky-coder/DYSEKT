@@ -400,39 +400,6 @@ void WaveformView::drawWaveform (juce::Graphics& g)
 
 void WaveformView::drawSlices (juce::Graphics& g)
 {
-    // --- Consume pending optimistic marker commit from processor (for MIDI/knob moves) ---
-    int optIdx = processor.pendingUiOptimisticIdx.exchange(-1, std::memory_order_acq_rel);
-    int optSample = -1;
-    if (optIdx >= 0) {
-        optSample = processor.pendingUiOptimisticSample.exchange(-1, std::memory_order_acq_rel);
-
-        // Only set optimistic if different from snapshot
-        const auto& uiSnap = processor.getUiSliceSnapshot();
-        if (optIdx < (int)uiSnap.slices.size() && uiSnap.slices[(size_t)optIdx].startSample != optSample) {
-            optimisticSliceIdx = optIdx;
-            optimisticStartSample = optSample;
-        } else {
-            // It's already committed in the snapshot, so don't set
-            optimisticSliceIdx = -1;
-            optimisticStartSample = -1;
-        }
-    }
-
-    // --- Clear optimistic state once snapshot reflects the real model ---
-    if (optimisticSliceIdx >= 0) {
-        const auto& snap = processor.getUiSliceSnapshot();
-        if (optimisticSliceIdx < (int)snap.slices.size()) {
-            const auto& optSlice = snap.slices[(size_t)optimisticSliceIdx];
-            if (optSlice.startSample == optimisticStartSample || !optSlice.active) {
-                optimisticSliceIdx = -1;
-                optimisticStartSample = -1;
-            }
-        } else {
-            optimisticSliceIdx = -1;
-            optimisticStartSample = -1;
-        }
-    }
-
     const auto& ui = processor.getUiSliceSnapshot();
     int sel = ui.selectedSlice;
     int num = ui.numSlices;
@@ -442,52 +409,48 @@ void WaveformView::drawSlices (juce::Graphics& g)
         const auto& s = ui.slices[(size_t) i];
         if (! s.active) continue;
 
-        int drawStartSample = s.startSample;
-
-        // --- Use optimistic start sample if we're waiting for snapshot to catch up ---
-        if (i == optimisticSliceIdx && optimisticStartSample >= 0)
-            drawStartSample = optimisticStartSample;
+        // ----- INTERSECT-style preview: Use preview state if active, else model -----
+        int markerSample = (i == previewSliceIdx && previewStartSample >= 0)
+            ? previewStartSample
+            : s.startSample;
 
         int drawEndSample = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
 
-        // Live preview during drag:
+        // Retain existing drag/linked/live logic for end position if needed:
+
         if (i == sel && dragSliceIdx == i &&
             (dragMode == DragEdgeLeft || dragMode == MoveSlice))
         {
-            drawStartSample = dragPreviewStart;
             drawEndSample = dragPreviewEnd;
         }
         else if (i == linkedSliceIdx && linkedSliceIdx >= 0 && dragMode != None)
         {
-            drawStartSample = linkedPreviewStart;
-            drawEndSample   = linkedPreviewEnd;
+            drawEndSample = linkedPreviewEnd;
         }
         else if (dragMode == None)
         {
             const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
             if (liveIdx == i)
             {
-                const int liveStart = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
-                const int liveEnd   = processor.liveDragBoundsEnd.load   (std::memory_order_relaxed);
-                if (liveStart >= 0 && liveEnd > liveStart && liveEnd <= ui.sampleNumFrames)
+                const int liveEnd = processor.liveDragBoundsEnd.load (std::memory_order_relaxed);
+                if (liveEnd >= 0 && liveEnd <= ui.sampleNumFrames)
                 {
-                    drawStartSample = liveStart;
-                    drawEndSample   = liveEnd;
+                    drawEndSample = liveEnd;
                 }
             }
         }
 
-        int x1 = std::max (0, sampleToPixel (drawStartSample));
-        int x2 = std::min (getWidth(), sampleToPixel (drawEndSample));
+        int x1 = std::max(0, sampleToPixel(markerSample)); // always use preview if present!
+        int x2 = std::min(getWidth(), sampleToPixel(drawEndSample));
         int sw = x2 - x1;
         if (sw <= 0) continue;
 
         if (i == sel)
         {
-            g.setColour (getTheme().selectionOverlay.withAlpha (0.22f));
-            g.fillRect (x1, 0, sw, getHeight());
-            g.setColour (getTheme().foreground.withAlpha (0.8f));
-            g.drawVerticalLine (x1, 0.0f, (float) getHeight());
+            g.setColour(getTheme().selectionOverlay.withAlpha(0.22f));
+            g.fillRect(x1, 0, sw, getHeight());
+            g.setColour(getTheme().foreground.withAlpha(0.8f));
+            g.drawVerticalLine(x1, 0.0f, (float)getHeight());
 
             {
                 bool hov = (hoveredEdge == HoveredEdge::Left);
@@ -495,26 +458,41 @@ void WaveformView::drawSlices (juce::Graphics& g)
                 float th = hov ? 12.0f : 9.0f;
                 float alpha = hov ? 1.0f : 0.9f;
                 juce::Path triS;
-                triS.addTriangle ((float) x1, (float) getHeight(),
-                                  (float) x1 + tw, (float) getHeight(),
-                                  (float) x1, (float) getHeight() - th);
-                g.setColour (getTheme().foreground.withAlpha (alpha));
-                g.fillPath (triS);
+                triS.addTriangle((float)x1, (float)getHeight(),
+                                 (float)x1 + tw, (float)getHeight(),
+                                 (float)x1, (float)getHeight() - th);
+                g.setColour(getTheme().foreground.withAlpha(alpha));
+                g.fillPath(triS);
             }
 
-            g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
-            g.setColour (getTheme().foreground.withAlpha (0.7f));
-            g.drawText ("M", x1 + 2, getHeight() - 24, 12, 12, juce::Justification::centredLeft);
+            g.setFont(DysektLookAndFeel::makeFont(10.0f, true));
+            g.setColour(getTheme().foreground.withAlpha(0.7f));
+            g.drawText("M", x1 + 2, getHeight() - 24, 12, 12, juce::Justification::centredLeft);
 
-            g.setColour (getTheme().foreground.withAlpha (0.85f));
-            g.setFont (DysektLookAndFeel::makeFont (13.0f, true));
-            g.drawText ("Slice " + juce::String (i + 1), x1 + 3, 3, 70, 14,
-                         juce::Justification::centredLeft);
+            g.setColour(getTheme().foreground.withAlpha(0.85f));
+            g.setFont(DysektLookAndFeel::makeFont(13.0f, true));
+            g.drawText("Slice " + juce::String(i + 1), x1 + 3, 3, 70, 14, juce::Justification::centredLeft);
         }
         else
         {
-            g.setColour (s.colour.withAlpha (0.30f));
-            g.drawVerticalLine (x1, 0.0f, (float) getHeight());
+            g.setColour(s.colour.withAlpha(0.30f));
+            g.drawVerticalLine(x1, 0.0f, (float)getHeight());
+        }
+    }
+
+    // ------- END OF LOOP: clear preview once model reflects it -------
+    if (previewSliceIdx >= 0) {
+        if (previewSliceIdx < (int)ui.slices.size()) {
+            if (ui.slices[(size_t)previewSliceIdx].startSample == previewStartSample
+                || !ui.slices[(size_t)previewSliceIdx].active) {
+                previewSliceIdx = -1;
+                previewStartSample = -1;
+                repaint();
+            }
+        } else {
+            previewSliceIdx = -1;
+            previewStartSample = -1;
+            repaint();
         }
     }
 }
@@ -641,41 +619,48 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     const auto& ui = processor.getUiSliceSnapshot();
     int sel = ui.selectedSlice;
     int num = ui.numSlices;
-    if (!(sliceDrawMode || altModeActive) && sel >= 0 && sel < num)
+  if (!(sliceDrawMode || altModeActive) && sel >= 0 && sel < num)
+{
+    const auto& s = ui.slices[(size_t) sel];
+    if (s.active)
     {
-        const auto& s = ui.slices[(size_t) sel];
-        if (s.active)
-        {
-            const int selEnd = processor.sliceManager.getEndForSlice (sel, ui.sampleNumFrames);
-            int x1 = sampleToPixel (s.startSample);
+        const int selEnd = processor.sliceManager.getEndForSlice (sel, ui.sampleNumFrames);
+        int x1 = sampleToPixel (s.startSample);
 
-            if (std::abs (e.x - x1) < 6)
+        if (std::abs (e.x - x1) < 6)
+        {
+            DysektProcessor::Command gestureCmd;
+            gestureCmd.type = DysektProcessor::CmdBeginGesture;
+            processor.pushCommand (gestureCmd);
+
+            dragMode = DragEdgeLeft;
+            dragSliceIdx = sel;
+            dragPreviewStart = s.startSample;
+            dragPreviewEnd = selEnd;
+            dragOrigStart = s.startSample;
+            dragOrigEnd   = selEnd;
+            linkedSliceIdx = -1;
+
+            // INTERSECT-style: Set up preview state for immediate marker display!
+            previewSliceIdx = sel;
+            previewStartSample = s.startSample;
+            repaint();
+
+            for (int i = 0; i < num; ++i)
             {
-                DysektProcessor::Command gestureCmd;
-                gestureCmd.type = DysektProcessor::CmdBeginGesture;
-                processor.pushCommand (gestureCmd);
-                dragMode = DragEdgeLeft;
-                dragSliceIdx = sel;
-                dragPreviewStart = s.startSample;
-                dragPreviewEnd = selEnd;
-                dragOrigStart = s.startSample;
-                dragOrigEnd   = selEnd;
-                linkedSliceIdx = -1;
-                for (int i = 0; i < num; ++i)
+                if (i == sel || ! ui.slices[(size_t) i].active) continue;
+                if (processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames) == s.startSample)
                 {
-                    if (i == sel || ! ui.slices[(size_t) i].active) continue;
-                    if (processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames) == s.startSample)
-                    {
-                        linkedSliceIdx = i;
-                        linkedPreviewStart = ui.slices[(size_t) i].startSample;
-                        linkedPreviewEnd   = s.startSample;
-                        break;
-                    }
+                    linkedSliceIdx = i;
+                    linkedPreviewStart = ui.slices[(size_t) i].startSample;
+                    linkedPreviewEnd   = s.startSample;
+                    break;
                 }
-                return;
             }
+            return;
         }
     }
+}
 
     if (sliceDrawMode || altModeActive)
     {
@@ -721,18 +706,23 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         return;
     }
 
-    // Slice edge dragging (visual preview)
-    if (dragMode == DragEdgeLeft && dragSliceIdx >= 0)
-    {
-        if (processor.snapToZeroCrossing.load())
-            dragPreviewStart = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, pixelToSample(e.x));
-        else
-            dragPreviewStart = juce::jlimit(0, dragPreviewEnd - 64, pixelToSample(e.x));
-        if (linkedSliceIdx >= 0)
-            linkedPreviewEnd = dragPreviewStart;
-        repaint();
-    }
-    // TODO: add MoveSlice/other modes if needed
+ // Slice edge dragging (visual preview)
+if (dragMode == DragEdgeLeft && dragSliceIdx >= 0)
+{
+    if (processor.snapToZeroCrossing.load())
+        dragPreviewStart = AudioAnalysis::findNearestZeroCrossing (sampleSnap->buffer, pixelToSample(e.x));
+    else
+        dragPreviewStart = juce::jlimit(0, dragPreviewEnd - 64, pixelToSample(e.x));
+    if (linkedSliceIdx >= 0)
+        linkedPreviewEnd = dragPreviewStart;
+
+    // INTERSECT-style: update preview for immediate marker display!
+    previewSliceIdx = dragSliceIdx;
+    previewStartSample = dragPreviewStart;
+    repaint();
+    return;
+}
+// TODO: add MoveSlice/other modes if needed
 }
 
 void WaveformView::mouseUp (const juce::MouseEvent&)
