@@ -443,12 +443,10 @@ void WaveformView::drawSlices (juce::Graphics& g)
         if (! s.active) continue;
 
         int drawStartSample = s.startSample;
-
-        // --- Use optimistic start sample if we're waiting for snapshot to catch up ---
         if (i == optimisticSliceIdx && optimisticStartSample >= 0)
             drawStartSample = optimisticStartSample;
 
-        int drawEndSample = processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames);
+        int drawEndSample = processor.sliceManager.getEndForSlice(i, ui.sampleNumFrames);
 
         // Live preview during drag:
         if (i == sel && dragSliceIdx == i &&
@@ -482,63 +480,36 @@ void WaveformView::drawSlices (juce::Graphics& g)
         int sw = x2 - x1;
         if (sw <= 0) continue;
 
-        if (i == sel)
-        {
-            g.setColour (getTheme().selectionOverlay.withAlpha (0.22f));
-            g.fillRect (x1, 0, sw, getHeight());
-            g.setColour (getTheme().foreground.withAlpha (0.8f));
-            g.drawVerticalLine (x1, 0.0f, (float) getHeight());
+        // --- CUBASE-STYLE SLICE OVERLAY ---
+        // Soft colored region fill
+        g.setColour(s.colour.withAlpha(0.11f));
+        g.fillRect(x1, 0, sw, getHeight());
 
-            {
-                bool hov = (hoveredEdge == HoveredEdge::Left);
-                float tw = hov ? 10.0f : 7.0f;
-                float th = hov ? 12.0f : 9.0f;
-                float alpha = hov ? 1.0f : 0.9f;
-                juce::Path triS;
-                triS.addTriangle ((float) x1, (float) getHeight(),
-                                  (float) x1 + tw, (float) getHeight(),
-                                  (float) x1, (float) getHeight() - th);
-                g.setColour (getTheme().foreground.withAlpha (alpha));
-                g.fillPath (triS);
-            }
+        // Strong colored borders: top & bottom
+        g.setColour(s.colour.withAlpha(0.65f));
+        g.drawHorizontalLine(0, (float)x1, (float)x2);                    // top
+        g.drawHorizontalLine(getHeight() - 1, (float)x1, (float)x2);      // bottom
 
-            g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
-            g.setColour (getTheme().foreground.withAlpha (0.7f));
-            g.drawText ("M", x1 + 2, getHeight() - 24, 12, 12, juce::Justification::centredLeft);
+        // Bold colored vertical start marker
+        g.setColour(s.colour.withAlpha(0.85f));
+        g.fillRect(x1, 0, 2, getHeight());
 
-            g.setColour (getTheme().foreground.withAlpha (0.85f));
-            g.setFont (DysektLookAndFeel::makeFont (13.0f, true));
-            g.drawText ("Slice " + juce::String (i + 1), x1 + 3, 3, 70, 14,
-                         juce::Justification::centredLeft);
+        // (Optional) end marker: uncomment for Cubase-style region ending
+        //g.setColour(s.colour.withAlpha(0.42f));
+        //g.fillRect(x2 - 2, 0, 2, getHeight());
+
+        // Selection highlight overlay
+        if (i == sel) {
+            g.setColour(s.colour.withAlpha(0.18f));
+            g.fillRect(x1, 0, sw, getHeight());
         }
-        else
-        {
-            g.setColour (s.colour.withAlpha (0.30f));
-            g.drawVerticalLine (x1, 0.0f, (float) getHeight());
-        }
+
+        // Optional: slice index label
+        g.setFont(juce::Font(10.0f, juce::Font::bold));
+        g.setColour(s.colour.contrasting(0.8f));
+        g.drawText(juce::String(i + 1), x1 + 4, 3, 16, 12, juce::Justification::left);
     }
 }
-
-void WaveformView::drawPlaybackCursors (juce::Graphics& g)
-{
-    int previewIdx = LazyChopEngine::getPreviewVoiceIndex();
-    for (int i = 0; i < VoicePool::kMaxVoices; ++i)
-    {
-        float pos = processor.voicePool.voicePositions[i].load (std::memory_order_relaxed);
-        if (pos > 0.0f)
-        {
-            int px = sampleToPixel ((int) pos);
-            if (px >= 0 && px < getWidth())
-            {
-                if (i == previewIdx && processor.lazyChop.isActive())
-                    g.setColour (juce::Colour (0xFFCC4444));
-                else
-                    g.setColour (getTheme().accent.withAlpha (0.7f));
-
-                g.drawVerticalLine (px, 0.0f, (float) getHeight());
-            }
-        }
-    }
 }
 
 void WaveformView::resized()

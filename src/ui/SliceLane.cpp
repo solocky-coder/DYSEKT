@@ -71,64 +71,6 @@ void SliceLane::paint (juce::Graphics& g)
 
     const int Y1 = 1, Y2 = bodyH - 1;
 
-    // ── Pass 1: fills ─────────────────────────────────────────────────────────
-    for (int i = 0; i < visCount; ++i)
-    {
-        const auto& si = vis[(size_t) i];
-        if (si.selected)
-        {
-            g.setColour (si.col.withAlpha (0.28f));
-            g.fillRect (si.x1, Y1, si.x2 - si.x1, Y2 - Y1);
-        }
-        else
-        {
-            g.setColour (si.col.withAlpha (kOpacity[(size_t) si.idx % 5]));
-            g.fillRect (si.x1, Y1, si.x2 - si.x1, Y2 - Y1);
-        }
-    }
-
-    // ── Pass 2: dividers — one shared dark line per boundary ─────────────────
-    // Left edge of every slice (including first)
-    for (int i = 0; i < visCount; ++i)
-    {
-        g.setColour (getTheme().darkBar.darker (0.3f));
-        g.fillRect (vis[(size_t) i].x1, Y1, 1, Y2 - Y1);
-    }
-    // Right edge of last visible slice
-    if (visCount > 0)
-        g.fillRect (vis[(size_t) (visCount - 1)].x2 - 1, Y1, 1, Y2 - Y1);
-
-    // ── Pass 3: top accent bars + selection border ────────────────────────────
-    for (int i = 0; i < visCount; ++i)
-    {
-        const auto& si = vis[(size_t) i];
-        int sw = si.x2 - si.x1;
-        if (sw < 3) continue;
-
-        if (si.selected)
-        {
-            // Bright 2px bottom bar (inset 1px from dividers)
-            g.setColour (si.col.withAlpha (0.95f));
-            g.fillRect (si.x1 + 1, Y2 - 2, sw - 2, 2);
-
-            // 4-sided border inset by 1px from each divider
-            g.setColour (si.col.withAlpha (0.70f));
-            // top
-            g.drawHorizontalLine (Y1,     (float) (si.x1 + 1), (float) (si.x2 - 1));
-            // bottom
-            g.drawHorizontalLine (Y2 - 1, (float) (si.x1 + 1), (float) (si.x2 - 1));
-            // left
-            g.drawVerticalLine   (si.x1 + 1, (float) Y1, (float) Y2);
-            // right
-            g.drawVerticalLine   (si.x2 - 2, (float) Y1, (float) Y2);
-        }
-        else
-        {
-            // Hairline bottom tick at full colour brightness (inset 1px)
-            g.setColour (si.col.withAlpha (0.50f));
-            g.fillRect (si.x1 + 1, Y2 - 1, sw - 2, 1);
-        }
-    }
 
     // ── Pass 4: labels ────────────────────────────────────────────────────────
     // Recompute stable label positions (cache logic preserved)
