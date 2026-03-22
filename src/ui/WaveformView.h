@@ -71,16 +71,6 @@ private:
         float samplesPerPixel = 1.0f;
         bool valid = false;
     };
-private:
-    struct ViewState
-    {
-        int numFrames = 0;
-        int visibleStart = 0;
-        int visibleLen = 0;
-        int width = 0;
-        float samplesPerPixel = 1.0f;
-        bool valid = false;
-    };
 
     int previewSliceIdx = -1;
     int previewStartSample = -1;
