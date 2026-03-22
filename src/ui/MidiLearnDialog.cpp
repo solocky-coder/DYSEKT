@@ -24,7 +24,7 @@ static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
     "Cents Detune",
     "MIDI Note",
     "Marker",               // 21 - slice start / trim-in (same CC, context-aware)
-    "Slice End",            // 22
+    "",            // 22
     "Pan",
     "Filter Cutoff",
     "Filter Resonance",
