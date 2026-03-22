@@ -402,22 +402,36 @@ void WaveformView::drawSlices (juce::Graphics& g)
 {
     // --- Consume pending optimistic marker commit from processor (for MIDI/knob moves) ---
     int optIdx = processor.pendingUiOptimisticIdx.exchange(-1, std::memory_order_acq_rel);
-    if (optIdx >= 0)
-    {
-        optimisticSliceIdx = optIdx;
-        optimisticStartSample = processor.pendingUiOptimisticSample.exchange(-1, std::memory_order_acq_rel);
-    }
+    int optSample = -1;
+    if (optIdx >= 0) {
+        optSample = processor.pendingUiOptimisticSample.exchange(-1, std::memory_order_acq_rel);
 
-    // --- Clear optimistic state once snapshot reflects the real model ---
-    if (optimisticSliceIdx >= 0) {
-        const auto& optSlice = processor.getUiSliceSnapshot().slices[(size_t)optimisticSliceIdx];
-        if (optSlice.startSample == optimisticStartSample) {
+        // Only set optimistic if different from snapshot
+        const auto& uiSnap = processor.getUiSliceSnapshot();
+        if (optIdx < (int)uiSnap.slices.size() && uiSnap.slices[(size_t)optIdx].startSample != optSample) {
+            optimisticSliceIdx = optIdx;
+            optimisticStartSample = optSample;
+        } else {
+            // It's already committed in the snapshot, so don't set
             optimisticSliceIdx = -1;
             optimisticStartSample = -1;
         }
     }
 
-    // ... rest of the function ...
+    // --- Clear optimistic state once snapshot reflects the real model ---
+    if (optimisticSliceIdx >= 0) {
+        const auto& snap = processor.getUiSliceSnapshot();
+        if (optimisticSliceIdx < (int)snap.slices.size()) {
+            const auto& optSlice = snap.slices[(size_t)optimisticSliceIdx];
+            if (optSlice.startSample == optimisticStartSample || !optSlice.active) {
+                optimisticSliceIdx = -1;
+                optimisticStartSample = -1;
+            }
+        } else {
+            optimisticSliceIdx = -1;
+            optimisticStartSample = -1;
+        }
+    }
 
     const auto& ui = processor.getUiSliceSnapshot();
     int sel = ui.selectedSlice;
@@ -455,11 +469,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
             {
                 const int liveStart = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
                 const int liveEnd   = processor.liveDragBoundsEnd.load   (std::memory_order_relaxed);
-                // Sanity check: only use live bounds if they form a valid region
-                // within the sample — stale atomics after smoother finishes can
-                // cause ghost markers if liveDragSliceIdx hasn't been cleared yet.
-                if (liveStart >= 0 && liveEnd > liveStart
-                    && liveEnd <= ui.sampleNumFrames)
+                if (liveStart >= 0 && liveEnd > liveStart && liveEnd <= ui.sampleNumFrames)
                 {
                     drawStartSample = liveStart;
                     drawEndSample   = liveEnd;
