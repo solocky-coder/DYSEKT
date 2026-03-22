@@ -1425,7 +1425,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     // ── Slice start/end boundary (non-trim mode only) ────────
                     // Trim CC already handled above the slice guard; this path
                     // only runs when trim mode is inactive.
-                    if (outFieldId == FieldSliceStart || outFieldId == FieldTrimOut)
+                    if (outFieldId == FieldSliceStart)
                     {
                         const int total = sampleData.getNumFrames();
                         if (total > 1)
