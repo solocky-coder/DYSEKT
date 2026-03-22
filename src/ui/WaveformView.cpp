@@ -21,31 +21,10 @@ void WaveformView::setSliceDrawMode(bool active)
         dragPreviewEnd = 0;
         drawStartedFromAlt = false;
         processor.liveDragSliceIdx.store(-1, std::memory_order_release);
-        processor.liveDragBoundsStart.store(-1, std::memory_order_release);
-        processor.liveDragBoundsEnd.store(-1, std::memory_order_release);
+        processor.liveDragBoundsStart.store(-1, std::memory_order_release); // <--- ADD THIS LINE
+        processor.liveDragBoundsEnd.store(-1, std::memory_order_release);   // <--- ADD THIS LINE
         repaint();
     }
-}
-
-void WaveformView::exitTrimMode()
-{
-    trimMode = false;
-    dragMode = None;
-    trimDragging = false;
-    repaint();
-}
-
-void WaveformView::getTrimBounds(int& outStart, int& outEnd) const
-{
-    outStart = trimInPoint;
-    outEnd   = trimOutPoint;
-}
-
-void WaveformView::resetTrim()
-{
-    trimInPoint = trimStart;
-    trimOutPoint = trimEnd;
-    repaint();
 }
 
 bool WaveformView::hasActiveSlicePreview() const noexcept
@@ -531,6 +510,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
         g.drawText(juce::String(i + 1), x1 + 4, 3, 16, 12, juce::Justification::left);
     }
 }
+
 
 void WaveformView::resized()
 {
