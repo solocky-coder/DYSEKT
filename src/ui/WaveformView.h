@@ -103,7 +103,6 @@ private:
     int optimisticSliceIdx = -1;
     int optimisticStartSample = -1;
 
-
     DysektProcessor& processor;
     WaveformCache cache;
     CacheKey prevCacheKey;
@@ -145,7 +144,6 @@ private:
     int linkedSliceIdx     = -1;
     int linkedPreviewStart = 0;
     int linkedPreviewEnd   = 0;
-
 
     // Middle-mouse drag (scroll+zoom like ScrollZoomBar)
     bool midDragging = false;
