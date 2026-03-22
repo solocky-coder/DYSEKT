@@ -2048,8 +2048,19 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
-    // Pass through MIDI
-    // (already in the buffer, no action needed)
+    // ---- Compute master output peak (sum across all output buses) ----
+    float masterL = 0.0f, masterR = 0.0f;
+    for (int b = 0; b < numActiveBuses; ++b)
+    {
+        if (busL[b])
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+                masterL = juce::jmax(masterL, std::abs(busL[b][i]));
+        if (busR[b])
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+                masterR = juce::jmax(masterR, std::abs(busR[b][i]));
+    }
+    masterPeakL.store(masterL, std::memory_order_relaxed);
+    masterPeakR.store(masterR, std::memory_order_relaxed);
 
     // Decay all slice peak meters toward zero (60 dB/s at typical block sizes)
     static const float kDecayPerBlock = 0.60f;  // approx 60 dB/s at 512 @ 44100
@@ -2060,7 +2071,6 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         v = slicePeakR[si].load (std::memory_order_relaxed) * kDecayPerBlock;
         slicePeakR[si].store (v, std::memory_order_relaxed);
     }
-}
 
 juce::AudioProcessorEditor* DysektProcessor::createEditor()
 {

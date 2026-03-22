@@ -236,7 +236,8 @@ public:
     static constexpr int kMaxMeterSlices = 128;
     std::array<std::atomic<float>, kMaxMeterSlices> slicePeakL {};
     std::array<std::atomic<float>, kMaxMeterSlices> slicePeakR {};
-
+    // Master output peak meters (0..1, decaying, written in audio thread, read by UI)
+    std::atomic<float> masterPeakL {0.0f}, masterPeakR {0.0f};
     // Live drag bounds (UI -> audio thread, bypasses FIFO for low latency)
     std::atomic<int> liveDragBoundsStart { 0 };
     std::atomic<int> liveDragBoundsEnd   { 0 };

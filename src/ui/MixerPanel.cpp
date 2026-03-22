@@ -600,11 +600,21 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
                     juce::Justification::centred);
     }
 
-    // Remaining columns — dimmed dashes
+        // Remaining columns — dimmed dashes
     g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.setColour (theme.foreground.withAlpha (0.15f));
     for (int i = ColFcut; i < kNumCols; ++i)
         g.drawText ("—", colX ((Col)i), ry, kKnobColW, kMasterH, juce::Justification::centred);
+
+    // === ADD THIS BLOCK HERE: ===
+    const int mx = colX(ColOut) + kKnobColW + 4;
+    const int mw = getWidth() - mx - 6;
+    if (mw > 20)
+    {
+        float pkL = processor.masterPeakL.load(std::memory_order_relaxed);
+        float pkR = processor.masterPeakR.load(std::memory_order_relaxed);
+        drawMeter(g, mx, ry + 4, mw, kMasterH - 8, pkL, pkR, theme.accent, kMaxMeterSlices - 1);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
