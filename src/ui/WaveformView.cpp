@@ -4,6 +4,37 @@
 #include "../PluginProcessor.h"
 #include "../audio/AudioAnalysis.h"
 
+// === NEW: Implementation for drawPlaybackCursors ===
+void WaveformView::drawPlaybackCursors(juce::Graphics& /*g*/)
+{
+    // TODO: If you want to actually draw playback cursors, implement drawing here.
+    // For now, do nothing to satisfy the linker.
+}
+
+// === NEW: Implementation for exitTrimMode, getTrimBounds, resetTrim ===
+void WaveformView::exitTrimMode()
+{
+    trimMode = false;
+    dragMode = None;
+    trimDragging = false;
+    repaint();
+}
+
+void WaveformView::getTrimBounds(int& outStart, int& outEnd) const
+{
+    outStart = trimInPoint;
+    outEnd   = trimOutPoint;
+}
+
+void WaveformView::resetTrim()
+{
+    trimInPoint = trimStart;
+    trimOutPoint = trimEnd;
+    repaint();
+}
+
+// ==== Everything else unchanged ====
+
 WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
 
 void WaveformView::setSliceDrawMode(bool active)
@@ -864,27 +895,5 @@ void WaveformView::setTrimMode (bool active)
     {
         dragMode = None;
     }
-    repaint();
-}
-
-// --- MISSING: Implementations for exitTrimMode, getTrimBounds, resetTrim ---
-void WaveformView::exitTrimMode()
-{
-    trimMode = false;
-    dragMode = None;
-    trimDragging = false;
-    repaint();
-}
-
-void WaveformView::getTrimBounds(int& outStart, int& outEnd) const
-{
-    outStart = trimInPoint;
-    outEnd   = trimOutPoint;
-}
-
-void WaveformView::resetTrim()
-{
-    trimInPoint = trimStart;
-    trimOutPoint = trimEnd;
     repaint();
 }
