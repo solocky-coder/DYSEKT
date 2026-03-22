@@ -24,8 +24,8 @@ if (!active)
     processor.liveDragBoundsStart.store(-1, std::memory_order_release); // <--- ADD THIS LINE
     processor.liveDragBoundsEnd.store(-1, std::memory_order_release);   // <--- ADD THIS LINE
     repaint();
+ }
 }
-
 
 bool WaveformView::hasActiveSlicePreview() const noexcept
 {
