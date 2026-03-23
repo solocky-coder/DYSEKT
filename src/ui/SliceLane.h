@@ -13,25 +13,21 @@ public:
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
-    /// Invalidate the label-position cache so it is recomputed on the next paint.
-    /// Call whenever the slice list, selection, or viewport changes.
     void invalidateLabelCache() noexcept { labelCacheDirty = true; }
 
 private:
     DysektProcessor& processor;
     WaveformView* waveformView = nullptr;
 
-    // ── Label position cache (prevents per-frame jitter / flicker)
     struct CachedLabel
     {
         int   sliceIdx = 0;
-        int   x        = 0;  ///< Pixel x-coordinate of label left edge
+        int   x        = 0;
     };
 
     std::array<CachedLabel, SliceManager::kMaxSlices> cachedLabels {};
     int cachedLabelCount = 0;
 
-    // Key used to detect whether the cache needs rebuilding
     struct LabelCacheKey
     {
         int  numSlices     = 0;
