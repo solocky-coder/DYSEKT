@@ -31,13 +31,11 @@ void SliceLane::paint (juce::Graphics& g)
     int h   = getHeight();
 
     // ==== UI LAYOUT CONSTANTS ====
-    // Previous: Top 30px = slice body strip, area above waveform held the color bar.
-    // Now: The *full* vertical area (except bottom dot row) is the interactive waveform/slice area.
     static constexpr int kDotZoneH = 6; // bottom dot row
-    const int bodyH = h - kDotZoneH;    // expand body to cover total area minus dot row
-    const int dotZoneY = bodyH;         // dot strip starts below waveform area
+    const int bodyH = h - kDotZoneH;
+    const int dotZoneY = bodyH;
 
-    // Collect visible slices
+    // Collect visible slices (add juce::Colour col field!)
     struct SliceInfo { int idx; int x1; int x2; bool selected; juce::Colour col; };
     std::array<SliceInfo, SliceManager::kMaxSlices> vis {};
     int visCount = 0;
@@ -54,17 +52,15 @@ void SliceLane::paint (juce::Graphics& g)
         x2 = std::min(w, x2);
         if (x2 - x1 < 2) continue;
         if (visCount < SliceManager::kMaxSlices)
-            vis[(size_t) visCount++] = { i, x1, x2, (i == sel), s.colour };
+            vis[(size_t) visCount++] = { i, x1, x2, (i == sel), s.colour }; // this field is required!
     }
 
     // ==== WAVEFORM AREA DRAW ====
-    // Each slice background
     for (int i = 0; i < visCount; ++i)
     {
         const auto& si = vis[(size_t) i];
-        g.setColour(si.colour.withAlpha(si.selected ? 0.22f : 0.14f));
+        g.setColour(si.col.withAlpha(si.selected ? 0.22f : 0.14f));
         g.fillRect(si.x1, 0, si.x2 - si.x1, bodyH);
-        // Outline for selected
         if (si.selected)
         {
             g.setColour(getTheme().accent.withAlpha(0.27f));
@@ -72,15 +68,7 @@ void SliceLane::paint (juce::Graphics& g)
         }
     }
 
-    // Opacity steps for non-selected slices (legacy fade, if needed)
-    // static constexpr float kOpacity[5] = { 0.11f, 0.19f, 0.27f, 0.19f, 0.11f };
-
-    // ==== WAVEFORM RENDER - Line overlay (optional) ====
-    // Instead, you may want to call out to waveform renderer / paint peaks, if you have one:
-    // (Example, pseudo-code: see WaveformCache etc. to fill here if you wish.)
-
     // ==== SLICE LABELS ====
-    // (This logic is kept from previous for overlays)
     LabelCacheKey currentKey;
     currentKey.numSlices     = num;
     currentKey.selectedSlice = sel;
@@ -123,10 +111,9 @@ void SliceLane::paint (juce::Graphics& g)
         const auto& cl = cachedLabels[(size_t)i];
         int sliceIdx = cl.sliceIdx;
         juce::String label = juce::String(sliceIdx + 1);
-        // Find slice's current rect
         auto it = std::find_if(vis.begin(), vis.begin() + visCount, [sliceIdx](const SliceInfo& si){ return si.idx == sliceIdx; });
         if (it == vis.begin() + visCount) continue;
-        int labelY = 8; // vertically center in bodyH if desired
+        int labelY = 8;
         g.setColour(juce::Colours::black.withAlpha(0.34f));
         g.drawFittedText(label, cl.x, labelY + 1, 22, 16, juce::Justification::left, 1);
         g.setColour(getTheme().foreground);
@@ -134,18 +121,14 @@ void SliceLane::paint (juce::Graphics& g)
     }
 
     // ==== DOT (LOCK ROW) ====
-    // Dot strip background (slightly darker than body)
     g.setColour(getTheme().darkBar.darker(0.20f));
     g.fillRect(0, dotZoneY, w, kDotZoneH);
-
-    // Top separator line between body and dot zone
     g.setColour(getTheme().separator.withAlpha(0.60f));
     g.drawHorizontalLine(dotZoneY, 0.0f, (float) w);
 
-    // Dot geometry: 4 dots spaced 5px centre-to-centre, each 2×2px square
-    static constexpr int kDotSz  = 2;   // square side
-    static constexpr int kDotGap = 5;   // centre-to-centre
-    const int dotRowY = dotZoneY + kDotZoneH / 2 - kDotSz / 2;  // vertically centred
+    static constexpr int kDotSz  = 2;
+    static constexpr int kDotGap = 5;
+    const int dotRowY = dotZoneY + kDotZoneH / 2 - kDotSz / 2;
 
     static const juce::Colour kDotA { 0xFF00FF87 };
     static const juce::Colour kDotD { 0xFFFFE800 };
@@ -170,17 +153,15 @@ void SliceLane::paint (juce::Graphics& g)
 
         if (allLocked || sw < 26)
         {
-            // All-locked or too narrow for 4 dots: single padlock pip centred
             if (sw < 7) continue;
             const int px = si.x1 + sw / 2;
             const int py = dotZoneY + 1;
             g.setColour(getTheme().lockActive.withAlpha(alpha));
-            g.fillRect(px - 1, py,     2, 2);   // shackle
-            g.fillRect(px - 2, py + 2, 4, 3);   // body
+            g.fillRect(px - 1, py,     2, 2);
+            g.fillRect(px - 2, py + 2, 4, 3);
         }
         else
         {
-            // Partial: 4 ADSR dots, centred under slice
             const int totalW = kDotGap * 3 + kDotSz;
             if (totalW > sw - 2) continue;
             const int startX = si.x1 + (sw - totalW) / 2;
@@ -197,14 +178,12 @@ void SliceLane::paint (juce::Graphics& g)
                 }
                 else
                 {
-                    // Very dim hollow dot — shows position without noise
                     g.setColour(dc.withAlpha(0.15f));
                     g.drawRect(dx, dotRowY, kDotSz, kDotSz, 1);
                 }
             }
         }
     }
-    // Bottom separator
     g.setColour(getTheme().separator);
     g.drawHorizontalLine(h - 1, 0.0f, (float) w);
 }
@@ -226,14 +205,10 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
     int num = ui.numSlices;
     int h = getHeight();
 
-    // Update: The region for slices is now the full height minus dot zone!
-    int dotZoneY = h - 6; // dot zone is always last 6 px
-
-    // Only process if click is in the (new, bigger) waveform/slice area
+    int dotZoneY = h - 6;
     if (e.y < 0 || e.y >= dotZoneY)
-        return; // ignore dot zone and out of bounds
+        return;
 
-    // Collect all overlapping slice indices at click position (x)
     std::vector<int> overlapping;
     for (int i = 0; i < num; ++i)
     {
@@ -248,7 +223,6 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
             overlapping.push_back(i);
     }
 
-    // Right-click: show context menu for the selected (or topmost) slice
     if (e.mods.isRightButtonDown())
     {
         int targetSlice = ui.selectedSlice;
@@ -266,7 +240,6 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
             const bool lockD = (s.lockMask & kLockDecay)   != 0;
             const bool lockS = (s.lockMask & kLockSustain) != 0;
             const bool lockR = (s.lockMask & kLockRelease) != 0;
-            // 16-colour palette
             static const struct { const char* name; juce::uint32 argb; } kPal[] = {
                 { "Cyan",    0xFF00C8FF }, { "Green",   0xFF00FF87 },
                 { "Yellow",  0xFFFFE800 }, { "Orange",  0xFFFF6B00 },
@@ -340,7 +313,6 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                     else if (result == 13) toggleLock(kLockRelease);
                     else if (result >= 20 && result < 36)
                     {
-                        // Set slice colour
                         static const juce::uint32 kPalARGB[] = {
                             0xFF00C8FF, 0xFF00FF87, 0xFFFFE800, 0xFFFF6B00,
                             0xFFFF2D55, 0xFFFF2D9A, 0xFFB44FFF, 0xFF4A80FF,
@@ -359,7 +331,6 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // Left-click: cycle selection through overlapping slices
     if (!overlapping.empty())
     {
         int current = ui.selectedSlice;
