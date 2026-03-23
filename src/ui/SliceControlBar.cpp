@@ -36,8 +36,9 @@ static constexpr int kKnobR = 7;   // knob radius (px)
 SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p) {}
 void SliceControlBar::resized() {}
 
-// ... [drawLockIcon, drawParamCell, drawKnob, drawKnobCell, drawPanSliderCell, etc. remain unchanged] ...
+// ... (Other functions remain unchanged)
 
+// -- MARKER SLIDER CELL --
 void SliceControlBar::drawMarkerSliderCell(juce::Graphics& g, int x, int y,
                                            int markerSample, int sampleNumFrames,
                                            bool locked, int& outWidth)
@@ -114,11 +115,11 @@ void SliceControlBar::drawMarkerSliderCell(juce::Graphics& g, int x, int y,
     cells.push_back(c);
 }
 
-// ... (other member functions unchanged) ...
+// ... (Rest of drawing and event logic unchanged) ...
 
 void SliceControlBar::paint (juce::Graphics& g)
 {
-    // ... [frame drawing code unchanged] ...
+    // Frame and background drawing unchanged
     cells.clear();
 
     const auto& ui = processor.getUiSliceSnapshot();
@@ -136,14 +137,36 @@ void SliceControlBar::paint (juce::Graphics& g)
         return;
     }
 
-    // ... [read slice/parameter values as before] ...
+    int x = 8; // <<< FIXED: declare x as the horizontal layout offset/cursor
+
+    // Read live slice values directly from sliceManager — not the UI snapshot.
+    const auto& s = (processor.sliceManager.getNumSlices() > idx && idx >= 0)
+                    ? processor.sliceManager.getSlice (idx)
+                    : ui.slices[(size_t) juce::jmax (0, idx)];
+
+    float gBpm      = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
+    float gPitch    = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
+    int   gAlgo     = (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
+    float gAttack   = processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load();
+    float gDecay    = processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load();
+    float gSustain  = processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load();
+    float gRelease  = processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load();
+    int   gMG       = (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load();
+    int   gLoopMode = (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
+    bool  gStretch  = processor.apvts.getRawParameterValue (ParamIds::defaultStretchEnabled)->load() > 0.5f;
+
+    bool algoLocked    = (s.lockMask & kLockAlgorithm) != 0;
+    int  algoVal       = algoLocked ? s.algorithm : gAlgo;
+    bool stretchLocked = (s.lockMask & kLockStretch) != 0;
+    bool stretchVal    = stretchLocked ? s.stretchEnabled : gStretch;
+    bool repitchStretch = (algoVal == 0) && stretchVal;
 
     int cw;
     using F = DysektProcessor;
 
     int filterGroupX1 = 0, filterGroupX2 = 0;
 
-    // ... [draw other controls as before] ...
+    // ... Row 1: draw controls as previously ...
 
     // MARKER — slice boundary slider in row 1
     {
@@ -159,7 +182,7 @@ void SliceControlBar::paint (juce::Graphics& g)
         x += cw + 4;
     }
 
-    // ... [draw gain, pan, out, rest of UI as before] ...
+    // ... (Rest of row 1 and row 2 controls as in your code) ...
 }
 
-// ... [rest of file unchanged, including event handling] ...
+// ... (rest of file, including event logic, unchanged) ...
