@@ -10,6 +10,7 @@ SliceLane::SliceLane (DysektProcessor& p) : processor (p) {}
 
 void SliceLane::paint (juce::Graphics& g)
 {
+    // Fill background
     g.fillAll (getTheme().darkBar.brighter (0.04f));
 
     auto sampleSnap = processor.sampleData.getSnapshot();
@@ -29,85 +30,82 @@ void SliceLane::paint (juce::Graphics& g)
     int w   = getWidth();
     int h   = getHeight();
 
-    // Top 30px = slice body strip; bottom 6px = ADSR lock dot strip
-    static constexpr int kBodyH = 30;
-    static constexpr int kDotZoneH = 6;
-    const int bodyH = juce::jmin (h, kBodyH);
-    const int dotZoneY = bodyH;   // dot strip starts right below body
+    // ==== UI LAYOUT CONSTANTS ====
+    // Previous: Top 30px = slice body strip, area above waveform held the color bar.
+    // Now: The *full* vertical area (except bottom dot row) is the interactive waveform/slice area.
+    static constexpr int kDotZoneH = 6; // bottom dot row
+    const int bodyH = h - kDotZoneH;    // expand body to cover total area minus dot row
+    const int dotZoneY = bodyH;         // dot strip starts below waveform area
 
-    int previewIdx = -1, previewStart = 0, previewEnd = 0;
-    const bool hasPreview = waveformView != nullptr
-        && waveformView->getActiveSlicePreview (previewIdx, previewStart, previewEnd);
-
-    int linkedIdx = -1, linkedStart = 0, linkedEnd = 0;
-    const bool hasLinked = waveformView != nullptr
-        && waveformView->getLinkedSlicePreview (linkedIdx, linkedStart, linkedEnd);
-
-    // ── Collect visible slices ────────────────────────────────────────────────
+    // Collect visible slices
     struct SliceInfo { int idx; int x1; int x2; bool selected; juce::Colour col; };
     std::array<SliceInfo, SliceManager::kMaxSlices> vis {};
     int visCount = 0;
-
     for (int i = 0; i < num; ++i)
     {
         const auto& s = ui.slices[(size_t) i];
         if (! s.active) continue;
         int startSample = s.startSample;
-        int endSample   = processor.sliceManager.getEndForSlice (i, numFrames);
-        if (hasPreview  && i == previewIdx) { startSample = previewStart; endSample = previewEnd; }
-        if (hasLinked   && i == linkedIdx)  { startSample = linkedStart;  endSample = linkedEnd;  }
+        int endSample   = processor.sliceManager.getEndForSlice(i, numFrames);
 
         int x1 = (int) ((float) (startSample - visStart) / visLen * w);
         int x2 = (int) ((float) (endSample   - visStart) / visLen * w);
-        x1 = std::max (0, x1);
-        x2 = std::min (w, x2);
+        x1 = std::max(0, x1);
+        x2 = std::min(w, x2);
         if (x2 - x1 < 2) continue;
         if (visCount < SliceManager::kMaxSlices)
             vis[(size_t) visCount++] = { i, x1, x2, (i == sel), s.colour };
     }
 
-    // Opacity steps for non-selected slices (5-step cycle, same hue per slice)
-    static constexpr float kOpacity[5] = { 0.11f, 0.19f, 0.27f, 0.19f, 0.11f };
+    // ==== WAVEFORM AREA DRAW ====
+    // Each slice background
+    for (int i = 0; i < visCount; ++i)
+    {
+        const auto& si = vis[(size_t) i];
+        g.setColour(si.colour.withAlpha(si.selected ? 0.22f : 0.14f));
+        g.fillRect(si.x1, 0, si.x2 - si.x1, bodyH);
+        // Outline for selected
+        if (si.selected)
+        {
+            g.setColour(getTheme().accent.withAlpha(0.27f));
+            g.drawRect(si.x1, 0, si.x2 - si.x1, bodyH, 2);
+        }
+    }
 
-    const int Y1 = 1, Y2 = bodyH - 1;
+    // Opacity steps for non-selected slices (legacy fade, if needed)
+    // static constexpr float kOpacity[5] = { 0.11f, 0.19f, 0.27f, 0.19f, 0.11f };
 
+    // ==== WAVEFORM RENDER - Line overlay (optional) ====
+    // Instead, you may want to call out to waveform renderer / paint peaks, if you have one:
+    // (Example, pseudo-code: see WaveformCache etc. to fill here if you wish.)
 
-    // ── Pass 4: labels ────────────────────────────────────────────────────────
-    // Recompute stable label positions (cache logic preserved)
+    // ==== SLICE LABELS ====
+    // (This logic is kept from previous for overlays)
     LabelCacheKey currentKey;
     currentKey.numSlices     = num;
     currentKey.selectedSlice = sel;
     currentKey.visStart      = visStart;
     currentKey.visLen        = visLen;
     currentKey.width         = w;
-
-    // If a drag preview is active the slice x-positions have changed but the
-    // cache key hasn't — force a rebuild so labels track their moving markers.
-    if (hasPreview || hasLinked)
-        labelCacheDirty = true;
-
     if (labelCacheDirty || !(currentKey == prevLabelCacheKey))
     {
         cachedLabelCount = 0;
         std::array<int, SliceManager::kMaxSlices> labelEndsCache {};
         int labelEndCount = 0;
 
-        g.setFont (DysektLookAndFeel::makeFont (12.0f, true));
+        g.setFont(DysektLookAndFeel::makeFont(12.0f, true));
 
         for (int i = 0; i < visCount; ++i)
         {
             const auto& si = vis[(size_t) i];
             int sw = si.x2 - si.x1;
             if (sw <= 14) continue;
-
-            juce::String label = juce::String (si.idx + 1);
-            int labelW = g.getCurrentFont().getStringWidth (label) + 6;
-            int labelX = si.x1 + 4;  // +4 to clear the left border
-
+            juce::String label = juce::String(si.idx + 1);
+            int labelW = g.getCurrentFont().getStringWidth(label) + 6;
+            int labelX = si.x1 + 4;
             for (int li = 0; li < labelEndCount; ++li)
                 if (labelX < labelEndsCache[(size_t) li])
                     labelX = labelEndsCache[(size_t) li] + 1;
-
             if (labelX + labelW < w && cachedLabelCount < SliceManager::kMaxSlices)
             {
                 cachedLabels[(size_t) cachedLabelCount++] = { si.idx, labelX };
@@ -115,16 +113,39 @@ void SliceLane::paint (juce::Graphics& g)
                     labelEndsCache[(size_t) labelEndCount++] = labelX + labelW;
             }
         }
-
         prevLabelCacheKey = currentKey;
         labelCacheDirty   = false;
     }
+    // Label render pass
+    g.setFont(DysektLookAndFeel::makeFont(12.0f, true));
+    for (int i = 0; i < cachedLabelCount; ++i)
+    {
+        const auto& cl = cachedLabels[(size_t)i];
+        int sliceIdx = cl.sliceIdx;
+        juce::String label = juce::String(sliceIdx + 1);
+        // Find slice's current rect
+        auto it = std::find_if(vis.begin(), vis.begin() + visCount, [sliceIdx](const SliceInfo& si){ return si.idx == sliceIdx; });
+        if (it == vis.begin() + visCount) continue;
+        int labelY = 8; // vertically center in bodyH if desired
+        g.setColour(juce::Colours::black.withAlpha(0.34f));
+        g.drawFittedText(label, cl.x, labelY + 1, 22, 16, juce::Justification::left, 1);
+        g.setColour(getTheme().foreground);
+        g.drawFittedText(label, cl.x, labelY, 22, 16, juce::Justification::left, 1);
+    }
 
+    // ==== DOT (LOCK ROW) ====
+    // Dot strip background (slightly darker than body)
+    g.setColour(getTheme().darkBar.darker(0.20f));
+    g.fillRect(0, dotZoneY, w, kDotZoneH);
 
-    // ── ADSR lock dot strip — separate 6px zone BELOW the slice body ─────────
-    // Each slice gets its own dot-zone column directly beneath it.
-    // Filled dot = field locked.  Hollow outline = free.  Padlock = all locked.
-    // Dot colours: A=#00FF87  D=#FFE800  S=#00C8FF  R=#FF6B00
+    // Top separator line between body and dot zone
+    g.setColour(getTheme().separator.withAlpha(0.60f));
+    g.drawHorizontalLine(dotZoneY, 0.0f, (float) w);
+
+    // Dot geometry: 4 dots spaced 5px centre-to-centre, each 2×2px square
+    static constexpr int kDotSz  = 2;   // square side
+    static constexpr int kDotGap = 5;   // centre-to-centre
+    const int dotRowY = dotZoneY + kDotZoneH / 2 - kDotSz / 2;  // vertically centred
 
     static const juce::Colour kDotA { 0xFF00FF87 };
     static const juce::Colour kDotD { 0xFFFFE800 };
@@ -133,19 +154,6 @@ void SliceLane::paint (juce::Graphics& g)
     static const uint32_t     kAdsrBits[4] = { kLockAttack, kLockDecay,
                                                 kLockSustain, kLockRelease };
     static const juce::Colour kAdsrCols[4] = { kDotA, kDotD, kDotS, kDotR };
-
-    // Dot strip background (slightly darker than body)
-    g.setColour (getTheme().darkBar.darker (0.20f));
-    g.fillRect (0, dotZoneY, w, kDotZoneH);
-
-    // Top separator line between body and dot zone
-    g.setColour (getTheme().separator.withAlpha (0.60f));
-    g.drawHorizontalLine (dotZoneY, 0.0f, (float) w);
-
-    // Dot geometry: 4 dots spaced 5px centre-to-centre, each 2×2px square
-    static constexpr int kDotSz  = 2;   // square side
-    static constexpr int kDotGap = 5;   // centre-to-centre
-    const int dotRowY = dotZoneY + kDotZoneH / 2 - kDotSz / 2;  // vertically centred
 
     for (int i = 0; i < visCount; ++i)
     {
@@ -166,9 +174,9 @@ void SliceLane::paint (juce::Graphics& g)
             if (sw < 7) continue;
             const int px = si.x1 + sw / 2;
             const int py = dotZoneY + 1;
-            g.setColour (getTheme().lockActive.withAlpha (alpha));
-            g.fillRect (px - 1, py,     2, 2);   // shackle
-            g.fillRect (px - 2, py + 2, 4, 3);   // body
+            g.setColour(getTheme().lockActive.withAlpha(alpha));
+            g.fillRect(px - 1, py,     2, 2);   // shackle
+            g.fillRect(px - 2, py + 2, 4, 3);   // body
         }
         else
         {
@@ -176,7 +184,6 @@ void SliceLane::paint (juce::Graphics& g)
             const int totalW = kDotGap * 3 + kDotSz;
             if (totalW > sw - 2) continue;
             const int startX = si.x1 + (sw - totalW) / 2;
-
             for (int d = 0; d < 4; ++d)
             {
                 const bool locked = (sl.lockMask & kAdsrBits[d]) != 0;
@@ -185,22 +192,21 @@ void SliceLane::paint (juce::Graphics& g)
 
                 if (locked)
                 {
-                    g.setColour (dc.withAlpha (alpha));
-                    g.fillRect (dx, dotRowY, kDotSz, kDotSz);
+                    g.setColour(dc.withAlpha(alpha));
+                    g.fillRect(dx, dotRowY, kDotSz, kDotSz);
                 }
                 else
                 {
                     // Very dim hollow dot — shows position without noise
-                    g.setColour (dc.withAlpha (0.15f));
-                    g.drawRect (dx, dotRowY, kDotSz, kDotSz, 1);
+                    g.setColour(dc.withAlpha(0.15f));
+                    g.drawRect(dx, dotRowY, kDotSz, kDotSz, 1);
                 }
             }
         }
     }
-
-    // ── Bottom separator ──────────────────────────────────────────────────────
-    g.setColour (getTheme().separator);
-    g.drawHorizontalLine (h - 1, 0.0f, (float) w);
+    // Bottom separator
+    g.setColour(getTheme().separator);
+    g.drawHorizontalLine(h - 1, 0.0f, (float) w);
 }
 
 void SliceLane::mouseDown (const juce::MouseEvent& e)
@@ -211,51 +217,55 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
         return;
 
     const auto& ui = processor.getUiSliceSnapshot();
-    const float z = std::max (1.0f, processor.zoom.load());
+    const float z = std::max(1.0f, processor.zoom.load());
     const float sc = processor.scroll.load();
-    const int visLen = juce::jlimit (1, numFrames, (int) (numFrames / z));
-    const int maxStart = juce::jmax (0, numFrames - visLen);
-    const int visStart = juce::jlimit (0, maxStart, (int) (sc * (float) maxStart));
+    const int visLen = juce::jlimit(1, numFrames, (int) (numFrames / z));
+    const int maxStart = juce::jmax(0, numFrames - visLen);
+    const int visStart = juce::jlimit(0, maxStart, (int) (sc * (float) maxStart));
     int w = getWidth();
     int num = ui.numSlices;
+    int h = getHeight();
 
-    // Collect all overlapping slice indices at click position
+    // Update: The region for slices is now the full height minus dot zone!
+    int dotZoneY = h - 6; // dot zone is always last 6 px
+
+    // Only process if click is in the (new, bigger) waveform/slice area
+    if (e.y < 0 || e.y >= dotZoneY)
+        return; // ignore dot zone and out of bounds
+
+    // Collect all overlapping slice indices at click position (x)
     std::vector<int> overlapping;
-
     for (int i = 0; i < num; ++i)
     {
         const auto& s = ui.slices[(size_t) i];
         if (! s.active) continue;
 
         int x1 = (int) ((float) (s.startSample - visStart) / visLen * w);
-        const int slaneEnd = processor.sliceManager.getEndForSlice (i, numFrames);
+        const int slaneEnd = processor.sliceManager.getEndForSlice(i, numFrames);
         int x2 = (int) ((float) (slaneEnd - visStart) / visLen * w);
 
         if (e.x >= x1 && e.x < x2)
-            overlapping.push_back (i);
+            overlapping.push_back(i);
     }
 
-    // ── Right-click: show context menu for the selected (or topmost) slice ──
+    // Right-click: show context menu for the selected (or topmost) slice
     if (e.mods.isRightButtonDown())
     {
         int targetSlice = ui.selectedSlice;
-        if (! overlapping.empty())
+        if (!overlapping.empty())
         {
-            auto it = std::find (overlapping.begin(), overlapping.end(), ui.selectedSlice);
+            auto it = std::find(overlapping.begin(), overlapping.end(), ui.selectedSlice);
             targetSlice = (it != overlapping.end()) ? *it : overlapping.front();
         }
-
         if (targetSlice >= 0 && targetSlice < ui.numSlices)
         {
             const auto& s = ui.slices[(size_t) targetSlice];
             const bool allLocked = (s.lockMask == 0xFFFFFFFFu);
             const juce::String lockLabel = allLocked ? "Unlock Slice" : "Lock Slice";
-
             const bool lockA = (s.lockMask & kLockAttack)  != 0;
             const bool lockD = (s.lockMask & kLockDecay)   != 0;
             const bool lockS = (s.lockMask & kLockSustain) != 0;
             const bool lockR = (s.lockMask & kLockRelease) != 0;
-
             // 16-colour palette
             static const struct { const char* name; juce::uint32 argb; } kPal[] = {
                 { "Cyan",    0xFF00C8FF }, { "Green",   0xFF00FF87 },
@@ -273,40 +283,40 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
             for (int ci = 0; ci < 16; ++ci)
             {
                 juce::Colour c ((juce::uint32) kPal[ci].argb);
-                colourSub.addColouredItem (20 + ci, kPal[ci].name, c,
-                                           true, c.toDisplayString (false) == curCol.toDisplayString (false));
+                colourSub.addColouredItem(20 + ci, kPal[ci].name, c,
+                                         true, c.toDisplayString(false) == curCol.toDisplayString(false));
             }
 
             juce::PopupMenu adsrSub;
-            adsrSub.addItem (10, "Lock Attack",  true, lockA);
-            adsrSub.addItem (11, "Lock Decay",   true, lockD);
-            adsrSub.addItem (12, "Lock Sustain", true, lockS);
-            adsrSub.addItem (13, "Lock Release", true, lockR);
+            adsrSub.addItem(10, "Lock Attack",  true, lockA);
+            adsrSub.addItem(11, "Lock Decay",   true, lockD);
+            adsrSub.addItem(12, "Lock Sustain", true, lockS);
+            adsrSub.addItem(13, "Lock Release", true, lockR);
 
             juce::PopupMenu menu;
-            menu.addItem (1, "Delete Slice");
+            menu.addItem(1, "Delete Slice");
             menu.addSeparator();
-            menu.addSubMenu ("Slice Colour", colourSub);
+            menu.addSubMenu("Slice Colour", colourSub);
             menu.addSeparator();
-            menu.addItem (2, lockLabel, true, allLocked);
-            menu.addSubMenu ("ADSR Lock", adsrSub);
+            menu.addItem(2, lockLabel, true, allLocked);
+            menu.addSubMenu("ADSR Lock", adsrSub);
 
             auto* topLvl = getTopLevelComponent();
             float ms = DysektLookAndFeel::getMenuScale();
             const auto screenPt = e.getScreenPosition();
-            menu.showMenuAsync (
+            menu.showMenuAsync(
                 juce::PopupMenu::Options()
-                    .withTargetScreenArea ({ screenPt, screenPt })
-                    .withParentComponent (topLvl)
-                    .withStandardItemHeight ((int) (24 * ms)),
-                [this, targetSlice, allLocked] (int result)
+                    .withTargetScreenArea({ screenPt, screenPt })
+                    .withParentComponent(topLvl)
+                    .withStandardItemHeight((int) (24 * ms)),
+                [this, targetSlice, allLocked](int result)
                 {
                     auto toggleLock = [&] (uint32_t bit)
                     {
                         DysektProcessor::Command cmd;
                         cmd.type      = DysektProcessor::CmdToggleLock;
                         cmd.intParam1 = (int) bit;
-                        processor.pushCommand (cmd);
+                        processor.pushCommand(cmd);
                     };
 
                     if (result == 1)
@@ -314,7 +324,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                         DysektProcessor::Command cmd;
                         cmd.type      = DysektProcessor::CmdDeleteSlice;
                         cmd.intParam1 = targetSlice;
-                        processor.pushCommand (cmd);
+                        processor.pushCommand(cmd);
                     }
                     else if (result == 2)
                     {
@@ -322,12 +332,12 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                         cmd.type        = DysektProcessor::CmdSetSliceLockAll;
                         cmd.intParam1   = targetSlice;
                         cmd.floatParam1 = allLocked ? 0.f : 1.f;
-                        processor.pushCommand (cmd);
+                        processor.pushCommand(cmd);
                     }
-                    else if (result == 10) toggleLock (kLockAttack);
-                    else if (result == 11) toggleLock (kLockDecay);
-                    else if (result == 12) toggleLock (kLockSustain);
-                    else if (result == 13) toggleLock (kLockRelease);
+                    else if (result == 10) toggleLock(kLockAttack);
+                    else if (result == 11) toggleLock(kLockDecay);
+                    else if (result == 12) toggleLock(kLockSustain);
+                    else if (result == 13) toggleLock(kLockRelease);
                     else if (result >= 20 && result < 36)
                     {
                         // Set slice colour
@@ -341,7 +351,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                         cmd.type      = DysektProcessor::CmdSetSliceColour;
                         cmd.intParam1 = targetSlice;
                         cmd.intParam2 = (int) kPalARGB[result - 20];
-                        processor.pushCommand (cmd);
+                        processor.pushCommand(cmd);
                     }
                     repaint();
                 });
@@ -349,13 +359,12 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // ── Left-click: cycle selection through overlapping slices ──────────────
-    if (! overlapping.empty())
+    // Left-click: cycle selection through overlapping slices
+    if (!overlapping.empty())
     {
         int current = ui.selectedSlice;
         int target  = current;
-
-        auto it = std::find (overlapping.begin(), overlapping.end(), current);
+        auto it = std::find(overlapping.begin(), overlapping.end(), current);
         if (it != overlapping.end())
         {
             ++it;
@@ -367,10 +376,9 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
         {
             target = overlapping.front();
         }
-
         DysektProcessor::Command cmd;
         cmd.type      = DysektProcessor::CmdSelectSlice;
         cmd.intParam1 = target;
-        processor.pushCommand (cmd);
+        processor.pushCommand(cmd);
     }
 }

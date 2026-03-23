@@ -21,7 +21,7 @@ private:
     DysektProcessor& processor;
     WaveformView* waveformView = nullptr;
 
-    // ── Label position cache (Bug #3: prevents per-frame jitter / flicker) ───
+    // ── Label position cache (prevents per-frame jitter / flicker)
     struct CachedLabel
     {
         int   sliceIdx = 0;
