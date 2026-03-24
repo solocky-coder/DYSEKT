@@ -65,7 +65,6 @@ target_sources(Dysekt PRIVATE
     src/ui/SliceControlBar.cpp
     src/ui/WaveformView.cpp
     src/ui/WaveformCache.cpp
-    src/ui/SliceLane.cpp
     src/ui/ActionPanel.cpp
     src/ui/LogoBar.cpp
     src/ui/KeysPanel.cpp
