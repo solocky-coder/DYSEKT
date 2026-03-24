@@ -5,10 +5,6 @@
 #include "../audio/AudioAnalysis.h"
 
 // Slice lock bitmask constants — update if your actual project declares them differently!
-constexpr uint32_t kLockAttack  = 0x00000001u;
-constexpr uint32_t kLockDecay   = 0x00000002u;
-constexpr uint32_t kLockSustain = 0x00000004u;
-constexpr uint32_t kLockRelease = 0x00000008u;
 
 // === Optionally: Implementation for drawPlaybackCursors (stub for linker) ===
 void WaveformView::drawPlaybackCursors(juce::Graphics&) {}
