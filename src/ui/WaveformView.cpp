@@ -158,7 +158,6 @@ void WaveformView::paint (juce::Graphics& g)
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
         paintTrimOverlay (g);
-        drawPlaybackCursors (g);
         paintViewStateActive = false;
     } else {
         paintViewStateActive = false;
