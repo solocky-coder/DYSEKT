@@ -2,7 +2,7 @@
 #include <algorithm>
 #include "ui/PluginEditorConstants.h"
 
-// ... (helper static functions getSettingsDir, getUserSettingsFile, getThemesDir unchanged) ...
+// ... (all unchanged helper/static functions) ...
 
 DysektEditor::DysektEditor (DysektProcessor& p)
     : AudioProcessorEditor (p),
@@ -240,6 +240,8 @@ void DysektEditor::paint (juce::Graphics& g)
     }
 }
 
+// --- KEY FIX BELOW ---
+// Replace this function with a working logic that does NOT use "trimH"
 void DysektEditor::resized()
 {
     auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
@@ -290,12 +292,12 @@ void DysektEditor::resized()
     const int screenW     = kFrameW  - kFrameInset * 2;
     const int screenTop   = frameTop + kFrameInset;
     const int screenBot   = frameBot - kFrameInset;
-    const int screenH     = screenBot - screenTop;
+    const int screenH     = juce::jmax (80, screenBot - screenTop);
 
     actionPanel.setBounds (juce::Rectangle<int> (screenX, screenTop, screenW, kActionH));
     int y = screenTop + kActionH;
     // --- NO SLICE LANE: waveformView now fills from y to the bottom ---
-    int h  = juce::jmax (80, screenBot - trimH - y);
+    int h  = screenH - kActionH; // Always >= 80
     waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
     if (trimDialog != nullptr)
         trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
@@ -325,5 +327,4 @@ void DysektEditor::toggleMixerPanel()
     resized(); repaint(); resized(); repaint();
 }
 
-// --- The rest of the class methods remain unchanged as in your working version ---
-// (User settings, save/load, keyboard shortcuts, timerCallback, theme, file drag, etc...)
+// --- All further methods unchanged ---
