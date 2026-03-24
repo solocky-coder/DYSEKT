@@ -6,7 +6,6 @@
 #include "ui/LogoBar.h"
 #include "ui/HeaderBar.h"
 #include "params/ParamIds.h"
-#include "ui/SliceLane.h"
 #include "ui/SliceControlBar.h"
 #include "ui/WaveformView.h"
 #include "ui/ActionPanel.h"
@@ -27,7 +26,6 @@ class DysektEditor : public juce::AudioProcessorEditor,
                      public juce::FileDragAndDropTarget,
                      private juce::Timer
 {
-// ... rest of your class unchanged ...
 public:
     explicit DysektEditor (DysektProcessor&);
     ~DysektEditor() override;
@@ -85,7 +83,6 @@ private:
     SliceLcdDisplay  sliceLcd;
     SliceWaveformLcd sliceWaveformLcd;
 
-    SliceLane       sliceLane;
     WaveformView    waveformView;
     SliceControlBar sliceControlBar;
     ActionPanel     actionPanel;
