@@ -4,7 +4,8 @@
 #include "../PluginProcessor.h"
 #include "../audio/AudioAnalysis.h"
 
-// ------------ MISSING METHODS defined for linker -------------
+void WaveformView::drawPlaybackCursors(juce::Graphics&) {} // Definition for linker
+
 void WaveformView::exitTrimMode()
 {
     trimMode = false;
@@ -25,7 +26,6 @@ void WaveformView::resetTrim()
     trimOutPoint = trimEnd;
     repaint();
 }
-// ------------------------------------------------------------
 
 WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
 
@@ -158,6 +158,7 @@ void WaveformView::paint (juce::Graphics& g)
         paintLazyChopOverlay (g);
         paintTransientMarkers (g);
         paintTrimOverlay (g);
+        drawPlaybackCursors (g);
         paintViewStateActive = false;
     } else {
         paintViewStateActive = false;
@@ -420,7 +421,6 @@ void WaveformView::drawWaveform (juce::Graphics& g)
     }
 }
 
-// --- SLICES AND BAR VISUALIZATION ---
 void WaveformView::drawSlices (juce::Graphics& g)
 {
     // --- Consume pending optimistic marker commit from processor (for MIDI/knob moves) ---
