@@ -19,6 +19,7 @@ public:
     void mouseEnter (const juce::MouseEvent& e) override;
     void mouseExit (const juce::MouseEvent& e) override;
     void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override;
+    void mouseDoubleClick (const juce::MouseEvent& e) override;
     void modifierKeysChanged (const juce::ModifierKeys& mods) override;
 
     bool isInterestedInFileDrag (const juce::StringArray& files) override;
@@ -53,6 +54,7 @@ public:
     std::function<void()> onTrimCancelled;
     // Callback for file load requests (routed through trim dialog if set)
     std::function<void (const juce::File&)> onLoadRequest;
+    std::function<void()> onShortcutsToggle;
 
     void setSoftWaveform (bool soft) { softWaveform = soft; repaint(); }
     bool isSoftWaveform() const noexcept { return softWaveform; }
@@ -90,6 +92,9 @@ private:
     void paintLazyChopOverlay (juce::Graphics& g);
     void paintTransientMarkers (juce::Graphics& g);
     void paintTrimOverlay (juce::Graphics& g);
+    void paintMidiSliceOverlay (juce::Graphics& g);
+
+    static constexpr int kMidiOverlayH = 22;
 
     // Aggregates all cache-invalidation inputs; rebuild is skipped when unchanged.
     struct CacheKey
@@ -107,7 +112,8 @@ private:
     DysektProcessor& processor;
     WaveformCache cache;
     CacheKey prevCacheKey;
-    bool sliceDrawMode = false;
+    bool sliceDrawMode         = false;
+    bool midiSliceOverlayActive = false;
     bool softWaveform  = false;   // TAL-style gradient+outline rendering
     bool trimMode      = false;   // trim in/out marker editing mode
     int  trimInPoint   = 0;       // trim-in marker position in samples (DragTrimIn path)

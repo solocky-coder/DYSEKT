@@ -186,16 +186,40 @@ void WaveformView::paint (juce::Graphics& g)
         paintTransientMarkers (g);
         paintTrimOverlay (g);
         drawPlaybackCursors (g);
+        paintMidiSliceOverlay (g);
         paintViewStateActive = false;
     } else {
         paintViewStateActive = false;
         g.setColour (getTheme().foreground.withAlpha (0.25f));
         g.setFont (DysektLookAndFeel::makeFont (22.0f));
         g.drawText ("DROP AUDIO FILE", getLocalBounds(), juce::Justification::centred);
+        paintMidiSliceOverlay (g);
     }
 }
 
 void WaveformView::paintDrawSlicePreview (juce::Graphics& g) {}
+
+void WaveformView::paintMidiSliceOverlay (juce::Graphics& g)
+{
+    if (! midiSliceOverlayActive) return;
+
+    auto strip = getLocalBounds().removeFromTop (kMidiOverlayH);
+
+    // Dark semi-transparent background
+    g.setColour (juce::Colour (0xFF1A1A2E).withAlpha (0.90f));
+    g.fillRect (strip);
+
+    // Red pulsing dot
+    g.setColour (juce::Colour (0xFFFF2D55));
+    g.fillEllipse (8.0f, (kMidiOverlayH - 8) * 0.5f, 8.0f, 8.0f);
+
+    // Label
+    g.setColour (juce::Colours::white.withAlpha (0.90f));
+    g.setFont (DysektLookAndFeel::makeFont (11.0f));
+    g.drawText ("MIDI SLICE  â  Click to finish",
+                juce::Rectangle<int> (24, 0, strip.getWidth() - 32, kMidiOverlayH),
+                juce::Justification::centredLeft);
+}
 
 void WaveformView::paintLazyChopOverlay (juce::Graphics& g)
 {
@@ -657,6 +681,17 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
+    // ── MIDI Slice overlay: clicking the strip stops MIDI slicing ───────────
+    if (midiSliceOverlayActive && ! e.mods.isRightButtonDown() && e.y < kMidiOverlayH)
+    {
+        DysektProcessor::Command cmd;
+        cmd.type = DysektProcessor::CmdLazyChopStop;
+        processor.pushCommand (cmd);
+        midiSliceOverlayActive = false;
+        repaint();
+        return;
+    }
+
     // ── Right-click: show slice context menu anywhere on the waveform ─────────
     if (e.mods.isRightButtonDown())
     {
@@ -677,7 +712,15 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             }
         }
 
-        if (targetSlice >= 0)
+        // ── Build menu: MIDI Slice + Shortcuts always visible at top ─────────
+        juce::PopupMenu menu;
+        const juce::String midiLabel = midiSliceOverlayActive ? "Stop MIDI Slice" : "MIDI Slice";
+        menu.addItem (50, midiLabel,  true, midiSliceOverlayActive);
+        menu.addItem (51, "Shortcuts");
+
+        // Slice-specific items appear below when cursor is over a slice
+        bool hasSliceItems = (targetSlice >= 0);
+        if (hasSliceItems)
         {
             const auto& s = ui.slices[(size_t) targetSlice];
             const bool allLocked = (s.lockMask == 0xFFFFFFFFu);
@@ -688,7 +731,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             const bool lockS = (s.lockMask & kLockSustain)  != 0;
             const bool lockR = (s.lockMask & kLockRelease)  != 0;
 
-            // 16-colour palette
             static const struct { const char* name; juce::uint32 argb; } kPal[] = {
                 { "Cyan",    0xFF00C8FF }, { "Green",   0xFF00FF87 },
                 { "Yellow",  0xFFFFE800 }, { "Orange",  0xFFFF6B00 },
@@ -715,68 +757,104 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             adsrSub.addItem (12, "Lock Sustain", true, lockS);
             adsrSub.addItem (13, "Lock Release", true, lockR);
 
-            juce::PopupMenu menu;
+            menu.addSeparator();
             menu.addItem (1, "Delete Slice");
             menu.addSeparator();
             menu.addSubMenu ("Slice Colour", colourSub);
             menu.addSeparator();
             menu.addItem (2, lockLabel, true, allLocked);
             menu.addSubMenu ("ADSR Lock", adsrSub);
+        }
 
-            auto* topLvl = getTopLevelComponent();
-            float ms = DysektLookAndFeel::getMenuScale();
-            const auto screenPt = e.getScreenPosition();
-            menu.showMenuAsync (
-                juce::PopupMenu::Options()
-                    .withTargetScreenArea ({ screenPt, screenPt })
-                    .withParentComponent (topLvl)
-                    .withStandardItemHeight ((int) (24 * ms)),
-                [this, targetSlice, allLocked] (int result)
+        auto* topLvl = getTopLevelComponent();
+        float ms = DysektLookAndFeel::getMenuScale();
+        const auto screenPt = e.getScreenPosition();
+        menu.showMenuAsync (
+            juce::PopupMenu::Options()
+                .withTargetScreenArea ({ screenPt, screenPt })
+                .withParentComponent (topLvl)
+                .withStandardItemHeight ((int) (24 * ms)),
+            [this, targetSlice, hasSliceItems] (int result)
+            {
+                // ── MIDI Slice toggle ──────────────────────────────────────────
+                if (result == 50)
                 {
-                    auto toggleLock = [&] (uint32_t bit)
+                    DysektProcessor::Command cmd;
+                    if (midiSliceOverlayActive)
                     {
-                        DysektProcessor::Command cmd;
-                        cmd.type = DysektProcessor::CmdToggleLock;
-                        cmd.intParam1 = (int) bit;
+                        cmd.type = DysektProcessor::CmdLazyChopStop;
                         processor.pushCommand (cmd);
-                    };
-
-                    if (result == 1)
-                    {
-                        DysektProcessor::Command cmd;
-                        cmd.type = DysektProcessor::CmdDeleteSlice;
-                        cmd.intParam1 = targetSlice;
-                        processor.pushCommand (cmd);
+                        midiSliceOverlayActive = false;
                     }
-                    else if (result == 2)
+                    else
                     {
-                        DysektProcessor::Command cmd;
-                        cmd.type = DysektProcessor::CmdSetSliceLockAll;
-                        cmd.intParam1 = targetSlice;
-                        cmd.floatParam1 = allLocked ? 0.f : 1.f;
+                        cmd.type = DysektProcessor::CmdLazyChopStart;
                         processor.pushCommand (cmd);
-                    }
-                    else if (result == 10) toggleLock (kLockAttack);
-                    else if (result == 11) toggleLock (kLockDecay);
-                    else if (result == 12) toggleLock (kLockSustain);
-                    else if (result == 13) toggleLock (kLockRelease);
-                    else if (result >= 20 && result < 36)
-                    {
-                        static const juce::uint32 kPalARGB[] = {
-                            0xFF00C8FF, 0xFF00FF87, 0xFFFFE800, 0xFFFF6B00,
-                            0xFFFF2D55, 0xFFFF2D9A, 0xFFB44FFF, 0xFF4A80FF,
-                            0xFF00BFFF, 0xFF00FFD0, 0xFFA8FF3E, 0xFFFFD700,
-                            0xFFFF7F50, 0xFFFF00FF, 0xFFE8E8E8, 0xFF888888,
-                        };
-                        DysektProcessor::Command cmd;
-                        cmd.type = DysektProcessor::CmdSetSliceColour;
-                        cmd.intParam1 = targetSlice;
-                        cmd.intParam2 = (int) kPalARGB[result - 20];
-                        processor.pushCommand (cmd);
+                        processor.midiSelectsSlice.store (true);
+                        midiSliceOverlayActive = true;
                     }
                     repaint();
-                });
-        }
+                    return;
+                }
+                // ── Shortcuts ─────────────────────────────────────────────────
+                if (result == 51)
+                {
+                    if (onShortcutsToggle) onShortcutsToggle();
+                    return;
+                }
+
+                if (! hasSliceItems) { repaint(); return; }
+
+                auto allLocked = false;
+                {
+                    const auto& uiSnap = processor.getUiSliceSnapshot();
+                    if (targetSlice >= 0 && targetSlice < uiSnap.numSlices)
+                        allLocked = (uiSnap.slices[(size_t) targetSlice].lockMask == 0xFFFFFFFFu);
+                }
+
+                auto toggleLock = [&] (uint32_t bit)
+                {
+                    DysektProcessor::Command cmd;
+                    cmd.type = DysektProcessor::CmdToggleLock;
+                    cmd.intParam1 = (int) bit;
+                    processor.pushCommand (cmd);
+                };
+
+                if (result == 1)
+                {
+                    DysektProcessor::Command cmd;
+                    cmd.type = DysektProcessor::CmdDeleteSlice;
+                    cmd.intParam1 = targetSlice;
+                    processor.pushCommand (cmd);
+                }
+                else if (result == 2)
+                {
+                    DysektProcessor::Command cmd;
+                    cmd.type = DysektProcessor::CmdSetSliceLockAll;
+                    cmd.intParam1 = targetSlice;
+                    cmd.floatParam1 = allLocked ? 0.f : 1.f;
+                    processor.pushCommand (cmd);
+                }
+                else if (result == 10) toggleLock (kLockAttack);
+                else if (result == 11) toggleLock (kLockDecay);
+                else if (result == 12) toggleLock (kLockSustain);
+                else if (result == 13) toggleLock (kLockRelease);
+                else if (result >= 20 && result < 36)
+                {
+                    static const juce::uint32 kPalARGB[] = {
+                        0xFF00C8FF, 0xFF00FF87, 0xFFFFE800, 0xFFFF6B00,
+                        0xFFFF2D55, 0xFFFF2D9A, 0xFFB44FFF, 0xFF4A80FF,
+                        0xFF00BFFF, 0xFF00FFD0, 0xFFA8FF3E, 0xFFFFD700,
+                        0xFFFF7F50, 0xFFFF00FF, 0xFFE8E8E8, 0xFF888888,
+                    };
+                    DysektProcessor::Command cmd;
+                    cmd.type = DysektProcessor::CmdSetSliceColour;
+                    cmd.intParam1 = targetSlice;
+                    cmd.intParam2 = (int) kPalARGB[result - 20];
+                    processor.pushCommand (cmd);
+                }
+                repaint();
+            });
         return;
     }
 
@@ -844,6 +922,19 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             break;
         }
     }
+}
+
+void WaveformView::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    if (trimMode) return;
+    auto sampleSnap = processor.sampleData.getSnapshot();
+    if (sampleSnap == nullptr) return;
+    int samplePos = juce::jlimit (0, sampleSnap->buffer.getNumSamples(), pixelToSample (e.x));
+    DysektProcessor::Command cmd;
+    cmd.type = DysektProcessor::CmdCreateSlice;
+    cmd.intParam1 = samplePos;
+    cmd.intParam2 = samplePos + 1;
+    processor.pushCommand (cmd);
 }
 
 void WaveformView::mouseDrag (const juce::MouseEvent& e)

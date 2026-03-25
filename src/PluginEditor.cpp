@@ -58,7 +58,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
     browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
-    waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
+    waveformView.onLoadRequest    = [this] (const juce::File& f) { showTrimDialog (f); };
+    waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
     waveformView.onTrimApplied = [this] (int s, int e)
     {
         processor.applyTrimToCurrentSample (s, e);
@@ -301,8 +302,8 @@ void DysektEditor::resized()
     const int screenTop = frameTop + kFrameInset;
     const int screenBot = frameBot - kFrameInset;
 
-    actionPanel.setBounds (juce::Rectangle<int> (screenX, screenTop, screenW, kActionH));
-    int y = screenTop + kActionH;
+    actionPanel.setBounds ({});   // collapsed — buttons moved to waveform right-click menu
+    int y = screenTop;   // waveform fills full height — no button strip above
 
     // SliceLane is collapsed — waveform absorbs its space (no kSliceLaneH offset)
     sliceLane.setBounds ({});
