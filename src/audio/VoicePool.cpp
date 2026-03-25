@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
-static constexpr int kStretchBlockSize = 128;        // required block size for Signalsmith Stretch processing
+static constexpr int kStretchBlockSize = 128; // required block size for Signalsmith Stretch processing
 static constexpr int kMaxStretchInputSamples = 8192; // max pre-roll/input feed size (empirically tuned)
 
 static inline float dbToLinear (float dB)
@@ -74,14 +74,14 @@ void VoicePool::setMaxActiveVoices (int n)
 }
 
 void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
-                               float tonalityHz, float formantSemis, bool formantComp,
-                               const SampleData& sample)
+                                float tonalityHz, float formantSemis, bool formantComp,
+                                const SampleData& sample)
 {
-    int blockSize = std::max (256, (int)(sr * 0.023));   // ~1024 @ 44.1k (~23ms)
-    int interval  = std::max (64,  (int)(sr * 0.006));   // ~256 @ 44.1k (~6ms)
+    int blockSize = std::max (256, (int)(sr * 0.023)); // ~1024 @ 44.1k (~23ms)
+    int interval  = std::max (64,  (int)(sr * 0.006)); // ~256  @ 44.1k (~6ms)
 
     if (! v.stretcher)
-        v.stretcher = std::make_shared<signalsmith::stretch::SignalsmithStretch<float, void>>();
+        v.stretcher = std::make_shared<signalsmith::stretch::SignalsmithStretch<float>>();
     v.stretcher->configure (2, blockSize, interval, false);
 
     float tonalityLimit = (tonalityHz > 0.0f && sr > 0.0) ? (float)(tonalityHz / sr) : 0.0f;
@@ -91,7 +91,7 @@ void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
         v.stretcher->setFormantSemitones (formantSemis, formantComp);
 
     v.stretchOutReadPos = 0;
-    v.stretchOutAvail = 0;
+    v.stretchOutAvail   = 0;
 
     // Pre-roll: prime the pipeline so first output isn't silence
     float playbackRate = v.stretchTimeRatio;
@@ -105,8 +105,8 @@ void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
         for (int i = 0; i < seekLen; ++i)
         {
             int srcIdx = (v.direction > 0)
-                ? v.startSample + i
-                : v.endSample - 1 - i;
+                         ? v.startSample + i
+                         : v.endSample - 1 - i;
             srcIdx = juce::jlimit (0, maxFrame, srcIdx);
             v.stretchInBufL[(size_t) i] = sample.getInterpolatedSample (srcIdx, 0);
             v.stretchInBufR[(size_t) i] = sample.getInterpolatedSample (srcIdx, 1);
@@ -121,19 +121,19 @@ void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  startVoiceUnsliced — chromatic playback with explicit bounds, no slice needed.
-//  Used for trim-mode and unsliced-sample playback. All params come from globals.
+// startVoiceUnsliced — chromatic playback with explicit bounds, no slice needed.
+// Used for trim-mode and unsliced-sample playback. All params come from globals.
 // ─────────────────────────────────────────────────────────────────────────────
 void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
-                                     int startSample, int endSample,
-                                     const SampleData& sample)
+                                    int startSample, int endSample,
+                                    const SampleData& sample)
 {
     auto& v = voices[voiceIdx];
 
-    v.active      = true;
-    v.sliceIdx    = -1;
-    v.midiNote    = p.note;
-    v.velocity    = p.velocity / 127.0f;
+    v.active     = true;
+    v.sliceIdx   = -1;
+    v.midiNote   = p.note;
+    v.velocity   = p.velocity / 127.0f;
     v.startSample = startSample;
     v.endSample   = endSample;
     v.bufferEnd   = sample.getNumFrames();
@@ -156,7 +156,7 @@ void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
 
     v.volume = dbToLinear (p.globalVolume);
 
-    float panAngle  = (p.globalPan + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
+    float panAngle = (p.globalPan + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
     v.panL = std::cos (panAngle);
     v.panR = std::sin (panAngle);
 
@@ -190,38 +190,38 @@ void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
 }
 
 void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
-                            SliceManager& sm, const SampleData& sample)
+                             SliceManager& sm, const SampleData& sample)
 {
     auto& v = voices[voiceIdx];
     const int sliceIdx = p.sliceIdx;
     const auto& s = sm.getSlice (sliceIdx);
 
-    v.active    = true;
-    v.sliceIdx  = sliceIdx;
-    v.midiNote  = p.note;
-    v.velocity  = p.velocity / 127.0f;
+    v.active   = true;
+    v.sliceIdx = sliceIdx;
+    v.midiNote = p.note;
+    v.velocity = p.velocity / 127.0f;
 
     v.startSample = s.startSample;
     // Marker model: derive end from the next slice's start (or buffer end).
     const int sliceEnd = sm.getEndForSlice (sliceIdx, sample.getNumFrames());
-    v.endSample   = sliceEnd;
+    v.endSample = sliceEnd;
 
     // Resolve parameters via inheritance
-    float attack   = sm.resolveParam (sliceIdx, kLockAttack,   s.attackSec,    p.globalAttackSec);
-    float decay    = sm.resolveParam (sliceIdx, kLockDecay,    s.decaySec,     p.globalDecaySec);
-    float sustain  = sm.resolveParam (sliceIdx, kLockSustain,  s.sustainLevel, p.globalSustain);
-    float release  = sm.resolveParam (sliceIdx, kLockRelease,  s.releaseSec,   p.globalReleaseSec);
+    float attack  = sm.resolveParam (sliceIdx, kLockAttack,   s.attackSec,    p.globalAttackSec);
+    float decay   = sm.resolveParam (sliceIdx, kLockDecay,    s.decaySec,     p.globalDecaySec);
+    float sustain = sm.resolveParam (sliceIdx, kLockSustain,  s.sustainLevel, p.globalSustain);
+    float release = sm.resolveParam (sliceIdx, kLockRelease,  s.releaseSec,   p.globalReleaseSec);
 
     v.envelope.noteOn (attack, decay, sustain, release, sampleRate);
 
     int resolvedLoopMode = (int) sm.resolveParam (sliceIdx, kLockLoop, (float) s.loopMode, (float) p.globalLoopMode);
-    v.looping    = (resolvedLoopMode == 1);
-    v.pingPong   = (resolvedLoopMode == 2);
-    v.muteGroup  = (int) sm.resolveParam (sliceIdx, kLockMuteGroup, (float) s.muteGroup, (float) p.globalMuteGroup);
+    v.looping  = (resolvedLoopMode == 1);
+    v.pingPong = (resolvedLoopMode == 2);
+    v.muteGroup = (int) sm.resolveParam (sliceIdx, kLockMuteGroup, (float) s.muteGroup, (float) p.globalMuteGroup);
 
     bool rev = sm.resolveParam (sliceIdx, kLockReverse,
-                                 s.reverse ? 1.0f : 0.0f,
-                                 p.globalReverse ? 1.0f : 0.0f) > 0.5f;
+                                s.reverse ? 1.0f : 0.0f,
+                                p.globalReverse ? 1.0f : 0.0f) > 0.5f;
     v.direction = rev ? -1 : 1;
     v.position  = rev ? (sliceEnd - 1) : s.startSample;
 
@@ -229,21 +229,21 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
 
     int algo = (int) sm.resolveParam (sliceIdx, kLockAlgorithm, (float) s.algorithm, (float) p.globalAlgorithm);
 
-    float sliceBpm = sm.resolveParam (sliceIdx, kLockBpm,   s.bpm,            p.globalBpm);
-    float pitchSt  = sm.resolveParam (sliceIdx, kLockPitch,       s.pitchSemitones, p.globalPitch);
-    float cents    = sm.resolveParam (sliceIdx, kLockCentsDetune, s.centsDetune,    p.globalCentsDetune);
+    float sliceBpm = sm.resolveParam (sliceIdx, kLockBpm,        s.bpm,           p.globalBpm);
+    float pitchSt  = sm.resolveParam (sliceIdx, kLockPitch,      s.pitchSemitones, p.globalPitch);
+    float cents    = sm.resolveParam (sliceIdx, kLockCentsDetune, s.centsDetune,   p.globalCentsDetune);
     float pitch    = pitchSt + cents / 100.0f;
     float pitchRatio = std::pow (2.0f, pitch / 12.0f);
 
     bool stretchOn = sm.resolveParam (sliceIdx, kLockStretch,
-                                       s.stretchEnabled ? 1.0f : 0.0f,
-                                       p.globalStretch ? 1.0f : 0.0f) > 0.5f;
+                                      s.stretchEnabled ? 1.0f : 0.0f,
+                                      p.globalStretch ? 1.0f : 0.0f) > 0.5f;
 
-    float tonality = sm.resolveParam (sliceIdx, kLockTonality,    s.tonalityHz,       p.globalTonality);
-    float formant  = sm.resolveParam (sliceIdx, kLockFormant,     s.formantSemitones, p.globalFormant);
-    bool fComp     = sm.resolveParam (sliceIdx, kLockFormantComp,
-                                       s.formantComp ? 1.0f : 0.0f,
-                                       p.globalFormantComp ? 1.0f : 0.0f) > 0.5f;
+    float tonality = sm.resolveParam (sliceIdx, kLockTonality,    s.tonalityHz,        p.globalTonality);
+    float formant  = sm.resolveParam (sliceIdx, kLockFormant,     s.formantSemitones,  p.globalFormant);
+    bool  fComp    = sm.resolveParam (sliceIdx, kLockFormantComp,
+                                      s.formantComp ? 1.0f : 0.0f,
+                                      p.globalFormantComp ? 1.0f : 0.0f) > 0.5f;
 
     int grainMode = (int) sm.resolveParam (sliceIdx, kLockGrainMode,
                                            (float) s.grainMode, (float) p.globalGrainMode);
@@ -270,15 +270,15 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     v.filterStateR = 0.0f;
 
     v.releaseTail = sm.resolveParam (sliceIdx, kLockReleaseTail,
-                                      s.releaseTail ? 1.0f : 0.0f,
-                                      p.globalReleaseTail ? 1.0f : 0.0f) > 0.5f;
+                                     s.releaseTail ? 1.0f : 0.0f,
+                                     p.globalReleaseTail ? 1.0f : 0.0f) > 0.5f;
     v.oneShot = sm.resolveParam (sliceIdx, kLockOneShot,
                                   s.oneShot ? 1.0f : 0.0f,
                                   p.globalOneShot ? 1.0f : 0.0f) > 0.5f;
     v.bufferEnd = sample.getNumFrames();
 
     // Reset stretch state (guard against stale data from stolen voices)
-    v.stretchActive  = false;
+    v.stretchActive = false;
     v.startedViaChromaticLegato = p.chromaticLegatoTrigger;
 
     if (stretchOn && p.dawBpm > 0.0f && sliceBpm > 0.0f)
@@ -293,11 +293,11 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
         else
         {
             // Signalsmith Stretch: independent pitch + time
-            v.stretchActive = true;
-            v.speed = 1.0;
-            v.stretchTimeRatio = speedRatio;
+            v.stretchActive     = true;
+            v.speed             = 1.0;
+            v.stretchTimeRatio  = speedRatio;
             v.stretchPitchSemis = pitch;
-            v.stretchSrcPos = rev ? (sliceEnd - 1) : s.startSample;
+            v.stretchSrcPos     = rev ? (sliceEnd - 1) : s.startSample;
 
             initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
         }
@@ -308,11 +308,11 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
         {
             // Stretch algo with no BPM stretch, or chromatic legato override:
             // use Signalsmith for pitch-only (time stays constant — no Mickey Mouse)
-            v.stretchActive = true;
-            v.speed = 1.0;
-            v.stretchTimeRatio = 1.0f;
+            v.stretchActive     = true;
+            v.speed             = 1.0;
+            v.stretchTimeRatio  = 1.0f;
             v.stretchPitchSemis = pitch;
-            v.stretchSrcPos = rev ? (sliceEnd - 1) : s.startSample;
+            v.stretchSrcPos     = rev ? (sliceEnd - 1) : s.startSample;
 
             initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
         }
@@ -331,7 +331,7 @@ void VoicePool::releaseNote (int note)
         if (voices[i].active && voices[i].midiNote == note)
         {
             if (voices[i].oneShot)
-                continue;   // ignore note-off; voice plays through to endSample
+                continue; // ignore note-off; voice plays through to endSample
             voices[i].envelope.noteOff();
         }
     }
@@ -368,6 +368,54 @@ void VoicePool::killVoicesForChromaticLegato (int sliceIdx)
         if (v.active && v.sliceIdx == sliceIdx && v.startedViaChromaticLegato)
             v.envelope.forceRelease (kKillReleaseSec, sampleRate);
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// retuneChromaticLegatoVoice — true sample-through legato pitch update.
+//
+// Instead of killing the old voice and restarting from the slice head, we find
+// the active chromatic-legato voice and update only its pitch, leaving the
+// playback position completely untouched. This gives smooth, continuous sample
+// playback while the pitch follows the incoming MIDI notes.
+//
+// Stretch mode  : calls stretcher->setTransposeSemitones() live — no re-init.
+// Repitch mode  : recalculates v.speed from the new semitone ratio.
+//
+// Returns true  → caller should NOT start a new voice.
+// Returns false → no active legato voice found; caller must start fresh.
+// ─────────────────────────────────────────────────────────────────────────────
+bool VoicePool::retuneChromaticLegatoVoice (int sliceIdx, float newPitchSemis,
+                                             float tonalityHz, int newMidiNote)
+{
+    for (int i = 0; i < maxActive; ++i)
+    {
+        auto& v = voices[i];
+        if (! v.active || v.sliceIdx != sliceIdx || ! v.startedViaChromaticLegato)
+            continue;
+
+        // Found an active legato voice on this slice — retune it in place.
+        v.midiNote = newMidiNote;
+
+        if (v.stretchActive && v.stretcher)
+        {
+            // Stretch / pitch-only stretch mode:
+            // update the transposition semitones without touching the read position.
+            const float tonalityLimit = (tonalityHz > 0.0f && sampleRate > 0.0)
+                                        ? (float)(tonalityHz / sampleRate) : 0.0f;
+            v.stretcher->setTransposeSemitones (newPitchSemis, tonalityLimit);
+            v.stretchPitchSemis = newPitchSemis;
+        }
+        else
+        {
+            // Repitch mode: update playback speed ratio only.
+            const float pitchRatio = std::pow (2.0f, newPitchSemis / 12.0f);
+            v.speed = (double) pitchRatio;
+        }
+
+        return true; // retuned — no new voice needed
+    }
+
+    return false; // no active legato voice found — caller should start fresh
 }
 
 void VoicePool::muteGroup (int group, int exceptVoice)
@@ -463,18 +511,18 @@ static void fillStretchBlock (Voice& v, const SampleData& sample)
     if (outCapacity <= 0)
     {
         v.stretchOutReadPos = 0;
-        v.stretchOutAvail = 0;
+        v.stretchOutAvail   = 0;
         return;
     }
     const int outputSamples = std::min (kStretchBlockSize, outCapacity);
 
     // Process through Signalsmith
-    float* inPtrs[2]  = { v.stretchInBufL.data(), v.stretchInBufR.data() };
+    float* inPtrs[2]  = { v.stretchInBufL.data(),  v.stretchInBufR.data() };
     float* outPtrs[2] = { v.stretchOutBufL.data(), v.stretchOutBufR.data() };
     v.stretcher->process (inPtrs, inputSamples, outPtrs, outputSamples);
 
     v.stretchOutReadPos = 0;
-    v.stretchOutAvail = outputSamples;
+    v.stretchOutAvail   = outputSamples;
 }
 
 void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr*/,
@@ -505,8 +553,8 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
         if (v.stretchOutReadPos >= v.stretchOutAvail)
         {
             bool pastEnd = (v.direction > 0)
-                ? (v.stretchSrcPos >= v.endSample)
-                : (v.stretchSrcPos <= v.startSample);
+                           ? (v.stretchSrcPos >= v.endSample)
+                           : (v.stretchSrcPos <= v.startSample);
 
             if (pastEnd && !v.pingPong)
             {
@@ -568,12 +616,12 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
         {
             if (newPos >= v.endSample)
             {
-                newPos = v.endSample - 1;
+                newPos      = v.endSample - 1;
                 v.direction = -1;
             }
             else if (newPos < v.startSample)
             {
-                newPos = v.startSample;
+                newPos      = v.startSample;
                 v.direction = 1;
             }
         }
@@ -636,7 +684,7 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
 }
 
 void VoicePool::processSample (const SampleData& sample, double sr,
-                               float& outL, float& outR)
+                                float& outL, float& outR)
 {
     outL = 0.0f;
     outR = 0.0f;
@@ -667,25 +715,25 @@ void VoicePool::startShiftPreview (int startSample, int bufferSize,
     // Shares the lazyChop preview slot; only called when lazyChop is inactive
     const int i = kPreviewVoiceIndex;
     Voice& v = voices[i];
-    v.active = true;
-    v.sliceIdx = -1;
-    v.position = (double) startSample;
-    v.speed = 1.0;
-    v.direction = 1;
-    v.midiNote = -1;
-    v.velocity = 0.8f;
-    v.startSample = startSample;
-    v.endSample = bufferSize;
-    v.bufferEnd = bufferSize;
-    v.pingPong = false;
-    v.muteGroup = 0;
-    v.looping = false;
-    v.volume = 1.0f;
-    v.releaseTail = false;
-    v.oneShot = false;
+    v.active        = true;
+    v.sliceIdx      = -1;
+    v.position      = (double) startSample;
+    v.speed         = 1.0;
+    v.direction     = 1;
+    v.midiNote      = -1;
+    v.velocity      = 0.8f;
+    v.startSample   = startSample;
+    v.endSample     = bufferSize;
+    v.bufferEnd     = bufferSize;
+    v.pingPong      = false;
+    v.muteGroup     = 0;
+    v.looping       = false;
+    v.volume        = 1.0f;
+    v.releaseTail   = false;
+    v.oneShot       = false;
     v.stretchActive = false;
     v.stretchOutReadPos = 0;
-    v.stretchOutAvail = 0;
+    v.stretchOutAvail   = 0;
     v.envelope.noteOn (0.002f, 0.0f, 1.0f, 0.05f, sr);
     voicePositions[i].store ((float) startSample, std::memory_order_relaxed);
 }

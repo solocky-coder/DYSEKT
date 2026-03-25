@@ -1576,22 +1576,31 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         if (cs.chromaticChannel != inChannel) continue;
 
                         const float semitoneOffset = (float) (note - root);
-                        int voiceIdx = voicePool.allocate();
-                        int mg = (int) sliceManager.resolveParam (ci, kLockMuteGroup,
-                                                                    (float) cs.muteGroup,
-                                                                    (float) p.globalMuteGroup);
-                        voicePool.muteGroup (mg, voiceIdx);
-
-                        // Legato: steal prior chromatic voices on this slice, force pitch-only
+                        // True sample-through chromatic legato:
+                        // On a new legato note, only pitch changes — playback position is NOT reset.
+                        // Try to retune an already-playing voice first; only start fresh if nothing is playing.
                         const bool legato = cs.chromaticLegato;
-                        if (legato)
-                            voicePool.killVoicesForChromaticLegato (ci);
-
                         p.sliceIdx    = ci;
                         const float savedGlobalPitch = p.globalPitch;
                         p.globalPitch = savedGlobalPitch + semitoneOffset;
                         p.chromaticLegatoTrigger = legato;
-                        voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
+
+                        bool retuned = false;
+                        if (legato)
+                            retuned = voicePool.retuneChromaticLegatoVoice (ci, p.globalPitch,
+                                                                             sliceManager, sampleData);
+                        if (! retuned)
+                        {
+                            int voiceIdx = voicePool.allocate();
+                            int mg = (int) sliceManager.resolveParam (ci, kLockMuteGroup,
+                                                                        (float) cs.muteGroup,
+                                                                        (float) p.globalMuteGroup);
+                            voicePool.muteGroup (mg, voiceIdx);
+                            if (legato)
+                                voicePool.killVoicesForChromaticLegato (ci);
+                            voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
+                        }
+
                         p.chromaticLegatoTrigger = false;
                         p.globalPitch = savedGlobalPitch;
 
