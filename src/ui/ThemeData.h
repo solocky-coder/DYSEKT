@@ -256,6 +256,46 @@ struct ThemeData
     }
 
 
+    // ── MIDNIGHT ─────────────────────────────────────────────────────────────
+    // Deep purple-black · Violet accent · Serum / Vital premium synth feel
+    // Sharp 2px radius · Zero glow · Crisp 1px borders — Direction D
+    static ThemeData midnightTheme()
+    {
+        ThemeData t;
+        t.name             = "midnight";
+        t.background       = juce::Colour (0xFF0D0B14);   // deep purple-black
+        t.waveformBg       = juce::Colour (0xFF08060F);   // near-void
+        t.darkBar          = juce::Colour (0xFF100E1A);   // panel bars
+        t.foreground       = juce::Colour (0xFFD8D0F0);   // cool purple-tinted white
+        t.header           = juce::Colour (0xFF0A0812);   // top bar
+        t.waveform         = juce::Colour (0xFF9B6FFF);   // violet
+        t.selectionOverlay = juce::Colour (0xFF1A0F38);   // selection tint
+        t.lockActive       = juce::Colour (0xFF9B6FFF);
+        t.lockInactive     = juce::Colour (0xFF1C1838);
+        t.gridLine         = juce::Colour (0xFF161228);
+        t.accent           = juce::Colour (0xFF9B6FFF);   // electric violet
+        t.button           = juce::Colour (0xFF18152A);   // elevated panel
+        t.buttonHover      = juce::Colour (0xFF221F38);
+        t.separator        = juce::Colour (0xFF2A2545);
+        t.slicePalette[0 ] = juce::Colour (0xFFFF2DA0); // Hot Magenta
+        t.slicePalette[1 ] = juce::Colour (0xFF00FFAA); // Mint
+        t.slicePalette[2 ] = juce::Colour (0xFFFF6B00); // Amber
+        t.slicePalette[3 ] = juce::Colour (0xFF5CCCFF); // Cyan
+        t.slicePalette[4 ] = juce::Colour (0xFFFFE000); // Solar Yellow
+        t.slicePalette[5 ] = juce::Colour (0xFF9B6FFF); // Violet
+        t.slicePalette[6 ] = juce::Colour (0xFF00FFD4); // Aqua
+        t.slicePalette[7 ] = juce::Colour (0xFFFF2040); // Alarm Red
+        t.slicePalette[8 ] = juce::Colour (0xFF40FF30); // Neon Green
+        t.slicePalette[9 ] = juce::Colour (0xFFFF40A0); // Acid Pink
+        t.slicePalette[10] = juce::Colour (0xFF00A8FF); // Sky Blue
+        t.slicePalette[11] = juce::Colour (0xFFFFB800); // Gold
+        t.slicePalette[12] = juce::Colour (0xFFFF2DA0); // Hot Magenta
+        t.slicePalette[13] = juce::Colour (0xFF00FFAA); // Mint
+        t.slicePalette[14] = juce::Colour (0xFFFF6B00); // Amber
+        t.slicePalette[15] = juce::Colour (0xFF9B6FFF); // Violet
+        return t;
+    }
+
     // ── PIGMENTS ──────────────────────────────────────────────────────────────
     // Deep navy-black · Electric cyan accent · Arturia Pigments-inspired
     static ThemeData pigmentsTheme()
@@ -303,6 +343,7 @@ struct ThemeData
     static ThemeData fromThemeFile (const juce::String& text)
     {
         ThemeData t = darkTheme(); // defaults
+        if (text.contains("name: midnight")) return midnightTheme();
         if (text.contains("name: pigments")) return pigmentsTheme();
 
         for (auto line : juce::StringArray::fromLines (text))
