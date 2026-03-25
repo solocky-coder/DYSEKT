@@ -4,7 +4,33 @@
 #include "../PluginProcessor.h"
 #include "../audio/AudioAnalysis.h"
 
-void WaveformView::drawPlaybackCursors(juce::Graphics&) {} // Definition for linker
+void WaveformView::drawPlaybackCursors(juce::Graphics& g)
+{
+    const int h = getHeight();
+    const int w = getWidth();
+
+    for (int i = 0; i < VoicePool::kMaxVoices; ++i)
+    {
+        float pos = processor.voicePool.voicePositions[i].load(std::memory_order_relaxed);
+        if (pos <= 0.0f)
+            continue;
+
+        int px = sampleToPixel((int) pos);
+        if (px < 0 || px >= w)
+            continue;
+
+        // Bright white playhead line
+        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        g.drawVerticalLine(px, 0.0f, (float) h);
+
+        // Downward triangle marker at top
+        juce::Path tri;
+        tri.addTriangle((float) px - 5.0f, 0.0f,
+                        (float) px + 5.0f, 0.0f,
+                        (float) px,        8.0f);
+        g.fillPath(tri);
+    }
+}
 
 void WaveformView::exitTrimMode()
 {
@@ -17,7 +43,7 @@ void WaveformView::exitTrimMode()
 void WaveformView::getTrimBounds(int& outStart, int& outEnd) const
 {
     outStart = trimInPoint;
-    outEnd   = trimOutPoint;
+    outEnd = trimOutPoint;
 }
 
 void WaveformView::resetTrim()
@@ -37,7 +63,7 @@ void WaveformView::setSliceDrawMode(bool active)
     if (!active)
     {
         // --- CLEAR ALL DRAG/PREVIEW/LIVE MARKER STATES ---
-        dragMode     = None;
+        dragMode = None;
         dragSliceIdx = -1;
         linkedSliceIdx = -1;
         dragPreviewStart = 0;
@@ -71,9 +97,9 @@ bool WaveformView::getLinkedSlicePreview (int& sliceIdx, int& startSample, int& 
 {
     if (linkedSliceIdx < 0 || dragMode == None)
         return false;
-    sliceIdx    = linkedSliceIdx;
+    sliceIdx = linkedSliceIdx;
     startSample = linkedPreviewStart;
-    endSample   = linkedPreviewEnd;
+    endSample = linkedPreviewEnd;
     return true;
 }
 
@@ -119,8 +145,8 @@ int WaveformView::sampleToPixel (int sample) const
 {
     if (paintViewStateActive && cachedPaintViewState.valid)
         return (int) ((float) (sample - cachedPaintViewState.visibleStart)
-                      / (float) cachedPaintViewState.visibleLen
-                      * (float) cachedPaintViewState.width);
+            / (float) cachedPaintViewState.visibleLen
+            * (float) cachedPaintViewState.width);
     const auto state = buildViewState (processor.sampleData.getSnapshot());
     if (! state.valid) return 0;
     return (int) ((float) (sample - state.visibleStart) / (float) state.visibleLen * (float) state.width);
@@ -194,8 +220,8 @@ void WaveformView::paintLazyChopOverlay (juce::Graphics& g)
 void WaveformView::paintTrimOverlay (juce::Graphics& g)
 {
     if (! trimMode) return;
-    const int w  = getWidth();
-    const int h  = getHeight();
+    const int w = getWidth();
+    const int h = getHeight();
 
     auto sampleSnap = processor.sampleData.getSnapshot();
     int totalFrames = sampleSnap ? sampleSnap->buffer.getNumSamples() : 1;
@@ -251,10 +277,10 @@ void WaveformView::paintTransientMarkers (juce::Graphics& g)
 
 void WaveformView::drawWaveform (juce::Graphics& g)
 {
-    const int   cy    = getHeight() / 2;
+    const int cy = getHeight() / 2;
     const float scale = (float) getHeight() * UILayout::waveformVerticalScale;
 
-    auto& peaks    = cache.getPeaks();
+    auto& peaks = cache.getPeaks();
     const int numPeaks = std::min (cache.getNumPeaks(), getWidth());
     if (numPeaks <= 0)
         return;
@@ -291,7 +317,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
             {
                 float y = (float) cy - peaks[(size_t) px].maxVal * scale;
                 if (! started) { path.startNewSubPath ((float) px, y); started = true; }
-                else             path.lineTo ((float) px, y);
+                else path.lineTo ((float) px, y);
             }
             g.strokePath (path, juce::PathStrokeType (1.5f));
 
@@ -331,8 +357,8 @@ void WaveformView::drawWaveform (juce::Graphics& g)
     }
     else
     {
-        const juce::Colour waveCol  = getTheme().waveform;
-        const juce::Colour bgCol    = getTheme().waveformBg;
+        const juce::Colour waveCol = getTheme().waveform;
+        const juce::Colour bgCol   = getTheme().waveformBg;
         const int h = getHeight();
 
         if (samplesPerPixel < 1.0f)
@@ -344,7 +370,7 @@ void WaveformView::drawWaveform (juce::Graphics& g)
             {
                 float y = (float) cy - peaks[(size_t) px].maxVal * scale;
                 if (! started) { path.startNewSubPath ((float) px, y); started = true; }
-                else             path.lineTo ((float) px, y);
+                else path.lineTo ((float) px, y);
             }
             g.strokePath (path, juce::PathStrokeType (1.8f,
                 juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
@@ -368,8 +394,8 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         else
         {
             juce::ColourGradient grad (
-                waveCol.withAlpha (0.0f),  0.0f, 0.0f,
-                waveCol.withAlpha (0.0f),  0.0f, (float) h,
+                waveCol.withAlpha (0.0f), 0.0f, 0.0f,
+                waveCol.withAlpha (0.0f), 0.0f, (float) h,
                 false);
             grad.addColour (0.35, waveCol.withAlpha (0.18f));
             grad.addColour (0.5,  waveCol.withAlpha (0.28f));
@@ -432,11 +458,11 @@ void WaveformView::drawSlices (juce::Graphics& g)
         // Only set optimistic if different from snapshot
         const auto& uiSnap = processor.getUiSliceSnapshot();
         if (optIdx < (int)uiSnap.slices.size() && uiSnap.slices[(size_t)optIdx].startSample != optSample) {
-            optimisticSliceIdx = optIdx;
+            optimisticSliceIdx    = optIdx;
             optimisticStartSample = optSample;
         } else {
             // It's already committed in the snapshot, so don't set
-            optimisticSliceIdx = -1;
+            optimisticSliceIdx    = -1;
             optimisticStartSample = -1;
         }
     }
@@ -447,11 +473,11 @@ void WaveformView::drawSlices (juce::Graphics& g)
         if (optimisticSliceIdx < (int)snap.slices.size()) {
             const auto& optSlice = snap.slices[(size_t)optimisticSliceIdx];
             if (optSlice.startSample == optimisticStartSample || !optSlice.active) {
-                optimisticSliceIdx = -1;
+                optimisticSliceIdx    = -1;
                 optimisticStartSample = -1;
             }
         } else {
-            optimisticSliceIdx = -1;
+            optimisticSliceIdx    = -1;
             optimisticStartSample = -1;
         }
     }
@@ -476,7 +502,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
             (dragMode == DragEdgeLeft || dragMode == MoveSlice))
         {
             drawStartSample = dragPreviewStart;
-            drawEndSample = dragPreviewEnd;
+            drawEndSample   = dragPreviewEnd;
         }
         else if (i == linkedSliceIdx && linkedSliceIdx >= 0 && dragMode != None)
         {
@@ -514,8 +540,8 @@ void WaveformView::drawSlices (juce::Graphics& g)
 
         // Strong colored borders: top & bottom
         g.setColour(s.colour.withAlpha(0.65f));
-        g.drawHorizontalLine(0, (float)x1, (float)x2);                    // top
-        g.drawHorizontalLine(getHeight() - 1, (float)x1, (float)x2);      // bottom
+        g.drawHorizontalLine(0,               (float)x1, (float)x2); // top
+        g.drawHorizontalLine(getHeight() - 1, (float)x1, (float)x2); // bottom
 
         // Bold colored vertical start marker (bar also does this, leaving as reinforcing)
         g.setColour(s.colour.withAlpha(0.85f));
@@ -604,7 +630,7 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
 }
 
 void WaveformView::mouseEnter (const juce::MouseEvent& e) { mouseMove (e); }
-void WaveformView::mouseExit (const juce::MouseEvent&) { if (hoveredEdge != HoveredEdge::None) { hoveredEdge = HoveredEdge::None; repaint(); } }
+void WaveformView::mouseExit  (const juce::MouseEvent&)   { if (hoveredEdge != HoveredEdge::None) { hoveredEdge = HoveredEdge::None; repaint(); } }
 void WaveformView::modifierKeysChanged (const juce::ModifierKeys& mods) { syncAltStateFromMods (mods); }
 
 void WaveformView::mouseDown (const juce::MouseEvent& e)
@@ -651,19 +677,19 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 DysektProcessor::Command gestureCmd;
                 gestureCmd.type = DysektProcessor::CmdBeginGesture;
                 processor.pushCommand (gestureCmd);
-                dragMode = DragEdgeLeft;
-                dragSliceIdx = sel;
+                dragMode        = DragEdgeLeft;
+                dragSliceIdx    = sel;
                 dragPreviewStart = s.startSample;
-                dragPreviewEnd = selEnd;
-                dragOrigStart = s.startSample;
-                dragOrigEnd   = selEnd;
-                linkedSliceIdx = -1;
+                dragPreviewEnd   = selEnd;
+                dragOrigStart    = s.startSample;
+                dragOrigEnd      = selEnd;
+                linkedSliceIdx   = -1;
                 for (int i = 0; i < num; ++i)
                 {
                     if (i == sel || ! ui.slices[(size_t) i].active) continue;
                     if (processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames) == s.startSample)
                     {
-                        linkedSliceIdx = i;
+                        linkedSliceIdx    = i;
                         linkedPreviewStart = ui.slices[(size_t) i].startSample;
                         linkedPreviewEnd   = s.startSample;
                         break;
@@ -677,7 +703,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
     if (sliceDrawMode || altModeActive)
     {
         DysektProcessor::Command cmd;
-        cmd.type = DysektProcessor::CmdCreateSlice;
+        cmd.type      = DysektProcessor::CmdCreateSlice;
         cmd.intParam1 = samplePos;
         cmd.intParam2 = samplePos + 1;
         processor.pushCommand(cmd);
@@ -711,7 +737,7 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         int minLen = 1;
         int newSample = juce::jlimit(0, totalFrames, pixelToSample(e.x));
         if (dragMode == DragTrimIn)
-            trimInPoint = juce::jlimit(0, trimOutPoint - minLen, newSample);
+            trimInPoint  = juce::jlimit(0, trimOutPoint - minLen, newSample);
         else if (dragMode == DragTrimOut)
             trimOutPoint = juce::jlimit(trimInPoint + minLen, totalFrames, newSample);
         repaint();
@@ -738,11 +764,11 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
     if (trimMode)
     {
         trimDragging = false;
-        dragMode = None;
+        dragMode     = None;
 
         // Only update internal trim points and visual state;
         // do NOT trigger 'onTrimApplied' here. Apply is done by 'APPLY' button.
-        processor.trimRegionStart.store (trimInPoint, std::memory_order_relaxed);
+        processor.trimRegionStart.store (trimInPoint,  std::memory_order_relaxed);
         processor.trimRegionEnd.store   (trimOutPoint, std::memory_order_relaxed);
         repaint();
         return;
@@ -752,27 +778,27 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
     if ((dragMode == DragEdgeLeft || dragMode == MoveSlice) && dragSliceIdx >= 0)
     {
         DysektProcessor::Command cmd;
-        cmd.type = DysektProcessor::CmdSetSliceBounds;
+        cmd.type      = DysektProcessor::CmdSetSliceBounds;
         cmd.intParam1 = dragSliceIdx;
         cmd.intParam2 = dragPreviewStart;
-        cmd.positions[0] = dragPreviewEnd;
-        cmd.numPositions = 1;
+        cmd.positions[0]  = dragPreviewEnd;
+        cmd.numPositions  = 1;
         processor.pushCommand(cmd);
 
         // Also commit the linked adjacent slice so boundaries stay flush
         if (linkedSliceIdx >= 0)
         {
             DysektProcessor::Command lCmd;
-            lCmd.type = DysektProcessor::CmdSetSliceBounds;
+            lCmd.type      = DysektProcessor::CmdSetSliceBounds;
             lCmd.intParam1 = linkedSliceIdx;
             lCmd.intParam2 = linkedPreviewStart;
-            lCmd.positions[0] = linkedPreviewEnd;
-            lCmd.numPositions = 1;
+            lCmd.positions[0]  = linkedPreviewEnd;
+            lCmd.numPositions  = 1;
             processor.pushCommand(lCmd);
         }
 
         // --- Optimistic update to prevent marker jump-back
-        optimisticSliceIdx = dragSliceIdx;
+        optimisticSliceIdx    = dragSliceIdx;
         optimisticStartSample = dragPreviewStart;
     }
 
@@ -780,12 +806,12 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
     processor.liveDragSliceIdx.store (-1, std::memory_order_release);
 
     // Clear drag state
-    dragMode     = None;
-    dragSliceIdx = -1;
-    linkedSliceIdx = -1;
-    trimDragging = false;
+    dragMode         = None;
+    dragSliceIdx     = -1;
+    linkedSliceIdx   = -1;
+    trimDragging     = false;
     dragPreviewStart = 0;
-    dragPreviewEnd = 0;
+    dragPreviewEnd   = 0;
     drawStartedFromAlt = false;
     repaint();
 }
@@ -808,21 +834,21 @@ void WaveformView::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseW
     }
     else
     {
-        int width = getWidth();
-        float oldZoom = processor.zoom.load();
-        float oldViewFrac = 1.0f / oldZoom;
-        float oldScroll = processor.scroll.load();
+        int   width         = getWidth();
+        float oldZoom       = processor.zoom.load();
+        float oldViewFrac   = 1.0f / oldZoom;
+        float oldScroll     = processor.scroll.load();
         float cursorPixelFrac = (width > 0) ? (float) e.x / (float) width : 0.5f;
         float newZoom = (w.deltaY > 0)
             ? std::min (16384.0f, oldZoom * 1.2f)
-            : std::max (1.0f, oldZoom / 1.2f);
+            : std::max (1.0f,     oldZoom / 1.2f);
         processor.zoom.store (newZoom);
         float newViewFrac = 1.0f / newZoom;
-        float maxScroll = 1.0f - newViewFrac;
+        float maxScroll   = 1.0f - newViewFrac;
         if (maxScroll > 0.0f)
         {
             float oldViewStart = oldScroll * (1.0f - oldViewFrac);
-            float anchorFrac = oldViewStart + cursorPixelFrac * oldViewFrac;
+            float anchorFrac   = oldViewStart + cursorPixelFrac * oldViewFrac;
             float newViewStart = anchorFrac - cursorPixelFrac * newViewFrac;
             processor.scroll.store (juce::jlimit (0.0f, 1.0f, newViewStart / maxScroll));
         }
@@ -837,8 +863,8 @@ bool WaveformView::isInterestedInFileDrag (const juce::StringArray& files)
     for (auto& f : files)
     {
         auto ext = juce::File (f).getFileExtension().toLowerCase();
-        if (ext == ".wav"  || ext == ".ogg"  || ext == ".aif"  ||
-            ext == ".aiff" || ext == ".flac"  || ext == ".mp3"  ||
+        if (ext == ".wav"  || ext == ".ogg"  || ext == ".aif" ||
+            ext == ".aiff" || ext == ".flac" || ext == ".mp3" ||
             ext == ".sf2"  || ext == ".sfz")
             return true;
     }
