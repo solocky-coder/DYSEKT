@@ -85,7 +85,7 @@ void DysektLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
     // ── Main fill with subtle top-to-bottom gradient ─────────────────────────
     auto fillCol = isDown      ? baseBg.brighter (0.20f)
                  : isHighlighted ? baseBg.brighter (0.12f)
-                 : toggled     ? baseBg.mixed (getTheme().accent, 0.18f)
+                 : toggled     ? baseBg.interpolatedWith (getTheme().accent, 0.18f)
                                : baseBg;
 
     juce::ColourGradient grad (fillCol.brighter (0.06f), bounds.getX(), bounds.getY(),
