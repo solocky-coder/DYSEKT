@@ -212,9 +212,9 @@ void DysektEditor::toggleShortcutsPanel()
 void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
-    if (actionPanel.isVisible() && waveformView.isVisible())
+    if (waveformView.isVisible() && waveformView.getHeight() > 0)
     {
-        const auto& abnd = actionPanel.getBounds();
+        // Use waveformView directly for frame bounds — actionPanel is now collapsed
         const auto& sbnd = waveformView.getBounds();
         const auto ac = getTheme().accent;
 
@@ -222,8 +222,8 @@ void DysektEditor::paint (juce::Graphics& g)
         const int kFrameX = kMargin;
         const int kFrameW = getWidth() - kMargin * 2;
         const juce::Rectangle<float> outerF (
-            (float) kFrameX, (float) abnd.getY() - kFrameInset,
-            (float) kFrameW, (float) (sbnd.getBottom() - abnd.getY() + kFrameInset * 2));
+            (float) kFrameX, (float) sbnd.getY() - kFrameInset,
+            (float) kFrameW, (float) (sbnd.getHeight() + kFrameInset * 2));
         juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
         g.setGradientFill (outerGrad);
@@ -535,6 +535,7 @@ void DysektEditor::ensureDefaultThemes()
     write ("snow",  ThemeData::snowTheme());
     write ("ghost", ThemeData::ghostTheme());
     write ("hack",  ThemeData::hackTheme());
+    write ("pigments", ThemeData::pigmentsTheme());
 }
 
 juce::StringArray DysektEditor::getAvailableThemes()
@@ -567,6 +568,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
     else if (themeName == "snow")  setTheme (ThemeData::snowTheme());
     else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
     else if (themeName == "hack")  setTheme (ThemeData::hackTheme());
+    else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
     else                           setTheme (ThemeData::darkTheme());
     processor.sliceManager.setSlicePalette (getTheme().slicePalette);
     saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);

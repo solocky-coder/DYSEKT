@@ -554,26 +554,30 @@ void WaveformView::drawSlices (juce::Graphics& g)
         int sw = x2 - x1;
         if (sw <= 0) continue;
 
+        // 3px breathing room at the top so markers don't touch the frame edge
+        const int kTopPad = 3;
+        const int markerH = getHeight() - kTopPad;
+
         // --- COLORED BAR/RECTANGLE AT SLICE START (ALWAYS MATCHES MARKER) ---
         g.setColour(s.colour.withAlpha(0.92f));
-        g.fillRect(x1, 0, 2, getHeight());
+        g.fillRect(x1, kTopPad, 2, markerH);
 
         // --- CUBASE-STYLE SLICE OVERLAY ---
         g.setColour(s.colour.withAlpha(0.11f));
-        g.fillRect(x1, 0, sw, getHeight());
+        g.fillRect(x1, kTopPad, sw, markerH);
 
         // Strong colored borders: top & bottom
         g.setColour(s.colour.withAlpha(0.65f));
-        g.drawHorizontalLine(0, (float)x1, (float)x2);
+        g.drawHorizontalLine(kTopPad, (float)x1, (float)x2);
         g.drawHorizontalLine(getHeight() - 1, (float)x1, (float)x2);
 
         g.setColour(s.colour.withAlpha(0.85f));
-        g.fillRect(x1, 0, 2, getHeight());
+        g.fillRect(x1, kTopPad, 2, markerH);
 
         // Selection highlight overlay
         if (i == sel) {
             g.setColour(s.colour.withAlpha(0.18f));
-            g.fillRect(x1, 0, sw, getHeight());
+            g.fillRect(x1, kTopPad, sw, markerH);
         }
 
         // Slice index label
