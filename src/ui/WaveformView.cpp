@@ -556,7 +556,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
 
         // --- COLORED BAR/RECTANGLE AT SLICE START (ALWAYS MATCHES MARKER) ---
         g.setColour(s.colour.withAlpha(0.92f));
-        g.fillRect(x1, 0, 4, getHeight());
+        g.fillRect(x1, 0, 2, getHeight());
 
         // --- CUBASE-STYLE SLICE OVERLAY ---
         g.setColour(s.colour.withAlpha(0.11f));
