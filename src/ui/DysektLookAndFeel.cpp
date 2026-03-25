@@ -63,27 +63,51 @@ void DysektLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
                                                   const juce::Colour& /*bgColour*/,
                                                   bool isHighlighted, bool isDown)
 {
-    auto bounds = button.getLocalBounds().toFloat();
+    auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
+    const float r = 3.5f;   // corner radius — Pigments-style rounded
 
-    // Use the button's own colour if it has been explicitly set
     auto btnCol = button.findColour (juce::TextButton::buttonColourId);
     auto baseBg = (btnCol != juce::Colour()) ? btnCol : getTheme().button;
 
     if (baseBg.isTransparent())
         return;
 
-    // Sharp fill — no rounded corners
-    g.setColour (isDown ? baseBg.brighter (0.15f)
-                        : isHighlighted ? baseBg.brighter (0.08f)
-                                        : baseBg);
-    g.fillRect (bounds);
+    const bool toggled = button.getToggleState();
 
-    // Frame: draw a 1px border following the theme
-    auto frameCol = button.getToggleState()
-                    ? getTheme().accent
-                    : getTheme().separator;
-    g.setColour (isHighlighted ? frameCol.brighter (0.2f) : frameCol);
-    g.drawRect (bounds, 1.0f);
+    // ── Glow halo behind active/hovered buttons ──────────────────────────────
+    if (toggled || isHighlighted)
+    {
+        auto glowCol = toggled ? getTheme().accent : getTheme().separator.brighter (0.3f);
+        g.setColour (glowCol.withAlpha (toggled ? 0.18f : 0.10f));
+        g.fillRoundedRectangle (bounds.expanded (2.0f), r + 2.0f);
+    }
+
+    // ── Main fill with subtle top-to-bottom gradient ─────────────────────────
+    auto fillCol = isDown      ? baseBg.brighter (0.20f)
+                 : isHighlighted ? baseBg.brighter (0.12f)
+                 : toggled     ? baseBg.mixed (getTheme().accent, 0.18f)
+                               : baseBg;
+
+    juce::ColourGradient grad (fillCol.brighter (0.06f), bounds.getX(), bounds.getY(),
+                               fillCol.darker  (0.06f), bounds.getX(), bounds.getBottom(),
+                               false);
+    g.setGradientFill (grad);
+    g.fillRoundedRectangle (bounds, r);
+
+    // ── Border ───────────────────────────────────────────────────────────────
+    auto borderCol = toggled  ? getTheme().accent
+                   : isHighlighted ? getTheme().separator.brighter (0.4f)
+                                   : getTheme().separator;
+    g.setColour (borderCol.withAlpha (toggled ? 1.0f : 0.75f));
+    g.drawRoundedRectangle (bounds, r, 1.0f);
+
+    // ── Accent top-edge highlight for toggled state (Pigments "lit" look) ────
+    if (toggled)
+    {
+        auto topLine = bounds.removeFromTop (1.5f);
+        g.setColour (getTheme().accent.withAlpha (0.85f));
+        g.fillRoundedRectangle (topLine.reduced (r * 0.5f, 0), 0.75f);
+    }
 }
 
 void DysektLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
@@ -110,9 +134,22 @@ void DysektLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 
 void DysektLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
 {
-    g.fillAll (getTheme().darkBar);
-    g.setColour (getTheme().separator);
-    g.drawRect (0, 0, width, height, 1);
+    const float r = 5.0f;
+    auto bounds = juce::Rectangle<float> (0, 0, (float)width, (float)height);
+
+    // Slightly-lighter rounded panel
+    juce::ColourGradient grad (getTheme().darkBar.brighter (0.08f), 0, 0,
+                               getTheme().darkBar,                  0, (float)height, false);
+    g.setGradientFill (grad);
+    g.fillRoundedRectangle (bounds, r);
+
+    // Outer border with accent tint
+    g.setColour (getTheme().separator.withAlpha (0.9f));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), r, 1.0f);
+
+    // Subtle inner highlight line at top
+    g.setColour (getTheme().accent.withAlpha (0.08f));
+    g.fillRoundedRectangle (bounds.reduced (1.5f, 1.5f).removeFromTop (1.0f), 0.5f);
 }
 
 void DysektLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area,
@@ -135,7 +172,11 @@ void DysektLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectan
     if (isHighlighted && isActive)
     {
         g.setColour (getTheme().buttonHover);
-        g.fillRect (area);
+        g.fillRoundedRectangle (area.reduced (3, 1).toFloat(), 3.0f);
+        // Thin accent left edge on highlighted row
+        g.setColour (getTheme().accent.withAlpha (0.70f));
+        g.fillRoundedRectangle (juce::Rectangle<float> ((float)area.getX() + 3, (float)area.getY() + 3,
+                                                         2.0f, (float)area.getHeight() - 6), 1.0f);
     }
 
     // Tick indicator: draw a small filled rect (no unicode glyphs that may render as random symbols)
@@ -189,13 +230,17 @@ void DysektLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
 {
     const auto& t = getTheme();
 
-    // Background
-    g.setColour (t.button);
-    g.fillRect (0, 0, width, height);
+    // Background — rounded
+    const float cbR = 3.5f;
+    auto cbBounds = juce::Rectangle<float> (0, 0, (float)width, (float)height).reduced (0.5f);
+    juce::ColourGradient cbGrad (t.button.brighter (0.05f), 0, 0,
+                                  t.button.darker  (0.05f), 0, (float)height, false);
+    g.setGradientFill (cbGrad);
+    g.fillRoundedRectangle (cbBounds, cbR);
 
     // Border
-    g.setColour (box.hasKeyboardFocus (false) ? t.accent.withAlpha (0.5f) : t.separator);
-    g.drawRect (0, 0, width, height, 1);
+    g.setColour (box.hasKeyboardFocus (false) ? t.accent.withAlpha (0.55f) : t.separator);
+    g.drawRoundedRectangle (cbBounds, cbR, 1.0f);
 
     // Dropdown arrow — centred vertically and in the button zone
     const int arrowCX = buttonX + (width - buttonX) / 2;
@@ -247,12 +292,15 @@ void DysektLookAndFeel::drawPopupMenuUpDownArrow (juce::Graphics& g, int width, 
 
 void DysektLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height)
 {
-    g.fillAll (getTheme().darkBar.brighter (0.1f));
-    g.setColour (getTheme().separator);
-    g.drawRect (0, 0, width, height, 1);
-    g.setColour (getTheme().foreground);
-    g.setFont (makeFont (14.0f));
-    g.drawText (text, 4, 0, width - 8, height, juce::Justification::centredLeft);
+    const float r = 4.0f;
+    auto bounds = juce::Rectangle<float> (0, 0, (float)width, (float)height);
+    g.setColour (getTheme().darkBar.brighter (0.12f));
+    g.fillRoundedRectangle (bounds, r);
+    g.setColour (getTheme().separator.brighter (0.2f));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), r, 1.0f);
+    g.setColour (getTheme().foreground.withAlpha (0.95f));
+    g.setFont (makeFont (13.0f));
+    g.drawText (text, 6, 0, width - 12, height, juce::Justification::centredLeft);
 }
 
 juce::Rectangle<int> DysektLookAndFeel::getTooltipBounds (const juce::String& text,
@@ -302,10 +350,13 @@ void DysektLookAndFeel::drawScrollbar (juce::Graphics& g,
         else
             thumb = { x + thumbStartPosition, y + 1, thumbSize, height - 2 };
 
-        g.setColour (t.accent.withAlpha (0.55f));
-        g.fillRect (thumb);
-
-        g.setColour (t.accent.withAlpha (0.25f));
-        g.drawRect (thumb, 1);
+        // Rounded pill thumb
+        auto thumbF = thumb.toFloat().reduced (1.0f);
+        const float thumbR = isScrollbarVertical ? (float)(thumb.getWidth() - 2) * 0.5f
+                                                  : (float)(thumb.getHeight() - 2) * 0.5f;
+        g.setColour (t.accent.withAlpha (0.50f));
+        g.fillRoundedRectangle (thumbF, thumbR);
+        g.setColour (t.accent.withAlpha (0.30f));
+        g.drawRoundedRectangle (thumbF, thumbR, 1.0f);
     }
 }

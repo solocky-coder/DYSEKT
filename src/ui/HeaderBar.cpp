@@ -115,8 +115,9 @@ void HeaderBar::paint (juce::Graphics& g)
     const juce::Rectangle<int> btnFrame (frameX1, frameY1,
                                          frameX2 - frameX1, frameY2 - frameY1);
 
-    g.setColour (getTheme().separator);
-    g.drawRect (btnFrame, 1);
+    // Rounded container frame around button group (Pigments style)
+    g.setColour (getTheme().separator.withAlpha (0.75f));
+    g.drawRoundedRectangle (btnFrame.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
     // ── Subtle divider between UNDO and REDO ──────────────────────────────────
     {
