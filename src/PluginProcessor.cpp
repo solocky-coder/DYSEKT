@@ -1588,7 +1588,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         bool retuned = false;
                         if (legato)
                             retuned = voicePool.retuneChromaticLegatoVoice (ci, p.globalPitch,
-                                                                             sliceManager, sampleData);
+                                                                             0.0f, note);
                         if (! retuned)
                         {
                             int voiceIdx = voicePool.allocate();
