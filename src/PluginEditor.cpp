@@ -269,12 +269,13 @@ void DysektEditor::resized()
     sliceLcd.setBounds (topRow.removeFromLeft (sideW));
     topRow.removeFromLeft (kMargin);
 
-    // Centre: LogoBar (top) → HeaderBar / buttons (middle) → DualLcdControlFrame (bottom)
+    // Centre: LogoBar + HeaderBar (same bounds, buttons flank logo) → DualLcdControlFrame (below)
     auto centreCol = topRow.removeFromLeft (kCtrlFrameW);
-    logoBar.setBounds (centreCol.removeFromTop (kLogoH));
-    headerBar.setBounds (centreCol.removeFromTop (kBtnRowH));
+    auto logoRow = centreCol.removeFromTop (kLogoH);
+    logoBar.setBounds (logoRow);
+    headerBar.setBounds (logoRow);   // overlaid on logoBar — transparent bg, buttons left+right of logo
     if (auto* cf = headerBar.getControlFrame())
-        cf->setBounds (centreCol);
+        cf->setBounds (centreCol);   // now gets the extra kBtnRowH px of height
 
     topRow.removeFromLeft (kMargin);
 

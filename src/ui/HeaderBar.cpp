@@ -68,31 +68,22 @@ void HeaderBar::setBodeActive      (bool v) { controlFrame.setBodeActive      (v
 
 void HeaderBar::resized()
 {
-    const int w = getWidth();
-    const int h = getHeight();
-
-    // 2×2 grid:  Left col → UNDO (top) / REDO (bottom)
-    //            Right col → PANIC (top) / ⚙  (bottom)
-    const int btnW   = 56;   // width of each button
-    const int btnH   = 20;   // height of each button
-    const int colGap = 4;    // horizontal gap between the two columns
-    const int rowGap = 4;    // vertical gap between top and bottom buttons
-
-    const int groupW = btnW * 2 + colGap;
+    const int h      = getHeight();   // kLogoH = 52
+    const int btnW   = 54;
+    const int btnH   = 20;
+    const int rowGap = 4;
     const int groupH = btnH * 2 + rowGap;
+    const int gy     = (h - groupH) / 2;
+    const int pad    = 3;
 
-    // Centre the group inside this bar
-    const int gx = (w - groupW) / 2;
-    const int gy = (h - groupH) / 2;
+    // LEFT side of logo: PANIC (top) + ⚙ (bottom)
+    panicBtn    .setBounds (pad, gy,               btnW, btnH);
+    shortcutsBtn.setBounds (pad, gy + btnH + rowGap, btnW, btnH);
 
-    // Left column
-    undoBtn.setBounds (gx,             gy,              btnW, btnH);
-    redoBtn.setBounds (gx,             gy + btnH + rowGap, btnW, btnH);
-
-    // Right column
-    const int rx = gx + btnW + colGap;
-    panicBtn    .setBounds (rx, gy,                   btnW, btnH);
-    shortcutsBtn.setBounds (rx, gy + btnH + rowGap,   btnW, btnH);
+    // RIGHT side of logo: UNDO (top) + REDO (bottom)
+    const int rx = getWidth() - btnW - pad;
+    undoBtn.setBounds (rx, gy,               btnW, btnH);
+    redoBtn.setBounds (rx, gy + btnH + rowGap, btnW, btnH);
 }
 
 // ── paint ─────────────────────────────────────────────────────────────────────
@@ -103,41 +94,32 @@ void HeaderBar::paint (juce::Graphics& g)
     for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &shortcutsBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId,  getTheme().button);
-        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);      // on = accent
+        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
-    g.fillAll (getTheme().header);
+    // No background fill — LogoBar paints the header background beneath us.
 
-    // ── Frame around the 2×2 button group ────────────────────────────────────
-    const int frameX1 = undoBtn.getX() - 3;
-    const int frameY1 = undoBtn.getY() - 3;
-    const int frameX2 = shortcutsBtn.getRight() + 3;
-    const int frameY2 = shortcutsBtn.getBottom() + 3;
-    const juce::Rectangle<int> btnFrame (frameX1, frameY1,
-                                         frameX2 - frameX1, frameY2 - frameY1);
-
-    g.setColour (getTheme().separator.withAlpha (0.75f));
-    g.drawRoundedRectangle (btnFrame.toFloat().reduced (0.5f), 3.0f, 1.0f);
-
-    // ── Subtle vertical divider between left and right columns ────────────────
+    // ── Helper: draw rounded frame + inner divider around a stacked button pair ──
+    auto drawPairFrame = [&] (juce::TextButton& top, juce::TextButton& bot)
     {
-        const int vx = panicBtn.getX();
-        const int vy = undoBtn.getY();
-        const int vh = shortcutsBtn.getBottom() - vy;
-        g.setColour (getTheme().foreground.withAlpha (0.12f));
-        g.drawVerticalLine (vx, (float) vy + 3, (float) (vy + vh - 3));
-    }
+        const int fx = top.getX() - 3;
+        const int fy = top.getY() - 3;
+        const int fw = top.getWidth()  + 6;
+        const int fh = bot.getBottom() - top.getY() + 6;
+        g.setColour (getTheme().separator.withAlpha (0.75f));
+        g.drawRoundedRectangle ((float) fx, (float) fy, (float) fw, (float) fh, 3.0f, 1.0f);
 
-    // ── Subtle horizontal dividers within each column ─────────────────────────
-    {
-        const int rowY = redoBtn.getY();
+        // Horizontal divider between the two buttons
         g.setColour (getTheme().foreground.withAlpha (0.12f));
-        g.drawHorizontalLine (rowY, (float) undoBtn.getX()  + 3, (float) undoBtn.getRight()  - 3);
-        g.drawHorizontalLine (rowY, (float) panicBtn.getX() + 3, (float) panicBtn.getRight() - 3);
-    }
+        g.drawHorizontalLine (bot.getY(),
+                              (float) top.getX() + 3,
+                              (float) top.getRight() - 3);
+    };
 
-    // Left side intentionally empty — sample name lives in LCD 1
+    drawPairFrame (panicBtn,  shortcutsBtn); // left group
+    drawPairFrame (undoBtn,   redoBtn);      // right group
+
     sampleInfoBounds = {};
     slicesInfoArea   = {};
     (void) processor;
