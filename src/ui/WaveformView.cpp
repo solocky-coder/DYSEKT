@@ -62,7 +62,7 @@ WaveformView::WaveformView (DysektProcessor& p) : processor (p)
     midiSliceBtn.setClickingTogglesState (false);
     midiSliceBtn.setToggleState (true, juce::dontSendNotification);
     midiSliceBtn.setVisible (false);
-    addAndMakeVisible (midiSliceBtn);
+    addChildComponent (midiSliceBtn);
 
     midiSliceBtn.onClick = [this]
     {
