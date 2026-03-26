@@ -537,6 +537,14 @@ void DysektEditor::ensureDefaultThemes()
     write ("hack",  ThemeData::hackTheme());
     write ("midnight", ThemeData::midnightTheme());
     write ("pigments", ThemeData::pigmentsTheme());
+
+    // Remove any .dysektstyle files not in the approved list
+    static const juce::StringArray knownThemes { "dark", "shell", "lazy", "snow", "ghost", "hack", "midnight", "pigments" };
+    for (auto& f : dir.findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
+    {
+        if (! knownThemes.contains (f.getFileNameWithoutExtension()))
+            f.deleteFile();
+    }
 }
 
 juce::StringArray DysektEditor::getAvailableThemes()
