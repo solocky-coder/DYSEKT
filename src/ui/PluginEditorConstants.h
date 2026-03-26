@@ -11,12 +11,12 @@ constexpr int kActionH    = 22;
 constexpr int kTrimBarH   = 34;
 constexpr int kPanelSlotH = 200;
 
-// Centre column width — widened from 180 to 200 to comfortably fit the four
-// action buttons (UNDO / REDO / PANIC / ⚙) in a single row.
+// Centre column width
 constexpr int kCtrlFrameW = 200;
 
-// Height of the Undo/Redo/Panic/Settings button row inside the centre column.
-constexpr int kBtnRowH    = 28;
+// Height of the 2×2 button grid (UNDO/REDO left col, PANIC/⚙ right col).
+// Two 20px buttons + 4px row gap + 6px top/bottom padding = 50px.
+constexpr int kBtnRowH    = 50;
 
 constexpr int kBaseHCore  = kLogoH + kLcdRowH + kSliceLaneH + kScrollbarH
                            + kSliceCtrlH + kActionH + 120;

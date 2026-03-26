@@ -68,28 +68,31 @@ void HeaderBar::setBodeActive      (bool v) { controlFrame.setBodeActive      (v
 
 void HeaderBar::resized()
 {
-    const int h   = getHeight();
-    const int btnH = 20;
-    const int btnY = (h - btnH) / 2;
-    const int gap  = 4;
-    int right = getWidth() - 8;
+    const int w = getWidth();
+    const int h = getHeight();
 
-    // Right to left: [⚙] [PANIC] [REDO][UNDO]
+    // 2×2 grid:  Left col → UNDO (top) / REDO (bottom)
+    //            Right col → PANIC (top) / ⚙  (bottom)
+    const int btnW   = 56;   // width of each button
+    const int btnH   = 20;   // height of each button
+    const int colGap = 4;    // horizontal gap between the two columns
+    const int rowGap = 4;    // vertical gap between top and bottom buttons
 
-    // ⚙ settings button — rightmost
-    shortcutsBtn.setBounds (right - 22, btnY, 22, btnH);
-    right -= 26;
+    const int groupW = btnW * 2 + colGap;
+    const int groupH = btnH * 2 + rowGap;
 
-    // PANIC
-    const int panicW = 52;
-    panicBtn.setBounds (right - panicW, btnY, panicW, btnH);
-    right -= panicW + gap * 2;
+    // Centre the group inside this bar
+    const int gx = (w - groupW) / 2;
+    const int gy = (h - groupH) / 2;
 
-    // REDO | UNDO — side-by-side as a joined pair
-    const int urW = 50;
-    redoBtn.setBounds (right - urW,         btnY, urW, btnH);
-    undoBtn.setBounds (right - urW * 2 - 1, btnY, urW, btnH);
-    right -= urW * 2 + 1 + gap;
+    // Left column
+    undoBtn.setBounds (gx,             gy,              btnW, btnH);
+    redoBtn.setBounds (gx,             gy + btnH + rowGap, btnW, btnH);
+
+    // Right column
+    const int rx = gx + btnW + colGap;
+    panicBtn    .setBounds (rx, gy,                   btnW, btnH);
+    shortcutsBtn.setBounds (rx, gy + btnH + rowGap,   btnW, btnH);
 }
 
 // ── paint ─────────────────────────────────────────────────────────────────────
@@ -106,26 +109,32 @@ void HeaderBar::paint (juce::Graphics& g)
 
     g.fillAll (getTheme().header);
 
-    // ── Frame around the button group ─────────────────────────────────────────
-    // Tight bounding rect around all 4 buttons with 2px padding
-    const int frameX1 = undoBtn.getX() - 2;
-    const int frameY1 = undoBtn.getY() - 2;
-    const int frameX2 = shortcutsBtn.getRight() + 2;
-    const int frameY2 = shortcutsBtn.getBottom() + 2;
+    // ── Frame around the 2×2 button group ────────────────────────────────────
+    const int frameX1 = undoBtn.getX() - 3;
+    const int frameY1 = undoBtn.getY() - 3;
+    const int frameX2 = shortcutsBtn.getRight() + 3;
+    const int frameY2 = shortcutsBtn.getBottom() + 3;
     const juce::Rectangle<int> btnFrame (frameX1, frameY1,
                                          frameX2 - frameX1, frameY2 - frameY1);
 
-    // Rounded container frame around button group (Pigments style)
     g.setColour (getTheme().separator.withAlpha (0.75f));
-    g.drawRoundedRectangle (btnFrame.toFloat().reduced (0.5f), 4.0f, 1.0f);
+    g.drawRoundedRectangle (btnFrame.toFloat().reduced (0.5f), 3.0f, 1.0f);
 
-    // ── Subtle divider between UNDO and REDO ──────────────────────────────────
+    // ── Subtle vertical divider between left and right columns ────────────────
     {
-        const int rx = redoBtn.getX();
-        const int ry = redoBtn.getY();
-        const int rh = redoBtn.getHeight();
-        g.setColour (getTheme().foreground.withAlpha (0.15f));
-        g.drawVerticalLine (rx, (float) ry + 3, (float) (ry + rh - 3));
+        const int vx = panicBtn.getX();
+        const int vy = undoBtn.getY();
+        const int vh = shortcutsBtn.getBottom() - vy;
+        g.setColour (getTheme().foreground.withAlpha (0.12f));
+        g.drawVerticalLine (vx, (float) vy + 3, (float) (vy + vh - 3));
+    }
+
+    // ── Subtle horizontal dividers within each column ─────────────────────────
+    {
+        const int rowY = redoBtn.getY();
+        g.setColour (getTheme().foreground.withAlpha (0.12f));
+        g.drawHorizontalLine (rowY, (float) undoBtn.getX()  + 3, (float) undoBtn.getRight()  - 3);
+        g.drawHorizontalLine (rowY, (float) panicBtn.getX() + 3, (float) panicBtn.getRight() - 3);
     }
 
     // Left side intentionally empty — sample name lives in LCD 1
