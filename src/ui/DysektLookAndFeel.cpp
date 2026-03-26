@@ -130,9 +130,13 @@ void DysektLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, i
 {
     const float r = 3.0f;   // tighter radius — Midnight direction
     auto bounds = juce::Rectangle<float> (0, 0, (float)width, (float)height);
+    const auto bgColour = getTheme().darkBar.brighter (0.06f);
+
+    // Fill entire rect first — eliminates white OS window corners behind rounded shape
+    g.fillAll (bgColour);
 
     // Flat panel — no gradient blur, just a clean solid fill
-    g.setColour (getTheme().darkBar.brighter (0.06f));
+    g.setColour (bgColour);
     g.fillRoundedRectangle (bounds, r);
 
     // Outer border — accent tint, full opacity

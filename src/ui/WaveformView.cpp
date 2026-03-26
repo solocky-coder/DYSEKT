@@ -10,8 +10,15 @@ void WaveformView::drawPlaybackCursors (juce::Graphics& g)
     const int h = getHeight();
     const int w = getWidth();
 
+    // The MIDI slice preview voice is drawn exclusively by paintLazyChopOverlay.
+    // Skipping it here prevents a ghost white line from persisting after MIDI slice stops.
+    const int midiPreviewVoice = LazyChopEngine::getPreviewVoiceIndex();
+
     for (int i = 0; i < VoicePool::kMaxVoices; ++i)
     {
+        if (i == midiPreviewVoice)
+            continue;
+
         float pos = processor.voicePool.voicePositions[i].load (std::memory_order_relaxed);
         if (pos <= 0.0f)
             continue;

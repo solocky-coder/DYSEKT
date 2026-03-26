@@ -12,7 +12,7 @@ public:
     void resized() override;
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
-    void mouseUp          (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
 
 private:
@@ -20,16 +20,16 @@ private:
     {
         int x, y, w, h;
         uint32_t lockBit;
-        int fieldId;       // SliceParamField enum value
+        int fieldId; // SliceParamField enum value
         float minVal, maxVal, step;
-        bool isBoolean;    // for ping-pong toggle
-        bool isChoice;     // for algorithm popup
+        bool isBoolean; // for ping-pong toggle
+        bool isChoice; // for algorithm popup
         bool isReadOnly = false;
-        bool isSetBpm   = false;
-        bool isMidiLearnBtn  = false;  // START / END boundary buttons
-        bool isKnob          = false;  // numeric rotary
-        bool isMidiLearnable = false;  // right-click → Learn menu
-        float knobNorm       = 0.0f;   // 0-1 position for knob arc
+        bool isSetBpm = false;
+        bool isMidiLearnBtn = false; // START / END boundary buttons
+        bool isKnob = false; // numeric rotary
+        bool isMidiLearnable = false; // right-click → Learn menu
+        float knobNorm = 0.0f; // 0-1 position for knob arc
     };
 
     std::vector<ParamCell> cells;
@@ -46,9 +46,13 @@ private:
                        int fieldId, float minVal, float maxVal, float step,
                        int& outWidth);
 
+    // Flat LCD-style slider — used for MARKER (matches TrimDialog IN/OUT style)
+    void drawMarkerSliderCell (juce::Graphics& g, int x, int y,
+                               int sampleVal, int totalFrames, int& outWidth);
+
     // Horizontal bipolar slider — used for PAN
     void drawPanSliderCell (juce::Graphics& g, int x, int y,
-                             float panValue, bool locked, int& outWidth);
+                            float panValue, bool locked, int& outWidth);
 
     // START / END slice boundary MIDI Learn buttons
     void drawMidiLearnCell (juce::Graphics& g, int x, int y,
@@ -64,10 +68,10 @@ private:
 
     // Per-field helpers
     float getCurrentValue (int fieldId) const;
-    float toNorm   (int fieldId, float nativeVal) const;
-    float fromNorm (int fieldId, float norm)      const;
+    float toNorm (int fieldId, float nativeVal) const;
+    float fromNorm (int fieldId, float norm) const;
 
-    static constexpr int kKnobR = 9;   // knob radius (px)
+    static constexpr int kKnobR = 9; // knob radius (px)
 
     DysektProcessor& processor;
 
@@ -83,7 +87,6 @@ private:
     // Root note cell (editable when no slices exist)
     juce::Rectangle<int> rootNoteArea;
     bool draggingRootNote = false;
-
 
     // Text editor overlay
     std::unique_ptr<juce::TextEditor> textEditor;

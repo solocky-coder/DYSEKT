@@ -110,6 +110,16 @@ public:
     // Atomic voice positions for UI cursor display
     std::array<std::atomic<float>, kMaxVoices> voicePositions;
 
+    // ── Legato pitch glide (thread-safe: written MIDI thread, read audio thread) ──
+    // Stores the target and active-flag for smooth pitch transitions.
+    // Plain atomics here so Voice struct stays unchanged.
+    std::array<std::atomic<float>, kMaxVoices> legatoTargetSpeed;   // repitch mode target ratio
+    std::array<std::atomic<float>, kMaxVoices> legatoTargetSemis;   // stretch mode target semitones
+    std::array<std::atomic<bool>,  kMaxVoices> legatoPitchGliding;  // true while ramping
+
+    // ── Global legato glide time (ms) — written from UI thread, read from audio thread ──
+    std::atomic<float> legatoGlideMs { 15.0f };
+
     void processVoiceSample (int i, const SampleData& sample, double sampleRate,
                              float& outL, float& outR);
 

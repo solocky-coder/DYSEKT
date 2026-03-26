@@ -20,6 +20,13 @@ VoicePool::VoicePool()
     for (auto& p : voicePositions)
         p.store (0.0f, std::memory_order_relaxed);
 
+    for (int i = 0; i < kMaxVoices; ++i)
+    {
+        legatoTargetSpeed [i].store (1.0f,  std::memory_order_relaxed);
+        legatoTargetSemis [i].store (0.0f,  std::memory_order_relaxed);
+        legatoPitchGliding[i].store (false, std::memory_order_relaxed);
+    }
+
     for (auto& v : voices)
     {
         v.stretchInBufL.resize (kMaxStretchInputSamples);
@@ -281,6 +288,9 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     v.stretchActive = false;
     v.startedViaChromaticLegato = p.chromaticLegatoTrigger;
 
+    // Reset any in-flight legato pitch glide from a previous note
+    legatoPitchGliding[voiceIdx].store (false, std::memory_order_relaxed);
+
     if (stretchOn && p.dawBpm > 0.0f && sliceBpm > 0.0f)
     {
         float speedRatio = p.dawBpm / sliceBpm;
@@ -399,17 +409,18 @@ bool VoicePool::retuneChromaticLegatoVoice (int sliceIdx, float newPitchSemis,
         if (v.stretchActive && v.stretcher)
         {
             // Stretch / pitch-only stretch mode:
-            // update the transposition semitones without touching the read position.
-            const float tonalityLimit = (tonalityHz > 0.0f && sampleRate > 0.0)
-                                        ? (float)(tonalityHz / sampleRate) : 0.0f;
-            v.stretcher->setTransposeSemitones (newPitchSemis, tonalityLimit);
-            v.stretchPitchSemis = newPitchSemis;
+            // ARM a glide — processVoiceSample will ramp stretchPitchSemis toward
+            // the target one block at a time, eliminating click/smear artifacts.
+            legatoTargetSemis [i].store (newPitchSemis, std::memory_order_relaxed);
+            legatoPitchGliding[i].store (true,          std::memory_order_relaxed);
         }
         else
         {
-            // Repitch mode: update playback speed ratio only.
+            // Repitch mode: ARM a speed glide — processVoiceSample ramps v.speed
+            // per sample toward the target, preventing phase-discontinuity clicks.
             const float pitchRatio = std::pow (2.0f, newPitchSemis / 12.0f);
-            v.speed = (double) pitchRatio;
+            legatoTargetSpeed [i].store (pitchRatio, std::memory_order_relaxed);
+            legatoPitchGliding[i].store (true,       std::memory_order_relaxed);
         }
 
         return true; // retuned — no new voice needed
@@ -549,6 +560,26 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
             return;
         }
 
+        // ── Legato pitch glide (stretch mode) ────────────────────────────────
+        // When a legato retune has been armed, ramp stretchPitchSemis toward the
+        // target one block at a time. This prevents phase-vocoder smear / metallic
+        // artifacts caused by an instant transposition step change.
+        if (legatoPitchGliding[i].load (std::memory_order_relaxed)
+            && v.stretchOutReadPos >= v.stretchOutAvail
+            && v.stretcher)
+        {
+            const float target = legatoTargetSemis[i].load (std::memory_order_relaxed);
+            // ~10ms at 44.1kHz → ≈3.4 blocks of 128 samples; use 4 for safety
+            const float blocksFor10ms = std::max (1.0f, legatoGlideMs.load (std::memory_order_relaxed) * 0.001f * (float) sampleRate / kStretchBlockSize);
+            v.stretchPitchSemis += (target - v.stretchPitchSemis) / blocksFor10ms;
+            if (std::abs (v.stretchPitchSemis - target) < 0.015f)
+            {
+                v.stretchPitchSemis = target;
+                legatoPitchGliding[i].store (false, std::memory_order_relaxed);
+            }
+            v.stretcher->setTransposeSemitones (v.stretchPitchSemis, 0.0f);
+        }
+
         // Fill output buffer if empty
         if (v.stretchOutReadPos >= v.stretchOutAvail)
         {
@@ -603,6 +634,21 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
             v.active = false;
             voicePositions[i].store (0.0f, std::memory_order_relaxed);
             return;
+        }
+
+        // ── Legato pitch glide (repitch mode) ────────────────────────────────
+        // Ramp v.speed toward target per sample to avoid phase discontinuity
+        // clicks on instant pitch changes. ~10ms exponential smoothing.
+        if (legatoPitchGliding[i].load (std::memory_order_relaxed))
+        {
+            const float target = legatoTargetSpeed[i].load (std::memory_order_relaxed);
+            const float alpha  = 1.0f / std::max (1.0f, legatoGlideMs.load (std::memory_order_relaxed) * 0.001f * (float) sampleRate);
+            v.speed += ((double) target - v.speed) * alpha;
+            if (std::abs ((float) v.speed - target) < 0.000025f)
+            {
+                v.speed = target;
+                legatoPitchGliding[i].store (false, std::memory_order_relaxed);
+            }
         }
 
         // Linear interpolation

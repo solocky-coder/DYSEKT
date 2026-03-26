@@ -255,17 +255,31 @@ void DysektEditor::paint (juce::Graphics& g)
 void DysektEditor::resized()
 {
     auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
-    auto headerStrip = area.removeFromTop (kLogoH);
-    logoBar.setBounds (headerStrip.removeFromLeft (220));
-    headerBar.setBounds (headerStrip);
-    auto lcdRow = area.removeFromTop (kLcdRowH).reduced (kMargin, 6);
-    const int lcdW = (lcdRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
-    sliceLcd.setBounds (lcdRow.removeFromLeft (lcdW));
-    lcdRow.removeFromLeft (kMargin);
+
+    // ── New combined top strip ─────────────────────────────────────────────
+    // The old 52px logoBar row and the LCD row are merged into one strip.
+    // SliceLcdDisplay (left) and SliceWaveformLcd (right) are taller; the
+    // centre column stacks: LogoBar → button row (HeaderBar) → Global Frame.
+    const int kTopStripH = kLogoH + kLcdRowH;
+    auto topArea = area.removeFromTop (kTopStripH);
+    auto topRow  = topArea.reduced (kMargin, 4);
+
+    // Left: SliceLcdDisplay — full strip height
+    const int sideW = (topRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
+    sliceLcd.setBounds (topRow.removeFromLeft (sideW));
+    topRow.removeFromLeft (kMargin);
+
+    // Centre: LogoBar (top) → HeaderBar / buttons (middle) → DualLcdControlFrame (bottom)
+    auto centreCol = topRow.removeFromLeft (kCtrlFrameW);
+    logoBar.setBounds (centreCol.removeFromTop (kLogoH));
+    headerBar.setBounds (centreCol.removeFromTop (kBtnRowH));
     if (auto* cf = headerBar.getControlFrame())
-        cf->setBounds (lcdRow.removeFromLeft (kCtrlFrameW));
-    lcdRow.removeFromLeft (kMargin);
-    sliceWaveformLcd.setBounds (lcdRow);
+        cf->setBounds (centreCol);
+
+    topRow.removeFromLeft (kMargin);
+
+    // Right: SliceWaveformLcd — full strip height
+    sliceWaveformLcd.setBounds (topRow);
 
     auto actionArea = area.removeFromTop (kActionH);
     const int kFX = kMargin;
