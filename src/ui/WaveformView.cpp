@@ -54,7 +54,24 @@ void WaveformView::resetTrim()
     repaint();
 }
 
-WaveformView::WaveformView (DysektProcessor& p) : processor (p) {}
+WaveformView::WaveformView (DysektProcessor& p) : processor (p)
+{
+    // ── MIDI Slice button ─────────────────────────────────────────────────────
+    midiSliceBtn.setButtonText (juce::CharPointer_UTF8 ("\xe2\x97\x8f  MIDI SLICE \xe2\x80\x94 Click to finish"));
+    midiSliceBtn.setToggleable (true);
+    midiSliceBtn.setClickingTogglesState (false);
+    midiSliceBtn.setToggleState (true, juce::dontSendNotification);
+    midiSliceBtn.setVisible (false);
+    addAndMakeVisible (midiSliceBtn);
+
+    midiSliceBtn.onClick = [this]
+    {
+        DysektProcessor::Command cmd;
+        cmd.type = DysektProcessor::CmdLazyChopStop;
+        processor.pushCommand (cmd);
+        setMidiSliceActive (false);
+    };
+}
 
 void WaveformView::setSliceDrawMode(bool active)
 {
@@ -201,24 +218,8 @@ void WaveformView::paintDrawSlicePreview (juce::Graphics& g) {}
 
 void WaveformView::paintMidiSliceOverlay (juce::Graphics& g)
 {
-    if (! midiSliceOverlayActive) return;
-
-    auto strip = getLocalBounds().removeFromTop (kMidiOverlayH);
-
-    // Dark semi-transparent background
-    g.setColour (juce::Colour (0xFF1A1A2E).withAlpha (0.90f));
-    g.fillRect (strip);
-
-    // Red pulsing dot
-    g.setColour (juce::Colour (0xFFFF2D55));
-    g.fillEllipse (8.0f, (kMidiOverlayH - 8) * 0.5f, 8.0f, 8.0f);
-
-    // Label
-    g.setColour (juce::Colours::white.withAlpha (0.90f));
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
-    g.drawText ("MIDI SLICE  â  Click to finish",
-                juce::Rectangle<int> (24, 0, strip.getWidth() - 32, kMidiOverlayH),
-                juce::Justification::centredLeft);
+    // midiSliceBtn child component covers the full strip when active -- nothing to paint here.
+    (void) g;
 }
 
 void WaveformView::paintLazyChopOverlay (juce::Graphics& g)
@@ -596,6 +597,14 @@ void WaveformView::resized()
         trimInPoint = juce::jlimit(0, totalFrames - 1, trimInPoint);
         trimOutPoint = juce::jlimit(trimInPoint + 1, totalFrames, trimOutPoint);
     }
+    midiSliceBtn.setBounds (0, 0, getWidth(), kMidiOverlayH);
+}
+
+void WaveformView::setMidiSliceActive (bool active)
+{
+    midiSliceOverlayActive = active;
+    midiSliceBtn.setVisible (active);
+    repaint();
 }
 
 void WaveformView::syncAltStateFromMods (const juce::ModifierKeys& mods)
@@ -685,16 +694,9 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // ── MIDI Slice overlay: clicking the strip stops MIDI slicing ───────────
+    // ── MIDI Slice overlay: handled by midiSliceBtn child component ──────────
     if (midiSliceOverlayActive && ! e.mods.isRightButtonDown() && e.y < kMidiOverlayH)
-    {
-        DysektProcessor::Command cmd;
-        cmd.type = DysektProcessor::CmdLazyChopStop;
-        processor.pushCommand (cmd);
-        midiSliceOverlayActive = false;
-        repaint();
-        return;
-    }
+        return; // button child handles clicks in this strip
 
     // ── Right-click: show slice context menu anywhere on the waveform ─────────
     if (e.mods.isRightButtonDown())
@@ -788,16 +790,15 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     {
                         cmd.type = DysektProcessor::CmdLazyChopStop;
                         processor.pushCommand (cmd);
-                        midiSliceOverlayActive = false;
+                        setMidiSliceActive (false);
                     }
                     else
                     {
                         cmd.type = DysektProcessor::CmdLazyChopStart;
                         processor.pushCommand (cmd);
                         processor.midiSelectsSlice.store (true);
-                        midiSliceOverlayActive = true;
+                        setMidiSliceActive (true);
                     }
-                    repaint();
                     return;
                 }
                 // ── Shortcuts ─────────────────────────────────────────────────

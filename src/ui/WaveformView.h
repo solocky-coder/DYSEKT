@@ -63,6 +63,8 @@ public:
     bool shiftPreviewActive = false;
     std::vector<int> transientPreviewPositions;
 
+    juce::TextButton midiSliceBtn;
+
 private:
     struct ViewState
     {
@@ -114,6 +116,7 @@ private:
     CacheKey prevCacheKey;
     bool sliceDrawMode         = false;
     bool midiSliceOverlayActive = false;
+    void setMidiSliceActive (bool active);
     bool softWaveform  = false;   // TAL-style gradient+outline rendering
     bool trimMode      = false;   // trim in/out marker editing mode
     int  trimInPoint   = 0;       // trim-in marker position in samples (DragTrimIn path)
