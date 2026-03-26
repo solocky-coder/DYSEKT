@@ -434,7 +434,7 @@ void SliceControlBar::drawMidiLearnCell (juce::Graphics& g, int x, int y,
 // =============================================================================
 // showMidiLearnMenu
 // =============================================================================
-void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point screenPos)
+void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos)
 {
  const bool mapped = processor.midiLearn.isMapped (fieldId);
  juce::PopupMenu menu;
@@ -449,7 +449,7 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point screenPos)
  float ms = DysektLookAndFeel::getMenuScale();
  menu.showMenuAsync (
  juce::PopupMenu::Options()
- .withTargetScreenArea(juce::Rectangle(screenPos.x, screenPos.y, 1, 1))
+ .withTargetScreenArea(juce::Rectangle<int>(screenPos.x, screenPos.y, 1, 1))
  .withParentComponent(topLvl)
  .withStandardItemHeight((int)(24 * ms)),
  [this, fieldId] (int result) {
@@ -457,7 +457,7 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point screenPos)
  else if (result == 2) { processor.midiLearn.clearMapping (fieldId); repaint(); }
  else if (result == 1000)
  {
- if (auto* editor = findParentComponentOfClass())
+ if (auto* editor = findParentComponentOfClass<DysektEditor>())
  editor->keyPressed(juce::KeyPress('M', juce::ModifierKeys::commandModifier, 0));
  }
  }
@@ -1330,7 +1330,7 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
 
  if (ui.numSlices == 0 && rootNoteArea.contains (pos))
  {
- textEditor = std::make_unique();
+ textEditor = std::make_unique<juce::TextEditor>();
  addAndMakeVisible (*textEditor);
  textEditor->setBounds (rootNoteArea.getX(), rootNoteArea.getY() + 15,
  rootNoteArea.getWidth(), 16);
@@ -1396,7 +1396,7 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
 // =============================================================================
 void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
 {
- textEditor = std::make_unique();
+ textEditor = std::make_unique<juce::TextEditor>();
  addAndMakeVisible (*textEditor);
  textEditor->setBounds (cell.x + kParamCellTextX, cell.y + 14,
  cell.w - kParamCellTextX - 2, 16);
