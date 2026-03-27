@@ -253,8 +253,8 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
 
-    const juce::Font labelFont = DysektLookAndFeel::makeFont (12.0f, true);
-    const juce::Font valueFont = DysektLookAndFeel::makeFont (13.0f);
+    const juce::Font labelFont = DysektLookAndFeel::makeFont (24.0f, true);
+    const juce::Font valueFont = DysektLookAndFeel::makeFont (26.0f);
 
     if (highlight)
     {
@@ -288,7 +288,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
     auto b = getLocalBounds().reduced (4);
     const int rowH    = kRowH;
     const int y       = b.getY() + 4 + row * rowH - scrollOffsetPx;
-    const juce::Font  f = DysektLookAndFeel::makeFont (11.5f);
+    const juce::Font  f = DysektLookAndFeel::makeFont (23.0f);
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
@@ -362,7 +362,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     const auto pal = LcdColours::fromTheme();
     auto screen = getLocalBounds().reduced (4);
 
-    const juce::Font flagFont = DysektLookAndFeel::makeFont (8.5f, true);
+    const juce::Font flagFont = DysektLookAndFeel::makeFont (17.0f, true);
     const int pad    = 3;
     const int flagW  = 34;   // fixed pill width
     const int flagH  = 12;   // pill height
@@ -435,7 +435,7 @@ void SliceLcdDisplay::drawNoSliceScreen (juce::Graphics& g)
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setFont (DysektLookAndFeel::makeFont (20.0f));
     g.setColour (pal.noDataCol);
 
     if (data.hasSample && data.sampleName.isNotEmpty())
@@ -446,12 +446,12 @@ void SliceLcdDisplay::drawNoSliceScreen (juce::Graphics& g)
         g.setColour (pal.noDataCol);
     }
 
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
+    g.setFont (DysektLookAndFeel::makeFont (22.0f));
     g.drawText ("-- NO SLICE SELECTED --", b, juce::Justification::centred);
 
     if (data.numSlices > 0)
     {
-        g.setFont (DysektLookAndFeel::makeFont (9.0f));
+        g.setFont (DysektLookAndFeel::makeFont (18.0f));
         g.setColour (pal.dim);
         g.drawText (juce::String (data.numSlices) + " SLICES  |  SELECT A PAD",
                     b, juce::Justification::centredBottom);
@@ -462,11 +462,11 @@ void SliceLcdDisplay::drawNoSampleScreen (juce::Graphics& g)
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
+    g.setFont (DysektLookAndFeel::makeFont (22.0f));
     g.setColour (pal.noDataCol);
     g.drawText ("-- NO SAMPLE LOADED --", b, juce::Justification::centred);
 
-    g.setFont (DysektLookAndFeel::makeFont (9.0f));
+    g.setFont (DysektLookAndFeel::makeFont (18.0f));
     g.setColour (pal.dim);
     g.drawText ("DROP A FILE OR USE THE BROWSER",
                 b, juce::Justification::centredBottom);
@@ -568,8 +568,8 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         g.setColour (pal.phosphor.withAlpha (0.10f));
         g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
 
-        const juce::Font lblF = DysektLookAndFeel::makeFont (12.0f, true);
-        const juce::Font valF = DysektLookAndFeel::makeFont (13.0f);
+        const juce::Font lblF = DysektLookAndFeel::makeFont (24.0f, true);
+        const juce::Font valF = DysektLookAndFeel::makeFont (26.0f);
         const int lblW = lblF.getStringWidth (sliceStr);
         const int gap  = 8;
         const int valW = valF.getStringWidth (nameStr);
@@ -589,7 +589,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         // Lock badge: small pill on the far right when slice is locked
         if (data.sliceLocked)
         {
-            const juce::Font lkF = DysektLookAndFeel::makeFont (8.0f, true);
+            const juce::Font lkF = DysektLookAndFeel::makeFont (16.0f, true);
             const juce::String lkStr = "LOCK";
             const int lkW = lkF.getStringWidth (lkStr) + 6;
             const int lkX = screen.getRight() - lkW - 6;

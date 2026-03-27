@@ -10,7 +10,7 @@ public:
     explicit SliceLcdDisplay (DysektProcessor& p);
 
     // Height the component requests — used by PluginEditor for layout
-    static constexpr int kPreferredHeight = 114;  // 7 visible rows × 14px + padding
+    static constexpr int kPreferredHeight = 228;  // 7 visible rows × 14px + padding
 
     void paint    (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
@@ -27,7 +27,7 @@ private:
     // ── Layout constants ──────────────────────────────────────────────────────
     static constexpr int kVisibleRows   = 7;   // rows shown without scrolling
     static constexpr int kTotalRows     = 10;  // total rows including scroll
-    static constexpr int kRowH          = 14;  // fixed row height in pixels
+    static constexpr int kRowH          = 28;  // fixed row height in pixels
     static constexpr int kScrollW       = 8;   // scrollbar strip width
     static constexpr int kLeftPad      = 6;
     static constexpr int kLabelW       = 46;

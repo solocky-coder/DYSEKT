@@ -160,7 +160,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     env.ax  = juce::jlimit (0.02f, kAX - 0.02f, (attackMs  / 1000.0f) * kAX);
     env.dx  = juce::jlimit (env.ax + 0.04f, kDX, env.ax + (decayMs  / 5000.0f) * (kDX - kAX));
     env.sy  = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f)); // 0=top=loud
-    env.ay  = 0.04f;   // attack peak: always at top — not user-draggable
+    env.ay  = 0.20f;   // attack peak: always at top — not user-draggable
     env.rx  = juce::jlimit (kSEnd + 0.02f, kRMax, kSEnd + (releaseMs / 5000.0f) * (kRMax - kSEnd));
 
     // Rebuild node list
@@ -585,9 +585,10 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
     for (const auto& node : envNodes)
     {
         const float cx = ox + node.xn * W;
-        const float cy = oy + node.yn * H;
         const bool  hov    = (node.role == hovRole || node.role == dragRole);
         const float r      = hov ? kNodeR + 2.5f : kNodeR;
+        const float cy = juce::jmax (oy + r + 4.0f,
+                             juce::jmin (oy + H - r - 4.0f, oy + node.yn * H));
 
         // Determine if this field is locked
         uint32_t fieldBit = 0;
