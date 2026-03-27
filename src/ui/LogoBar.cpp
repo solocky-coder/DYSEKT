@@ -1,7 +1,6 @@
 #include "LogoBar.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
-#include
 
 LogoBar::LogoBar (DysektProcessor& p) : processor (p) {}
 

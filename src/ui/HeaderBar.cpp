@@ -5,7 +5,6 @@
 #include "../PluginEditor.h"
 #include "../audio/GrainEngine.h"
 #include "BinaryData.h"
-#include
 
 HeaderBar::HeaderBar (DysektProcessor& p)
     : processor (p),
