@@ -71,7 +71,7 @@ private:
 
     bool browserOpen = false;
     bool mixerOpen   = false;
-    bool softWave    = false;
+    int  waveformMode = 0;   // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
 
     std::unique_ptr<TrimSession>     trimSession;
     std::unique_ptr<TrimDialog>      trimDialog;

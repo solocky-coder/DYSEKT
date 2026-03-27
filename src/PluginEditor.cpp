@@ -180,12 +180,11 @@ void DysektEditor::showTrimMode (const juce::File& file)
 
 void DysektEditor::toggleSoftWave()
 {
-    softWave = ! softWave;
-    waveformView.setSoftWaveform (softWave);
-    actionPanel.setWaveActive (softWave);
+    waveformMode = (waveformMode + 1) % 8;
+    waveformView.setWaveformMode (waveformMode);
+    actionPanel.setWaveActive (waveformMode != 0);
     headerBar.setBrowserActive (browserOpen);
-    headerBar.setWaveActive (softWave);
-    headerBar.setWaveActive (softWave);
+    headerBar.setWaveActive (waveformMode != 0);
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
     saveUserSettings (scale, getTheme().name);
 }
@@ -607,7 +606,7 @@ void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)
 
     file.replaceWithText ("uiScale: " + juce::String (scale, 2)
                           + "\ntheme: " + themeName
-                          + "\nwaveStyle: " + (softWave ? "soft" : "hard") + "\n");
+                          + "\nwaveStyle: " + juce::String (waveformMode) + "\n");
 }
 
 void DysektEditor::loadUserSettings()
@@ -627,14 +626,16 @@ void DysektEditor::loadUserSettings()
             else if (line.startsWith ("waveStyle:"))
             {
                 auto val = line.fromFirstOccurrenceOf (":", false, false).trim();
-                softWave = (val == "soft");
+                if      (val == "soft") waveformMode = 1;
+                else if (val == "hard") waveformMode = 0;
+                else                   waveformMode = juce::jlimit (0, 7, val.getIntValue());
             }
         }
     }
     applyTheme (themeName);
 
-    waveformView.setSoftWaveform (softWave);
-    actionPanel.setWaveActive (softWave);
+    waveformView.setWaveformMode (waveformMode);
+    actionPanel.setWaveActive (waveformMode != 0);
 
     headerBar.setMidiFollowActive (processor.midiSelectsSlice.load());
 }
