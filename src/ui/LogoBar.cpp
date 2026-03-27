@@ -9,20 +9,20 @@ void LogoBar::paint (juce::Graphics& g)
     g.fillAll (getTheme().header);
 
     const auto accent = getTheme().accent;
-    const auto fg = getTheme().foreground;
-    const int h = getHeight();
+    const auto fg     = getTheme().foreground;
+    const int h  = getHeight();
     const int cy = h / 2;
 
     // ── Waveform-slice icon ───────────────────────────────────────────────
     // 5 bars of varying height, drawn left-to-right starting at x=10
-    const int iconX = 10;
-    const int iconW = 28; // total icon width
-    const int barW = 3;
-    const int gap = 2;
-    const int barStep = barW + gap;
+    const int   iconX    = 10;
+    const int   iconW    = 28;   // total icon width
+    const int   barW     = 3;
+    const int   gap      = 2;
+    const int   barStep  = barW + gap;
 
     // Heights as fraction of bar area height
-    const float barH = (float) (h - 18); // CHANGED from (h - 10)
+    const float barH = (float) (h - 18);  // tighter vertical space
     // [left … right]: fraction of barH for each bar
     const float heights[5] = { 0.55f, 0.90f, 0.48f, 0.80f, 0.52f };
     // bar 1 (index 1) is the "active" highlighted bar
@@ -55,7 +55,7 @@ void LogoBar::paint (juce::Graphics& g)
     // ── Wordmark: "DY" (foreground) + "SEKT" (accent) ───────────────────
     const int textX = iconX + iconW + 8;
 
-    g.setFont (DysektLookAndFeel::makeFont (15.0f, true)); // CHANGED from 20.0f
+    g.setFont (DysektLookAndFeel::makeFont (15.0f, true));  // reduced from 20.0f
 
     // "DY" — foreground colour
     g.setColour (fg.withAlpha (0.90f));
@@ -68,12 +68,12 @@ void LogoBar::paint (juce::Graphics& g)
     g.drawText ("SEKT", textX + dyW, 0, 60, h, juce::Justification::centredLeft);
 
     // ── Tagline: "sample slicer" ──────────────────────────────────────────
-    const int tagX = textX;
+    const int tagX  = textX;
     // estimate wordmark total width to position tagline underneath right edge
     const int sektW = g.getCurrentFont().getStringWidth ("SEKT");
     const int wordW = dyW + sektW;
 
-    g.setFont (DysektLookAndFeel::makeFont (7.0f)); // CHANGED from 8.0f
+    g.setFont (DysektLookAndFeel::makeFont (7.0f));  // reduced from 8.0f
     g.setColour (fg.withAlpha (0.90f));
     // right-align tagline under the wordmark
     g.drawText ("sample slicer", tagX, cy + 8, wordW, 12,

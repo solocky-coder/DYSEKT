@@ -7,15 +7,15 @@
 #include "BinaryData.h"
 
 HeaderBar::HeaderBar (DysektProcessor& p)
-    : processor (p),
-      controlFrame (p)
+ : processor (p),
+   controlFrame (p)
 {
     // Standard buttons
     for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &shortcutsBtn })
     {
         btn->setAlwaysOnTop (true);
         btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
-        btn->setColour (juce::TextButton::textColourOnId,  getTheme().foreground);
+        btn->setColour (juce::TextButton::textColourOnId, getTheme().foreground);
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
         addAndMakeVisible (*btn);
     }
@@ -47,10 +47,10 @@ HeaderBar::HeaderBar (DysektProcessor& p)
     };
 
     // Wire control frame callbacks → forward to PluginEditor via HeaderBar's lambdas
-    controlFrame.onBrowserToggle    = [this] { if (onBrowserToggle)    onBrowserToggle(); };
-    controlFrame.onWaveToggle       = [this] { if (onWaveToggle)       onWaveToggle(); };
+    controlFrame.onBrowserToggle = [this] { if (onBrowserToggle) onBrowserToggle(); };
+    controlFrame.onWaveToggle    = [this] { if (onWaveToggle)    onWaveToggle(); };
     controlFrame.onMidiFollowToggle = [this] { if (onMidiFollowToggle) onMidiFollowToggle(); };
-    controlFrame.onBodeToggle       = [this] { if (onBodeToggle)       onBodeToggle(); };
+    controlFrame.onBodeToggle    = [this] { if (onBodeToggle)    onBodeToggle(); };
     // Note: controlFrame is NOT added as a visible child here —
     // PluginEditor::resized() calls addAndMakeVisible(*headerBar.getControlFrame())
     // and positions it between the two LCD panels.
@@ -58,10 +58,10 @@ HeaderBar::HeaderBar (DysektProcessor& p)
 
 // ── State sync ────────────────────────────────────────────────────────────────
 
-void HeaderBar::setBrowserActive   (bool v) { controlFrame.setBrowserActive (v); }
-void HeaderBar::setWaveActive      (bool v) { controlFrame.setWaveActive (v); }
-void HeaderBar::setMidiFollowActive(bool v) { controlFrame.setMidiFollowActive (v); }
-void HeaderBar::setBodeActive      (bool v) { controlFrame.setBodeActive (v); }
+void HeaderBar::setBrowserActive  (bool v) { controlFrame.setBrowserActive (v); }
+void HeaderBar::setWaveActive     (bool v) { controlFrame.setWaveActive (v); }
+void HeaderBar::setMidiFollowActive (bool v) { controlFrame.setMidiFollowActive (v); }
+void HeaderBar::setBodeActive     (bool v) { controlFrame.setBodeActive (v); }
 
 // ── resized ───────────────────────────────────────────────────────────────────
 
@@ -70,27 +70,23 @@ void HeaderBar::resized()
     const int w = getWidth();
     const int h = getHeight();
 
-    // 2×2 grid: Left col → UNDO (top) / REDO (bottom)
-    //           Right col → PANIC (top) / ⚙ (bottom)
-    const int btnW   = 36;  // CHANGED from 56
-    const int btnH   = 20;  // height of each button
-    const int colGap =  4;  // horizontal gap between the two columns
-    const int rowGap =  4;  // vertical gap between top and bottom buttons
+    // Two separate 1×2 groups flanking the logo:
+    //   Left  → UNDO (top) / REDO (bottom), flush to left edge
+    //   Right → PANIC (top) / ⚙  (bottom), flush to right edge
+    const int btnW   = 36; // width of each button
+    const int btnH   = 20; // height of each button
+    const int rowGap =  4; // vertical gap between top and bottom buttons
 
-    const int groupW = btnW * 2 + colGap;
     const int groupH = btnH * 2 + rowGap;
+    const int gy     = (h - groupH) / 2;
 
-    // Centre the group inside this bar
-    const int gx = (w - groupW) / 2;
-    const int gy = (h - groupH) / 2;
+    // Left pair — flush left
+    undoBtn.setBounds (0,         gy,                 btnW, btnH);
+    redoBtn.setBounds (0,         gy + btnH + rowGap, btnW, btnH);
 
-    // Left column
-    undoBtn.setBounds (gx, gy,                btnW, btnH);
-    redoBtn.setBounds (gx, gy + btnH + rowGap, btnW, btnH);
-
-    // Right column
-    const int rx = gx + btnW + colGap;
-    panicBtn    .setBounds (rx, gy,                btnW, btnH);
+    // Right pair — flush right
+    const int rx = w - btnW;
+    panicBtn    .setBounds (rx, gy,                 btnW, btnH);
     shortcutsBtn.setBounds (rx, gy + btnH + rowGap, btnW, btnH);
 }
 
@@ -102,38 +98,45 @@ void HeaderBar::paint (juce::Graphics& g)
     for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &shortcutsBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
-        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);
+        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);    // on = accent
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
-    g.fillAll (getTheme().header);
+    // Background is transparent — LogoBar paints behind us
+    g.fillAll (juce::Colours::transparentBlack);
 
-    // ── Frame around the 2×2 button group ────────────────────────────────────
-    const int frameX1 = undoBtn.getX()           - 3;
-    const int frameY1 = undoBtn.getY()           - 3;
-    const int frameX2 = shortcutsBtn.getRight()  + 3;
-    const int frameY2 = shortcutsBtn.getBottom() + 3;
-    const juce::Rectangle<int> btnFrame (frameX1, frameY1,
-                                         frameX2 - frameX1, frameY2 - frameY1);
-
-    g.setColour (getTheme().separator.withAlpha (0.75f));
-    g.drawRoundedRectangle (btnFrame.toFloat().reduced (0.5f), 3.0f, 1.0f);
-
-    // ── Subtle vertical divider between left and right columns ────────────────
+    // ── Frame around the left pair (UNDO / REDO) ─────────────────────────
     {
-        const int vx = panicBtn.getX();
-        const int vy = undoBtn.getY();
-        const int vh = shortcutsBtn.getBottom() - vy;
+        const juce::Rectangle<int> lf (
+            undoBtn.getX() - 3,  undoBtn.getY() - 3,
+            undoBtn.getWidth() + 6,
+            redoBtn.getBottom() - undoBtn.getY() + 6);
+
+        g.setColour (getTheme().separator.withAlpha (0.75f));
+        g.drawRoundedRectangle (lf.toFloat().reduced (0.5f), 3.0f, 1.0f);
+
+        // Subtle horizontal divider between UNDO and REDO
         g.setColour (getTheme().foreground.withAlpha (0.12f));
-        g.drawVerticalLine (vx, (float) vy + 3, (float) (vy + vh - 3));
+        g.drawHorizontalLine (redoBtn.getY(),
+                              (float) undoBtn.getX() + 3,
+                              (float) undoBtn.getRight() - 3);
     }
 
-    // ── Subtle horizontal dividers within each column ─────────────────────────
+    // ── Frame around the right pair (PANIC / ⚙) ──────────────────────────
     {
-        const int rowY = redoBtn.getY();
+        const juce::Rectangle<int> rf (
+            panicBtn.getX() - 3, panicBtn.getY() - 3,
+            panicBtn.getWidth() + 6,
+            shortcutsBtn.getBottom() - panicBtn.getY() + 6);
+
+        g.setColour (getTheme().separator.withAlpha (0.75f));
+        g.drawRoundedRectangle (rf.toFloat().reduced (0.5f), 3.0f, 1.0f);
+
+        // Subtle horizontal divider between PANIC and ⚙
         g.setColour (getTheme().foreground.withAlpha (0.12f));
-        g.drawHorizontalLine (rowY, (float) undoBtn.getX()  + 3, (float) undoBtn.getRight()  - 3);
-        g.drawHorizontalLine (rowY, (float) panicBtn.getX() + 3, (float) panicBtn.getRight() - 3);
+        g.drawHorizontalLine (shortcutsBtn.getY(),
+                              (float) panicBtn.getX() + 3,
+                              (float) panicBtn.getRight() - 3);
     }
 
     // Left side intentionally empty — sample name lives in LCD 1
@@ -154,8 +157,9 @@ void HeaderBar::mouseDown (const juce::MouseEvent& e)
         openRelinkBrowser();
 }
 
-void HeaderBar::mouseDrag        (const juce::MouseEvent&) {}
-void HeaderBar::mouseUp          (const juce::MouseEvent&) {}
+void HeaderBar::mouseDrag       (const juce::MouseEvent&) {}
+void HeaderBar::mouseUp         (const juce::MouseEvent&) {}
+
 void HeaderBar::mouseDoubleClick (const juce::MouseEvent& /*e*/) {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -164,7 +168,7 @@ void HeaderBar::adjustScale (float delta)
 {
     if (auto* p = processor.apvts.getParameter (ParamIds::uiScale))
     {
-        float current  = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+        float current = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
         float newScale = juce::jlimit (0.5f, 3.0f, current + delta);
         p->setValueNotifyingHost (p->convertTo0to1 (newScale));
     }
