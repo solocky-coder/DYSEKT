@@ -253,8 +253,8 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
 
-    const juce::Font labelFont = DysektLookAndFeel::makeFont (11.0f, true);
-    const juce::Font valueFont = DysektLookAndFeel::makeFont (12.0f);
+    const juce::Font labelFont = DysektLookAndFeel::makeFont (12.0f, true);
+    const juce::Font valueFont = DysektLookAndFeel::makeFont (13.0f);
 
     if (highlight)
     {
@@ -568,8 +568,8 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         g.setColour (pal.phosphor.withAlpha (0.10f));
         g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
 
-        const juce::Font lblF = DysektLookAndFeel::makeFont (11.0f, true);
-        const juce::Font valF = DysektLookAndFeel::makeFont (12.0f);
+        const juce::Font lblF = DysektLookAndFeel::makeFont (12.0f, true);
+        const juce::Font valF = DysektLookAndFeel::makeFont (13.0f);
         const int lblW = lblF.getStringWidth (sliceStr);
         const int gap  = 8;
         const int valW = valF.getStringWidth (nameStr);
