@@ -367,16 +367,16 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     auto screen = getLocalBounds().reduced (4);
 
     const juce::Font flagFont = DysektLookAndFeel::makeFont (17.0f, true);
-    const int pad    = 3;
-    const int flagW  = 34;   // fixed pill width
-    const int flagH  = 12;   // pill height
-    const int flagGap = 3;   // gap between pills
+    const int pad    = 5;
+    const int flagW  = 48;   // fixed pill width
+    const int flagH  = 22;   // pill height
+    const int flagGap = 5;   // gap between pills
     const int numFlags = 7;
     const int totalFlagsH = numFlags * flagH + (numFlags - 1) * flagGap;
 
     // Centre the vertical stack in the screen height
     int fy = screen.getY() + (screen.getHeight() - totalFlagsH) / 2;
-    const int fx = screen.getRight() - flagW - kScrollW - 4;
+    const int fx = screen.getRight() - flagW - kScrollW - 18;
 
     struct Flag { juce::String text; bool on; int fieldId; bool isCycle; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
