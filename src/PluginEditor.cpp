@@ -1,6 +1,5 @@
 #include "PluginEditor.h"
-#include "PluginEditor.h"
-#include <filesystem>
+#include
 #include "ui/PluginEditorConstants.h"
 // ========================== STATIC CONSTANTS ==========================
 
@@ -140,7 +139,7 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
  return;
  }
  auto ext = file.getFileExtension().toLowerCase();
- if (ext == ".sf2" || ext == ".sfz") {
+ if (ext == ".sf2" \|\| ext == ".sfz") {
  processor.loadSoundFontAsync (file);
  return;
  }
@@ -185,7 +184,7 @@ void DysektEditor::toggleSoftWave()
  waveformView.setWaveformMode (waveformMode);
  actionPanel.setWaveActive (waveformMode != 0);
  headerBar.setBrowserActive (browserOpen);
-    headerBar.setWaveMode (waveformMode);
+ headerBar.setWaveMode (waveformMode);
  float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
  saveUserSettings (scale, getTheme().name);
 }
@@ -358,7 +357,7 @@ void DysektEditor::toggleMixerPanel()
  resized(); repaint(); resized(); repaint();
 }
 
-// -- KEYBOARD SHORTCUTS --
+// \-\- KEYBOARD SHORTCUTS --
 bool DysektEditor::keyPressed (const juce::KeyPress& key)
 {
  auto mods = key.getModifiers();
@@ -369,7 +368,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  if (code == 'Z' && mods.isCommandDown())
  { DysektProcessor::Command c; c.type = DysektProcessor::CmdUndo; processor.pushCommand (c); return true; }
 
- if ((code == '?' || code == '/') && mods.isCommandDown())
+ if ((code == '?' \|\| code == '/') && mods.isCommandDown())
  { toggleShortcutsPanel(); return true; }
 
  // ⌘M — toggle MIDI Learn assignments dialog
@@ -393,7 +392,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  return true;
  }
 
- if (mods.isCommandDown() || mods.isAltDown()) return false;
+ if (mods.isCommandDown() \|\| mods.isAltDown()) return false;
 
  if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
  { toggleShortcutsPanel(); return true; }
@@ -406,7 +405,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  processor.pushCommand (c); repaint(); return true;
  }
  if (code == 'D') { DysektProcessor::Command c; c.type = DysektProcessor::CmdDuplicateSlice; processor.pushCommand (c); return true; }
- if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey)
+ if (code == juce::KeyPress::deleteKey \|\| code == juce::KeyPress::backspaceKey)
  {
  const auto& ui = processor.getUiSliceSnapshot();
  if (ui.selectedSlice >= 0)
@@ -415,14 +414,14 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  }
  if (code == 'F') { toggleMidiFollow(); return true; }
 
- if (code == juce::KeyPress::rightKey || (code == juce::KeyPress::tabKey && ! mods.isShiftDown()))
+ if (code == juce::KeyPress::rightKey \|\| (code == juce::KeyPress::tabKey && ! mods.isShiftDown()))
  {
  const auto& ui = processor.getUiSliceSnapshot();
  if (ui.numSlices > 0)
  { DysektProcessor::Command c; c.type = DysektProcessor::CmdSelectSlice; c.intParam1 = juce::jlimit (0, ui.numSlices-1, ui.selectedSlice+1); processor.pushCommand (c); repaint(); }
  return true;
  }
- if (code == juce::KeyPress::leftKey || (code == juce::KeyPress::tabKey && mods.isShiftDown()))
+ if (code == juce::KeyPress::leftKey \|\| (code == juce::KeyPress::tabKey && mods.isShiftDown()))
  {
  const auto& ui = processor.getUiSliceSnapshot();
  if (ui.numSlices > 0)
@@ -458,7 +457,7 @@ void DysektEditor::timerCallback()
  }
 
  const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
- if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
+ if (zoom != lastZoom \|\| scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
 
  // Sync trim mode state to ActionPanel — disables/re-enables slice buttons
  {
@@ -471,7 +470,7 @@ void DysektEditor::timerCallback()
  }
 
  float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
- if (scaleDirty || scale != lastScale)
+ if (scaleDirty \|\| scale != lastScale)
  {
  scaleDirty = false; lastScale = scale;
  setTransform (juce::AffineTransform::scale (scale));
@@ -484,11 +483,11 @@ void DysektEditor::timerCallback()
  processor.voicePool.voicePositions.end(),
  [] (const std::atomic<float>& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
 
- const bool waveformAnimating = waveformInteracting || previewActive
- || playbackActive || processor.lazyChop.isActive()
- || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
- const bool waveformNeedsRepaint = uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating;
- const bool laneNeedsRepaint = uiChanged || viewportChanged || previewActive || lastPreviewActive;
+ const bool waveformAnimating = waveformInteracting \|\| previewActive
+ \|\| playbackActive \|\| processor.lazyChop.isActive()
+ \|\| (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
+ const bool waveformNeedsRepaint = uiChanged \|\| viewportChanged \|\| waveformAnimating \|\| lastWaveformAnimating;
+ const bool laneNeedsRepaint = uiChanged \|\| viewportChanged \|\| previewActive \|\| lastPreviewActive;
 
  lastWaveformAnimating = waveformAnimating;
  lastPreviewActive = previewActive;
@@ -521,7 +520,7 @@ void DysektEditor::timerCallback()
  {
  const int procStart = processor.trimRegionStart.load (std::memory_order_relaxed);
  const int procEnd = processor.trimRegionEnd .load (std::memory_order_relaxed);
- if (procStart != waveformView.getTrimIn() || procEnd != waveformView.getTrimOut())
+ if (procStart != waveformView.getTrimIn() \|\| procEnd != waveformView.getTrimOut())
  waveformView.setTrimPoints (procStart, procEnd);
  }
 
@@ -609,9 +608,9 @@ void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)
  auto file = getUserSettingsFile();
  file.getParentDirectory().createDirectory();
 
-    file.replaceWithText ("uiScale: " + juce::String (scale, 2)
-        + "\ntheme: " + themeName
-        + "\nwaveStyle: " + juce::String (waveformMode) + "\n");
+ file.replaceWithText ("uiScale: " + juce::String (scale, 2)
+ + "\\ntheme: " + themeName
+ + "\\nwaveStyle: " + juce::String (waveformMode) + "\\n");
 }
 
 void DysektEditor::loadUserSettings()
@@ -640,7 +639,7 @@ void DysektEditor::loadUserSettings()
  applyTheme (themeName);
 
  waveformView.setWaveformMode (waveformMode);
-    headerBar.setWaveMode (waveformMode);
+ headerBar.setWaveMode (waveformMode);
  actionPanel.setWaveActive (waveformMode != 0);
 
  headerBar.setMidiFollowActive (processor.midiSelectsSlice.load());
@@ -651,9 +650,9 @@ bool DysektEditor::isInterestedInFileDrag (const juce::StringArray& files)
  for (auto& f : files)
  {
  auto ext = juce::File (f).getFileExtension().toLowerCase();
- if (ext == ".wav" || ext == ".aif" || ext == ".aiff" ||
- ext == ".ogg" || ext == ".flac" || ext == ".mp3" ||
- ext == ".sf2" || ext == ".sfz")
+ if (ext == ".wav" \|\| ext == ".aif" \|\| ext == ".aiff" \|\|
+ ext == ".ogg" \|\| ext == ".flac" \|\| ext == ".mp3" \|\|
+ ext == ".sf2" \|\| ext == ".sfz")
  return true;
  }
  return false;
