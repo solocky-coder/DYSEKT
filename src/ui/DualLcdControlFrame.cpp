@@ -151,7 +151,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         bodeIconArea = { gap * 4 + btnSz * 3,       btnY, btnSz, btnSz };
 
         drawIcon (g, filIconArea .toFloat(), 0, browserActive);
-        drawIcon (g, waIconArea  .toFloat(), 1, waveActive);
+        drawIcon (g, waIconArea  .toFloat(), 1, waveMode != 0);
         drawIcon (g, midiFollowIconArea  .toFloat(), 2, midiFollowActive);
         drawIcon (g, bodeIconArea.toFloat(), 3, bodeActive);
     }
@@ -241,7 +241,7 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
     }
     if (waIconArea.contains (pos))
     {
-        waveActive = ! waveActive;
+        setWaveMode ((waveMode + 1) % 8);
         repaint();
         if (onWaveToggle) onWaveToggle();
         return;
