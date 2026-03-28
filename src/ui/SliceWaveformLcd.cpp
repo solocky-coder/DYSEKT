@@ -125,7 +125,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 {
     // Mirror SCB logic exactly: unlocked fields read from global APVTS (same units),
     // locked fields read from per-slice values.
-    // APVTS params: Attack 0-1000ms, Decay 0-5000ms, Sustain 0-100%, Release 0-5000ms
+    // APVTS params: Attack 0-10000ms, Decay 0-10000ms, Sustain 0-100%, Release 0-10000ms
     float attackMs  = processor.attackParam  ? processor.attackParam ->load() : 5.0f;
     float decayMs   = processor.decayParam   ? processor.decayParam  ->load() : 100.0f;
     float sustainPc = processor.sustainParam ? processor.sustainParam->load() : 100.0f;
@@ -157,11 +157,11 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     static constexpr float kSEnd = 0.65f;   // fixed end of sustain plateau
     static constexpr float kRMax = 0.99f;   // max X for release node
 
-    env.ax  = juce::jlimit (0.02f, kAX - 0.02f, (attackMs  / 1000.0f) * kAX);
-    env.dx  = juce::jlimit (env.ax + 0.04f, kDX, env.ax + (decayMs  / 5000.0f) * (kDX - kAX));
+    env.ax  = juce::jlimit (0.02f, kAX - 0.02f, (attackMs  / 10000.0f) * kAX);
+    env.dx  = juce::jlimit (env.ax + 0.04f, kDX, env.ax + (decayMs  / 10000.0f) * (kDX - kAX));
     env.sy  = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f)); // 0=top=loud
     env.ay  = 0.20f;   // attack peak: always at top — not user-draggable
-    env.rx  = juce::jlimit (kSEnd + 0.02f, kRMax, kSEnd + (releaseMs / 5000.0f) * (kRMax - kSEnd));
+    env.rx  = juce::jlimit (kSEnd + 0.02f, kRMax, kSEnd + (releaseMs / 10000.0f) * (kRMax - kSEnd));
 
     // Rebuild node list
     envNodes.clear();
@@ -192,12 +192,12 @@ void SliceWaveformLcd::commitNodes()
     static constexpr float kSEnd = 0.65f;
     static constexpr float kRMax = 0.99f;
 
-    const float attackMs  = juce::jlimit (0.0f, 1000.0f, (env.ax / kAX) * 1000.0f);
-    const float decayMs   = juce::jlimit (0.0f, 5000.0f,
-                                ((env.dx - env.ax) / (kDX - kAX)) * 5000.0f);
+    const float attackMs  = juce::jlimit (0.0f, 10000.0f, (env.ax / kAX) * 10000.0f);
+    const float decayMs   = juce::jlimit (0.0f, 10000.0f,
+                                ((env.dx - env.ax) / (kDX - kAX)) * 10000.0f);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,  (1.0f - env.sy) * 100.0f);
-    const float releaseMs = juce::jlimit (0.0f, 5000.0f,
-                                ((env.rx - kSEnd) / (kRMax - kSEnd)) * 5000.0f);
+    const float releaseMs = juce::jlimit (0.0f, 10000.0f,
+                                ((env.rx - kSEnd) / (kRMax - kSEnd)) * 10000.0f);
 
     // Write to selected slice via CmdSetSliceParam (per-slice, not global)
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
