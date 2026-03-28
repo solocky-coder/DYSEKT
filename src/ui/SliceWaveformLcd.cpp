@@ -189,7 +189,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     const float decayNorm   = std::sqrt (juce::jmin (decayMs   / sliceDurMs, 1.0f));
     const float releaseNorm = std::sqrt (juce::jmin (releaseMs / sliceDurMs, 1.0f));
 
-    env.ax  = juce::jlimit (0.02f, kAX, attackNorm * kAX);
+    env.ax  = juce::jlimit (0.0f, kAX, attackNorm * kAX);
 
     // Remaining space after attack — same proportions as original at low attack
     const float remain    = kRMax - env.ax;
@@ -390,7 +390,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     if (dragRole == NodeRole::Attack)
     {
         // A: X only — peak height is always maximum, no Y drag
-        env.ax = juce::jlimit (0.02f, kAX, xn);
+        env.ax = juce::jlimit (0.0f, kAX, xn);
     }
 
     // Recalculate dynamic zones every drag tick (attack movement shifts D/S/R zones)
