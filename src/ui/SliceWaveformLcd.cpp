@@ -156,7 +156,14 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     static constexpr float kAX   = 0.85f;   // attack can span entire slice
     static constexpr float kRMax = 0.99f;
 
-    env.ax  = juce::jlimit (0.02f, kAX, (attackMs / 120000.0f) * kAX);
+    // Skewed mapping (kSkew must match NormalisableRange skew in ParamLayout.cpp)
+    // This makes node position proportional to knob normalized position so they stay in sync.
+    static constexpr float kSkew = 0.3f;
+    const float attackNorm  = std::pow (juce::jmax (0.0f, attackMs  / 120000.0f), 1.0f / kSkew);
+    const float decayNorm   = std::pow (juce::jmax (0.0f, decayMs   / 120000.0f), 1.0f / kSkew);
+    const float releaseNorm = std::pow (juce::jmax (0.0f, releaseMs / 120000.0f), 1.0f / kSkew);
+
+    env.ax  = juce::jlimit (0.02f, kAX, attackNorm * kAX);
 
     // Remaining space after attack — same proportions as original at low attack
     const float remain    = kRMax - env.ax;
@@ -164,12 +171,12 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     const float kSEnd_eff = env.ax + remain * 0.65f;   // sustain plateau end
 
     env.dx    = juce::jlimit (env.ax + 0.01f, kDX_eff,
-                              env.ax + (decayMs / 120000.0f) * (kDX_eff - env.ax));
+                              env.ax + decayNorm * (kDX_eff - env.ax));
     env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
     env.ay    = 0.20f;   // attack peak: always at top — not user-draggable
     env.sxEnd = kSEnd_eff;
     env.rx    = juce::jlimit (kSEnd_eff + 0.01f, kRMax,
-                              kSEnd_eff + (releaseMs / 120000.0f) * (kRMax - kSEnd_eff));
+                              kSEnd_eff + releaseNorm * (kRMax - kSEnd_eff));
 
     // Rebuild node list
     envNodes.clear();
@@ -177,7 +184,8 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
     a.colour = kColAttack;  a.label = "A"; envNodes.add (a);
 
-    EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
+    // Decay node: X-only drag — fixed Y so it doesn't jump when sustain level changes
+    EnvNode d; d.xn = env.dx; d.yn = 0.5f; d.role = NodeRole::Decay;
     d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
 
     // Sustain handle: mid of plateau [dx .. kSEnd]
@@ -203,12 +211,15 @@ void SliceWaveformLcd::commitNodes()
     const float kDX_eff   = env.ax + remain * 0.47f;
     const float kSEnd_eff = env.ax + remain * 0.65f;
 
-    const float attackMs  = juce::jlimit (0.0f, 120000.0f, (env.ax / kAX) * 120000.0f);
+    // Inverse of skewed mapping in buildEnvelopeNodes (kSkew must match)
+    static constexpr float kSkew = 0.3f;
+    const float attackMs  = juce::jlimit (0.0f, 120000.0f,
+        std::pow (env.ax / kAX, kSkew) * 120000.0f);
     const float decayMs   = juce::jlimit (0.0f, 120000.0f,
-        (kDX_eff > env.ax) ? ((env.dx - env.ax) / (kDX_eff - env.ax)) * 120000.0f : 0.0f);
+        (kDX_eff > env.ax) ? std::pow ((env.dx - env.ax) / (kDX_eff - env.ax), kSkew) * 120000.0f : 0.0f);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,  (1.0f - env.sy) * 100.0f);
     const float releaseMs = juce::jlimit (0.0f, 120000.0f,
-        (kRMax > kSEnd_eff) ? ((env.rx - kSEnd_eff) / (kRMax - kSEnd_eff)) * 120000.0f : 0.0f);
+        (kRMax > kSEnd_eff) ? std::pow ((env.rx - kSEnd_eff) / (kRMax - kSEnd_eff), kSkew) * 120000.0f : 0.0f);
 
     // Write to selected slice via CmdSetSliceParam (per-slice, not global)
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
@@ -392,7 +403,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     envNodes.clear();
     EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
     a.colour = kColAttack;  a.label = "A"; envNodes.add (a);
-    EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
+    EnvNode d; d.xn = env.dx; d.yn = 0.5f; d.role = NodeRole::Decay;   // fixed Y — X-only drag
     d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
     EnvNode s; s.xn = (env.dx + kSEnd_eff) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
     s.colour = kColSustain; s.label = "S"; envNodes.add (s);
