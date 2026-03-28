@@ -1,5 +1,5 @@
 #include "PluginEditor.h"
-#include
+#include <filesystem>
 #include "ui/PluginEditorConstants.h"
 // ========================== STATIC CONSTANTS ==========================
 
