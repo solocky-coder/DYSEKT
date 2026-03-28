@@ -154,7 +154,7 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
  if (pref == DysektProcessor::TrimPrefAsk) {
  juce::AudioFormatManager fm;
  fm.registerBasicFormats();
- std::unique_ptr reader (fm.createReaderFor (file));
+ std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
  double duration = 0.0;
  if (reader != nullptr && reader->sampleRate > 0.0)
  duration = (double) reader->lengthInSamples / reader->sampleRate;
@@ -170,7 +170,7 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
 
 void DysektEditor::showTrimMode (const juce::File& file)
 {
- trimSession = std::make_unique();
+ trimSession = std::make_unique<TrimSession>();
  trimSession->file = file;
  trimSession->active = false;
 
@@ -382,7 +382,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  }
  else
  {
- midiLearnDialog = std::make_unique (
+ midiLearnDialog = std::make_unique<MidiLearnDialog> (
  processor.midiLearn,
  [this] { midiLearnDialog.reset(); resized(); }
  );
@@ -482,7 +482,7 @@ void DysektEditor::timerCallback()
 
  const bool playbackActive = std::any_of (processor.voicePool.voicePositions.begin(),
  processor.voicePool.voicePositions.end(),
- [] (const std::atomic& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
+ [] (const std::atomic<float>& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
 
  const bool waveformAnimating = waveformInteracting || previewActive
  || playbackActive || processor.lazyChop.isActive()
@@ -508,7 +508,7 @@ void DysektEditor::timerCallback()
 
  if (trimDialog == nullptr)
  {
- trimDialog = std::make_unique (processor, waveformView);
+ trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
  addAndMakeVisible (*trimDialog);
  trimDialog->toFront (false);
  resized();
@@ -609,12 +609,9 @@ void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)
  auto file = getUserSettingsFile();
  file.getParentDirectory().createDirectory();
 
- file.replaceWithText ("uiScale: " + juce::String (scale, 2)
- \+ "
-theme: " + themeName
- \+ "
-waveStyle: " + juce::String (waveformMode) + "
-");
+    file.replaceWithText ("uiScale: " + juce::String (scale, 2)
+        + "\ntheme: " + themeName
+        + "\nwaveStyle: " + juce::String (waveformMode) + "\n");
 }
 
 void DysektEditor::loadUserSettings()
