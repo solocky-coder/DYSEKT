@@ -265,16 +265,9 @@ void SliceWaveformLcd::commitNodes()
     sendField (DysektProcessor::FieldDecay,   decayMs   / 1000.0f);
     sendField (DysektProcessor::FieldSustain, sustainPc / 100.0f);    // 0-1
     sendField (DysektProcessor::FieldRelease, releaseMs / 1000.0f);
-
-    // Also update APVTS knobs so the visual knob position stays in sync with the dragged nodes
-    if (auto* p = processor.apvts.getParameter (ParamIds::defaultAttack))
-        p->setValueNotifyingHost (p->convertTo0to1 (attackMs));
-    if (auto* p = processor.apvts.getParameter (ParamIds::defaultDecay))
-        p->setValueNotifyingHost (p->convertTo0to1 (decayMs));
-    if (auto* p = processor.apvts.getParameter (ParamIds::defaultSustain))
-        p->setValueNotifyingHost (p->convertTo0to1 (sustainPc));
-    if (auto* p = processor.apvts.getParameter (ParamIds::defaultRelease))
-        p->setValueNotifyingHost (p->convertTo0to1 (releaseMs));
+    // NOTE: do NOT touch the global APVTS params here — CmdSetSliceParam locks the
+    // per-slice value and sets the lock bit, so the SCB knob reads s.xxxSec directly.
+    // Writing to the global default would silently override every unlocked slice.
 
     // Give the processor time to echo the new values before rebuilding
     postCommitGuard = 6;
