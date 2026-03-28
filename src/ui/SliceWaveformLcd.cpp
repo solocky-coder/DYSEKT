@@ -228,6 +228,16 @@ void SliceWaveformLcd::commitNodes()
     sendField (DysektProcessor::FieldSustain, sustainPc / 100.0f);    // 0-1
     sendField (DysektProcessor::FieldRelease, releaseMs / 1000.0f);
 
+    // Also update APVTS knobs so the visual knob position stays in sync with the dragged nodes
+    if (auto* p = processor.apvts.getParameter (ParamIds::defaultAttack))
+        p->setValueNotifyingHost (p->convertTo0to1 (attackMs));
+    if (auto* p = processor.apvts.getParameter (ParamIds::defaultDecay))
+        p->setValueNotifyingHost (p->convertTo0to1 (decayMs));
+    if (auto* p = processor.apvts.getParameter (ParamIds::defaultSustain))
+        p->setValueNotifyingHost (p->convertTo0to1 (sustainPc));
+    if (auto* p = processor.apvts.getParameter (ParamIds::defaultRelease))
+        p->setValueNotifyingHost (p->convertTo0to1 (releaseMs));
+
     // Give the processor time to echo the new values before rebuilding
     postCommitGuard = 6;
     lastEnvSnapVer  = -1;   // force rebuild once guard expires
@@ -342,20 +352,30 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     const float xn = juce::jlimit (0.01f, 0.99f, (e.position.x - ox) / W);
     const float yn = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
 
-    static constexpr float kAX   = 0.22f;
-    static constexpr float kDX   = 0.48f;
-    const float kSEnd = env.sxEnd;
+    // Dynamic layout — must match buildEnvelopeNodes exactly
+    static constexpr float kAX   = 0.85f;   // attack spans up to 85% of display
     static constexpr float kRMax = 0.99f;
 
     if (dragRole == NodeRole::Attack)
     {
         // A: X only — peak height is always maximum, no Y drag
-        env.ax = juce::jlimit (0.02f, std::min (kAX - 0.02f, env.dx - 0.04f), xn);
+        env.ax = juce::jlimit (0.02f, kAX, xn);
     }
-    else if (dragRole == NodeRole::Decay)
+
+    // Recalculate dynamic zones every drag tick (attack movement shifts D/S/R zones)
+    const float remain    = kRMax - env.ax;
+    const float kDX_eff   = env.ax + remain * 0.47f;
+    const float kSEnd_eff = env.ax + remain * 0.65f;
+    env.sxEnd = kSEnd_eff;
+
+    // Clamp D and R into their (possibly shifted) zones
+    env.dx = juce::jlimit (env.ax + 0.01f, kDX_eff,       env.dx);
+    env.rx = juce::jlimit (kSEnd_eff + 0.01f, kRMax,       env.rx);
+
+    if (dragRole == NodeRole::Decay)
     {
         // D: X only — controls how far decay extends before sustain
-        env.dx = juce::jlimit (env.ax + 0.04f, kDX, xn);
+        env.dx = juce::jlimit (env.ax + 0.01f, kDX_eff, xn);
     }
     else if (dragRole == NodeRole::Sustain)
     {
@@ -365,7 +385,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     else if (dragRole == NodeRole::Release)
     {
         // R: X only — drag right = longer release tail
-        env.rx = juce::jlimit (kSEnd + 0.02f, kRMax, xn);
+        env.rx = juce::jlimit (kSEnd_eff + 0.01f, kRMax, xn);
     }
 
     // Rebuild envNodes[] from updated env.* (no param read during drag)
@@ -374,12 +394,12 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     a.colour = kColAttack;  a.label = "A"; envNodes.add (a);
     EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
     d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
-    EnvNode s; s.xn = (env.dx + kSEnd) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
+    EnvNode s; s.xn = (env.dx + kSEnd_eff) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
     s.colour = kColSustain; s.label = "S"; envNodes.add (s);
     EnvNode r; r.xn = env.rx; r.yn = 0.96f; r.role = NodeRole::Release;
     r.colour = kColRelease; r.label = "R"; envNodes.add (r);
 
-    // Push to params
+    // Push to params — also updates APVTS knobs so display stays in sync
     commitNodes();
 
     repaint();
