@@ -69,10 +69,10 @@ static Slice sanitiseRestoredSlice (Slice s)
     s.bpm = juce::jlimit (20.0f, 999.0f, s.bpm);
     s.pitchSemitones = juce::jlimit (-48.0f, 48.0f, s.pitchSemitones);
     s.algorithm = juce::jlimit (0, 1, s.algorithm == 2 ? 1 : s.algorithm);
-    s.attackSec = juce::jlimit (0.0f, 1.0f, s.attackSec);
-    s.decaySec = juce::jlimit (0.0f, 5.0f, s.decaySec);
+    s.attackSec = juce::jlimit (0.0f, 120.0f, s.attackSec);
+    s.decaySec = juce::jlimit (0.0f, 120.0f, s.decaySec);
     s.sustainLevel = juce::jlimit (0.0f, 1.0f, s.sustainLevel);
-    s.releaseSec = juce::jlimit (0.0f, 5.0f, s.releaseSec);
+    s.releaseSec = juce::jlimit (0.0f, 120.0f, s.releaseSec);
     s.muteGroup = juce::jlimit (0, 32, s.muteGroup);
     s.loopMode = juce::jlimit (0, 2, s.loopMode);
     s.tonalityHz = juce::jlimit (0.0f, 8000.0f, s.tonalityHz);
@@ -1348,10 +1348,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldFilterRes:    nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
                             case FieldTonality:     nativeVal = juce::jlimit (0.0f,  8000.0f,  raw); break;
                             case FieldFormant:      nativeVal = juce::jlimit (-24.0f,   24.0f, raw); break;
-                            case FieldAttack:       nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
-                            case FieldDecay:        nativeVal = juce::jlimit (0.0f,     5.0f,  raw); break;
+                            case FieldAttack:       nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
+                            case FieldDecay:        nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
                             case FieldSustain:      nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
-                            case FieldRelease:      nativeVal = juce::jlimit (0.0f,     5.0f,  raw); break;
+                            case FieldRelease:      nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
                             case FieldVolume:       nativeVal = juce::jlimit (-100.0f,  24.0f, raw); break;
                             case FieldMuteGroup:    nativeVal = std::round (juce::jlimit (0.0f, 32.0f, raw)); break;
                             case FieldMidiNote:     nativeVal = std::round (juce::jlimit (0.0f, 127.0f, raw)); break;

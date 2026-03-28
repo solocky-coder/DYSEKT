@@ -219,6 +219,12 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     float sustain = sm.resolveParam (sliceIdx, kLockSustain,  s.sustainLevel, p.globalSustain);
     float release = sm.resolveParam (sliceIdx, kLockRelease,  s.releaseSec,   p.globalReleaseSec);
 
+    // Clamp attack+decay to slice duration so max-range values don't leave
+    // the envelope in the attack phase for the whole slice (near-silent output).
+    const float sliceDurSec = (float)(sliceEnd - s.startSample) / (float)sampleRate;
+    attack = juce::jmin (attack, sliceDurSec);
+    decay  = juce::jmin (decay,  sliceDurSec - attack);
+
     v.envelope.noteOn (attack, decay, sustain, release, sampleRate);
 
     int resolvedLoopMode = (int) sm.resolveParam (sliceIdx, kLockLoop, (float) s.loopMode, (float) p.globalLoopMode);
