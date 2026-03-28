@@ -42,10 +42,10 @@ struct Slice
     float    bpm            = 120.0f;
     float    pitchSemitones = 0.0f;
     int      algorithm      = 0;        // 0=Repitch, 1=Stretch
-    float    attackSec      = 0.005f;
-    float    decaySec       = 0.1f;
+    float    attackSec      = 0.0f;
+    float    decaySec       = 0.0f;
     float    sustainLevel   = 1.0f;
-    float    releaseSec     = 0.02f;
+    float    releaseSec     = 0.010f;
     int      muteGroup      = 1;
     int      loopMode       = 0;        // 0=Off, 1=Loop, 2=Ping-Pong
     bool     stretchEnabled = false;
