@@ -340,8 +340,9 @@ void VoicePool::releaseNote (int note)
     {
         if (voices[i].active && voices[i].midiNote == note)
         {
-            if (voices[i].oneShot)
+            if (voices[i].oneShot && !voices[i].looping)
                 continue; // ignore note-off; voice plays through to endSample
+                          // (but NOT for looping voices — they have no natural end)
             voices[i].envelope.noteOff();
         }
     }

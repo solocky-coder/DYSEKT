@@ -509,12 +509,40 @@ void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
                 cmd.floatParam1 = data.reverse ? 0.0f : 1.0f;
                 break;
             case F::FieldLoop:
+            {
                 // Cycle: Off → Loop → Ping → Off
-                cmd.floatParam1 = (float)((data.loopMode + 1) % 3);
-                break;
+                int newMode = (data.loopMode + 1) % 3;
+                cmd.floatParam1 = (float)newMode;
+                processor.pushCommand (cmd);
+                // LOO and 1SH are mutually exclusive — enabling loop clears one-shot
+                if (newMode > 0 && data.oneShot)
+                {
+                    DysektProcessor::Command clr;
+                    clr.type       = F::CmdSetSliceParam;
+                    clr.intParam1  = F::FieldOneShot;
+                    clr.floatParam1 = 0.0f;
+                    processor.pushCommand (clr);
+                }
+                repaint();
+                return;
+            }
             case F::FieldOneShot:
-                cmd.floatParam1 = data.oneShot ? 0.0f : 1.0f;
-                break;
+            {
+                float newVal = data.oneShot ? 0.0f : 1.0f;
+                cmd.floatParam1 = newVal;
+                processor.pushCommand (cmd);
+                // 1SH and LOO are mutually exclusive — enabling one-shot clears loop
+                if (newVal > 0.0f && data.loopMode > 0)
+                {
+                    DysektProcessor::Command clr;
+                    clr.type       = F::CmdSetSliceParam;
+                    clr.intParam1  = F::FieldLoop;
+                    clr.floatParam1 = 0.0f;
+                    processor.pushCommand (clr);
+                }
+                repaint();
+                return;
+            }
             case F::FieldMuteGroup:
                 // Cycle: 0 → 1 → 2 → ... → 8 → 0
                 cmd.floatParam1 = (float)((data.muteGroup + 1) % 9);
