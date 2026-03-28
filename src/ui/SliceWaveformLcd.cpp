@@ -121,6 +121,32 @@ void SliceWaveformLcd::buildDisplayData()
 
 // ── Envelope: read params → normalised nodes ──────────────────────────────────
 
+// ── getSliceDurMs ─────────────────────────────────────────────────────────────
+// Returns the duration (in ms) of the currently selected slice.
+// Used by buildEnvelopeNodes / commitNodes to scale ADSR positions relative
+// to actual slice length so dragging is intuitive regardless of slice size.
+float SliceWaveformLcd::getSliceDurMs() const
+{
+    static constexpr float kDefaultMs = 1000.0f;   // fallback if no slice loaded
+
+    const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+    if (sel < 0 || sel >= processor.sliceManager.getNumSlices())
+        return kDefaultMs;
+
+    const auto& s      = processor.sliceManager.getSlice (sel);
+    const int   total  = processor.sampleData.getNumFrames();
+    if (total <= 0)
+        return kDefaultMs;
+
+    const int sliceEnd = processor.sliceManager.getEndForSlice (sel, total);
+    const int len      = sliceEnd - s.startSample;
+    if (len <= 0)
+        return kDefaultMs;
+
+    const float sr = (float) processor.voicePool.getSampleRate();
+    return (float) len / sr * 1000.0f;
+}
+
 void SliceWaveformLcd::buildEnvelopeNodes()
 {
     // Mirror SCB logic exactly: unlocked fields read from global APVTS (same units),
@@ -156,12 +182,12 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     static constexpr float kAX   = 0.85f;   // attack can span entire slice
     static constexpr float kRMax = 0.99f;
 
-    // Skewed mapping (kSkew must match NormalisableRange skew in ParamLayout.cpp)
-    // This makes node position proportional to knob normalized position so they stay in sync.
-    static constexpr float kSkew = 0.3f;
-    const float attackNorm  = std::pow (juce::jmax (0.0f, attackMs  / 120000.0f), 1.0f / kSkew);
-    const float decayNorm   = std::pow (juce::jmax (0.0f, decayMs   / 120000.0f), 1.0f / kSkew);
-    const float releaseNorm = std::pow (juce::jmax (0.0f, releaseMs / 120000.0f), 1.0f / kSkew);
+    // Slice-relative sqrt mapping: node = sqrt(ms / sliceDurMs)
+    // This keeps nodes visible for typical ADSR values regardless of slice length.
+    const float sliceDurMs = getSliceDurMs();   // actual selected slice duration
+    const float attackNorm  = std::sqrt (juce::jmin (attackMs  / sliceDurMs, 1.0f));
+    const float decayNorm   = std::sqrt (juce::jmin (decayMs   / sliceDurMs, 1.0f));
+    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / sliceDurMs, 1.0f));
 
     env.ax  = juce::jlimit (0.02f, kAX, attackNorm * kAX);
 
@@ -211,15 +237,16 @@ void SliceWaveformLcd::commitNodes()
     const float kDX_eff   = env.ax + remain * 0.47f;
     const float kSEnd_eff = env.ax + remain * 0.65f;
 
-    // Inverse of skewed mapping in buildEnvelopeNodes (kSkew must match)
-    static constexpr float kSkew = 0.3f;
-    const float attackMs  = juce::jlimit (0.0f, 120000.0f,
-        std::pow (env.ax / kAX, kSkew) * 120000.0f);
-    const float decayMs   = juce::jlimit (0.0f, 120000.0f,
-        (kDX_eff > env.ax) ? std::pow ((env.dx - env.ax) / (kDX_eff - env.ax), kSkew) * 120000.0f : 0.0f);
-    const float sustainPc = juce::jlimit (0.0f, 100.0f,  (1.0f - env.sy) * 100.0f);
-    const float releaseMs = juce::jlimit (0.0f, 120000.0f,
-        (kRMax > kSEnd_eff) ? std::pow ((env.rx - kSEnd_eff) / (kRMax - kSEnd_eff), kSkew) * 120000.0f : 0.0f);
+    // Inverse of slice-relative sqrt mapping in buildEnvelopeNodes:
+    //   ms = ratio^2 * sliceDurMs   (inverse of  norm = sqrt(ms/sliceDurMs))
+    const float sliceDurMs = getSliceDurMs();
+    const float aRatio = env.ax / kAX;
+    const float dRatio = (kDX_eff > env.ax) ? (env.dx - env.ax) / (kDX_eff - env.ax) : 0.0f;
+    const float rRatio = (kRMax   > kSEnd_eff) ? (env.rx - kSEnd_eff) / (kRMax - kSEnd_eff) : 0.0f;
+    const float attackMs  = juce::jlimit (0.0f, sliceDurMs, aRatio * aRatio * sliceDurMs);
+    const float decayMs   = juce::jlimit (0.0f, sliceDurMs, dRatio * dRatio * sliceDurMs);
+    const float sustainPc = juce::jlimit (0.0f, 100.0f,     (1.0f - env.sy) * 100.0f);
+    const float releaseMs = juce::jlimit (0.0f, sliceDurMs, rRatio * rRatio * sliceDurMs);
 
     // Write to selected slice via CmdSetSliceParam (per-slice, not global)
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);

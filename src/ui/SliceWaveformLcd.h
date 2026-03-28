@@ -73,6 +73,7 @@ private:
     void  buildDisplayData();
     void  buildEnvelopeNodes();            // read params → nodes[]
     void  commitNodes();                   // nodes[] → write params
+    float getSliceDurMs() const;           // actual selected slice duration in ms
     float envAt (float xn) const;         // interpolated Y at position xn
 
     void drawBackground  (juce::Graphics& g);
