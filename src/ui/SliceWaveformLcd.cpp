@@ -158,7 +158,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     static constexpr float kRMax = 0.99f;   // max X for release node
 
     env.ax  = juce::jlimit (0.02f, kAX - 0.02f, (attackMs  / 120000.0f) * kAX);
-    env.dx  = juce::jlimit (env.ax + 0.04f, kDX, env.ax + (decayMs  / 10000.0f) * (kDX - kAX));
+    env.dx  = juce::jlimit (env.ax + 0.04f, kDX, env.ax + (decayMs  / 120000.0f) * (kDX - kAX));
     env.sy  = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f)); // 0=top=loud
     env.ay  = 0.20f;   // attack peak: always at top — not user-draggable
     env.rx  = juce::jlimit (kSEnd + 0.02f, kRMax, kSEnd + (releaseMs / 120000.0f) * (kRMax - kSEnd));
