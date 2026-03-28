@@ -101,6 +101,7 @@ private:
         float dx  { 0.25f };   // decay end X
         float sy  { 0.30f };   // sustain Y level
         float rx  { 0.82f };   // release start X
+        float sxEnd { 0.65f };   // dynamic sustain plateau end X
     } env;
 
     // Cache of computed nodes (rebuilt each paint + mouse event)

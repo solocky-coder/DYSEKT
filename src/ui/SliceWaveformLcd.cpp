@@ -152,16 +152,24 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     //   D node: (dx,    sy  )  drag right = more decay
     //   S node: (mid,   sy  )  drag up/down = sustain level
     //   R node: (rEnd,  BOT )  drag right = more release tail
-    static constexpr float kAX   = 0.22f;   // max X for attack node
-    static constexpr float kDX   = 0.48f;   // max X for decay node
-    static constexpr float kSEnd = 0.65f;   // fixed end of sustain plateau
-    static constexpr float kRMax = 0.99f;   // max X for release node
+    // Attack spans up to 85% of display; D/S/R share remaining space proportionally
+    static constexpr float kAX   = 0.85f;   // attack can span entire slice
+    static constexpr float kRMax = 0.99f;
 
-    env.ax  = juce::jlimit (0.02f, kAX - 0.02f, (attackMs  / 120000.0f) * kAX);
-    env.dx  = juce::jlimit (env.ax + 0.04f, kDX, env.ax + (decayMs  / 120000.0f) * (kDX - kAX));
-    env.sy  = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f)); // 0=top=loud
-    env.ay  = 0.20f;   // attack peak: always at top — not user-draggable
-    env.rx  = juce::jlimit (kSEnd + 0.02f, kRMax, kSEnd + (releaseMs / 120000.0f) * (kRMax - kSEnd));
+    env.ax  = juce::jlimit (0.02f, kAX, (attackMs / 120000.0f) * kAX);
+
+    // Remaining space after attack — same proportions as original at low attack
+    const float remain    = kRMax - env.ax;
+    const float kDX_eff   = env.ax + remain * 0.47f;   // decay zone end
+    const float kSEnd_eff = env.ax + remain * 0.65f;   // sustain plateau end
+
+    env.dx    = juce::jlimit (env.ax + 0.01f, kDX_eff,
+                              env.ax + (decayMs / 120000.0f) * (kDX_eff - env.ax));
+    env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
+    env.ay    = 0.20f;   // attack peak: always at top — not user-draggable
+    env.sxEnd = kSEnd_eff;
+    env.rx    = juce::jlimit (kSEnd_eff + 0.01f, kRMax,
+                              kSEnd_eff + (releaseMs / 120000.0f) * (kRMax - kSEnd_eff));
 
     // Rebuild node list
     envNodes.clear();
@@ -174,7 +182,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 
     // Sustain handle: mid of plateau [dx .. kSEnd]
     EnvNode s;
-    s.xn = (env.dx + kSEnd) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
+    s.xn = (env.dx + env.sxEnd) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
     s.colour = kColSustain; s.label = "S"; envNodes.add (s);
 
     // Release node: at rEnd (tail end), always at bottom
@@ -187,17 +195,20 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 void SliceWaveformLcd::commitNodes()
 {
     // Inverse-map (must match buildEnvelopeNodes constants exactly)
-    static constexpr float kAX   = 0.22f;
-    static constexpr float kDX   = 0.48f;
-    static constexpr float kSEnd = 0.65f;
+    // Inverse-map: must match buildEnvNodes dynamic layout
+    static constexpr float kAX   = 0.85f;
     static constexpr float kRMax = 0.99f;
+
+    const float remain    = kRMax - env.ax;
+    const float kDX_eff   = env.ax + remain * 0.47f;
+    const float kSEnd_eff = env.ax + remain * 0.65f;
 
     const float attackMs  = juce::jlimit (0.0f, 120000.0f, (env.ax / kAX) * 120000.0f);
     const float decayMs   = juce::jlimit (0.0f, 120000.0f,
-                                ((env.dx - env.ax) / (kDX - kAX)) * 120000.0f);
+        (kDX_eff > env.ax) ? ((env.dx - env.ax) / (kDX_eff - env.ax)) * 120000.0f : 0.0f);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,  (1.0f - env.sy) * 100.0f);
     const float releaseMs = juce::jlimit (0.0f, 120000.0f,
-                                ((env.rx - kSEnd) / (kRMax - kSEnd)) * 120000.0f);
+        (kRMax > kSEnd_eff) ? ((env.rx - kSEnd_eff) / (kRMax - kSEnd_eff)) * 120000.0f : 0.0f);
 
     // Write to selected slice via CmdSetSliceParam (per-slice, not global)
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
@@ -227,14 +238,14 @@ void SliceWaveformLcd::commitNodes()
 float SliceWaveformLcd::envAt (float xn) const
 {
     // Polyline: P0(0,1) → P1(ax,top) → P2(dx,sy) → P3(kSEnd,sy) → P4(rx,1)
-    // kSEnd is the fixed sustain end / release start
-    static constexpr float kSEnd = 0.65f;
+    // kSEnd is dynamic — stored in env.sxEnd by buildEnvNodes
+    const float kSEnd = env.sxEnd;
     struct Pt { float x, y; };
     const Pt pts[] = {
         { 0.0f,   1.0f   },
         { env.ax, env.ay },   // attack peak (env.ay = 0.04, near top)
         { env.dx, env.sy },   // end of decay / sustain level
-        { kSEnd,  env.sy },   // fixed end of sustain plateau
+        { kSEnd,  env.sy },   // dynamic end of sustain plateau
         { env.rx, 1.0f   }    // end of release (silence)
     };
     constexpr int N = 5;
@@ -333,7 +344,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
 
     static constexpr float kAX   = 0.22f;
     static constexpr float kDX   = 0.48f;
-    static constexpr float kSEnd = 0.65f;
+    const float kSEnd = env.sxEnd;
     static constexpr float kRMax = 0.99f;
 
     if (dragRole == NodeRole::Attack)
