@@ -841,6 +841,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
                 }
             }
+            uiSnapshotDirty.store (true, std::memory_order_release);
             break;
         }
 

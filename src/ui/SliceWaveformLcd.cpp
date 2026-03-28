@@ -595,9 +595,9 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<fl
     envFill.startNewSubPath (px (0.0f), py (1.0f));
     envFill.lineTo (px (0.0f),   py (1.0f));
     envFill.lineTo (px (env.ax), py (env.ay));
-    envFill.lineTo (px (env.dx), py (env.sy));
-    envFill.lineTo (px (env.rx), py (env.sy));
-    envFill.lineTo (px (1.0f),   py (1.0f));
+    envFill.lineTo (px (env.dx),    py (env.sy));
+    envFill.lineTo (px (env.sxEnd), py (env.sy));
+    envFill.lineTo (px (env.rx),    py (1.0f));
     envFill.closeSubPath();
 
     juce::ColourGradient fillGrad (kColDecay.withAlpha (0.08f), 0, oy,
@@ -609,9 +609,9 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<fl
     juce::Path envLine;
     envLine.startNewSubPath (px (0.0f),   py (1.0f));
     envLine.lineTo          (px (env.ax), py (env.ay));
-    envLine.lineTo          (px (env.dx), py (env.sy));
-    envLine.lineTo          (px (env.rx), py (env.sy));
-    envLine.lineTo          (px (1.0f),   py (1.0f));
+    envLine.lineTo          (px (env.dx),    py (env.sy));
+    envLine.lineTo          (px (env.sxEnd), py (env.sy));
+    envLine.lineTo          (px (env.rx),    py (1.0f));
 
     // Glow pass
     juce::PathStrokeType glowStroke (2.5f);
@@ -630,15 +630,15 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<fl
 
     // Sustain plateau highlighted
     juce::Path susLine;
-    susLine.startNewSubPath (px (env.dx), py (env.sy));
-    susLine.lineTo          (px (env.rx), py (env.sy));
+    susLine.startNewSubPath (px (env.dx),    py (env.sy));
+    susLine.lineTo          (px (env.sxEnd), py (env.sy));
     g.setColour (kColSustain.withAlpha (0.35f));
     g.strokePath (susLine, juce::PathStrokeType (1.0f));
 
     // ── Segment labels ────────────────────────────────────────────────────────
     drawSegmentLabel (g, 0.0f, 1.0f, env.ax, env.ay, "FADE IN",  kColAttack,  area);
     drawSegmentLabel (g, env.ax, env.ay, env.dx, env.sy, "DECAY", kColDecay,   area);
-    drawSegmentLabel (g, env.rx, env.sy, 1.0f, 1.0f, "FADE OUT", kColRelease, area);
+    drawSegmentLabel (g, env.sxEnd, env.sy, env.rx, 1.0f, "FADE OUT", kColRelease, area);
 }
 
 void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float>& area)
