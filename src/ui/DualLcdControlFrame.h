@@ -27,10 +27,16 @@ public:
     std::function<void()> onMidiFollowToggle;
     std::function<void()> onBodeToggle;
 
-    void setBrowserActive   (bool v) { browserActive   = v; repaint(); }
-    void setWaveActive      (bool v) { waveActive      = v; repaint(); }
+    void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
+
+    /** Legacy bool helper — kept for backward compat; mode 0 = inactive. */
+    void setWaveActive       (bool v) { setWaveMode (v ? 1 : 0); }
+
+    /** Set the current waveform display mode (0-7) and update the icon. */
+    void setWaveMode         (int m)  { waveMode = juce::jlimit (0, 7, m); repaint(); }
+
     void setMidiFollowActive (bool v) { midiFollowActive = v; repaint(); }
-    void setBodeActive      (bool v) { bodeActive      = v; repaint(); }
+    void setBodeActive       (bool v) { bodeActive       = v; repaint(); }
 
 private:
     void drawIcon (juce::Graphics& g, juce::Rectangle<float> b, int type, bool active);
@@ -38,10 +44,10 @@ private:
     DysektProcessor& processor;
 
     // Icon toggle state
-    bool browserActive   = false;
-    bool waveActive      = false;
+    bool browserActive    = false;
+    int  waveMode         = 0;   // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
     bool midiFollowActive = false;
-    bool bodeActive      = false;
+    bool bodeActive       = false;
 
     // Hit areas (set during paint, used in mouseDown)
     juce::Rectangle<int> filIconArea;

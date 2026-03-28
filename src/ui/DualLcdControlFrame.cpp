@@ -124,16 +124,19 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
     // ── Background + border ───────────────────────────────────────────────────
     {
-        juce::ColourGradient grad (juce::Colour (0xFF131313), 0, 0,
-                                   juce::Colour (0xFF0E0E0E), 0, (float) h, false);
+        auto bgTop = getTheme().darkBar.darker (0.45f);
+        auto bgBot = getTheme().darkBar.darker (0.65f);
+        juce::ColourGradient grad (bgTop, 0, 0, bgBot, 0, (float) h, false);
         g.setGradientFill (grad);
         g.fillRoundedRectangle (getLocalBounds().toFloat(), 4.0f);
-        g.setColour (accent.withAlpha (0.20f));
-        g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (0.5f), 4.0f, 1.0f);
+        g.setColour (accent.withAlpha (0.18f));
+        g.drawRoundedRectangle (getLocalBounds().toFloat().expanded (1.0f), 5.0f, 1.0f);
+        g.setColour (accent.withAlpha (0.60f));
+        g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (0.5f), 4.0f, 1.5f);
     }
 
     // ── Divider ───────────────────────────────────────────────────────────────
-    g.setColour (accent.withAlpha (0.10f));
+    g.setColour (accent.withAlpha (0.25f));
     g.drawHorizontalLine (half, 6.0f, (float) w - 6.0f);
 
     // ── Top row: four icons evenly spread across full width ──────────────────

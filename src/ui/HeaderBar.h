@@ -22,24 +22,26 @@ public:
     std::function<void()> onBodeToggle;
 
     // State sync
-    void setBrowserActive   (bool v);
-    void setWaveActive      (bool v);
+    void setBrowserActive    (bool v);
+    /** Legacy bool — kept for backward compat (maps to mode 0 / 1). */
+    void setWaveActive       (bool v);
+    /** Set current waveform mode (0-7) so the icon updates. */
+    void setWaveMode         (int m);
     void setMidiFollowActive (bool v);
-    void setBodeActive      (bool v);
+    void setBodeActive       (bool v);
 
     /** Returns the control frame component (FIL/WA/CH icons + ROOT/PITCH/VOL knobs).
      *  PluginEditor adds this as a visible child and positions it between the LCDs. */
     juce::Component* getControlFrame() { return &controlFrame; }
 
-    // Header buttons — public so PluginEditor can access if needed
+    // Header buttons
     juce::TextButton undoBtn      { "UNDO"  };
     juce::TextButton redoBtn      { "REDO"  };
     juce::TextButton panicBtn     { "PANIC" };
-    juce::TextButton shortcutsBtn;   // cogwheel — label set in constructor
+    juce::TextButton shortcutsBtn;
 
     std::function<void()> onShortcutsToggle;
 
-    // Exposed so PluginEditor can wire it into the settings panel
     void showThemePopup();
 
 private:
@@ -48,13 +50,11 @@ private:
 
     DysektProcessor& processor;
 
-    // v8: icon buttons and global knobs live in DualLcdControlFrame
     DualLcdControlFrame controlFrame;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<juce::TextEditor>  textEditor;
 
-    // Hit areas for sample info / root (left side, same as before)
     juce::Rectangle<int> sampleInfoBounds;
     juce::Rectangle<int> rootNoteArea;
     juce::Rectangle<int> slicesInfoArea;

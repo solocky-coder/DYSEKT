@@ -228,8 +228,12 @@ void DysektEditor::paint (juce::Graphics& g)
         g.setGradientFill (outerGrad);
         g.fillRoundedRectangle (outerF, 4.0f);
 
-        g.setColour (ac.withAlpha (0.20f));
-        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.0f);
+        // Outer glow halo — one pixel outside the frame
+        g.setColour (ac.withAlpha (0.18f));
+        g.drawRoundedRectangle (outerF.expanded (1.0f), 5.0f, 1.0f);
+        // Main frame border
+        g.setColour (ac.withAlpha (0.60f));
+        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.5f);
 
         const auto screenF = outerF.reduced (4.0f);
         g.setColour (getTheme().darkBar.darker (0.55f));
@@ -244,7 +248,7 @@ void DysektEditor::paint (juce::Graphics& g)
         g.setGradientFill (glow);
         g.fillRoundedRectangle (screenF, 2.0f);
 
-        g.setColour (ac.withAlpha (0.12f));
+        g.setColour (ac.withAlpha (0.30f));
         g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
 
         // NOTE: sliceLane is now collapsed; no separator line needed here

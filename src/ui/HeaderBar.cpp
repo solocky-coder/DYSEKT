@@ -60,6 +60,7 @@ HeaderBar::HeaderBar (DysektProcessor& p)
 
 void HeaderBar::setBrowserActive  (bool v) { controlFrame.setBrowserActive (v); }
 void HeaderBar::setWaveActive     (bool v) { controlFrame.setWaveActive (v); }
+void HeaderBar::setWaveMode       (int  m) { controlFrame.setWaveMode (m); }
 void HeaderBar::setMidiFollowActive (bool v) { controlFrame.setMidiFollowActive (v); }
 void HeaderBar::setBodeActive     (bool v) { controlFrame.setBodeActive (v); }
 

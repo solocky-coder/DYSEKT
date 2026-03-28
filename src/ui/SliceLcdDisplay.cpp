@@ -221,8 +221,12 @@ void SliceLcdDisplay::drawLcdBackground (juce::Graphics& g)
                                      juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
     g.setGradientFill (outerGrad);
     g.fillRoundedRectangle (b.toFloat(), 4.0f);
-    g.setColour (ac.withAlpha (0.20f));
-    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
+    // Outer glow halo
+    g.setColour (ac.withAlpha (0.18f));
+    g.drawRoundedRectangle (b.toFloat().expanded (1.0f), 5.0f, 1.0f);
+    // Main LCD frame border
+    g.setColour (ac.withAlpha (0.60f));
+    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.5f);
 
     // ── Inner screen ────────────────────────────────────────────────────────
     auto screen = b.reduced (4);
