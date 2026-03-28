@@ -523,6 +523,22 @@ void SliceControlBar::paint (juce::Graphics& g)
  ? processor.sliceManager.getSlice (idx)
  : ui.slices[(size_t) juce::jmax (0, idx)];
 
+ // Dynamic release ceiling = selected slice duration in seconds.
+ // Matches the normalisation used by SliceWaveformLcd::buildEnvelopeNodes()
+ // so the SCB knob arc and the envelope node always agree on what "max" means.
+ float sliceDurSec = 1.0f;
+ {
+     const int total = processor.sampleData.getNumFrames();
+     if (total > 0)
+     {
+         const int sliceEnd = processor.sliceManager.getEndForSlice (idx, total);
+         const int sliceLen = sliceEnd - s.startSample;
+         const float sr     = (float) processor.voicePool.getSampleRate();
+         if (sliceLen > 0 && sr > 0.f)
+             sliceDurSec = (float) sliceLen / sr;
+     }
+ }
+
  float gBpm = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
  float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
  int gAlgo = (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
@@ -765,10 +781,12 @@ void SliceControlBar::paint (juce::Graphics& g)
  {
  bool locked = (s.lockMask & kLockRelease) != 0;
  float rel = locked ? s.releaseSec : gRelease / 1000.f;
+ // Normalise arc against slice duration — must match SliceWaveformLcd::buildEnvelopeNodes()
+ const float relNorm = juce::jlimit (0.f, 1.f, rel / sliceDurSec);
  drawKnobCell (g, x, row2y, "REL",
  juce::String ((int) (rel * 1000.f)) + "ms",
- toNorm (F::FieldRelease, rel),
- locked, kLockRelease, F::FieldRelease, 0.f, 5.f, 0.001f, cw);
+ relNorm,
+ locked, kLockRelease, F::FieldRelease, 0.f, sliceDurSec, 0.001f, cw);
  x += cw + 4;
  adsrGroupX2 = x - 4;
  }
