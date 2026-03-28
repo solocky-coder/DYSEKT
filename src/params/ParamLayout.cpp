@@ -35,13 +35,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         juce::ParameterID { ParamIds::defaultAttack, 1 },
         "Sample Attack",
         juce::NormalisableRange<float> (0.0f, 120000.0f, 0.1f, 0.3f),
-        5.0f));
+        0.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParamIds::defaultRelease, 1 },
         "Sample Release",
         juce::NormalisableRange<float> (0.0f, 120000.0f, 0.1f, 0.3f),
-        20.0f));
+        10.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParamIds::masterVolume, 1 },
@@ -76,7 +76,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         juce::ParameterID { ParamIds::defaultDecay, 1 },
         "Sample Decay",
         juce::NormalisableRange<float> (0.0f, 120000.0f, 0.1f, 0.3f),
-        100.0f));
+        0.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParamIds::defaultSustain, 1 },
