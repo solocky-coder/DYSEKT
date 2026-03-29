@@ -544,7 +544,6 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  float gBpm = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
  float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
- int gAlgo = (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
  float gAttack = processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load();
  float gDecay = processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load();
  float gSustain = processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load();
@@ -553,11 +552,9 @@ void SliceControlBar::paint (juce::Graphics& g)
  int gLoopMode = (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
  bool gStretch = processor.apvts.getRawParameterValue (ParamIds::defaultStretchEnabled)->load() > 0.5f;
 
- bool algoLocked = (s.lockMask & kLockAlgorithm) != 0;
- int algoVal = algoLocked ? s.algorithm : gAlgo;
+ // algo is now derived from stretchVal — no user-facing algo selector
  bool stretchLocked = (s.lockMask & kLockStretch) != 0;
  bool stretchVal = stretchLocked ? s.stretchEnabled : gStretch;
- bool repitchStretch = (algoVal == 0) && stretchVal;
 
  int cw;
  using F = DysektProcessor;
@@ -597,20 +594,11 @@ void SliceControlBar::paint (juce::Graphics& g)
  {
  bool locked = (s.lockMask & kLockPitch) != 0;
  float pv = locked ? s.pitchSemitones : gPitch;
- if (repitchStretch)
- {
- float daw = processor.dawBpm.load();
- float bpmVal = (s.lockMask & kLockBpm) ? s.bpm : gBpm;
- float semis = (daw > 0.f && bpmVal > 0.f)
- ? 12.f * std::log2 (daw / bpmVal) : 0.f;
- pv = (float) std::round (semis);
- }
  int pvi = (int) std::round (pv);
  drawKnobCell (g, x, row1y, "PITCH",
  (pvi >= 0 ? "+" : "") + juce::String (pvi) + "st",
  toNorm (F::FieldPitch, pv),
  locked, kLockPitch, F::FieldPitch, -48.f, 48.f, 0.1f, cw);
- if (repitchStretch) cells.back().isReadOnly = true;
  x += cw + 4;
  }
 
@@ -619,35 +607,16 @@ void SliceControlBar::paint (juce::Graphics& g)
  float gCents = processor.apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load();
  bool locked = (s.lockMask & kLockCentsDetune) != 0;
  float cv = locked ? s.centsDetune : gCents;
- if (repitchStretch)
- {
- float daw = processor.dawBpm.load();
- float bpmVal = (s.lockMask & kLockBpm) ? s.bpm : gBpm;
- float semis = (daw > 0.f && bpmVal > 0.f)
- ? 12.f * std::log2 (daw / bpmVal) : 0.f;
- int semisI = (int) std::round (semis);
- cv = (semis - (float) semisI) * 100.f;
- }
  int cvi = juce::jlimit (-100, 100, (int) std::round (cv));
  drawKnobCell (g, x, row1y, "TUNE",
  (cvi >= 0 ? "+" : "") + juce::String (cvi) + "ct",
  toNorm (F::FieldCentsDetune, cv),
  locked, kLockCentsDetune, F::FieldCentsDetune, -100.f, 100.f, 0.1f, cw);
- if (repitchStretch) cells.back().isReadOnly = true;
  x += cw + 4;
  }
 
- // ALGO — choice
- {
- juce::String algoNames[] = { "Repitch", "Stretch" };
- drawParamCell (g, x, row1y, "ALGO",
- algoNames[juce::jlimit (0, 1, algoVal)],
- algoLocked, kLockAlgorithm, F::FieldAlgorithm,
- 0.f, 1.f, 1.f, false, true, cw);
- x += cw + 4;
- }
-
- if (algoVal == 1)
+ // ALGO selector removed — Repitch vs Stretch is now derived from the STCH toggle
+ if (stretchVal)
  {
  float gTonal = processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load();
  bool locked = (s.lockMask & kLockTonality) != 0;

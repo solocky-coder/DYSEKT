@@ -1522,7 +1522,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.velocity         = velocity;
                 p.globalBpm        = bpmParam->load();
                 p.globalPitch      = pitchParam->load();
-                p.globalAlgorithm  = (int) algoParam->load();
+                // globalAlgorithm removed — algo derived from stretchOn flag
                 p.globalAttackSec  = attackParam->load()  / 1000.0f;
                 p.globalHoldSec    = holdParam->load()    / 1000.0f;
                 p.globalDecaySec   = decayParam->load()   / 1000.0f;
@@ -1534,7 +1534,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.globalTonality   = tonalityParam->load();
                 p.globalFormant    = formantParam->load();
                 p.globalFormantComp = formantCompParam->load() > 0.5f;
-                p.globalGrainMode  = (int) grainModeParam->load();
+                // globalGrainMode removed — Grain was a duplicate of Tonal
                 p.globalVolume     = masterVolParam->load();
                 p.globalReleaseTail = releaseTailParam->load() > 0.5f;
                 p.globalReverse    = reverseParam->load()      > 0.5f;

@@ -14,7 +14,6 @@ struct VoiceStartParams
     int note = 0;
     float globalBpm = 120.0f;
     float globalPitch = 0.0f;
-    int globalAlgorithm = 0;
     float globalAttackSec = 0.005f;
     float globalHoldSec    = 0.0f;
     float globalDecaySec = 0.1f;
@@ -26,7 +25,6 @@ struct VoiceStartParams
     float globalTonality = 0.0f;
     float globalFormant = 0.0f;
     bool globalFormantComp = false;
-    int globalGrainMode = 0;
     float globalVolume = 0.0f; // dB
     bool globalReleaseTail = false;
     bool globalReverse = false;
