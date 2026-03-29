@@ -38,7 +38,7 @@ private:
     juce::TextButton applyBtn  { "APPLY" };
     juce::TextButton cancelBtn { "CANCEL" };
 
-    juce::Rectangle<int> inCell, outCell;
+    juce::Rectangle<int> inCell, outCell, labelArea;
     int  activeDrag   = -1;   // 0=IN, 1=OUT, -1=none
     int  dragStartY   = 0;
     int  dragStartVal = 0;

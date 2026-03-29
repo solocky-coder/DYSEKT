@@ -82,6 +82,33 @@ void TrimDialog::paint (juce::Graphics& g)
 
     drawTrimKnob (g, inCell,  "IN",  inPt,  total);
     drawTrimKnob (g, outCell, "OUT", outPt, total);
+
+    // ── "TRIM SAMPLE" title on the left ──────────────────────────────────────
+    if (! labelArea.isEmpty())
+    {
+        const auto& T = getTheme();
+        const auto  r = labelArea.toFloat();
+
+        // Background + accent border
+        g.setColour (T.darkBar);
+        g.fillRoundedRectangle (r, 3.0f);
+        g.setColour (T.accent.withAlpha (0.60f));
+        g.drawRoundedRectangle (r.reduced (0.5f), 3.0f, 1.0f);
+
+        // Title text — two lines: "TRIM" large, "SAMPLE" smaller beneath
+        const float midY = r.getY() + r.getHeight() * 0.45f;
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
+        g.setColour (T.accent);
+        g.drawText ("TRIM", r.getX(), (int) r.getY() + 2,
+                    (int) r.getWidth(), (int) (midY - r.getY() - 1),
+                    juce::Justification::centred, false);
+
+        g.setFont (DysektLookAndFeel::makeFont (8.5f));
+        g.setColour (T.accent.withAlpha (0.70f));
+        g.drawText ("SAMPLE", r.getX(), (int) midY,
+                    (int) r.getWidth(), (int) (r.getBottom() - midY - 2),
+                    juce::Justification::centred, false);
+    }
 }
 
 void TrimDialog::resized()
@@ -100,6 +127,10 @@ void TrimDialog::resized()
     outCell = b.removeFromRight (knobW);
     b.removeFromRight (gap);
     inCell  = b.removeFromRight (knobW);
+    b.removeFromRight (gap);
+
+    // Left-side title label — whatever space remains
+    labelArea = b;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
