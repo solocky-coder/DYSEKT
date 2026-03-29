@@ -141,7 +141,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
     // ── Top row: four icons evenly spread across full width ──────────────────
     {
-        const int btnSz  = 28;
+        const int btnSz  = 36;
         const int btnY   = (half - btnSz) / 2;
         const int gap    = (w - 4 * btnSz) / 5;
 
@@ -171,7 +171,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         juce::String pitchStr = (gPitch >= 0.0f ? "+" : "") + juce::String ((int) std::round (gPitch));
         juce::String volStr   = (gVol >= 0.0f ? "+" : "") + juce::String (gVol, 1);
 
-        const int kr  = 8;
+        const int kr  = 12;
         const float kStart = juce::MathConstants<float>::pi * 1.25f;
         const float kEnd   = juce::MathConstants<float>::pi * 2.75f;
 

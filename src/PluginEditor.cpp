@@ -278,7 +278,7 @@ void DysektEditor::resized()
  logoBar.setBounds (logoRow);
  headerBar.setBounds (logoRow); // overlaid on logoBar — transparent bg, buttons left+right of logo
  if (auto* cf = headerBar.getControlFrame())
- cf->setBounds (centreCol); // now gets the extra kBtnRowH px of height
+ cf->setBounds (centreCol.removeFromTop (kCtrlFrameH));
 
  topRow.removeFromLeft (kMargin);
 
