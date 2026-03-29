@@ -1463,43 +1463,45 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         const int total = sampleData.getNumFrames();
                         if (total > 1)
                         {
-                            static constexpr float kEndlessSamplesPerStep = 1.0f / 512.0f;
-                            const int stepSamples = juce::jmax (1, (int) (total * kEndlessSamplesPerStep));
+                            auto& sl     = sliceManager.getSlice (sel);
+                            const int slEnd = sliceManager.getEndForSlice (sel, total);
 
-                            auto& sl = sliceManager.getSlice (sel);
-
-                            if (outFieldId == FieldSliceStart)
+                            if (outIsRelative)
                             {
-                                // Knob-drag emulation: CC drives the MARKER knob exactly
-                                // as a mouse drag would. Sensitivity = sampleNumFrames/300
-                                // (same as SCB mouseDrag). Writes to liveDrag atomics.
-                                // Commit fires after kMarkerIdleBlocks of CC silence.
-                                const int slEnd = sliceManager.getEndForSlice (sel, total);
-
-                                if (outIsRelative)
-                                {
-                                    const float sensitivity = (float) total / 300.0f;
-                                    const int curLive = markerPending
-                                        ? liveDragBoundsStart.load (std::memory_order_relaxed)
-                                        : sl.startSample;
-                                    const int newStart = juce::jlimit (0, slEnd - 64,
-                                        curLive + (int)(outNorm * sensitivity));
-                                    liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
-                                }
-                                else
-                                {
-                                    const int newStart = juce::jlimit (0, slEnd - 64,
-                                        (int)(outNorm * (float) total));
-                                    liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
-                                }
-
-                                liveDragBoundsEnd.store (slEnd, std::memory_order_relaxed);
-                                liveDragSliceIdx.store  (sel,   std::memory_order_release);
+                                // Relative: small per-click delta — inherently smooth.
+                                // Use the liveDrag / idle-commit path (same as before).
+                                const float sensitivity = (float) total / 300.0f;
+                                const int curLive = markerPending
+                                    ? liveDragBoundsStart.load (std::memory_order_relaxed)
+                                    : sl.startSample;
+                                const int newStart = juce::jlimit (0, slEnd - 64,
+                                    curLive + (int)(outNorm * sensitivity));
+                                liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
+                                liveDragBoundsEnd.store   (slEnd,    std::memory_order_relaxed);
+                                liveDragSliceIdx.store    (sel,      std::memory_order_release);
                                 markerPending      = true;
                                 markerPendingSlice = sel;
                                 markerIdleCounter  = 0;
-                                uiSnapshotDirty.store (true, std::memory_order_release);
                             }
+                            else
+                            {
+                                // Absolute: the raw target can be anywhere across the
+                                // whole file — writing directly to the atomic causes a
+                                // visible jump. Route through the per-slot smoother so
+                                // the processBlock() loop fires CmdSetSliceBounds each
+                                // buffer and the marker glides exactly like trim mode.
+                                const int newStart = juce::jlimit (0, slEnd - 64,
+                                    (int)(outNorm * (float) total));
+                                if (! ccSmootherActive[(size_t) outFieldId])
+                                    ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue (
+                                        (float) sl.startSample);
+                                ccSmoothers[(size_t) outFieldId].setTargetValue ((float) newStart);
+                                ccSmootherActive[(size_t) outFieldId] = true;
+                                // The smoother loop commits via CmdSetSliceBounds each
+                                // block — no liveDrag / markerPending needed here.
+                            }
+
+                            uiSnapshotDirty.store (true, std::memory_order_release);
                         }
                     }
                     else
