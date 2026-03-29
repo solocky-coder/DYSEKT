@@ -1989,7 +1989,9 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             pendingUiOptimisticIdx.store(pendSel, std::memory_order_release);
             pendingUiOptimisticSample.store(newStart, std::memory_order_release);
         }
-        // liveDragSliceIdx cleared by handleCommand after CmdSetSliceBounds
+        // Clear liveDragSliceIdx so the live-preview block in drainCommands
+        // stops overwriting startSample every block after the commit lands.
+        liveDragSliceIdx.store (-1, std::memory_order_release);
         markerPending      = false;
         markerPendingSlice = -1;
         markerIdleCounter  = 0;
