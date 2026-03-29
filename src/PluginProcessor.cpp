@@ -70,6 +70,7 @@ static Slice sanitiseRestoredSlice (Slice s)
     s.pitchSemitones = juce::jlimit (-48.0f, 48.0f, s.pitchSemitones);
     s.algorithm = juce::jlimit (0, 1, s.algorithm == 2 ? 1 : s.algorithm);
     s.attackSec = juce::jlimit (0.0f, 120.0f, s.attackSec);
+    s.holdSec   = juce::jlimit (0.0f, 120.0f, s.holdSec);
     s.decaySec = juce::jlimit (0.0f, 120.0f, s.decaySec);
     s.sustainLevel = juce::jlimit (0.0f, 1.0f, s.sustainLevel);
     s.releaseSec = juce::jlimit (0.0f, 120.0f, s.releaseSec);
@@ -145,6 +146,7 @@ DysektProcessor::DysektProcessor()
     decayParam     = apvts.getRawParameterValue (ParamIds::defaultDecay);
     sustainParam   = apvts.getRawParameterValue (ParamIds::defaultSustain);
     releaseParam   = apvts.getRawParameterValue (ParamIds::defaultRelease);
+    holdParam      = apvts.getRawParameterValue (ParamIds::defaultHold);
     muteGroupParam = apvts.getRawParameterValue (ParamIds::defaultMuteGroup);
     stretchParam   = apvts.getRawParameterValue (ParamIds::defaultStretchEnabled);
     tonalityParam  = apvts.getRawParameterValue (ParamIds::defaultTonality);
@@ -727,6 +729,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockPitch)        s.pitchSemitones    = pitchParam->load();
                     else if (bit == kLockAlgorithm)    s.algorithm         = (int) algoParam->load();
                     else if (bit == kLockAttack)       s.attackSec         = attackParam->load() / 1000.0f;
+                    else if (bit == kLockHold)         s.holdSec           = holdParam->load()  / 1000.0f;
                     else if (bit == kLockDecay)        s.decaySec          = decayParam->load() / 1000.0f;
                     else if (bit == kLockSustain)      s.sustainLevel      = sustainParam->load() / 100.0f;
                     else if (bit == kLockRelease)      s.releaseSec        = releaseParam->load() / 1000.0f;
@@ -769,6 +772,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     if (!(s.lockMask & kLockPitch))         s.pitchSemitones   = pitchParam->load();
                     if (!(s.lockMask & kLockAlgorithm))     s.algorithm        = (int) algoParam->load();
                     if (!(s.lockMask & kLockAttack))        s.attackSec        = attackParam->load()       / 1000.0f;
+                    if (!(s.lockMask & kLockHold))          s.holdSec          = holdParam->load()         / 1000.0f;
                     if (!(s.lockMask & kLockDecay))         s.decaySec         = decayParam->load()        / 1000.0f;
                     if (!(s.lockMask & kLockSustain))       s.sustainLevel     = sustainParam->load()      / 100.0f;
                     if (!(s.lockMask & kLockRelease))       s.releaseSec       = releaseParam->load()      / 1000.0f;
@@ -813,6 +817,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldPitch:     s.pitchSemitones = val; s.lockMask |= kLockPitch;     break;
                     case FieldAlgorithm: s.algorithm = (int) val; s.lockMask |= kLockAlgorithm; break;
                     case FieldAttack:    s.attackSec = val;      s.lockMask |= kLockAttack;    break;
+                    case FieldHold:      s.holdSec = val;        s.lockMask |= kLockHold;      break;
                     case FieldDecay:     s.decaySec = val;       s.lockMask |= kLockDecay;     break;
                     case FieldSustain:   s.sustainLevel = val;   s.lockMask |= kLockSustain;   break;
                     case FieldRelease:   s.releaseSec = val;     s.lockMask |= kLockRelease;   break;
@@ -1284,6 +1289,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldTonality:     return 100.0f;  // 100 Hz/click
                             case FieldFormant:      return 0.5f;    // 0.5 semitone/click
                             case FieldAttack:       return 0.002f;  // 2 ms/click
+                            case FieldHold:         return 0.010f;  // 10 ms/click
                             case FieldDecay:        return 0.010f;  // 10 ms/click
                             case FieldSustain:      return 0.01f;   // 1%/click
                             case FieldRelease:      return 0.010f;  // 10 ms/click
@@ -1309,6 +1315,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldTonality:     return (sl.lockMask & kLockTonality)     ? sl.tonalityHz       : apvts.getRawParameterValue (ParamIds::defaultTonality)->load();
                             case FieldFormant:      return (sl.lockMask & kLockFormant)      ? sl.formantSemitones : apvts.getRawParameterValue (ParamIds::defaultFormant)->load();
                             case FieldAttack:       return (sl.lockMask & kLockAttack)       ? sl.attackSec        : apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.0f;
+                            case FieldHold:         return (sl.lockMask & kLockHold)         ? sl.holdSec          : apvts.getRawParameterValue (ParamIds::defaultHold)->load()   / 1000.0f;
                             case FieldDecay:        return (sl.lockMask & kLockDecay)        ? sl.decaySec         : apvts.getRawParameterValue (ParamIds::defaultDecay)->load()  / 1000.0f;
                             case FieldSustain:      return (sl.lockMask & kLockSustain)      ? sl.sustainLevel     : apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.0f;
                             case FieldRelease:      return (sl.lockMask & kLockRelease)      ? sl.releaseSec       : apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.0f;
@@ -1350,6 +1357,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldTonality:     nativeVal = juce::jlimit (0.0f,  8000.0f,  raw); break;
                             case FieldFormant:      nativeVal = juce::jlimit (-24.0f,   24.0f, raw); break;
                             case FieldAttack:       nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
+                            case FieldHold:         nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
                             case FieldDecay:        nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
                             case FieldSustain:      nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
                             case FieldRelease:      nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
@@ -1409,6 +1417,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldTonality:     nativeVal = outNorm * 8000.0f;                 break;
                             case FieldFormant:      nativeVal = -24.0f + outNorm * 48.0f;          break;
                             case FieldAttack:       nativeVal = outNorm * 1.0f;                    break;
+                            case FieldHold:         nativeVal = outNorm * 5.0f;                    break;
                             case FieldDecay:        nativeVal = outNorm * 5.0f;                    break;
                             case FieldSustain:      nativeVal = outNorm;                           break;
                             case FieldRelease:      nativeVal = outNorm * 5.0f;                    break;
@@ -1515,6 +1524,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.globalPitch      = pitchParam->load();
                 p.globalAlgorithm  = (int) algoParam->load();
                 p.globalAttackSec  = attackParam->load()  / 1000.0f;
+                p.globalHoldSec    = holdParam->load()    / 1000.0f;
                 p.globalDecaySec   = decayParam->load()   / 1000.0f;
                 p.globalSustain    = sustainParam->load() / 100.0f;
                 p.globalReleaseSec = releaseParam->load() / 1000.0f;

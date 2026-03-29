@@ -155,7 +155,8 @@ void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
     v.position  = p.globalReverse ? (double)(endSample - 1) : (double)startSample;
 
     v.envelope.noteOn (p.globalAttackSec, p.globalDecaySec,
-                       p.globalSustain, p.globalReleaseSec, sampleRate);
+                       p.globalSustain, p.globalReleaseSec, sampleRate,
+                       p.globalHoldSec, p.globalOneShot > 0.5f);
 
     // Pitch: already baked in as p.globalPitch = basePitch + semitoneOffset
     const float pitchSt    = p.globalPitch + p.globalCentsDetune / 100.0f;
@@ -219,13 +220,25 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     float sustain = sm.resolveParam (sliceIdx, kLockSustain,  s.sustainLevel, p.globalSustain);
     float release = sm.resolveParam (sliceIdx, kLockRelease,  s.releaseSec,   p.globalReleaseSec);
 
-    // Clamp attack+decay to slice duration so max-range values don't leave
+    // Clamp attack to slice duration so max-range values don't leave
     // the envelope in the attack phase for the whole slice (near-silent output).
+    // Decay is NOT clamped: in one-shot mode the envelope decays freely to
+    // silence past the slice boundary (TAL-Drum / Speedrum behaviour).
     const float sliceDurSec = (float)(sliceEnd - s.startSample) / (float)sampleRate;
     attack = juce::jmin (attack, sliceDurSec);
-    decay  = juce::jmin (decay,  sliceDurSec - attack);
 
-    v.envelope.noteOn (attack, decay, sustain, release, sampleRate);
+    // Resolve one-shot flag here so it can be passed to the envelope.
+    const bool isOneShot = sm.resolveParam (sliceIdx, kLockOneShot,
+                                             s.oneShot ? 1.0f : 0.0f,
+                                             p.globalOneShot > 0.5f ? 1.0f : 0.0f) > 0.5f;
+
+    // Resolve hold time for this slice.
+    const float holdSec = sm.resolveParam (sliceIdx, kLockHold,
+                                           s.holdSec,
+                                           p.globalHoldSec);
+
+    v.envelope.noteOn (attack, decay, sustain, release, sampleRate,
+                       holdSec, isOneShot);
 
     int resolvedLoopMode = (int) sm.resolveParam (sliceIdx, kLockLoop, (float) s.loopMode, (float) p.globalLoopMode);
     v.looping  = (resolvedLoopMode == 1);
@@ -285,9 +298,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     v.releaseTail = sm.resolveParam (sliceIdx, kLockReleaseTail,
                                      s.releaseTail ? 1.0f : 0.0f,
                                      p.globalReleaseTail ? 1.0f : 0.0f) > 0.5f;
-    v.oneShot = sm.resolveParam (sliceIdx, kLockOneShot,
-                                  s.oneShot ? 1.0f : 0.0f,
-                                  p.globalOneShot ? 1.0f : 0.0f) > 0.5f;
+    v.oneShot = isOneShot ? 1.0f : 0.0f;  // already resolved before envelope noteOn
     v.bufferEnd = sample.getNumFrames();
 
     // Reset stretch state (guard against stale data from stolen voices)

@@ -15,6 +15,7 @@ static const juce::Colour kAdsrAttack { 0xFF00FF87 }; // Toxic Lime
 static const juce::Colour kAdsrDecay { 0xFFFFE800 }; // Radioactive Yellow
 static const juce::Colour kAdsrSustain { 0xFF00C8FF }; // Ice Blue
 static const juce::Colour kAdsrRelease { 0xFFFF6B00 }; // Molten Orange
+static const juce::Colour kAdsrHold    { 0xFFFF00FF }; // Hot Magenta
 
 static juce::Colour adsrTintForField (int fieldId)
 {
@@ -23,6 +24,7 @@ static juce::Colour adsrTintForField (int fieldId)
  if (fieldId == F::FieldDecay) return kAdsrDecay;
  if (fieldId == F::FieldSustain) return kAdsrSustain;
  if (fieldId == F::FieldRelease) return kAdsrRelease;
+ if (fieldId == F::FieldHold)    return kAdsrHold;
  return {}; // invalid = use theme default
 }
 
@@ -151,6 +153,7 @@ float SliceControlBar::toNorm (int fieldId, float v) const
  case F::FieldTonality: return juce::jlimit (0.f, 1.f, v / 8000.f);
  case F::FieldFormant: return juce::jlimit (0.f, 1.f, (v + 24.f) / 48.f);
  case F::FieldAttack: return juce::jlimit (0.f, 1.f, v / 1.f);
+ case F::FieldHold:   return juce::jlimit (0.f, 1.f, v / 5.f);
  case F::FieldDecay: return juce::jlimit (0.f, 1.f, v / 5.f);
  case F::FieldSustain: return juce::jlimit (0.f, 1.f, v);
  case F::FieldRelease: return juce::jlimit (0.f, 1.f, v / 5.f);
@@ -755,6 +758,19 @@ void SliceControlBar::paint (juce::Graphics& g)
  x += cw + 4;
  }
 
+
+ // HLD — hold knob (keeps peak level before decay)
+ {
+  float gHold = processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load();
+  bool locked = (s.lockMask & kLockHold) != 0;
+  float hld = locked ? s.holdSec : gHold / 1000.f;
+  drawKnobCell (g, x, row2y, "HLD",
+  juce::String ((int) (hld * 1000.f)) + "ms",
+  toNorm (F::FieldHold, hld),
+  locked, kLockHold, F::FieldHold, 0.f, 5.f, 0.001f, cw);
+  x += cw + 4;
+ }
+
  // DEC — knob
  {
  bool locked = (s.lockMask & kLockDecay) != 0;
@@ -1026,6 +1042,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  case F::FieldTonality: dragStartValue = (sl.lockMask & kLockTonality) ? sl.tonalityHz : processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load(); break;
  case F::FieldFormant: dragStartValue = (sl.lockMask & kLockFormant) ? sl.formantSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load(); break;
  case F::FieldAttack: dragStartValue = (sl.lockMask & kLockAttack) ? sl.attackSec : processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.f; break;
+ case F::FieldHold:   dragStartValue = (sl.lockMask & kLockHold)   ? sl.holdSec   : processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load()   / 1000.f; break;
  case F::FieldDecay: dragStartValue = (sl.lockMask & kLockDecay) ? sl.decaySec : processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load() / 1000.f; break;
  case F::FieldSustain: dragStartValue = (sl.lockMask & kLockSustain) ? sl.sustainLevel : processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.f; break;
  case F::FieldRelease: dragStartValue = (sl.lockMask & kLockRelease) ? sl.releaseSec : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f; break;
@@ -1240,6 +1257,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
 
  // ── All other knobs: CmdSetSliceParam ─────────────────────────────────
  bool isAdsr = (cell.fieldId == F::FieldAttack
+ || cell.fieldId == F::FieldHold
  || cell.fieldId == F::FieldDecay
  || cell.fieldId == F::FieldSustain
  || cell.fieldId == F::FieldRelease);
@@ -1257,6 +1275,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  // Shift = fine mode (÷10)
  float sensitivity = 1.0f;
  if (cell.fieldId == F::FieldAttack) sensitivity = 2.0f;
+ else if (cell.fieldId == F::FieldHold)  sensitivity = 10.0f;
  else if (cell.fieldId == F::FieldDecay) sensitivity = 10.0f;
  else if (cell.fieldId == F::FieldRelease) sensitivity = 10.0f;
  else if (cell.fieldId == F::FieldSustain) sensitivity = 0.5f;
@@ -1266,6 +1285,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  float ds = dragStartValue, dmin = cell.minVal, dmax = cell.maxVal;
  // Convert to display units
  if (cell.fieldId == F::FieldAttack ||
+ cell.fieldId == F::FieldHold ||
  cell.fieldId == F::FieldDecay ||
  cell.fieldId == F::FieldRelease)
  { ds *= 1000.f; dmin *= 1000.f; dmax *= 1000.f; }
@@ -1275,6 +1295,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  float dv = juce::jlimit (dmin, dmax, ds + deltaY * sensitivity);
 
  if (cell.fieldId == F::FieldAttack ||
+ cell.fieldId == F::FieldHold ||
  cell.fieldId == F::FieldDecay ||
  cell.fieldId == F::FieldRelease)
  newNative = dv / 1000.f;
@@ -1392,6 +1413,7 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  case F::FieldTonality: currentVal = (sl.lockMask & kLockTonality) ? sl.tonalityHz : processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load(); break;
  case F::FieldFormant: currentVal = (sl.lockMask & kLockFormant) ? sl.formantSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load(); break;
  case F::FieldAttack: currentVal = ((sl.lockMask & kLockAttack) ? sl.attackSec : processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.f) * 1000.f; break;
+ case F::FieldHold:   currentVal = ((sl.lockMask & kLockHold)   ? sl.holdSec   : processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load()   / 1000.f) * 1000.f; break;
  case F::FieldDecay: currentVal = ((sl.lockMask & kLockDecay) ? sl.decaySec : processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load() / 1000.f) * 1000.f; break;
  case F::FieldSustain: currentVal = ((sl.lockMask & kLockSustain) ? sl.sustainLevel : processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.f) * 100.f; break;
  case F::FieldRelease: currentVal = ((sl.lockMask & kLockRelease) ? sl.releaseSec : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f) * 1000.f; break;
@@ -1425,7 +1447,7 @@ void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
 
  using F = DysektProcessor;
  juce::String displayVal;
- if (cell.fieldId == F::FieldAttack || cell.fieldId == F::FieldDecay || cell.fieldId == F::FieldRelease)
+ if (cell.fieldId == F::FieldAttack || cell.fieldId == F::FieldHold || cell.fieldId == F::FieldDecay || cell.fieldId == F::FieldRelease)
  displayVal = juce::String ((int) currentValue);
  else if (cell.fieldId == F::FieldSustain)
  displayVal = juce::String ((int) currentValue);

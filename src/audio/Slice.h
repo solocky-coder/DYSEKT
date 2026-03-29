@@ -29,6 +29,7 @@ enum LockBit : uint32_t
     kLockFilter        = 4194304,   // bit 22
     kLockChromaticChannel = 8388608, // bit 23
     kLockChromaticLegato  = 16777216, // bit 24
+    kLockHold              = 33554432, // bit 25
 };
 
 struct Slice
@@ -43,6 +44,7 @@ struct Slice
     float    pitchSemitones = 0.0f;
     int      algorithm      = 0;        // 0=Repitch, 1=Stretch
     float    attackSec      = 0.0f;
+    float    holdSec        = 0.0f;   // AHDSR hold time in seconds
     float    decaySec       = 0.0f;
     float    sustainLevel   = 1.0f;
     float    releaseSec     = 0.010f;

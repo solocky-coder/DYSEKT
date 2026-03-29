@@ -22,6 +22,7 @@ static const juce::Colour kColAttack  { 0xFF00FF87 };   // Toxic Lime
 static const juce::Colour kColDecay   { 0xFFFFE800 };   // Radioactive Yellow
 static const juce::Colour kColSustain { 0xFF00C8FF };   // Ice Blue
 static const juce::Colour kColRelease { 0xFFFF6B00 };   // Molten Orange
+static const juce::Colour kColHold    { 0xFFFF00FF };   // Hot Magenta
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -153,6 +154,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     // locked fields read from per-slice values.
     // APVTS params: Attack 0-120000ms, Decay 0-120000ms, Sustain 0-100%, Release 0-120000ms
     float attackMs  = processor.attackParam  ? processor.attackParam ->load() : 5.0f;
+    float holdMs    = processor.holdParam    ? processor.holdParam   ->load() : 0.0f;
     float decayMs   = processor.decayParam   ? processor.decayParam  ->load() : 100.0f;
     float sustainPc = processor.sustainParam ? processor.sustainParam->load() : 100.0f;
     float releaseMs = processor.releaseParam ? processor.releaseParam->load() : 20.0f;
@@ -163,6 +165,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
         const auto& s = processor.sliceManager.getSlice (sel);
         // Per-field: if locked use slice value, otherwise use global APVTS value above
         if (s.lockMask & kLockAttack)  attackMs  = s.attackSec    * 1000.0f;
+        if (s.lockMask & kLockHold)    holdMs    = s.holdSec      * 1000.0f;
         if (s.lockMask & kLockDecay)   decayMs   = s.decaySec     * 1000.0f;
         if (s.lockMask & kLockSustain) sustainPc = s.sustainLevel  * 100.0f;
         if (s.lockMask & kLockRelease) releaseMs = s.releaseSec   * 1000.0f;
@@ -189,9 +192,11 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     // Using sliceDurMs as the window caused the node to pin at the right edge
     // once the value exceeded the slice length (e.g. 464ms slice + 5000ms decay).
     static constexpr float kAttackViewMs  = 1000.0f;
+    static constexpr float kHoldViewMs    = 5000.0f;
     static constexpr float kDecayViewMs   = 5000.0f;
     static constexpr float kReleaseViewMs = 5000.0f;
     const float attackNorm  = std::sqrt (juce::jmin (attackMs  / kAttackViewMs,  1.0f));
+    const float holdNorm    = std::sqrt (juce::jmin (holdMs    / kHoldViewMs,    1.0f));
     const float decayNorm   = std::sqrt (juce::jmin (decayMs   / kDecayViewMs,   1.0f));
     const float releaseNorm = std::sqrt (juce::jmin (releaseMs / kReleaseViewMs, 1.0f));
 
@@ -199,11 +204,15 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 
     // Remaining space after attack — same proportions as original at low attack
     const float remain    = kRMax - env.ax;
+    const float kHX_eff   = env.ax + remain * 0.20f;   // hold end (up to 20% of space)
     const float kDX_eff   = env.ax + remain * 0.47f;   // decay zone end
     const float kSEnd_eff = env.ax + remain * 0.65f;   // sustain plateau end
 
-    env.dx    = juce::jlimit (env.ax + 0.01f, kDX_eff,
-                              env.ax + decayNorm * (kDX_eff - env.ax));
+    env.hx  = juce::jlimit (env.ax, kHX_eff,
+                            env.ax + holdNorm * (kHX_eff - env.ax));
+
+    env.dx    = juce::jlimit (env.hx + 0.01f, kDX_eff,
+                              env.hx + decayNorm * (kDX_eff - env.hx));
     env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
     env.ay    = 0.20f;   // attack peak: always at top — not user-draggable
     env.sxEnd = kSEnd_eff;
@@ -215,6 +224,10 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 
     EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
     a.colour = kColAttack;  a.label = "A"; envNodes.add (a);
+
+    // Hold node: X-only drag — stays at peak level (ay)
+    EnvNode h; h.xn = env.hx; h.yn = env.ay; h.role = NodeRole::Hold;
+    h.colour = kColHold;    h.label = "H"; envNodes.add (h);
 
     // Decay node: X-only drag — fixed Y so it doesn't jump when sustain level changes
     EnvNode d; d.xn = env.dx; d.yn = 0.5f; d.role = NodeRole::Decay;
@@ -246,12 +259,19 @@ void SliceWaveformLcd::commitNodes()
     // Inverse of slice-relative sqrt mapping in buildEnvelopeNodes:
     //   ms = ratio^2 * kXxxViewMs  (inverse of  norm = sqrt(ms/kXxxViewMs))
     static constexpr float kAttackViewMs  = 1000.0f;
+    static constexpr float kHoldViewMs    = 5000.0f;
     static constexpr float kDecayViewMs   = 5000.0f;
     static constexpr float kReleaseViewMs = 5000.0f;
+    const float remain_c  = kRMax - env.ax;
+    const float kHX_eff   = env.ax + remain_c * 0.20f;
+    const float kDX_eff   = env.ax + remain_c * 0.47f;
+    const float kSEnd_eff = env.ax + remain_c * 0.65f;
     const float aRatio = env.ax / kAX;
-    const float dRatio = (kDX_eff > env.ax) ? (env.dx - env.ax) / (kDX_eff - env.ax) : 0.0f;
+    const float hRatio = (kHX_eff > env.ax) ? (env.hx - env.ax) / (kHX_eff - env.ax) : 0.0f;
+    const float dRatio = (kDX_eff > env.hx) ? (env.dx - env.hx) / (kDX_eff - env.hx) : 0.0f;
     const float rRatio = (kRMax   > kSEnd_eff) ? (env.rx - kSEnd_eff) / (kRMax - kSEnd_eff) : 0.0f;
     const float attackMs  = juce::jlimit (0.0f, kAttackViewMs,  aRatio * aRatio * kAttackViewMs);
+    const float holdMs    = juce::jlimit (0.0f, kHoldViewMs,    hRatio * hRatio * kHoldViewMs);
     const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,   dRatio * dRatio * kDecayViewMs);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,     (1.0f - env.sy) * 100.0f);
     const float releaseMs = juce::jlimit (0.0f, kReleaseViewMs, rRatio * rRatio * kReleaseViewMs);
@@ -270,6 +290,7 @@ void SliceWaveformLcd::commitNodes()
     };
 
     sendField (DysektProcessor::FieldAttack,  attackMs  / 1000.0f);   // seconds
+    sendField (DysektProcessor::FieldHold,    holdMs    / 1000.0f);
     sendField (DysektProcessor::FieldDecay,   decayMs   / 1000.0f);
     sendField (DysektProcessor::FieldSustain, sustainPc / 100.0f);    // 0-1
     sendField (DysektProcessor::FieldRelease, releaseMs / 1000.0f);
@@ -293,11 +314,12 @@ float SliceWaveformLcd::envAt (float xn) const
     const Pt pts[] = {
         { 0.0f,   1.0f   },
         { env.ax, env.ay },   // attack peak (env.ay = 0.04, near top)
+        { env.hx, env.ay },   // hold plateau end (same peak height)
         { env.dx, env.sy },   // end of decay / sustain level
         { kSEnd,  env.sy },   // dynamic end of sustain plateau
         { env.rx, 1.0f   }    // end of release (silence)
     };
-    constexpr int N = 5;
+    constexpr int N = 6;
 
     for (int i = 0; i < N - 1; ++i)
     {
@@ -361,6 +383,7 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
         // Right-click on a node: toggle that ADSR field's lock for the selected slice
         uint32_t bit = 0;
         if      (hit == NodeRole::Attack)  bit = kLockAttack;
+        else if (hit == NodeRole::Hold)    bit = kLockHold;
         else if (hit == NodeRole::Decay)   bit = kLockDecay;
         else if (hit == NodeRole::Sustain) bit = kLockSustain;
         else if (hit == NodeRole::Release) bit = kLockRelease;
@@ -411,6 +434,12 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     env.dx = juce::jlimit (env.ax + 0.01f, kDX_eff,       env.dx);
     env.rx = juce::jlimit (kSEnd_eff + 0.01f, kRMax,       env.rx);
 
+    if (dragRole == NodeRole::Hold)
+    {
+        // H: X-only drag — hold end must stay between ax and dx
+        const float kHX_eff = env.ax + (kRMax - env.ax) * 0.20f;
+        env.hx = juce::jlimit (env.ax, juce::jmin (kHX_eff, env.dx - 0.01f), xn);
+    }
     if (dragRole == NodeRole::Decay)
     {
         // D: X only — controls how far decay extends before sustain
@@ -431,6 +460,9 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     envNodes.clear();
     EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
     a.colour = kColAttack;  a.label = "A"; envNodes.add (a);
+
+    EnvNode h; h.xn = env.hx; h.yn = env.ay; h.role = NodeRole::Hold;
+    h.colour = kColHold;    h.label = "H"; envNodes.add (h);
     EnvNode d; d.xn = env.dx; d.yn = 0.5f; d.role = NodeRole::Decay;   // fixed Y — X-only drag
     d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
     EnvNode s; s.xn = (env.dx + kSEnd_eff) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
@@ -666,13 +698,14 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
         // Determine if this field is locked
         uint32_t fieldBit = 0;
         if      (node.role == NodeRole::Attack)  fieldBit = kLockAttack;
+        else if (node.role == NodeRole::Hold)    fieldBit = kLockHold;
         else if (node.role == NodeRole::Decay)   fieldBit = kLockDecay;
         else if (node.role == NodeRole::Sustain) fieldBit = kLockSustain;
         else if (node.role == NodeRole::Release) fieldBit = kLockRelease;
         const bool locked = (fieldBit != 0) && ((lockMask & fieldBit) != 0);
 
         // Tick line down to envelope
-        if (node.role != NodeRole::Sustain)
+        if (node.role != NodeRole::Sustain && node.role != NodeRole::Hold)
         {
             g.setColour (node.colour.withAlpha (locked ? 0.30f : 0.18f));
             g.drawVerticalLine (juce::roundToInt (cx), cy + r, oy + H);

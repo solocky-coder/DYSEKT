@@ -38,6 +38,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         0.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultHold, 1 },
+        "Sample Hold",
+        juce::NormalisableRange<float> (0.0f, 5000.0f, 0.1f, 0.3f),
+        0.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParamIds::defaultRelease, 1 },
         "Sample Release",
         juce::NormalisableRange<float> (0.0f, 120000.0f, 0.1f, 0.3f),

@@ -57,6 +57,7 @@ public:
         FieldFilterRes,    // 25 - per-slice LP filter resonance 0..1
         FieldChromaticChannel, // 26 - per-slice chromatic MIDI channel (0=off, 1-16)
         FieldChromaticLegato,  // 27 - per-slice chromatic legato (bool)
+        FieldHold,             // 28 - per-slice AHDSR hold time (seconds)
     };
 
     // ── Command types ────────────────────────────────────────────────────────
@@ -180,6 +181,7 @@ public:
     std::atomic<float>* decayParam        { nullptr };
     std::atomic<float>* sustainParam      { nullptr };
     std::atomic<float>* releaseParam      { nullptr };
+    std::atomic<float>* holdParam         { nullptr };
     void loadSoundFontAsync (const juce::File& file);
     void relinkFileAsync    (const juce::File& file);
     void applyTrimToCurrentSample (int trimStart, int trimEnd);

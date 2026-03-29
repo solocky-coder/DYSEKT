@@ -16,6 +16,7 @@ struct VoiceStartParams
     float globalPitch = 0.0f;
     int globalAlgorithm = 0;
     float globalAttackSec = 0.005f;
+    float globalHoldSec    = 0.0f;
     float globalDecaySec = 0.1f;
     float globalSustain = 1.0f; // 0-1
     float globalReleaseSec = 0.02f;
