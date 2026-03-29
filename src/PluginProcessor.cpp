@@ -1079,9 +1079,10 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 std::memory_order_relaxed);
             ccPickedUp.fill (false);  // new slice — absolute knobs must pick up again
             ccSmootherActive.fill (false);
-            markerPending      = false;
-            markerPendingSlice = -1;
-            markerIdleCounter  = 0;
+            markerPending        = false;
+            markerPendingSlice   = -1;
+            markerIdleCounter    = 0;
+            markerSmootherSlice  = -1;
             liveDragSliceIdx.store (-1, std::memory_order_release);
             break;
 
@@ -1497,6 +1498,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                         (float) sl.startSample);
                                 ccSmoothers[(size_t) outFieldId].setTargetValue ((float) newStart);
                                 ccSmootherActive[(size_t) outFieldId] = true;
+                                markerSmootherSlice = sel;
                                 // The smoother loop commits via CmdSetSliceBounds each
                                 // block — no liveDrag / markerPending needed here.
                             }
@@ -1913,15 +1915,24 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 }
                 else if (sel >= 0 && sel < sliceManager.getNumSlices() && total > 1)
                 {
+                    // Use the slice index that was active when the smoother was
+                    // seeded. If the user selects a different slice mid-glide,
+                    // 'sel' would be wrong and would corrupt the new selection.
+                    const int smoothSel = (i == FieldSliceStart && markerSmootherSlice >= 0)
+                                            ? markerSmootherSlice
+                                            : sel;
+                    if (smoothSel < 0 || smoothSel >= sliceManager.getNumSlices())
+                        break;
+
                     // Fire CmdSetSliceBounds with smoothed position
-                    auto& sl = sliceManager.getSlice (sel);
+                    auto& sl = sliceManager.getSlice (smoothSel);
                     Command smoothCmd;
                     smoothCmd.type      = CmdSetSliceBounds;
-                    smoothCmd.intParam1 = sel;
+                    smoothCmd.intParam1 = smoothSel;
                     smoothCmd.numPositions = 1;
                     if (i == FieldSliceStart)
                     {
-                        const int slEnd = sliceManager.getEndForSlice (sel, total);
+                        const int slEnd = sliceManager.getEndForSlice (smoothSel, total);
                         smoothCmd.intParam2    = juce::jlimit (0, slEnd - 64, (int) smoothed);
                         smoothCmd.positions[0] = slEnd;
                     }

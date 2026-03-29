@@ -258,9 +258,10 @@ public:
     // Commit-on-idle for FieldSliceStart CC — write live drag atomics during
     // movement, commit to SliceManager only after kIdleBlocks of silence.
     static constexpr int kMarkerIdleBlocks = 4;  // ~80ms at 512/44100
-    int  markerIdleCounter  = 0;    // counts blocks since last CC message
-    bool markerPending      = false; // true while a commit is outstanding
-    int  markerPendingSlice = -1;    // which slice the pending commit is for
+    int  markerIdleCounter     = 0;    // counts blocks since last CC message
+    bool markerPending         = false; // true while a commit is outstanding
+    int  markerPendingSlice    = -1;   // which slice the pending commit is for
+    int  markerSmootherSlice   = -1;   // which slice the FieldSliceStart absolute smoother is targeting
 
     // NRPN decoder state (audio thread only — no atomics needed)
     int nrpnMSB     = -1;
