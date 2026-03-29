@@ -59,6 +59,9 @@ public:
 
     Snapshot redo()
     {
+        if (undoStack.empty())
+            return Snapshot{};
+
         if (pos >= (int) undoStack.size() - 1)
             return undoStack.back();
 

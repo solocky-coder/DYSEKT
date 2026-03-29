@@ -636,7 +636,18 @@ void DysektProcessor::handleCommand (const Command& cmd)
             blocksSinceGestureActivity = 0;
             break;
 
+        // Drag-style commands: keep gesture lock open while the drag continues.
+        // The 2-block idle timeout in processBlock() will release it automatically
+        // once the user stops, collapsing the whole drag into one undo step.
         case CmdSetSliceBounds:
+            if (! gestureSnapshotCaptured)
+                captureSnapshot();
+            gestureSnapshotCaptured = true;   // ← stay locked during drag
+            blocksSinceGestureActivity = 0;
+            break;
+
+        // Discrete, atomic operations: capture once then immediately unlock so
+        // each operation gets its own undo step.
         case CmdCreateSlice:
         case CmdDeleteSlice:
         case CmdStretch:
@@ -650,10 +661,22 @@ void DysektProcessor::handleCommand (const Command& cmd)
             blocksSinceGestureActivity = 0;
             break;
 
+        // State-mutating commands that previously fell through to default without
+        // capturing a snapshot — each of these must be undoable.
+        case CmdApplyTrim:
+        case CmdSetRootNote:
+        case CmdSetSliceColour:
+        case CmdSetSliceLockAll:
+            if (! gestureSnapshotCaptured)
+                captureSnapshot();
+            gestureSnapshotCaptured = false;
+            blocksSinceGestureActivity = 0;
+            break;
+
         default:
-            // Leave param gesture mode after idle/non-param commands.
-            if (cmd.type != CmdSetSliceParam)
-                gestureSnapshotCaptured = false;
+            // Non-mutating commands (select, load callbacks, panic, etc.).
+            // Just release any open gesture window.
+            gestureSnapshotCaptured = false;
             break;
     }
 
