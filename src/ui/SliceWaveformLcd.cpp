@@ -522,8 +522,8 @@ void SliceWaveformLcd::drawWaveform (juce::Graphics& g, const juce::Rectangle<fl
     const float H  = area.getHeight();
     const int   n  = data.peaks.size();
 
-    // Grid
-    g.setColour (lcd2Phosphor().withAlpha (0.06f));
+    // Zero line
+    g.setColour (lcd2Phosphor().withAlpha (0.20f));
     g.drawHorizontalLine (juce::roundToInt (cy), area.getX(), area.getRight());
 
     // Build waveform paths — amplitude modulated by envelope shape
@@ -812,6 +812,49 @@ void SliceWaveformLcd::drawNoData (juce::Graphics& g)
 
 // ── Paint ─────────────────────────────────────────────────────────────────────
 
+void SliceWaveformLcd::drawPlayhead (juce::Graphics& g, const juce::Rectangle<float>& area)
+{
+    if (data.sliceIndex < 0) return;
+
+    const int   totalRange = data.endSample - data.startSample;
+    if (totalRange <= 0) return;
+
+    auto& vp = processor.voicePool;
+
+    for (int i = 0; i < VoicePool::kMaxVoices; ++i)
+    {
+        const auto& v = vp.getVoice (i);
+        if (! v.active || v.sliceIdx != data.sliceIndex) continue;
+
+        const float rawPos = vp.voicePositions[i].load (std::memory_order_relaxed);
+        float xn = (rawPos - (float) data.startSample) / (float) totalRange;
+        xn = juce::jlimit (0.0f, 1.0f, xn);
+
+        const float x = area.getX() + xn * area.getWidth();
+
+        // Soft glow halo
+        g.setColour (lcd2Phosphor().withAlpha (0.12f));
+        g.drawLine (x - 1.5f, area.getY(), x - 1.5f, area.getBottom(), 1.0f);
+        g.drawLine (x + 1.5f, area.getY(), x + 1.5f, area.getBottom(), 1.0f);
+
+        // Main playhead line
+        g.setColour (lcd2Phosphor().withAlpha (0.85f));
+        g.drawLine (x, area.getY(), x, area.getBottom(), 1.5f);
+
+        // Small triangle cap at top
+        const float capH = 5.0f;
+        juce::Path cap;
+        cap.addTriangle (x - 3.5f, area.getY(),
+                         x + 3.5f, area.getY(),
+                         x,        area.getY() + capH);
+        g.fillPath (cap);
+
+        // Only draw the most-recently-hit voice
+        break;
+    }
+}
+
+
 void SliceWaveformLcd::paint (juce::Graphics& g)
 {
     buildDisplayData();
@@ -833,4 +876,5 @@ void SliceWaveformLcd::paint (juce::Graphics& g)
     drawWaveform (g, area);
     drawEnvelope (g, area);
     drawNodes    (g, area);
+    drawPlayhead (g, area);
 }

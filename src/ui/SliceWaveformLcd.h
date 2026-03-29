@@ -84,6 +84,7 @@ private:
     void drawSegmentLabel(juce::Graphics& g, float x0, float y0,
                           float x1, float y1, const char* text,
                           juce::Colour col, const juce::Rectangle<float>& area);
+    void drawPlayhead   (juce::Graphics& g, const juce::Rectangle<float>& area);
 
     NodeRole hitTest (juce::Point<float> pos) const;
 
