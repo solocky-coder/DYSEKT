@@ -1269,11 +1269,14 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             }
                             uiSnapshotDirty.store (true, std::memory_order_release);
                         }
-                        else
+                        else if (trimModeActive.load (std::memory_order_relaxed))
                         {
-                            // Absolute: feed smoother so the marker glides instead of jumping.
-                            // processBlock() steps the smoother and writes to the correct
-                            // target (trim atomics or CmdSetSliceBounds) based on trim mode.
+                            // Absolute in trim mode only: seed from trim atomics and arm
+                            // the smoother. processBlock() steps it and writes to the trim
+                            // atomics each buffer.
+                            // In non-trim mode we deliberately fall through without arming
+                            // the smoother — the slice path below seeds from sl.startSample,
+                            // preventing a jump to the last trim-in/out position.
                             const int cur    = (outFieldId == FieldSliceStart) ? curStart : curEnd;
                             const int target = (outFieldId == FieldSliceStart)
                                 ? juce::jlimit (0, curEnd - 64,       (int)(outNorm * (float)total))
