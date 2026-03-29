@@ -84,6 +84,38 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
 
     juce::Timer::callAfterDelay (100,  [enforceReadOnly] { enforceReadOnly(); });
     juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });
+    // ── Cloud bookmarks ───────────────────────────────────────────────────────
+    detectCloudFolders();
+    loadCustomBookmarks();
+    rebuildBookmarkBar();
+
+    addBmBtn.setButtonText ("+");
+    addBmBtn.setTooltip    ("Add folder bookmark");
+    addBmBtn.setColour (juce::TextButton::buttonColourId,  getTheme().darkBar.darker (0.5f));
+    addBmBtn.setColour (juce::TextButton::textColourOffId, getTheme().accent.withAlpha (0.90f));
+    addBmBtn.onClick = [this]
+    {
+        fileChooser = std::make_unique<juce::FileChooser> (
+            "Choose a folder to bookmark",
+            juce::File::getSpecialLocation (juce::File::userHomeDirectory));
+
+        fileChooser->launchAsync (
+            juce::FileBrowserComponent::openMode
+            | juce::FileBrowserComponent::canSelectDirectories,
+            [this] (const juce::FileChooser& fc)
+            {
+                auto result = fc.getResult();
+                if (result.isDirectory())
+                {
+                    bookmarks.add ({ result.getFileName(), result, true });
+                    saveCustomBookmarks();
+                    rebuildBookmarkBar();
+                    resized();
+                    repaint();
+                }
+            });
+    };
+    addAndMakeVisible (addBmBtn);
 }
 
 FileBrowserPanel::~FileBrowserPanel()
@@ -106,6 +138,25 @@ void FileBrowserPanel::resized()
 {
     auto bounds = getLocalBounds();
 
+    // ── Bookmark bar at the top ────────────────────────────────────────────
+    {
+        auto bmBar = bounds.removeFromTop (kBmH);
+        const int addW = 22;
+        const int gap  = 3;
+        const int n    = bmBtns.size();
+        const int avail = bmBar.getWidth() - addW - gap - 4;
+        const int btnW = n > 0 ? juce::jmin (90, juce::jmax (40, (avail - gap * (n - 1)) / n)) : 0;
+
+        int bx = bmBar.getX() + 2;
+        for (auto* btn : bmBtns)
+        {
+            btn->setBounds (bx, bmBar.getY() + 4, btnW, bmBar.getHeight() - 8);
+            bx += btnW + gap;
+        }
+        addBmBtn.setBounds (bmBar.getRight() - addW - 2,
+                            bmBar.getY() + 4, addW, bmBar.getHeight() - 8);
+    }
+
     // -- Preview bar at the bottom if visible
     if (previewVisible)
     {
@@ -123,9 +174,23 @@ void FileBrowserPanel::resized()
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
+    // ── Bookmark bar background ────────────────────────────────────────────
+    {
+        const auto& T = getTheme();
+        auto bmRect = getLocalBounds().removeFromTop (kBmH).toFloat();
+        juce::ColourGradient bmGrad (T.darkBar.darker (0.5f), 0, bmRect.getY(),
+                                     T.darkBar.darker (0.3f), 0, bmRect.getBottom(), false);
+        g.setGradientFill (bmGrad);
+        g.fillRect (bmRect);
+        g.setColour (T.accent.withAlpha (0.20f));
+        g.drawLine (bmRect.getX(), bmRect.getBottom(),
+                    bmRect.getRight(), bmRect.getBottom(), 1.0f);
+    }
+
     // LCD frame
     const auto ac = getTheme().accent;
     auto b = getLocalBounds();
+    b.removeFromTop (kBmH);   // skip bookmark bar
 
     juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
                                     juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
@@ -272,4 +337,145 @@ void FileBrowserPanel::refreshTheme()
     smallLAF.refreshTheme();
     repaint();
     browser.repaint();
+}
+
+// ── Cloud bookmark detection ──────────────────────────────────────────────────
+
+void FileBrowserPanel::detectCloudFolders()
+{
+    auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
+
+    // Fixed-path services (macOS / Windows)
+    struct CloudDef { const char* name; const char* rel; };
+    static const CloudDef defs[] =
+    {
+        { "iCloud",       "Library/Mobile Documents/com~apple~CloudDocs" },
+        { "Dropbox",      "Dropbox"                                       },
+        { "Dropbox",      "Dropbox (Personal)"                           },
+        { "OneDrive",     "OneDrive"                                      },
+        { "OneDrive",     "OneDrive - Personal"                           },
+    };
+
+    for (auto& d : defs)
+    {
+        auto f = home.getChildFile (d.rel);
+        if (f.isDirectory())
+        {
+            bool dupe = false;
+            for (auto& b : bookmarks)
+                if (b.path == f) { dupe = true; break; }
+            if (! dupe)
+                bookmarks.add ({ d.name, f, false });
+        }
+    }
+
+    // macOS ~/Library/CloudStorage — Google Drive, OneDrive 365, Box, etc.
+    auto cs = home.getChildFile ("Library/CloudStorage");
+    if (cs.isDirectory())
+    {
+        auto children = cs.findChildFiles (juce::File::findDirectories, false);
+        for (auto& dir : children)
+        {
+            auto raw = dir.getFileName();
+            juce::String display;
+            if (raw.startsWithIgnoreCase ("GoogleDrive"))  display = "Google Drive";
+            else if (raw.startsWithIgnoreCase ("OneDrive")) display = "OneDrive";
+            else if (raw.startsWithIgnoreCase ("Dropbox"))  display = "Dropbox";
+            else if (raw.startsWithIgnoreCase ("Box"))      display = "Box";
+            else display = raw.upToFirstOccurrenceOf ("-", false, false);
+            if (display.isEmpty()) display = raw;
+
+            bool dupe = false;
+            for (auto& b : bookmarks)
+                if (b.path == dir) { dupe = true; break; }
+            if (! dupe)
+                bookmarks.add ({ display, dir, false });
+        }
+    }
+}
+
+// ── Bookmark persistence ──────────────────────────────────────────────────────
+
+static juce::File getBookmarksFile()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+               .getChildFile ("DYSEKT/bookmarks.txt");
+}
+
+void FileBrowserPanel::loadCustomBookmarks()
+{
+    auto f = getBookmarksFile();
+    if (! f.existsAsFile()) return;
+
+    juce::StringArray lines;
+    f.readLines (lines);
+    for (auto& line : lines)
+    {
+        juce::File dir (line.trim());
+        if (dir.isDirectory())
+        {
+            bool dupe = false;
+            for (auto& b : bookmarks)
+                if (b.path == dir) { dupe = true; break; }
+            if (! dupe)
+                bookmarks.add ({ dir.getFileName(), dir, true });
+        }
+    }
+}
+
+void FileBrowserPanel::saveCustomBookmarks()
+{
+    auto f = getBookmarksFile();
+    f.getParentDirectory().createDirectory();
+
+    juce::StringArray lines;
+    for (auto& b : bookmarks)
+        if (b.removable)
+            lines.add (b.path.getFullPathName());
+
+    f.replaceWithText (lines.joinIntoString ("\n"));
+}
+
+// ── Bookmark bar rebuild ──────────────────────────────────────────────────────
+
+void FileBrowserPanel::rebuildBookmarkBar()
+{
+    bmBtns.clear();
+    const auto& T = getTheme();
+
+    for (int i = 0; i < bookmarks.size(); ++i)
+    {
+        auto* btn = bmBtns.add (new RemovableButton());
+        btn->setButtonText (bookmarks[i].name);
+        btn->setTooltip    (bookmarks[i].path.getFullPathName());
+        btn->setColour (juce::TextButton::buttonColourId,  T.darkBar.darker (0.3f));
+        btn->setColour (juce::TextButton::buttonOnColourId,T.accent.withAlpha (0.2f));
+        btn->setColour (juce::TextButton::textColourOffId, T.accent.withAlpha (0.85f));
+        btn->setColour (juce::TextButton::textColourOnId,  T.accent);
+
+        btn->onClick = [this, i] { browser.setRoot (bookmarks[i].path); };
+
+        if (bookmarks[i].removable)
+        {
+            btn->onRightClick = [this, i]
+            {
+                juce::PopupMenu menu;
+                menu.addItem (1, "Remove bookmark");
+                menu.showMenuAsync (juce::PopupMenu::Options(),
+                    [this, i] (int result)
+                    {
+                        if (result == 1)
+                        {
+                            bookmarks.remove (i);
+                            saveCustomBookmarks();
+                            rebuildBookmarkBar();
+                            resized();
+                            repaint();
+                        }
+                    });
+            };
+        }
+
+        addAndMakeVisible (btn);
+    }
 }

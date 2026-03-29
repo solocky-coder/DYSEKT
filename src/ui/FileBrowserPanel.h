@@ -183,6 +183,21 @@ private:
     IconState state = Stopped;
 };
 
+// ── Removable bookmark button (right-click → remove) ────────────────────────
+class RemovableButton : public juce::TextButton
+{
+public:
+    std::function<void()> onRightClick;
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isRightButtonDown() && onRightClick)
+            onRightClick();
+        else
+            juce::TextButton::mouseDown (e);
+    }
+};
+
 class FileBrowserPanel : public juce::Component,
                          private juce::FileBrowserListener,
                          private juce::ChangeListener
@@ -212,6 +227,27 @@ private:
     void updatePlayButton();
 
     DysektProcessor& processor;
+
+    // ── Cloud bookmarks ───────────────────────────────────────────────────────
+    struct Bookmark
+    {
+        juce::String name;
+        juce::File   path;
+        bool         removable = true;   // false = auto-detected, always shown
+    };
+
+    juce::Array<Bookmark>              bookmarks;
+    juce::OwnedArray<RemovableButton>  bmBtns;
+    juce::TextButton                   addBmBtn;
+    std::unique_ptr<juce::FileChooser> fileChooser;
+
+    void detectCloudFolders();
+    void loadCustomBookmarks();
+    void saveCustomBookmarks();
+    void rebuildBookmarkBar();
+
+    static constexpr int kBmH = 28;
+
 
     SmallListLookAndFeel           smallLAF;
     juce::WildcardFileFilter       fileFilter;
