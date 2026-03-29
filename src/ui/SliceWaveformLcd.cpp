@@ -252,10 +252,6 @@ void SliceWaveformLcd::commitNodes()
     static constexpr float kAX   = 0.85f;
     static constexpr float kRMax = 0.99f;
 
-    const float remain    = kRMax - env.ax;
-    const float kDX_eff   = env.ax + remain * 0.47f;
-    const float kSEnd_eff = env.ax + remain * 0.65f;
-
     // Inverse of slice-relative sqrt mapping in buildEnvelopeNodes:
     //   ms = ratio^2 * kXxxViewMs  (inverse of  norm = sqrt(ms/kXxxViewMs))
     static constexpr float kAttackViewMs  = 1000.0f;
