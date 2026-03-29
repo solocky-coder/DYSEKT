@@ -70,16 +70,18 @@ void HeaderBar::resized()
 {
     const int w   = getWidth();
     const int h   = getHeight();
+    const int pad = 3;   // inset from the rounded frame border
 
     // Four equal-width buttons in a single horizontal row:
     // UNDO | REDO | PANIC | ⚙
-    const int btnW = w / 4;
-    const int gap  = 2;
+    const int innerW = w - pad * 2;
+    const int btnW   = innerW / 4;
+    const int gap    = 2;
 
-    undoBtn     .setBounds (0,          gap, btnW - gap, h - gap * 2);
-    redoBtn     .setBounds (btnW,       gap, btnW - gap, h - gap * 2);
-    panicBtn    .setBounds (btnW * 2,   gap, btnW - gap, h - gap * 2);
-    shortcutsBtn.setBounds (btnW * 3,   gap, w - btnW * 3 - gap, h - gap * 2);
+    undoBtn     .setBounds (pad,               pad, btnW - gap, h - pad * 2);
+    redoBtn     .setBounds (pad + btnW,        pad, btnW - gap, h - pad * 2);
+    panicBtn    .setBounds (pad + btnW * 2,    pad, btnW - gap, h - pad * 2);
+    shortcutsBtn.setBounds (pad + btnW * 3,    pad, w - pad - btnW * 3 - gap, h - pad * 2);
 }
 
 // ── paint ─────────────────────────────────────────────────────────────────────
@@ -90,18 +92,23 @@ void HeaderBar::paint (juce::Graphics& g)
     for (auto* btn : { &undoBtn, &redoBtn, &panicBtn, &shortcutsBtn })
     {
         btn->setColour (juce::TextButton::buttonColourId, getTheme().button);
-        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);    // on = accent
+        btn->setColour (juce::TextButton::textColourOnId,  getTheme().accent);
         btn->setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     }
 
-    // Background is transparent — LogoBar paints behind us
-    g.fillAll (juce::Colours::transparentBlack);
+    const auto accent = getTheme().accent;
+    auto b = getLocalBounds();
 
-    // Thin top border to visually separate button row from global frame
-    g.setColour (getTheme().separator.withAlpha (0.5f));
-    g.drawHorizontalLine (0, 0.0f, (float) getWidth());
+    // Dark rounded background — same as LCD panel frames
+    juce::ColourGradient bgGrad (juce::Colour (0xFF131313), 0, 0,
+                                  juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+    g.setGradientFill (bgGrad);
+    g.fillRoundedRectangle (b.toFloat(), 3.0f);
 
-    // Left side intentionally empty — sample name lives in LCD 1
+    // Bright accent border — matches DualLcdControlFrame / LCD panels
+    g.setColour (accent.withAlpha (0.60f));
+    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 3.0f, 1.0f);
+
     sampleInfoBounds = {};
     slicesInfoArea   = {};
     (void) processor;

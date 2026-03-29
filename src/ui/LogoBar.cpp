@@ -76,8 +76,8 @@ void LogoBar::paint (juce::Graphics& g)
     g.drawText (sekt, textX + dyW, 0, sektW + 2, h, juce::Justification::centredLeft);
 
     // ── Tagline ───────────────────────────────────────────────────────────
-    g.setFont (DysektLookAndFeel::makeFont (7.5f));
-    g.setColour (fg.withAlpha (0.55f));
-    g.drawText ("sample slicer", textX, cy + 7, wordW, 11,
-                juce::Justification::centredRight);
+    g.setFont (DysektLookAndFeel::makeFont (11.5f));
+    g.setColour (fg.withAlpha (0.85f));
+    g.drawText ("SAMPLE SLICER", textX, cy + 4, wordW + 20, h - cy - 4,
+                juce::Justification::centredLeft);
 }

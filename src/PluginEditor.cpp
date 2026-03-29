@@ -278,7 +278,11 @@ void DysektEditor::resized()
  logoBar.setBounds (logoRow);
  if (auto* cf = headerBar.getControlFrame())
  cf->setBounds (centreCol.removeFromTop (kCtrlFrameH));
-    headerBar.setBounds (centreCol.removeFromTop (kBtnBarH)); // button row beneath global frame
+    // Centre the button bar vertically in the remaining centreCol space
+    {
+        const int btnBarY = centreCol.getY() + (centreCol.getHeight() - kBtnBarH) / 2;
+        headerBar.setBounds (centreCol.getX(), btnBarY, centreCol.getWidth(), kBtnBarH);
+    }
 
  topRow.removeFromLeft (kMargin);
 

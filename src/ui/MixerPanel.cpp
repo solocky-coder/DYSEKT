@@ -635,7 +635,7 @@ void MixerPanel::paint (juce::Graphics& g)
         g.setGradientFill (outerGrad);
         g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
-        g.setColour (ac.withAlpha (0.20f));
+        g.setColour (ac.withAlpha (0.65f));
         g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
         auto screen = b.reduced (4);
