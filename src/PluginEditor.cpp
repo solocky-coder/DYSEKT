@@ -276,9 +276,9 @@ void DysektEditor::resized()
  auto centreCol = topRow.removeFromLeft (kCtrlFrameW);
  auto logoRow = centreCol.removeFromTop (kLogoH);
  logoBar.setBounds (logoRow);
- headerBar.setBounds (logoRow); // overlaid on logoBar — transparent bg, buttons left+right of logo
  if (auto* cf = headerBar.getControlFrame())
  cf->setBounds (centreCol.removeFromTop (kCtrlFrameH));
+    headerBar.setBounds (centreCol.removeFromTop (kBtnBarH)); // button row beneath global frame
 
  topRow.removeFromLeft (kMargin);
 

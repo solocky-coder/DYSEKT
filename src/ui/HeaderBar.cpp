@@ -68,27 +68,18 @@ void HeaderBar::setBodeActive     (bool v) { controlFrame.setBodeActive (v); }
 
 void HeaderBar::resized()
 {
-    const int w = getWidth();
-    const int h = getHeight();
+    const int w   = getWidth();
+    const int h   = getHeight();
 
-    // Two separate 1×2 groups flanking the logo:
-    //   Left  → UNDO (top) / REDO (bottom), flush to left edge
-    //   Right → PANIC (top) / ⚙  (bottom), flush to right edge
-    const int btnW   = 36; // width of each button
-    const int btnH   = 20; // height of each button
-    const int rowGap =  4; // vertical gap between top and bottom buttons
+    // Four equal-width buttons in a single horizontal row:
+    // UNDO | REDO | PANIC | ⚙
+    const int btnW = w / 4;
+    const int gap  = 2;
 
-    const int groupH = btnH * 2 + rowGap;
-    const int gy     = (h - groupH) / 2;
-
-    // Left pair — flush left
-    undoBtn.setBounds (0,         gy,                 btnW, btnH);
-    redoBtn.setBounds (0,         gy + btnH + rowGap, btnW, btnH);
-
-    // Right pair — flush right
-    const int rx = w - btnW;
-    panicBtn    .setBounds (rx, gy,                 btnW, btnH);
-    shortcutsBtn.setBounds (rx, gy + btnH + rowGap, btnW, btnH);
+    undoBtn     .setBounds (0,          gap, btnW - gap, h - gap * 2);
+    redoBtn     .setBounds (btnW,       gap, btnW - gap, h - gap * 2);
+    panicBtn    .setBounds (btnW * 2,   gap, btnW - gap, h - gap * 2);
+    shortcutsBtn.setBounds (btnW * 3,   gap, w - btnW * 3 - gap, h - gap * 2);
 }
 
 // ── paint ─────────────────────────────────────────────────────────────────────
@@ -106,39 +97,9 @@ void HeaderBar::paint (juce::Graphics& g)
     // Background is transparent — LogoBar paints behind us
     g.fillAll (juce::Colours::transparentBlack);
 
-    // ── Frame around the left pair (UNDO / REDO) ─────────────────────────
-    {
-        const juce::Rectangle<int> lf (
-            undoBtn.getX() - 3,  undoBtn.getY() - 3,
-            undoBtn.getWidth() + 6,
-            redoBtn.getBottom() - undoBtn.getY() + 6);
-
-        g.setColour (getTheme().separator.withAlpha (0.75f));
-        g.drawRoundedRectangle (lf.toFloat().reduced (0.5f), 3.0f, 1.0f);
-
-        // Subtle horizontal divider between UNDO and REDO
-        g.setColour (getTheme().foreground.withAlpha (0.12f));
-        g.drawHorizontalLine (redoBtn.getY(),
-                              (float) undoBtn.getX() + 3,
-                              (float) undoBtn.getRight() - 3);
-    }
-
-    // ── Frame around the right pair (PANIC / ⚙) ──────────────────────────
-    {
-        const juce::Rectangle<int> rf (
-            panicBtn.getX() - 3, panicBtn.getY() - 3,
-            panicBtn.getWidth() + 6,
-            shortcutsBtn.getBottom() - panicBtn.getY() + 6);
-
-        g.setColour (getTheme().separator.withAlpha (0.75f));
-        g.drawRoundedRectangle (rf.toFloat().reduced (0.5f), 3.0f, 1.0f);
-
-        // Subtle horizontal divider between PANIC and ⚙
-        g.setColour (getTheme().foreground.withAlpha (0.12f));
-        g.drawHorizontalLine (shortcutsBtn.getY(),
-                              (float) panicBtn.getX() + 3,
-                              (float) panicBtn.getRight() - 3);
-    }
+    // Thin top border to visually separate button row from global frame
+    g.setColour (getTheme().separator.withAlpha (0.5f));
+    g.drawHorizontalLine (0, 0.0f, (float) getWidth());
 
     // Left side intentionally empty — sample name lives in LCD 1
     sampleInfoBounds = {};
