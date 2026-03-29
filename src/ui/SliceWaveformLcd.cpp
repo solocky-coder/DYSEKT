@@ -103,8 +103,6 @@ void SliceWaveformLcd::buildDisplayData()
     data.volume         = sl.volume;
     data.pan            = sl.pan;
     data.pitchSemitones = sl.pitchSemitones;
-    data.algorithm      = sl.algorithm;
-
     const int kPeaks  = 256;
     data.peaks.clearQuick();
     data.peaks.insertMultiple (-1, 0.0f, kPeaks);

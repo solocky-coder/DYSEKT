@@ -51,7 +51,7 @@ private:
         float        volume         { 0.0f };
         float        pan            { 0.0f };
         float        pitchSemitones { 0.0f };
-        int          algorithm      { 0 };
+
         double       sampleRate     { 44100.0 };
         juce::String sampleName;
         bool         isDefault   { false };
