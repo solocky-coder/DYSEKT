@@ -52,8 +52,8 @@ private:
         float        pan          = 0.0f;
         float        pitchSemitones = 0.0f;
         float        centsDetune  = 0.0f;
-        int          algorithm    = 0;
         float        attackSec    = 0.005f;
+        float        holdSec      = 0.0f;
         float        decaySec     = 0.1f;
         float        sustainLevel = 1.0f;
         float        releaseSec   = 0.02f;
@@ -70,7 +70,7 @@ private:
         float        tonalityHz       = 0.0f;
         float        formantSemitones = 0.0f;
         bool         formantComp      = false;
-        int          grainMode        = 0;
+
         bool         releaseTail      = false;
         int          outputBus        = 0;
         float        bpm              = 120.0f;
@@ -102,7 +102,7 @@ private:
     // ── String formatters ─────────────────────────────────────────────────────
     static juce::String midiNoteName (int note);
     static juce::String formatMs     (float secs);
-    static juce::String formatAlgo   (int algo);
+
     static juce::String formatPan    (float pan);
 
     DysektProcessor& processor;

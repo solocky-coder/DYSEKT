@@ -60,16 +60,6 @@ juce::String SliceLcdDisplay::formatMs (float secs)
     return juce::String (secs, 2) + "s ";
 }
 
-juce::String SliceLcdDisplay::formatAlgo (int algo)
-{
-    switch (algo)
-    {
-        case 0:  return "TIME-DOMAIN";
-        case 1:  return "GRANULAR   ";
-        case 2:  return "SPECTRAL   ";
-        default: return "UNKNOWN    ";
-    }
-}
 
 juce::String SliceLcdDisplay::formatPan (float pan)
 {
@@ -131,8 +121,8 @@ void SliceLcdDisplay::buildDisplayData()
     data.pan         = sl.pan;
     data.pitchSemitones = sl.pitchSemitones;
     data.centsDetune = sl.centsDetune;
-    data.algorithm   = sl.algorithm;
     data.attackSec   = sl.attackSec;
+    data.holdSec     = sl.holdSec;
     data.decaySec    = sl.decaySec;
     data.sustainLevel = sl.sustainLevel;
     data.releaseSec  = sl.releaseSec;
@@ -148,7 +138,7 @@ void SliceLcdDisplay::buildDisplayData()
     data.tonalityHz      = sl.tonalityHz;
     data.formantSemitones = sl.formantSemitones;
     data.formantComp     = sl.formantComp;
-    data.grainMode       = sl.grainMode;
+
     data.releaseTail     = sl.releaseTail;
     data.outputBus       = sl.outputBus;
     data.bpm             = sl.bpm;
@@ -674,12 +664,12 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 4, panStr, pitStr);
     }
 
-    // ── Row 5:  DET:+xct  |  ALGO:xxxxxxxx ───────────────────────────────────
+    // ── Row 5:  DET:+xct  |  HLD:xxxms ───────────────────────────────────────
     {
         const float det = data.centsDetune;
-        juce::String detStr  = juce::String ("DET:") + (det >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (det)) + "ct";
-        juce::String algoStr = "ALGO:" + formatAlgo (data.algorithm).trimEnd();
-        drawRowPair (g, 5, detStr, algoStr);
+        juce::String detStr = juce::String ("DET:") + (det >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (det)) + "ct";
+        juce::String hldStr = "HLD:" + formatMs (data.holdSec).trimEnd();
+        drawRowPair (g, 5, detStr, hldStr);
     }
 
     // ── Row 6:  ATK/DEC  |  SUS/REL  +  badge flags ─────────────────────────
@@ -702,18 +692,10 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 7, fmntStr, tonalStr);
     }
 
-    // ── Row 8:  GRAIN:xxxxx  |  FRES:x.xx ───────────────────────────────────
+    // ── Row 8:  FRES:x.xx ────────────────────────────────────────────────────
     {
-        juce::String grainStr;
-        switch (data.grainMode)
-        {
-            case 0:  grainStr = "GRAIN:FAST";   break;
-            case 1:  grainStr = "GRAIN:NORMAL"; break;
-            case 2:  grainStr = "GRAIN:SMOOTH"; break;
-            default: grainStr = "GRAIN:?";      break;
-        }
         juce::String fresStr = "FRES:" + juce::String (data.filterRes, 2);
-        drawRowPair (g, 8, grainStr, fresStr);
+        drawRow (g, 8, "FRES", juce::String (data.filterRes, 2));
     }
 
     // ── Row 9:  OUT:xx  |  BPM:xxx.xx  +  toggle flags ───────────────────────
