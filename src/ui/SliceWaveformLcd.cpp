@@ -182,12 +182,18 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     static constexpr float kAX   = 0.85f;   // attack can span entire slice
     static constexpr float kRMax = 0.99f;
 
-    // Slice-relative sqrt mapping: node = sqrt(ms / sliceDurMs)
-    // This keeps nodes visible for typical ADSR values regardless of slice length.
-    const float sliceDurMs = getSliceDurMs();   // actual selected slice duration
-    const float attackNorm  = std::sqrt (juce::jmin (attackMs  / sliceDurMs, 1.0f));
-    const float decayNorm   = std::sqrt (juce::jmin (decayMs   / sliceDurMs, 1.0f));
-    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / sliceDurMs, 1.0f));
+    // Fixed view windows matching the SCB knob ranges:
+    //   Attack  → 0-1000 ms  (knob max = 1.0s)
+    //   Decay   → 0-5000 ms  (knob max = 5.0s)
+    //   Release → 0-5000 ms  (knob max = 5.0s)
+    // Using sliceDurMs as the window caused the node to pin at the right edge
+    // once the value exceeded the slice length (e.g. 464ms slice + 5000ms decay).
+    static constexpr float kAttackViewMs  = 1000.0f;
+    static constexpr float kDecayViewMs   = 5000.0f;
+    static constexpr float kReleaseViewMs = 5000.0f;
+    const float attackNorm  = std::sqrt (juce::jmin (attackMs  / kAttackViewMs,  1.0f));
+    const float decayNorm   = std::sqrt (juce::jmin (decayMs   / kDecayViewMs,   1.0f));
+    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / kReleaseViewMs, 1.0f));
 
     env.ax  = juce::jlimit (0.0f, kAX, attackNorm * kAX);
 
@@ -238,15 +244,17 @@ void SliceWaveformLcd::commitNodes()
     const float kSEnd_eff = env.ax + remain * 0.65f;
 
     // Inverse of slice-relative sqrt mapping in buildEnvelopeNodes:
-    //   ms = ratio^2 * sliceDurMs   (inverse of  norm = sqrt(ms/sliceDurMs))
-    const float sliceDurMs = getSliceDurMs();
+    //   ms = ratio^2 * kXxxViewMs  (inverse of  norm = sqrt(ms/kXxxViewMs))
+    static constexpr float kAttackViewMs  = 1000.0f;
+    static constexpr float kDecayViewMs   = 5000.0f;
+    static constexpr float kReleaseViewMs = 5000.0f;
     const float aRatio = env.ax / kAX;
     const float dRatio = (kDX_eff > env.ax) ? (env.dx - env.ax) / (kDX_eff - env.ax) : 0.0f;
     const float rRatio = (kRMax   > kSEnd_eff) ? (env.rx - kSEnd_eff) / (kRMax - kSEnd_eff) : 0.0f;
-    const float attackMs  = juce::jlimit (0.0f, sliceDurMs, aRatio * aRatio * sliceDurMs);
-    const float decayMs   = juce::jlimit (0.0f, sliceDurMs, dRatio * dRatio * sliceDurMs);
+    const float attackMs  = juce::jlimit (0.0f, kAttackViewMs,  aRatio * aRatio * kAttackViewMs);
+    const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,   dRatio * dRatio * kDecayViewMs);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,     (1.0f - env.sy) * 100.0f);
-    const float releaseMs = juce::jlimit (0.0f, sliceDurMs, rRatio * rRatio * sliceDurMs);
+    const float releaseMs = juce::jlimit (0.0f, kReleaseViewMs, rRatio * rRatio * kReleaseViewMs);
 
     // Write to selected slice via CmdSetSliceParam (per-slice, not global)
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
