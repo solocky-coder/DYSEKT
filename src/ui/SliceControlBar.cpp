@@ -15,7 +15,6 @@ static const juce::Colour kAdsrAttack { 0xFF00FF87 }; // Toxic Lime
 static const juce::Colour kAdsrDecay { 0xFFFFE800 }; // Radioactive Yellow
 static const juce::Colour kAdsrSustain { 0xFF00C8FF }; // Ice Blue
 static const juce::Colour kAdsrRelease { 0xFFFF6B00 }; // Molten Orange
-static const juce::Colour kAdsrHold    { 0xFFFF00FF }; // Hot Magenta
 
 static juce::Colour adsrTintForField (int fieldId)
 {
@@ -24,7 +23,6 @@ static juce::Colour adsrTintForField (int fieldId)
  if (fieldId == F::FieldDecay) return kAdsrDecay;
  if (fieldId == F::FieldSustain) return kAdsrSustain;
  if (fieldId == F::FieldRelease) return kAdsrRelease;
- if (fieldId == F::FieldHold)    return kAdsrHold;
  return {}; // invalid = use theme default
 }
 
@@ -153,7 +151,6 @@ float SliceControlBar::toNorm (int fieldId, float v) const
  case F::FieldTonality: return juce::jlimit (0.f, 1.f, v / 8000.f);
  case F::FieldFormant: return juce::jlimit (0.f, 1.f, (v + 24.f) / 48.f);
  case F::FieldAttack: return juce::jlimit (0.f, 1.f, v / 1.f);
- case F::FieldHold:   return juce::jlimit (0.f, 1.f, v / 5.f);
  case F::FieldDecay: return juce::jlimit (0.f, 1.f, v / 5.f);
  case F::FieldSustain: return juce::jlimit (0.f, 1.f, v);
  case F::FieldRelease: return juce::jlimit (0.f, 1.f, v / 5.f);
@@ -437,7 +434,7 @@ void SliceControlBar::drawMidiLearnCell (juce::Graphics& g, int x, int y,
 // =============================================================================
 // showMidiLearnMenu
 // =============================================================================
-void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos)
+void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point screenPos)
 {
  const bool mapped = processor.midiLearn.isMapped (fieldId);
  juce::PopupMenu menu;
@@ -452,7 +449,7 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos
  float ms = DysektLookAndFeel::getMenuScale();
  menu.showMenuAsync (
  juce::PopupMenu::Options()
- .withTargetScreenArea(juce::Rectangle<int>(screenPos.x, screenPos.y, 1, 1))
+ .withTargetScreenArea(juce::Rectangle(screenPos.x, screenPos.y, 1, 1))
  .withParentComponent(topLvl)
  .withStandardItemHeight((int)(24 * ms)),
  [this, fieldId] (int result) {
@@ -460,7 +457,7 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos
  else if (result == 2) { processor.midiLearn.clearMapping (fieldId); repaint(); }
  else if (result == 1000)
  {
- if (auto* editor = findParentComponentOfClass<DysektEditor>())
+ if (auto* editor = findParentComponentOfClass())
  editor->keyPressed(juce::KeyPress('M', juce::ModifierKeys::commandModifier, 0));
  }
  }
@@ -482,7 +479,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  g.setGradientFill (outerGrad);
  g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
- g.setColour (ac.withAlpha (0.65f));
+ g.setColour (ac.withAlpha (0.20f));
  g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
  auto screen = b.reduced (4);
@@ -526,24 +523,9 @@ void SliceControlBar::paint (juce::Graphics& g)
  ? processor.sliceManager.getSlice (idx)
  : ui.slices[(size_t) juce::jmax (0, idx)];
 
- // Dynamic release ceiling = selected slice duration in seconds.
- // Matches the normalisation used by SliceWaveformLcd::buildEnvelopeNodes()
- // so the SCB knob arc and the envelope node always agree on what "max" means.
- float sliceDurSec = 1.0f;
- {
-     const int total = processor.sampleData.getNumFrames();
-     if (total > 0)
-     {
-         const int sliceEnd = processor.sliceManager.getEndForSlice (idx, total);
-         const int sliceLen = sliceEnd - s.startSample;
-         const float sr     = (float) processor.voicePool.getSampleRate();
-         if (sliceLen > 0 && sr > 0.f)
-             sliceDurSec = (float) sliceLen / sr;
-     }
- }
-
  float gBpm = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
  float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
+ int gAlgo = (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
  float gAttack = processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load();
  float gDecay = processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load();
  float gSustain = processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load();
@@ -552,9 +534,11 @@ void SliceControlBar::paint (juce::Graphics& g)
  int gLoopMode = (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
  bool gStretch = processor.apvts.getRawParameterValue (ParamIds::defaultStretchEnabled)->load() > 0.5f;
 
- // algo is now derived from stretchVal — no user-facing algo selector
+ bool algoLocked = (s.lockMask & kLockAlgorithm) != 0;
+ int algoVal = algoLocked ? s.algorithm : gAlgo;
  bool stretchLocked = (s.lockMask & kLockStretch) != 0;
  bool stretchVal = stretchLocked ? s.stretchEnabled : gStretch;
+ bool repitchStretch = (algoVal == 0) && stretchVal;
 
  int cw;
  using F = DysektProcessor;
@@ -594,11 +578,20 @@ void SliceControlBar::paint (juce::Graphics& g)
  {
  bool locked = (s.lockMask & kLockPitch) != 0;
  float pv = locked ? s.pitchSemitones : gPitch;
+ if (repitchStretch)
+ {
+ float daw = processor.dawBpm.load();
+ float bpmVal = (s.lockMask & kLockBpm) ? s.bpm : gBpm;
+ float semis = (daw > 0.f && bpmVal > 0.f)
+ ? 12.f * std::log2 (daw / bpmVal) : 0.f;
+ pv = (float) std::round (semis);
+ }
  int pvi = (int) std::round (pv);
  drawKnobCell (g, x, row1y, "PITCH",
  (pvi >= 0 ? "+" : "") + juce::String (pvi) + "st",
  toNorm (F::FieldPitch, pv),
  locked, kLockPitch, F::FieldPitch, -48.f, 48.f, 0.1f, cw);
+ if (repitchStretch) cells.back().isReadOnly = true;
  x += cw + 4;
  }
 
@@ -607,16 +600,35 @@ void SliceControlBar::paint (juce::Graphics& g)
  float gCents = processor.apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load();
  bool locked = (s.lockMask & kLockCentsDetune) != 0;
  float cv = locked ? s.centsDetune : gCents;
+ if (repitchStretch)
+ {
+ float daw = processor.dawBpm.load();
+ float bpmVal = (s.lockMask & kLockBpm) ? s.bpm : gBpm;
+ float semis = (daw > 0.f && bpmVal > 0.f)
+ ? 12.f * std::log2 (daw / bpmVal) : 0.f;
+ int semisI = (int) std::round (semis);
+ cv = (semis - (float) semisI) * 100.f;
+ }
  int cvi = juce::jlimit (-100, 100, (int) std::round (cv));
  drawKnobCell (g, x, row1y, "TUNE",
  (cvi >= 0 ? "+" : "") + juce::String (cvi) + "ct",
  toNorm (F::FieldCentsDetune, cv),
  locked, kLockCentsDetune, F::FieldCentsDetune, -100.f, 100.f, 0.1f, cw);
+ if (repitchStretch) cells.back().isReadOnly = true;
  x += cw + 4;
  }
 
- // ALGO selector removed — Repitch vs Stretch is now derived from the STCH toggle
- if (stretchVal)
+ // ALGO — choice
+ {
+ juce::String algoNames[] = { "Repitch", "Stretch" };
+ drawParamCell (g, x, row1y, "ALGO",
+ algoNames[juce::jlimit (0, 1, algoVal)],
+ algoLocked, kLockAlgorithm, F::FieldAlgorithm,
+ 0.f, 1.f, 1.f, false, true, cw);
+ x += cw + 4;
+ }
+
+ if (algoVal == 1)
  {
  float gTonal = processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load();
  bool locked = (s.lockMask & kLockTonality) != 0;
@@ -727,19 +739,6 @@ void SliceControlBar::paint (juce::Graphics& g)
  x += cw + 4;
  }
 
-
- // HLD — hold knob (keeps peak level before decay)
- {
-  float gHold = processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load();
-  bool locked = (s.lockMask & kLockHold) != 0;
-  float hld = locked ? s.holdSec : gHold / 1000.f;
-  drawKnobCell (g, x, row2y, "HLD",
-  juce::String ((int) (hld * 1000.f)) + "ms",
-  toNorm (F::FieldHold, hld),
-  locked, kLockHold, F::FieldHold, 0.f, 5.f, 0.001f, cw);
-  x += cw + 4;
- }
-
  // DEC — knob
  {
  bool locked = (s.lockMask & kLockDecay) != 0;
@@ -766,12 +765,10 @@ void SliceControlBar::paint (juce::Graphics& g)
  {
  bool locked = (s.lockMask & kLockRelease) != 0;
  float rel = locked ? s.releaseSec : gRelease / 1000.f;
- // Normalise arc against slice duration — must match SliceWaveformLcd::buildEnvelopeNodes()
- const float relNorm = juce::jlimit (0.f, 1.f, rel / sliceDurSec);
  drawKnobCell (g, x, row2y, "REL",
  juce::String ((int) (rel * 1000.f)) + "ms",
- relNorm,
- locked, kLockRelease, F::FieldRelease, 0.f, sliceDurSec, 0.001f, cw);
+ toNorm (F::FieldRelease, rel),
+ locked, kLockRelease, F::FieldRelease, 0.f, 5.f, 0.001f, cw);
  x += cw + 4;
  adsrGroupX2 = x - 4;
  }
@@ -1011,7 +1008,6 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  case F::FieldTonality: dragStartValue = (sl.lockMask & kLockTonality) ? sl.tonalityHz : processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load(); break;
  case F::FieldFormant: dragStartValue = (sl.lockMask & kLockFormant) ? sl.formantSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load(); break;
  case F::FieldAttack: dragStartValue = (sl.lockMask & kLockAttack) ? sl.attackSec : processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.f; break;
- case F::FieldHold:   dragStartValue = (sl.lockMask & kLockHold)   ? sl.holdSec   : processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load()   / 1000.f; break;
  case F::FieldDecay: dragStartValue = (sl.lockMask & kLockDecay) ? sl.decaySec : processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load() / 1000.f; break;
  case F::FieldSustain: dragStartValue = (sl.lockMask & kLockSustain) ? sl.sustainLevel : processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.f; break;
  case F::FieldRelease: dragStartValue = (sl.lockMask & kLockRelease) ? sl.releaseSec : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f; break;
@@ -1226,7 +1222,6 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
 
  // ── All other knobs: CmdSetSliceParam ─────────────────────────────────
  bool isAdsr = (cell.fieldId == F::FieldAttack
- || cell.fieldId == F::FieldHold
  || cell.fieldId == F::FieldDecay
  || cell.fieldId == F::FieldSustain
  || cell.fieldId == F::FieldRelease);
@@ -1244,7 +1239,6 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  // Shift = fine mode (÷10)
  float sensitivity = 1.0f;
  if (cell.fieldId == F::FieldAttack) sensitivity = 2.0f;
- else if (cell.fieldId == F::FieldHold)  sensitivity = 10.0f;
  else if (cell.fieldId == F::FieldDecay) sensitivity = 10.0f;
  else if (cell.fieldId == F::FieldRelease) sensitivity = 10.0f;
  else if (cell.fieldId == F::FieldSustain) sensitivity = 0.5f;
@@ -1254,7 +1248,6 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  float ds = dragStartValue, dmin = cell.minVal, dmax = cell.maxVal;
  // Convert to display units
  if (cell.fieldId == F::FieldAttack ||
- cell.fieldId == F::FieldHold ||
  cell.fieldId == F::FieldDecay ||
  cell.fieldId == F::FieldRelease)
  { ds *= 1000.f; dmin *= 1000.f; dmax *= 1000.f; }
@@ -1264,7 +1257,6 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  float dv = juce::jlimit (dmin, dmax, ds + deltaY * sensitivity);
 
  if (cell.fieldId == F::FieldAttack ||
- cell.fieldId == F::FieldHold ||
  cell.fieldId == F::FieldDecay ||
  cell.fieldId == F::FieldRelease)
  newNative = dv / 1000.f;
@@ -1338,7 +1330,7 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
 
  if (ui.numSlices == 0 && rootNoteArea.contains (pos))
  {
- textEditor = std::make_unique<juce::TextEditor>();
+ textEditor = std::make_unique();
  addAndMakeVisible (*textEditor);
  textEditor->setBounds (rootNoteArea.getX(), rootNoteArea.getY() + 15,
  rootNoteArea.getWidth(), 16);
@@ -1382,7 +1374,6 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  case F::FieldTonality: currentVal = (sl.lockMask & kLockTonality) ? sl.tonalityHz : processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load(); break;
  case F::FieldFormant: currentVal = (sl.lockMask & kLockFormant) ? sl.formantSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load(); break;
  case F::FieldAttack: currentVal = ((sl.lockMask & kLockAttack) ? sl.attackSec : processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.f) * 1000.f; break;
- case F::FieldHold:   currentVal = ((sl.lockMask & kLockHold)   ? sl.holdSec   : processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load()   / 1000.f) * 1000.f; break;
  case F::FieldDecay: currentVal = ((sl.lockMask & kLockDecay) ? sl.decaySec : processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load() / 1000.f) * 1000.f; break;
  case F::FieldSustain: currentVal = ((sl.lockMask & kLockSustain) ? sl.sustainLevel : processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.f) * 100.f; break;
  case F::FieldRelease: currentVal = ((sl.lockMask & kLockRelease) ? sl.releaseSec : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f) * 1000.f; break;
@@ -1405,7 +1396,7 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
 // =============================================================================
 void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
 {
- textEditor = std::make_unique<juce::TextEditor>();
+ textEditor = std::make_unique();
  addAndMakeVisible (*textEditor);
  textEditor->setBounds (cell.x + kParamCellTextX, cell.y + 14,
  cell.w - kParamCellTextX - 2, 16);
@@ -1416,7 +1407,7 @@ void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
 
  using F = DysektProcessor;
  juce::String displayVal;
- if (cell.fieldId == F::FieldAttack || cell.fieldId == F::FieldHold || cell.fieldId == F::FieldDecay || cell.fieldId == F::FieldRelease)
+ if (cell.fieldId == F::FieldAttack || cell.fieldId == F::FieldDecay || cell.fieldId == F::FieldRelease)
  displayVal = juce::String ((int) currentValue);
  else if (cell.fieldId == F::FieldSustain)
  displayVal = juce::String ((int) currentValue);

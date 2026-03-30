@@ -69,11 +69,10 @@ static Slice sanitiseRestoredSlice (Slice s)
     s.bpm = juce::jlimit (20.0f, 999.0f, s.bpm);
     s.pitchSemitones = juce::jlimit (-48.0f, 48.0f, s.pitchSemitones);
     s.algorithm = juce::jlimit (0, 1, s.algorithm == 2 ? 1 : s.algorithm);
-    s.attackSec = juce::jlimit (0.0f, 120.0f, s.attackSec);
-    s.holdSec   = juce::jlimit (0.0f, 120.0f, s.holdSec);
-    s.decaySec = juce::jlimit (0.0f, 120.0f, s.decaySec);
+    s.attackSec = juce::jlimit (0.0f, 1.0f, s.attackSec);
+    s.decaySec = juce::jlimit (0.0f, 5.0f, s.decaySec);
     s.sustainLevel = juce::jlimit (0.0f, 1.0f, s.sustainLevel);
-    s.releaseSec = juce::jlimit (0.0f, 120.0f, s.releaseSec);
+    s.releaseSec = juce::jlimit (0.0f, 5.0f, s.releaseSec);
     s.muteGroup = juce::jlimit (0, 32, s.muteGroup);
     s.loopMode = juce::jlimit (0, 2, s.loopMode);
     s.tonalityHz = juce::jlimit (0.0f, 8000.0f, s.tonalityHz);
@@ -146,7 +145,6 @@ DysektProcessor::DysektProcessor()
     decayParam     = apvts.getRawParameterValue (ParamIds::defaultDecay);
     sustainParam   = apvts.getRawParameterValue (ParamIds::defaultSustain);
     releaseParam   = apvts.getRawParameterValue (ParamIds::defaultRelease);
-    holdParam      = apvts.getRawParameterValue (ParamIds::defaultHold);
     muteGroupParam = apvts.getRawParameterValue (ParamIds::defaultMuteGroup);
     stretchParam   = apvts.getRawParameterValue (ParamIds::defaultStretchEnabled);
     tonalityParam  = apvts.getRawParameterValue (ParamIds::defaultTonality);
@@ -636,18 +634,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
             blocksSinceGestureActivity = 0;
             break;
 
-        // Drag-style commands: keep gesture lock open while the drag continues.
-        // The 2-block idle timeout in processBlock() will release it automatically
-        // once the user stops, collapsing the whole drag into one undo step.
         case CmdSetSliceBounds:
-            if (! gestureSnapshotCaptured)
-                captureSnapshot();
-            gestureSnapshotCaptured = true;   // ← stay locked during drag
-            blocksSinceGestureActivity = 0;
-            break;
-
-        // Discrete, atomic operations: capture once then immediately unlock so
-        // each operation gets its own undo step.
         case CmdCreateSlice:
         case CmdDeleteSlice:
         case CmdStretch:
@@ -661,22 +648,10 @@ void DysektProcessor::handleCommand (const Command& cmd)
             blocksSinceGestureActivity = 0;
             break;
 
-        // State-mutating commands that previously fell through to default without
-        // capturing a snapshot — each of these must be undoable.
-        case CmdApplyTrim:
-        case CmdSetRootNote:
-        case CmdSetSliceColour:
-        case CmdSetSliceLockAll:
-            if (! gestureSnapshotCaptured)
-                captureSnapshot();
-            gestureSnapshotCaptured = false;
-            blocksSinceGestureActivity = 0;
-            break;
-
         default:
-            // Non-mutating commands (select, load callbacks, panic, etc.).
-            // Just release any open gesture window.
-            gestureSnapshotCaptured = false;
+            // Leave param gesture mode after idle/non-param commands.
+            if (cmd.type != CmdSetSliceParam)
+                gestureSnapshotCaptured = false;
             break;
     }
 
@@ -752,7 +727,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockPitch)        s.pitchSemitones    = pitchParam->load();
                     else if (bit == kLockAlgorithm)    s.algorithm         = (int) algoParam->load();
                     else if (bit == kLockAttack)       s.attackSec         = attackParam->load() / 1000.0f;
-                    else if (bit == kLockHold)         s.holdSec           = holdParam->load()  / 1000.0f;
                     else if (bit == kLockDecay)        s.decaySec          = decayParam->load() / 1000.0f;
                     else if (bit == kLockSustain)      s.sustainLevel      = sustainParam->load() / 100.0f;
                     else if (bit == kLockRelease)      s.releaseSec        = releaseParam->load() / 1000.0f;
@@ -795,7 +769,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     if (!(s.lockMask & kLockPitch))         s.pitchSemitones   = pitchParam->load();
                     if (!(s.lockMask & kLockAlgorithm))     s.algorithm        = (int) algoParam->load();
                     if (!(s.lockMask & kLockAttack))        s.attackSec        = attackParam->load()       / 1000.0f;
-                    if (!(s.lockMask & kLockHold))          s.holdSec          = holdParam->load()         / 1000.0f;
                     if (!(s.lockMask & kLockDecay))         s.decaySec         = decayParam->load()        / 1000.0f;
                     if (!(s.lockMask & kLockSustain))       s.sustainLevel     = sustainParam->load()      / 100.0f;
                     if (!(s.lockMask & kLockRelease))       s.releaseSec       = releaseParam->load()      / 1000.0f;
@@ -840,7 +813,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldPitch:     s.pitchSemitones = val; s.lockMask |= kLockPitch;     break;
                     case FieldAlgorithm: s.algorithm = (int) val; s.lockMask |= kLockAlgorithm; break;
                     case FieldAttack:    s.attackSec = val;      s.lockMask |= kLockAttack;    break;
-                    case FieldHold:      s.holdSec = val;        s.lockMask |= kLockHold;      break;
                     case FieldDecay:     s.decaySec = val;       s.lockMask |= kLockDecay;     break;
                     case FieldSustain:   s.sustainLevel = val;   s.lockMask |= kLockSustain;   break;
                     case FieldRelease:   s.releaseSec = val;     s.lockMask |= kLockRelease;   break;
@@ -869,7 +841,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
                 }
             }
-            uiSnapshotDirty.store (true, std::memory_order_release);
             break;
         }
 
@@ -1079,10 +1050,9 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 std::memory_order_relaxed);
             ccPickedUp.fill (false);  // new slice — absolute knobs must pick up again
             ccSmootherActive.fill (false);
-            markerPending        = false;
-            markerPendingSlice   = -1;
-            markerIdleCounter    = 0;
-            markerSmootherSlice  = -1;
+            markerPending      = false;
+            markerPendingSlice = -1;
+            markerIdleCounter  = 0;
             liveDragSliceIdx.store (-1, std::memory_order_release);
             break;
 
@@ -1269,14 +1239,11 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             }
                             uiSnapshotDirty.store (true, std::memory_order_release);
                         }
-                        else if (trimModeActive.load (std::memory_order_relaxed))
+                        else
                         {
-                            // Absolute in trim mode only: seed from trim atomics and arm
-                            // the smoother. processBlock() steps it and writes to the trim
-                            // atomics each buffer.
-                            // In non-trim mode we deliberately fall through without arming
-                            // the smoother — the slice path below seeds from sl.startSample,
-                            // preventing a jump to the last trim-in/out position.
+                            // Absolute: feed smoother so the marker glides instead of jumping.
+                            // processBlock() steps the smoother and writes to the correct
+                            // target (trim atomics or CmdSetSliceBounds) based on trim mode.
                             const int cur    = (outFieldId == FieldSliceStart) ? curStart : curEnd;
                             const int target = (outFieldId == FieldSliceStart)
                                 ? juce::jlimit (0, curEnd - 64,       (int)(outNorm * (float)total))
@@ -1316,7 +1283,6 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldTonality:     return 100.0f;  // 100 Hz/click
                             case FieldFormant:      return 0.5f;    // 0.5 semitone/click
                             case FieldAttack:       return 0.002f;  // 2 ms/click
-                            case FieldHold:         return 0.010f;  // 10 ms/click
                             case FieldDecay:        return 0.010f;  // 10 ms/click
                             case FieldSustain:      return 0.01f;   // 1%/click
                             case FieldRelease:      return 0.010f;  // 10 ms/click
@@ -1342,7 +1308,6 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldTonality:     return (sl.lockMask & kLockTonality)     ? sl.tonalityHz       : apvts.getRawParameterValue (ParamIds::defaultTonality)->load();
                             case FieldFormant:      return (sl.lockMask & kLockFormant)      ? sl.formantSemitones : apvts.getRawParameterValue (ParamIds::defaultFormant)->load();
                             case FieldAttack:       return (sl.lockMask & kLockAttack)       ? sl.attackSec        : apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.0f;
-                            case FieldHold:         return (sl.lockMask & kLockHold)         ? sl.holdSec          : apvts.getRawParameterValue (ParamIds::defaultHold)->load()   / 1000.0f;
                             case FieldDecay:        return (sl.lockMask & kLockDecay)        ? sl.decaySec         : apvts.getRawParameterValue (ParamIds::defaultDecay)->load()  / 1000.0f;
                             case FieldSustain:      return (sl.lockMask & kLockSustain)      ? sl.sustainLevel     : apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.0f;
                             case FieldRelease:      return (sl.lockMask & kLockRelease)      ? sl.releaseSec       : apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.0f;
@@ -1383,11 +1348,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldFilterRes:    nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
                             case FieldTonality:     nativeVal = juce::jlimit (0.0f,  8000.0f,  raw); break;
                             case FieldFormant:      nativeVal = juce::jlimit (-24.0f,   24.0f, raw); break;
-                            case FieldAttack:       nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
-                            case FieldHold:         nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
-                            case FieldDecay:        nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
+                            case FieldAttack:       nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
+                            case FieldDecay:        nativeVal = juce::jlimit (0.0f,     5.0f,  raw); break;
                             case FieldSustain:      nativeVal = juce::jlimit (0.0f,     1.0f,  raw); break;
-                            case FieldRelease:      nativeVal = juce::jlimit (0.0f,   120.0f,  raw); break;
+                            case FieldRelease:      nativeVal = juce::jlimit (0.0f,     5.0f,  raw); break;
                             case FieldVolume:       nativeVal = juce::jlimit (-100.0f,  24.0f, raw); break;
                             case FieldMuteGroup:    nativeVal = std::round (juce::jlimit (0.0f, 32.0f, raw)); break;
                             case FieldMidiNote:     nativeVal = std::round (juce::jlimit (0.0f, 127.0f, raw)); break;
@@ -1444,7 +1408,6 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             case FieldTonality:     nativeVal = outNorm * 8000.0f;                 break;
                             case FieldFormant:      nativeVal = -24.0f + outNorm * 48.0f;          break;
                             case FieldAttack:       nativeVal = outNorm * 1.0f;                    break;
-                            case FieldHold:         nativeVal = outNorm * 5.0f;                    break;
                             case FieldDecay:        nativeVal = outNorm * 5.0f;                    break;
                             case FieldSustain:      nativeVal = outNorm;                           break;
                             case FieldRelease:      nativeVal = outNorm * 5.0f;                    break;
@@ -1467,46 +1430,43 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         const int total = sampleData.getNumFrames();
                         if (total > 1)
                         {
-                            auto& sl     = sliceManager.getSlice (sel);
-                            const int slEnd = sliceManager.getEndForSlice (sel, total);
+                            static constexpr float kEndlessSamplesPerStep = 1.0f / 512.0f;
+                            const int stepSamples = juce::jmax (1, (int) (total * kEndlessSamplesPerStep));
 
-                            if (outIsRelative)
+                            auto& sl = sliceManager.getSlice (sel);
+
+                            if (outFieldId == FieldSliceStart)
                             {
-                                // Relative: small per-click delta — inherently smooth.
-                                // Use the liveDrag / idle-commit path (same as before).
-                                const float sensitivity = (float) total / 300.0f;
-                                const int curLive = markerPending
-                                    ? liveDragBoundsStart.load (std::memory_order_relaxed)
-                                    : sl.startSample;
-                                const int newStart = juce::jlimit (0, slEnd - 64,
-                                    curLive + (int)(outNorm * sensitivity));
-                                liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
-                                liveDragBoundsEnd.store   (slEnd,    std::memory_order_relaxed);
-                                liveDragSliceIdx.store    (sel,      std::memory_order_release);
+                                // Knob-drag emulation: CC drives the MARKER knob exactly
+                                // as a mouse drag would. Sensitivity = sampleNumFrames/300
+                                // (same as SCB mouseDrag). Writes to liveDrag atomics.
+                                // Commit fires after kMarkerIdleBlocks of CC silence.
+                                const int slEnd = sliceManager.getEndForSlice (sel, total);
+
+                                if (outIsRelative)
+                                {
+                                    const float sensitivity = (float) total / 300.0f;
+                                    const int curLive = markerPending
+                                        ? liveDragBoundsStart.load (std::memory_order_relaxed)
+                                        : sl.startSample;
+                                    const int newStart = juce::jlimit (0, slEnd - 64,
+                                        curLive + (int)(outNorm * sensitivity));
+                                    liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
+                                }
+                                else
+                                {
+                                    const int newStart = juce::jlimit (0, slEnd - 64,
+                                        (int)(outNorm * (float) total));
+                                    liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
+                                }
+
+                                liveDragBoundsEnd.store (slEnd, std::memory_order_relaxed);
+                                liveDragSliceIdx.store  (sel,   std::memory_order_release);
                                 markerPending      = true;
                                 markerPendingSlice = sel;
                                 markerIdleCounter  = 0;
+                                uiSnapshotDirty.store (true, std::memory_order_release);
                             }
-                            else
-                            {
-                                // Absolute: the raw target can be anywhere across the
-                                // whole file — writing directly to the atomic causes a
-                                // visible jump. Route through the per-slot smoother so
-                                // the processBlock() loop fires CmdSetSliceBounds each
-                                // buffer and the marker glides exactly like trim mode.
-                                const int newStart = juce::jlimit (0, slEnd - 64,
-                                    (int)(outNorm * (float) total));
-                                if (! ccSmootherActive[(size_t) outFieldId])
-                                    ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue (
-                                        (float) sl.startSample);
-                                ccSmoothers[(size_t) outFieldId].setTargetValue ((float) newStart);
-                                ccSmootherActive[(size_t) outFieldId] = true;
-                                markerSmootherSlice = sel;
-                                // The smoother loop commits via CmdSetSliceBounds each
-                                // block — no liveDrag / markerPending needed here.
-                            }
-
-                            uiSnapshotDirty.store (true, std::memory_order_release);
                         }
                     }
                     else
@@ -1552,9 +1512,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.velocity         = velocity;
                 p.globalBpm        = bpmParam->load();
                 p.globalPitch      = pitchParam->load();
-                // globalAlgorithm removed — algo derived from stretchOn flag
+                p.globalAlgorithm  = (int) algoParam->load();
                 p.globalAttackSec  = attackParam->load()  / 1000.0f;
-                p.globalHoldSec    = holdParam->load()    / 1000.0f;
                 p.globalDecaySec   = decayParam->load()   / 1000.0f;
                 p.globalSustain    = sustainParam->load() / 100.0f;
                 p.globalReleaseSec = releaseParam->load() / 1000.0f;
@@ -1564,7 +1523,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.globalTonality   = tonalityParam->load();
                 p.globalFormant    = formantParam->load();
                 p.globalFormantComp = formantCompParam->load() > 0.5f;
-                // globalGrainMode removed — Grain was a duplicate of Tonal
+                p.globalGrainMode  = (int) grainModeParam->load();
                 p.globalVolume     = masterVolParam->load();
                 p.globalReleaseTail = releaseTailParam->load() > 0.5f;
                 p.globalReverse    = reverseParam->load()      > 0.5f;
@@ -1918,24 +1877,15 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 }
                 else if (sel >= 0 && sel < sliceManager.getNumSlices() && total > 1)
                 {
-                    // Use the slice index that was active when the smoother was
-                    // seeded. If the user selects a different slice mid-glide,
-                    // 'sel' would be wrong and would corrupt the new selection.
-                    const int smoothSel = (i == FieldSliceStart && markerSmootherSlice >= 0)
-                                            ? markerSmootherSlice
-                                            : sel;
-                    if (smoothSel < 0 || smoothSel >= sliceManager.getNumSlices())
-                        break;
-
                     // Fire CmdSetSliceBounds with smoothed position
-                    auto& sl = sliceManager.getSlice (smoothSel);
+                    auto& sl = sliceManager.getSlice (sel);
                     Command smoothCmd;
                     smoothCmd.type      = CmdSetSliceBounds;
-                    smoothCmd.intParam1 = smoothSel;
+                    smoothCmd.intParam1 = sel;
                     smoothCmd.numPositions = 1;
                     if (i == FieldSliceStart)
                     {
-                        const int slEnd = sliceManager.getEndForSlice (smoothSel, total);
+                        const int slEnd = sliceManager.getEndForSlice (sel, total);
                         smoothCmd.intParam2    = juce::jlimit (0, slEnd - 64, (int) smoothed);
                         smoothCmd.positions[0] = slEnd;
                     }
@@ -1989,9 +1939,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             pendingUiOptimisticIdx.store(pendSel, std::memory_order_release);
             pendingUiOptimisticSample.store(newStart, std::memory_order_release);
         }
-        // Clear liveDragSliceIdx so the live-preview block in drainCommands
-        // stops overwriting startSample every block after the commit lands.
-        liveDragSliceIdx.store (-1, std::memory_order_release);
+        // liveDragSliceIdx cleared by handleCommand after CmdSetSliceBounds
         markerPending      = false;
         markerPendingSlice = -1;
         markerIdleCounter  = 0;

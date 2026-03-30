@@ -56,11 +56,8 @@ public:
     std::function<void (const juce::File&)> onLoadRequest;
     std::function<void()> onShortcutsToggle;
 
-    void setSoftWaveform (bool soft) { waveformMode = soft ? 1 : 0; repaint(); }
-    bool isSoftWaveform() const noexcept { return waveformMode == 1; }
-    void setWaveformMode (int m) { waveformMode = juce::jlimit (0, 7, m); repaint(); }
-    int  getWaveformMode() const noexcept { return waveformMode; }
-    void cycleWaveformMode() { waveformMode = (waveformMode + 1) % 8; repaint(); }
+    void setSoftWaveform (bool soft) { softWaveform = soft; repaint(); }
+    bool isSoftWaveform() const noexcept { return softWaveform; }
 
     bool altModeActive = false;
     bool shiftPreviewActive = false;
@@ -120,7 +117,7 @@ private:
     bool sliceDrawMode         = false;
     bool midiSliceOverlayActive = false;
     void setMidiSliceActive (bool active);
-    int  waveformMode  = 0;       // 0=Hard 1=Soft/Glow 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
+    bool softWaveform  = false;   // TAL-style gradient+outline rendering
     bool trimMode      = false;   // trim in/out marker editing mode
     int  trimInPoint   = 0;       // trim-in marker position in samples (DragTrimIn path)
     int  trimOutPoint  = 0;       // trim-out marker position in samples (DragTrimOut path)
