@@ -155,7 +155,8 @@ void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
     v.position  = p.globalReverse ? (double)(endSample - 1) : (double)startSample;
 
     v.envelope.noteOn (p.globalAttackSec, p.globalDecaySec,
-                       p.globalSustain, p.globalReleaseSec, sampleRate);
+                       p.globalSustain, p.globalReleaseSec, sampleRate,
+                       p.globalHoldSec, p.globalOneShot > 0.5f);
 
     // Pitch: already baked in as p.globalPitch = basePitch + semitoneOffset
     const float pitchSt    = p.globalPitch + p.globalCentsDetune / 100.0f;
@@ -174,22 +175,22 @@ void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
     v.filterStateL = 0.0f;
     v.filterStateR = 0.0f;
 
-    // Algorithm
+    // Algorithm: derived from stretch flag — no user-facing algo selector needed.
+    // Stretch ON  → Signalsmith (pitch-only; BPM time-stretch not available in unsliced mode)
+    // Stretch OFF → Repitch (speed = pitchRatio)
     v.stretchActive = false;
 
-    const int algo = p.globalAlgorithm;
-    if (algo == 0)
+    const float tonality = p.globalTonality;
+    const float formant  = p.globalFormant;
+    const bool  fComp    = p.globalFormantComp;
+
+    if (p.globalStretch)
     {
-        // Repitch — simple rate change
-        v.speed = (double) pitchRatio;
-    }
-    else if (algo == 1 || algo == 3 || algo == 4)
-    {
-        // Tonal / Formant / Grain — Signalsmith stretch
-        const float tonality = p.globalTonality;
-        const float formant  = p.globalFormant;
-        const bool  fComp    = p.globalFormantComp;
         initStretcher (v, pitchSt, sampleRate, tonality, formant, fComp, sample);
+    }
+    else
+    {
+        v.speed = (double) pitchRatio;
     }
 
     if (! v.stretchActive)
@@ -219,7 +220,25 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     float sustain = sm.resolveParam (sliceIdx, kLockSustain,  s.sustainLevel, p.globalSustain);
     float release = sm.resolveParam (sliceIdx, kLockRelease,  s.releaseSec,   p.globalReleaseSec);
 
-    v.envelope.noteOn (attack, decay, sustain, release, sampleRate);
+    // Clamp attack to slice duration so max-range values don't leave
+    // the envelope in the attack phase for the whole slice (near-silent output).
+    // Decay is NOT clamped: in one-shot mode the envelope decays freely to
+    // silence past the slice boundary (TAL-Drum / Speedrum behaviour).
+    const float sliceDurSec = (float)(sliceEnd - s.startSample) / (float)sampleRate;
+    attack = juce::jmin (attack, sliceDurSec);
+
+    // Resolve one-shot flag here so it can be passed to the envelope.
+    const bool isOneShot = sm.resolveParam (sliceIdx, kLockOneShot,
+                                             s.oneShot ? 1.0f : 0.0f,
+                                             p.globalOneShot > 0.5f ? 1.0f : 0.0f) > 0.5f;
+
+    // Resolve hold time for this slice.
+    const float holdSec = sm.resolveParam (sliceIdx, kLockHold,
+                                           s.holdSec,
+                                           p.globalHoldSec);
+
+    v.envelope.noteOn (attack, decay, sustain, release, sampleRate,
+                       holdSec, isOneShot);
 
     int resolvedLoopMode = (int) sm.resolveParam (sliceIdx, kLockLoop, (float) s.loopMode, (float) p.globalLoopMode);
     v.looping  = (resolvedLoopMode == 1);
@@ -234,7 +253,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
 
     v.outputBus = (int) sm.resolveParam (sliceIdx, kLockOutputBus, (float) s.outputBus, 0.0f);
 
-    int algo = (int) sm.resolveParam (sliceIdx, kLockAlgorithm, (float) s.algorithm, (float) p.globalAlgorithm);
+    // algo is now derived from stretchOn — removed per-slice algo param
 
     float sliceBpm = sm.resolveParam (sliceIdx, kLockBpm,        s.bpm,           p.globalBpm);
     float pitchSt  = sm.resolveParam (sliceIdx, kLockPitch,      s.pitchSemitones, p.globalPitch);
@@ -252,10 +271,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
                                       s.formantComp ? 1.0f : 0.0f,
                                       p.globalFormantComp ? 1.0f : 0.0f) > 0.5f;
 
-    int grainMode = (int) sm.resolveParam (sliceIdx, kLockGrainMode,
-                                           (float) s.grainMode, (float) p.globalGrainMode);
-    // Convert grainMode index (0=Fast, 1=Normal, 2=Smooth) to log2 hop adjust (-1, 0, +1)
-    int hopAdj = grainMode - 1;
+    // grainMode / hopAdj removed — Grain algo was a duplicate of Tonal
 
     v.volume = dbToLinear (sm.resolveParam (sliceIdx, kLockVolume, s.volume, p.globalVolume));
 
@@ -279,9 +295,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     v.releaseTail = sm.resolveParam (sliceIdx, kLockReleaseTail,
                                      s.releaseTail ? 1.0f : 0.0f,
                                      p.globalReleaseTail ? 1.0f : 0.0f) > 0.5f;
-    v.oneShot = sm.resolveParam (sliceIdx, kLockOneShot,
-                                  s.oneShot ? 1.0f : 0.0f,
-                                  p.globalOneShot ? 1.0f : 0.0f) > 0.5f;
+    v.oneShot = isOneShot ? 1.0f : 0.0f;  // already resolved before envelope noteOn
     v.bufferEnd = sample.getNumFrames();
 
     // Reset stretch state (guard against stale data from stolen voices)
@@ -291,33 +305,30 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     // Reset any in-flight legato pitch glide from a previous note
     legatoPitchGliding[voiceIdx].store (false, std::memory_order_relaxed);
 
+    // Routing is now derived from stretchOn flag — no separate algo param.
+    //   BPM stretch active  → Signalsmith: independent pitch + time
+    //   Stretch ON, no BPM  → Signalsmith: pitch-only (time constant — no Mickey Mouse)
+    //   Chromatic legato    → Signalsmith: pitch-only regardless of stretch flag
+    //   Stretch OFF         → Repitch: direct speed = pitchRatio
     if (stretchOn && p.dawBpm > 0.0f && sliceBpm > 0.0f)
     {
         float speedRatio = p.dawBpm / sliceBpm;
 
-        if (algo == 0)
-        {
-            // Repitch: BPM ratio drives speed (pitch is a consequence of speed)
-            v.speed = speedRatio;
-        }
-        else
-        {
-            // Signalsmith Stretch: independent pitch + time
-            v.stretchActive     = true;
-            v.speed             = 1.0;
-            v.stretchTimeRatio  = speedRatio;
-            v.stretchPitchSemis = pitch;
-            v.stretchSrcPos     = rev ? (sliceEnd - 1) : s.startSample;
+        // Always use Signalsmith for independent pitch + time
+        v.stretchActive     = true;
+        v.speed             = 1.0;
+        v.stretchTimeRatio  = speedRatio;
+        v.stretchPitchSemis = pitch;
+        v.stretchSrcPos     = rev ? (sliceEnd - 1) : s.startSample;
 
-            initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
-        }
+        initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
     }
     else
     {
-        if (algo == 1 || p.chromaticLegatoTrigger)
+        if (stretchOn || p.chromaticLegatoTrigger)
         {
-            // Stretch algo with no BPM stretch, or chromatic legato override:
-            // use Signalsmith for pitch-only (time stays constant — no Mickey Mouse)
+            // Stretch ON without BPM, or chromatic legato override:
+            // use Signalsmith for pitch-only (time stays constant)
             v.stretchActive     = true;
             v.speed             = 1.0;
             v.stretchTimeRatio  = 1.0f;
@@ -328,7 +339,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
         }
         else
         {
-            // Repitch: direct playback
+            // Repitch: direct speed change
             v.speed = pitchRatio;
         }
     }
@@ -340,8 +351,9 @@ void VoicePool::releaseNote (int note)
     {
         if (voices[i].active && voices[i].midiNote == note)
         {
-            if (voices[i].oneShot)
+            if (voices[i].oneShot && !voices[i].looping)
                 continue; // ignore note-off; voice plays through to endSample
+                          // (but NOT for looping voices — they have no natural end)
             voices[i].envelope.noteOff();
         }
     }
