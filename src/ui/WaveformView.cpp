@@ -339,143 +339,383 @@ void WaveformView::drawWaveform (juce::Graphics& g)
         fillPath.closeSubPath();
     }
 
-    if (! softWaveform)
-    {
-        if (samplesPerPixel < 1.0f)
-        {
-            g.setColour (getTheme().waveform.withAlpha (0.9f));
-            juce::Path path;
-            bool started = false;
-            for (int px = 0; px < numPeaks; ++px)
-            {
-                float y = (float) cy - peaks[(size_t) px].maxVal * scale;
-                if (! started) { path.startNewSubPath ((float) px, y); started = true; }
-                else path.lineTo ((float) px, y);
-            }
-            g.strokePath (path, juce::PathStrokeType (1.5f));
+    const juce::Colour waveCol = getTheme().waveform;
+    const int h = getHeight();
 
-            if (samplesPerPixel < 0.125f)
+    switch (waveformMode)
+    {
+        // ── Mode 0 : Hard ────────────────────────────────────────────────────
+        default:
+        case 0:
+        {
+            if (samplesPerPixel < 1.0f)
             {
-                const float dotR = 2.5f;
+                g.setColour (waveCol.withAlpha (0.9f));
+                juce::Path path;
+                bool started = false;
                 for (int px = 0; px < numPeaks; ++px)
                 {
-                    float exactPos = (float) pixelToSample (0) + (float) px * samplesPerPixel;
-                    float frac = exactPos - std::floor (exactPos);
-                    if (frac < samplesPerPixel)
+                    float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                    if (! started) { path.startNewSubPath ((float) px, y); started = true; }
+                    else path.lineTo ((float) px, y);
+                }
+                g.strokePath (path, juce::PathStrokeType (1.5f));
+
+                if (samplesPerPixel < 0.125f)
+                {
+                    const float dotR = 2.5f;
+                    for (int px = 0; px < numPeaks; ++px)
                     {
-                        float y = (float) cy - peaks[(size_t) px].maxVal * scale;
-                        g.fillEllipse ((float) px - dotR, y - dotR, dotR * 2.0f, dotR * 2.0f);
+                        float exactPos = (float) pixelToSample (0) + (float) px * samplesPerPixel;
+                        float frac = exactPos - std::floor (exactPos);
+                        if (frac < samplesPerPixel)
+                        {
+                            float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                            g.fillEllipse ((float) px - dotR, y - dotR, dotR * 2.0f, dotR * 2.0f);
+                        }
                     }
                 }
             }
-        }
-        else
-        {
-            g.setColour (getTheme().waveform);
-            g.fillPath (fillPath);
-
-            if (samplesPerPixel < 8.0f)
-            {
-                juce::Path midPath;
-                float midY0 = (float) cy - (peaks[0].maxVal + peaks[0].minVal) * 0.5f * scale;
-                midPath.startNewSubPath (0.0f, midY0);
-                for (int px = 1; px < numPeaks; ++px)
-                {
-                    float mid = (peaks[(size_t) px].maxVal + peaks[(size_t) px].minVal) * 0.5f;
-                    midPath.lineTo ((float) px, (float) cy - mid * scale);
-                }
-                g.strokePath (midPath, juce::PathStrokeType (1.5f));
-            }
-        }
-    }
-    else
-    {
-        const juce::Colour waveCol = getTheme().waveform;
-        const juce::Colour bgCol = getTheme().waveformBg;
-        const int h = getHeight();
-
-        if (samplesPerPixel < 1.0f)
-        {
-            g.setColour (waveCol.withAlpha (0.95f));
-            juce::Path path;
-            bool started = false;
-            for (int px = 0; px < numPeaks; ++px)
-            {
-                float y = (float) cy - peaks[(size_t) px].maxVal * scale;
-                if (! started) { path.startNewSubPath ((float) px, y); started = true; }
-                else path.lineTo ((float) px, y);
-            }
-            g.strokePath (path, juce::PathStrokeType (1.8f,
-                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-            if (samplesPerPixel < 0.125f)
+            else
             {
                 g.setColour (waveCol);
-                const float dotR = 3.0f;
+                g.fillPath (fillPath);
+
+                if (samplesPerPixel < 8.0f)
+                {
+                    juce::Path midPath;
+                    float midY0 = (float) cy - (peaks[0].maxVal + peaks[0].minVal) * 0.5f * scale;
+                    midPath.startNewSubPath (0.0f, midY0);
+                    for (int px = 1; px < numPeaks; ++px)
+                    {
+                        float mid = (peaks[(size_t) px].maxVal + peaks[(size_t) px].minVal) * 0.5f;
+                        midPath.lineTo ((float) px, (float) cy - mid * scale);
+                    }
+                    g.strokePath (midPath, juce::PathStrokeType (1.5f));
+                }
+            }
+            break;
+        }
+
+        // ── Mode 1 : Soft ────────────────────────────────────────────────────
+        case 1:
+        {
+            if (samplesPerPixel < 1.0f)
+            {
+                g.setColour (waveCol.withAlpha (0.95f));
+                juce::Path path;
+                bool started = false;
                 for (int px = 0; px < numPeaks; ++px)
                 {
-                    float exactPos = (float) pixelToSample (0) + (float) px * samplesPerPixel;
-                    float frac = exactPos - std::floor (exactPos);
-                    if (frac < samplesPerPixel)
+                    float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                    if (! started) { path.startNewSubPath ((float) px, y); started = true; }
+                    else path.lineTo ((float) px, y);
+                }
+                g.strokePath (path, juce::PathStrokeType (1.8f,
+                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+                if (samplesPerPixel < 0.125f)
+                {
+                    g.setColour (waveCol);
+                    const float dotR = 3.0f;
+                    for (int px = 0; px < numPeaks; ++px)
                     {
-                        float y = (float) cy - peaks[(size_t) px].maxVal * scale;
-                        g.fillEllipse ((float) px - dotR, y - dotR, dotR * 2.0f, dotR * 2.0f);
+                        float exactPos = (float) pixelToSample (0) + (float) px * samplesPerPixel;
+                        float frac = exactPos - std::floor (exactPos);
+                        if (frac < samplesPerPixel)
+                        {
+                            float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                            g.fillEllipse ((float) px - dotR, y - dotR, dotR * 2.0f, dotR * 2.0f);
+                        }
                     }
                 }
             }
+            else
+            {
+                juce::ColourGradient grad (
+                    waveCol.withAlpha (0.0f), 0.0f, 0.0f,
+                    waveCol.withAlpha (0.0f), 0.0f, (float) h,
+                    false);
+                grad.addColour (0.35, waveCol.withAlpha (0.18f));
+                grad.addColour (0.5,  waveCol.withAlpha (0.28f));
+                grad.addColour (0.65, waveCol.withAlpha (0.18f));
+                g.setGradientFill (grad);
+                g.fillPath (fillPath);
+
+                juce::Path topPath;
+                topPath.startNewSubPath (0.0f, (float) cy - peaks[0].maxVal * scale);
+                for (int px = 1; px < numPeaks; ++px)
+                    topPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
+
+                g.setColour (waveCol.withAlpha (0.25f));
+                g.strokePath (topPath, juce::PathStrokeType (3.5f,
+                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                g.setColour (waveCol.withAlpha (0.90f));
+                g.strokePath (topPath, juce::PathStrokeType (1.3f,
+                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+                juce::Path botPath;
+                botPath.startNewSubPath (0.0f, (float) cy - peaks[0].minVal * scale);
+                for (int px = 1; px < numPeaks; ++px)
+                    botPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].minVal * scale);
+
+                g.setColour (waveCol.withAlpha (0.25f));
+                g.strokePath (botPath, juce::PathStrokeType (3.5f,
+                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                g.setColour (waveCol.withAlpha (0.90f));
+                g.strokePath (botPath, juce::PathStrokeType (1.3f,
+                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+                if (samplesPerPixel < 8.0f)
+                {
+                    juce::Path midPath;
+                    float midY0 = (float) cy - (peaks[0].maxVal + peaks[0].minVal) * 0.5f * scale;
+                    midPath.startNewSubPath (0.0f, midY0);
+                    for (int px = 1; px < numPeaks; ++px)
+                    {
+                        float mid = (peaks[(size_t) px].maxVal + peaks[(size_t) px].minVal) * 0.5f;
+                        midPath.lineTo ((float) px, (float) cy - mid * scale);
+                    }
+                    g.setColour (waveCol.withAlpha (0.85f));
+                    g.strokePath (midPath, juce::PathStrokeType (1.5f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                }
+            }
+            break;
         }
-        else
+
+        // ── Mode 2 : Outline ─────────────────────────────────────────────────
+        // Top and bottom edge strokes only — no fill
+        case 2:
         {
-            juce::ColourGradient grad (
-                waveCol.withAlpha (0.0f), 0.0f, 0.0f,
-                waveCol.withAlpha (0.0f), 0.0f, (float) h,
-                false);
-            grad.addColour (0.35, waveCol.withAlpha (0.18f));
-            grad.addColour (0.5,  waveCol.withAlpha (0.28f));
-            grad.addColour (0.65, waveCol.withAlpha (0.18f));
-            g.setGradientFill (grad);
-            g.fillPath (fillPath);
-
-            juce::Path topPath;
+            juce::Path topPath, botPath;
             topPath.startNewSubPath (0.0f, (float) cy - peaks[0].maxVal * scale);
-            for (int px = 1; px < numPeaks; ++px)
-                topPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
-
-            g.setColour (waveCol.withAlpha (0.25f));
-            g.strokePath (topPath, juce::PathStrokeType (3.5f,
-                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-            g.setColour (waveCol.withAlpha (0.90f));
-            g.strokePath (topPath, juce::PathStrokeType (1.3f,
-                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-            juce::Path botPath;
             botPath.startNewSubPath (0.0f, (float) cy - peaks[0].minVal * scale);
             for (int px = 1; px < numPeaks; ++px)
-                botPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].minVal * scale);
-
-            g.setColour (waveCol.withAlpha (0.25f));
-            g.strokePath (botPath, juce::PathStrokeType (3.5f,
-                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-            g.setColour (waveCol.withAlpha (0.90f));
-            g.strokePath (botPath, juce::PathStrokeType (1.3f,
-                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-            if (samplesPerPixel < 8.0f)
             {
-                juce::Path midPath;
-                float midY0 = (float) cy - (peaks[0].maxVal + peaks[0].minVal) * 0.5f * scale;
-                midPath.startNewSubPath (0.0f, midY0);
-                for (int px = 1; px < numPeaks; ++px)
-                {
-                    float mid = (peaks[(size_t) px].maxVal + peaks[(size_t) px].minVal) * 0.5f;
-                    midPath.lineTo ((float) px, (float) cy - mid * scale);
-                }
-                g.setColour (waveCol.withAlpha (0.85f));
-                g.strokePath (midPath, juce::PathStrokeType (1.5f,
-                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                topPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
+                botPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].minVal * scale);
             }
+            g.setColour (waveCol.withAlpha (0.30f));
+            g.strokePath (topPath, juce::PathStrokeType (3.0f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath (botPath, juce::PathStrokeType (3.0f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (waveCol.withAlpha (0.95f));
+            g.strokePath (topPath, juce::PathStrokeType (1.2f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath (botPath, juce::PathStrokeType (1.2f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 3 : Rectified ───────────────────────────────────────────────
+        // Fold negative values up — centred on baseline at bottom quarter
+        case 3:
+        {
+            const float baseline = (float) h * 0.85f;
+            const float rectScale = scale * 1.6f;
+            juce::Path rectPath;
+            rectPath.startNewSubPath (0.0f, baseline - std::abs (peaks[0].maxVal) * rectScale);
+            for (int px = 1; px < numPeaks; ++px)
+            {
+                float amp = std::max (std::abs (peaks[(size_t) px].maxVal),
+                                      std::abs (peaks[(size_t) px].minVal));
+                rectPath.lineTo ((float) px, baseline - amp * rectScale);
+            }
+            rectPath.lineTo ((float) (numPeaks - 1), baseline);
+            rectPath.lineTo (0.0f, baseline);
+            rectPath.closeSubPath();
+
+            juce::ColourGradient grad (waveCol.withAlpha (0.65f), 0.0f, 0.0f,
+                                       waveCol.withAlpha (0.05f), 0.0f, (float) h, false);
+            g.setGradientFill (grad);
+            g.fillPath (rectPath);
+
+            juce::Path topLine;
+            topLine.startNewSubPath (0.0f, baseline - std::abs (peaks[0].maxVal) * rectScale);
+            for (int px = 1; px < numPeaks; ++px)
+            {
+                float amp = std::max (std::abs (peaks[(size_t) px].maxVal),
+                                      std::abs (peaks[(size_t) px].minVal));
+                topLine.lineTo ((float) px, baseline - amp * rectScale);
+            }
+            g.setColour (waveCol.withAlpha (0.95f));
+            g.strokePath (topLine, juce::PathStrokeType (1.3f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 4 : Mirrored ────────────────────────────────────────────────
+        // Solid fill in upper half + mirror image in lower half
+        case 4:
+        {
+            // Upper half (normal)
+            juce::Path upperPath;
+            upperPath.startNewSubPath (0.0f, (float) cy);
+            for (int px = 0; px < numPeaks; ++px)
+                upperPath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
+            upperPath.lineTo ((float) (numPeaks - 1), (float) cy);
+            upperPath.closeSubPath();
+
+            // Lower half (mirrored — positive values go downward)
+            juce::Path lowerPath;
+            lowerPath.startNewSubPath (0.0f, (float) cy);
+            for (int px = 0; px < numPeaks; ++px)
+                lowerPath.lineTo ((float) px, (float) cy + peaks[(size_t) px].maxVal * scale);
+            lowerPath.lineTo ((float) (numPeaks - 1), (float) cy);
+            lowerPath.closeSubPath();
+
+            g.setColour (waveCol.withAlpha (0.75f));
+            g.fillPath (upperPath);
+            g.setColour (waveCol.withAlpha (0.35f));
+            g.fillPath (lowerPath);
+
+            // Outline both edges
+            juce::Path edgePath;
+            edgePath.startNewSubPath (0.0f, (float) cy - peaks[0].maxVal * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                edgePath.lineTo ((float) px, (float) cy - peaks[(size_t) px].maxVal * scale);
+            g.setColour (waveCol.withAlpha (0.90f));
+            g.strokePath (edgePath, juce::PathStrokeType (1.2f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 5 : Bars ────────────────────────────────────────────────────
+        // Vertical bars from centre for each pixel — like a spectrum display
+        case 5:
+        {
+            const float barW = 1.0f;
+            for (int px = 0; px < numPeaks; ++px)
+            {
+                float topY  = (float) cy - peaks[(size_t) px].maxVal * scale;
+                float botY  = (float) cy - peaks[(size_t) px].minVal * scale;
+                float barH  = botY - topY;
+                if (barH < 1.0f) barH = 1.0f;
+
+                // Gradient per bar — bright top, fades to centre
+                float normAmp = peaks[(size_t) px].maxVal;
+                float alpha   = 0.4f + normAmp * 0.55f;
+                g.setColour (waveCol.withAlpha (alpha));
+                g.fillRect ((float) px, topY, barW, barH);
+            }
+            break;
+        }
+
+        // ── Mode 6 : RMS ─────────────────────────────────────────────────────
+        // RMS energy envelope — smoother than peak, shows perceived loudness
+        case 6:
+        {
+            // Build RMS path — use average of |max| and |min| as proxy for RMS
+            juce::Path rmsPath;
+            auto rms0 = (std::abs (peaks[0].maxVal) + std::abs (peaks[0].minVal)) * 0.5f;
+            rmsPath.startNewSubPath (0.0f, (float) cy - rms0 * scale);
+            for (int px = 1; px < numPeaks; ++px)
+            {
+                float r = (std::abs (peaks[(size_t) px].maxVal) +
+                           std::abs (peaks[(size_t) px].minVal)) * 0.5f;
+                rmsPath.lineTo ((float) px, (float) cy - r * scale);
+            }
+            // Mirror bottom
+            for (int px = numPeaks - 1; px >= 0; --px)
+            {
+                float r = (std::abs (peaks[(size_t) px].maxVal) +
+                           std::abs (peaks[(size_t) px].minVal)) * 0.5f;
+                rmsPath.lineTo ((float) px, (float) cy + r * scale);
+            }
+            rmsPath.closeSubPath();
+
+            juce::ColourGradient grad (
+                waveCol.withAlpha (0.0f), 0.0f, 0.0f,
+                waveCol.withAlpha (0.0f), 0.0f, (float) h, false);
+            grad.addColour (0.35, waveCol.withAlpha (0.22f));
+            grad.addColour (0.5,  waveCol.withAlpha (0.38f));
+            grad.addColour (0.65, waveCol.withAlpha (0.22f));
+            g.setGradientFill (grad);
+            g.fillPath (rmsPath);
+
+            // Bright outline on top edge
+            juce::Path rmsLine;
+            rmsLine.startNewSubPath (0.0f, (float) cy - rms0 * scale);
+            for (int px = 1; px < numPeaks; ++px)
+            {
+                float r = (std::abs (peaks[(size_t) px].maxVal) +
+                           std::abs (peaks[(size_t) px].minVal)) * 0.5f;
+                rmsLine.lineTo ((float) px, (float) cy - r * scale);
+            }
+            g.setColour (waveCol.withAlpha (0.30f));
+            g.strokePath (rmsLine, juce::PathStrokeType (3.5f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (waveCol.withAlpha (0.95f));
+            g.strokePath (rmsLine, juce::PathStrokeType (1.3f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 7 : Stepped ─────────────────────────────────────────────────
+        // Blocky quantised look — horizontal run then vertical step
+        case 7:
+        {
+            const int stepW = juce::jmax (2, getWidth() / juce::jmax (1, numPeaks / 4));
+            juce::Path stepPath;
+            bool started7 = false;
+            for (int px = 0; px < numPeaks; px += stepW)
+            {
+                float y = (float) cy - peaks[(size_t) px].maxVal * scale;
+                int   x = px;
+                if (! started7)
+                {
+                    stepPath.startNewSubPath ((float) x, y);
+                    started7 = true;
+                }
+                else
+                {
+                    stepPath.lineTo ((float) x, stepPath.getCurrentPosition().y);
+                    stepPath.lineTo ((float) x, y);
+                }
+                stepPath.lineTo ((float) juce::jmin (x + stepW, numPeaks - 1), y);
+            }
+
+            // Build closed fill path
+            juce::Path stepFill = stepPath;
+            stepFill.lineTo ((float) (numPeaks - 1), (float) cy);
+            stepFill.lineTo (0.0f, (float) cy);
+            stepFill.closeSubPath();
+
+            // Mirror bottom
+            juce::Path stepBot;
+            bool startedBot = false;
+            for (int px = 0; px < numPeaks; px += stepW)
+            {
+                float y = (float) cy - peaks[(size_t) px].minVal * scale;
+                int   x = px;
+                if (! startedBot)
+                {
+                    stepBot.startNewSubPath ((float) x, y);
+                    startedBot = true;
+                }
+                else
+                {
+                    stepBot.lineTo ((float) x, stepBot.getCurrentPosition().y);
+                    stepBot.lineTo ((float) x, y);
+                }
+                stepBot.lineTo ((float) juce::jmin (x + stepW, numPeaks - 1), y);
+            }
+            juce::Path botFill = stepBot;
+            botFill.lineTo ((float) (numPeaks - 1), (float) cy);
+            botFill.lineTo (0.0f, (float) cy);
+            botFill.closeSubPath();
+
+            g.setColour (waveCol.withAlpha (0.70f));
+            g.fillPath (stepFill);
+            g.setColour (waveCol.withAlpha (0.35f));
+            g.fillPath (botFill);
+
+            g.setColour (waveCol.withAlpha (0.95f));
+            g.strokePath (stepPath, juce::PathStrokeType (1.3f));
+            g.strokePath (stepBot,  juce::PathStrokeType (1.3f));
+            break;
         }
     }
 }
