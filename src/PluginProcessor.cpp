@@ -1500,21 +1500,34 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             }
                             else
                             {
-                                // Absolute: the raw target can be anywhere across the
-                                // whole file — writing directly to the atomic causes a
-                                // visible jump. Route through the per-slot smoother so
-                                // the processBlock() loop fires CmdSetSliceBounds each
-                                // buffer and the marker glides exactly like trim mode.
+                                // Absolute: Pickup mode — CC must first reach the marker's
+                                // current position before tracking begins.  This prevents
+                                // the marker jumping to wherever the CC happens to be when
+                                // you switch to a new slice.  ccPickedUp[field] is already
+                                // cleared by CmdSelectSlice whenever the slice changes.
+                                const float markerNorm = (float) sl.startSample
+                                                       / (float) juce::jmax (1, total);
+
+                                if (outFieldId >= 0 && outFieldId < (int) ccPickedUp.size()
+                                    && ! ccPickedUp[(size_t) outFieldId])
+                                {
+                                    // Tolerance: ~1 CC step (1/127 ≈ 0.008).
+                                    if (std::abs (outNorm - markerNorm) <= 0.008f)
+                                        ccPickedUp[(size_t) outFieldId] = true;
+                                    else
+                                        goto skipCcParam;   // not picked up yet — suppress
+                                }
+
+                                // Picked up: route through smoother so the marker
+                                // glides rather than teleports to the target.
                                 const int newStart = juce::jlimit (0, slEnd - 64,
-                                    (int)(outNorm * (float) total));
+                                    (int) (outNorm * (float) total));
                                 if (! ccSmootherActive[(size_t) outFieldId] || sel != markerSmootherSlice)
                                     ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue (
                                         (float) sl.startSample);
                                 ccSmoothers[(size_t) outFieldId].setTargetValue ((float) newStart);
                                 ccSmootherActive[(size_t) outFieldId] = true;
                                 markerSmootherSlice = sel;
-                                // The smoother loop commits via CmdSetSliceBounds each
-                                // block — no liveDrag / markerPending needed here.
                             }
 
                             uiSnapshotDirty.store (true, std::memory_order_release);
