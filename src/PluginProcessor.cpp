@@ -888,8 +888,13 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 int end = juce::jmax (cmd.intParam2, requestedEnd);
                 start = juce::jlimit (0, juce::jmax (0, maxLen - 1), start);
                 end = juce::jlimit (start + 1, juce::jmax (start + 1, maxLen), end);
+                // Enforce 64-sample minimum by clamping start BACKWARD rather than
+                // pushing end forward.  Pushing end writes a new value to slice[idx+1]
+                // which corrupts adjacent markers — this was the root cause of the
+                // "next slice marker jumps to previous marker's position" bug when
+                // switching CC control between adjacent slices.
                 if (end - start < 64)
-                    end = juce::jmin (maxLen, start + 64);
+                    start = juce::jmax (0, end - 64);
                 const int totalF = sampleData.getBuffer().getNumSamples();
                 int oldEnd = sliceManager.getEndForSlice (idx, totalF);
                 // Clamp start against the PREVIOUS slice to prevent overlap.
@@ -899,12 +904,18 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 {
                     const int prevStart = sliceManager.getSlice (idx - 1).startSample;
                     start = juce::jmax (start, prevStart + 64);
-                    // Keep end consistent
-                    end = juce::jmax (end, start + 64);
+                    // Only ensure end > start — do NOT push end past the caller-supplied
+                    // end value (next slice's current start).  The 64-sample floor is
+                    // handled above by clamping start; pushing end here would corrupt
+                    // slice[idx+1] the same way.
+                    end = juce::jmax (end, start + 1);
                     end = juce::jmin (end, maxLen);
                 }
                 s.startSample = start;
                 // Marker model: end boundary = next slice's start.
+                // Under normal operation 'end' equals getEndForSlice(idx) so this
+                // write is a no-op.  It only differs when a genuine constraint
+                // violation (prev + next slice too close) forces a compromise.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
 
