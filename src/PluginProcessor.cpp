@@ -1903,6 +1903,26 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         skipSliceBoundsUpdate:;
     }
 
+    // ── Detect direct slice changes (not via CmdSelectSlice) ─────────────────
+    // selectedSlice can be changed by direct .store() calls (pad triggers, UI
+    // clicks, note-on routing) that bypass CmdSelectSlice entirely.  Those paths
+    // never reach the CmdSelectSlice handler that clears ccPickedUp, so the
+    // pickup gate stays armed from the previous slice and the first CC for the
+    // new slice skips the gate — causing the marker to jump to wherever the CC
+    // controller was left after the last move.  Catch every slice change here,
+    // right before processMidi(), and reset pickup + smoother state regardless
+    // of how the slice was selected.
+    {
+        const int curSel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+        if (curSel != lastProcessedSlice)
+        {
+            ccPickedUp.fill      (false);
+            ccSmootherActive.fill (false);
+            markerSmootherSlice = -1;
+            lastProcessedSlice  = curSel;
+        }
+    }
+
     processMidi (midi);
 
     // ── Step CC smoothers ─────────────────────────────────────────────────────

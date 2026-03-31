@@ -262,6 +262,7 @@ public:
     bool markerPending       = false; // true while a commit is outstanding
     int  markerPendingSlice  = -1;   // which slice the pending commit is for
     int  markerSmootherSlice = -1;   // slice active when absolute-CC smoother was seeded
+    int  lastProcessedSlice  = -1;   // detects direct selectedSlice.store() changes between blocks
 
     // NRPN decoder state (audio thread only — no atomics needed)
     int nrpnMSB     = -1;
