@@ -1508,6 +1508,15 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 const float markerNorm = (float) sl.startSample
                                                        / (float) juce::jmax (1, total);
 
+                                // Intra-buffer guard: if a note-on arrived in this same
+                                // buffer it changed selectedSlice without clearing ccPickedUp.
+                                // Detect the mismatch and reset the pickup gate locally.
+                                if (sel != markerSmootherSlice)
+                                {
+                                    ccPickedUp[(size_t) outFieldId] = false;
+                                    markerSmootherSlice = -1;
+                                }
+
                                 if (outFieldId >= 0 && outFieldId < (int) ccPickedUp.size()
                                     && ! ccPickedUp[(size_t) outFieldId])
                                 {

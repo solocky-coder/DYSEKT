@@ -22,7 +22,7 @@
  *  armedSlot — std::atomic<int>. UI thread writes; audio thread reads.
  */
 
-static constexpr int kMidiLearnNumSlots = 32;
+static constexpr int kMidiLearnNumSlots = 33; // bumped: FieldHold moved to slot 29
 
 class MidiLearnManager
 {
