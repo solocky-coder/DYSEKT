@@ -31,6 +31,7 @@ static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
     "Chromatic Channel",
     "Chromatic Legato",
     "Trim Out",             // 28 - trim-out marker (trim mode only)
+    "Hold",                 // 29 - per-slice AHDSR hold time
 };
 
 static juce::String getSlotParameterName (int fieldId)
