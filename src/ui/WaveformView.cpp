@@ -965,10 +965,24 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             }
         }
 
-        // ── Build menu: MIDI Slice + Shortcuts always visible at top ─────────
+        // ── Build menu ────────────────────────────────────────────────────────
         juce::PopupMenu menu;
+
+        // MIDI Slice — always visible
         const juce::String midiLabel = midiSliceOverlayActive ? "Stop MIDI Slice" : "MIDI Slice";
-        menu.addItem (50, midiLabel,  true, midiSliceOverlayActive);
+        menu.addItem (50, midiLabel, true, midiSliceOverlayActive);
+
+        // Auto Slice sub-menu — always visible; divides whole sample into N equal slices
+        {
+            juce::PopupMenu autoSub;
+            autoSub.addItem (60,  "4 Slices");
+            autoSub.addItem (61,  "8 Slices");
+            autoSub.addItem (62, "16 Slices");
+            autoSub.addItem (63, "32 Slices");
+            const bool hasSample = (totalFrames > 0);
+            menu.addSubMenu ("Auto Slice", autoSub, hasSample);
+        }
+
         menu.addItem (51, "Shortcuts");
 
         // Slice-specific items appear below when cursor is over a slice
@@ -1049,6 +1063,18 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     return;
                 }
                 // ── Shortcuts ─────────────────────────────────────────────────
+                // ── Auto Slice (equal division of whole sample) ───────────────────
+                if (result >= 60 && result <= 63)
+                {
+                    const int counts[] = { 4, 8, 16, 32 };
+                    const int n = counts[result - 60];
+                    DysektProcessor::Command cmd;
+                    cmd.type      = DysektProcessor::CmdEqualChop;
+                    cmd.intParam1 = n;
+                    processor.pushCommand (cmd);
+                    return;
+                }
+
                 if (result == 51)
                 {
                     if (onShortcutsToggle) onShortcutsToggle();

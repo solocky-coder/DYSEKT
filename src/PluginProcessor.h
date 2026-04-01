@@ -77,6 +77,7 @@ public:
         CmdDuplicateSlice,
         CmdSplitSlice,
         CmdTransientChop,
+        CmdEqualChop,
         CmdRelinkFile,
         CmdFileLoadCompleted,
         CmdFileLoadFailed,

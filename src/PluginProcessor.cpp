@@ -655,6 +655,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
         case CmdDuplicateSlice:
         case CmdSplitSlice:
         case CmdTransientChop:
+        case CmdEqualChop:
             if (! gestureSnapshotCaptured)
                 captureSnapshot();
             gestureSnapshotCaptured = false;
@@ -1045,6 +1046,30 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 if (firstNew >= 0)
                     sliceManager.selectedSlice = firstNew;
             }
+            break;
+        }
+
+        case CmdEqualChop:
+        {
+            const int n     = juce::jlimit (2, 32, cmd.intParam1);
+            const int total = sampleData.getBuffer().getNumSamples();
+            if (total < n * 64) break;   // sample too short for requested count
+
+            // Clear all existing slices
+            while (sliceManager.getNumSlices() > 0)
+                sliceManager.deleteSlice (0);
+
+            // Create N equal slices across the full sample
+            for (int i = 0; i < n; ++i)
+            {
+                const int s = (int) (((double) i       / n) * total);
+                const int e = (int) (((double) (i + 1) / n) * total);
+                if (e - s >= 64)
+                    sliceManager.createSlice (s, e);
+            }
+
+            sliceManager.rebuildMidiMap();
+            sliceManager.selectedSlice = 0;
             break;
         }
 

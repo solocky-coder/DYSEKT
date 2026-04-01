@@ -151,20 +151,45 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
  return;
  }
  if (pref == DysektProcessor::TrimPrefAsk) {
- juce::AudioFormatManager fm;
- fm.registerBasicFormats();
- std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
- double duration = 0.0;
- if (reader != nullptr && reader->sampleRate > 0.0)
- duration = (double) reader->lengthInSamples / reader->sampleRate;
- if (duration < 5.0) {
- processor.loadFileAsync (file);
- processor.zoom.store (1.0f);
- processor.scroll.store (0.0f);
- return;
- }
- }
- showTrimMode (file);
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
+        double duration = 0.0;
+        if (reader != nullptr && reader->sampleRate > 0.0)
+            duration = (double) reader->lengthInSamples / reader->sampleRate;
+
+        if (duration < 5.0)
+        {
+            // Short sample — load directly, no trim prompt
+            processor.loadFileAsync (file);
+            processor.zoom.store (1.0f);
+            processor.scroll.store (0.0f);
+            return;
+        }
+
+        // Long sample (≥5s) — ask the user
+        juce::MessageBoxOptions opts = juce::MessageBoxOptions::makeOptionsYesNo (
+            juce::MessageBoxIconType::QuestionIcon,
+            "Trim Sample?",
+            "This sample is long.  Would you like to trim it before slicing?",
+            "Trim",
+            "No Thanks");
+
+        juce::AlertWindow::showAsync (opts, [this, file] (int choice)
+        {
+            if (choice == 1)
+                showTrimMode (file);   // Yes — enter trim mode
+            else
+            {
+                // No — load directly; user slices manually or via right-click
+                processor.loadFileAsync (file);
+                processor.zoom.store (1.0f);
+                processor.scroll.store (0.0f);
+            }
+        });
+        return;
+    }
+    showTrimMode (file);
 }
 
 void DysektEditor::showTrimMode (const juce::File& file)
