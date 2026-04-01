@@ -266,11 +266,6 @@ public:
     int  markerSmootherSlice = -1;   // slice active when absolute-CC smoother was seeded
     int  lastProcessedSlice  = -1;   // detects direct selectedSlice.store() changes between blocks
 
-    // NRPN decoder state (audio thread only — no atomics needed)
-    int nrpnMSB     = -1;
-    int nrpnLSB     = -1;
-    int nrpnDataMSB = -1;
-    int nrpnDataLSB = -1;   // zero-init = all false
 
     // Per-slot smoothed values for CC — prevents audible steps on absolute knobs.
     // Target is set in processMidi(); smoother is stepped each processBlock().
