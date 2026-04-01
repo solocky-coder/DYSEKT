@@ -57,7 +57,8 @@ public:
         FieldFilterRes,    // 25 - per-slice LP filter resonance 0..1
         FieldChromaticChannel, // 26 - per-slice chromatic MIDI channel (0=off, 1-16)
         FieldChromaticLegato,  // 27 - per-slice chromatic legato (bool)
-        FieldHold = 29,        // 29 - per-slice AHDSR hold time (was 28, collided with FieldTrimOut)
+        // NOTE: slot 28 is reserved for FieldTrimOut (static constexpr in PluginProcessor.cpp)
+        FieldHold = 29,        // 29 - per-slice AHDSR hold time (seconds)
     };
 
     // ── Command types ────────────────────────────────────────────────────────

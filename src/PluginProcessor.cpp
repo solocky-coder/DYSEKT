@@ -1504,18 +1504,19 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // current position before tracking begins.  This prevents
                                 // the marker jumping to wherever the CC happens to be when
                                 // you switch to a new slice.  ccPickedUp[field] is already
-                                // cleared by CmdSelectSlice whenever the slice changes.
+                                // cleared by CmdSelectSlice whenever the slice changes, and
+                                // by the inter-buffer detection block for other slice-change
+                                // paths.  The check below catches the intra-buffer race:
+                                // a note-on and a CC can arrive in the same MidiBuffer, so
+                                // selectedSlice may have changed since the detection block
+                                // ran at the top of processBlock.  If the smoother is
+                                // tracking a different slice, the pickup gate is stale —
+                                // clear it locally before applying the gate check.
+                                if (sel != markerSmootherSlice && markerSmootherSlice >= 0)
+                                    ccPickedUp[(size_t) outFieldId] = false;
+
                                 const float markerNorm = (float) sl.startSample
                                                        / (float) juce::jmax (1, total);
-
-                                // Intra-buffer guard: if a note-on arrived in this same
-                                // buffer it changed selectedSlice without clearing ccPickedUp.
-                                // Detect the mismatch and reset the pickup gate locally.
-                                if (sel != markerSmootherSlice)
-                                {
-                                    ccPickedUp[(size_t) outFieldId] = false;
-                                    markerSmootherSlice = -1;
-                                }
 
                                 if (outFieldId >= 0 && outFieldId < (int) ccPickedUp.size()
                                     && ! ccPickedUp[(size_t) outFieldId])
