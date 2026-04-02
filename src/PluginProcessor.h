@@ -266,7 +266,6 @@ public:
     int  markerSmootherSlice = -1;   // slice active when absolute-CC smoother was seeded
     int  lastProcessedSlice  = -1;   // detects direct selectedSlice.store() changes between blocks
 
-
     // Per-slot smoothed values for CC — prevents audible steps on absolute knobs.
     // Target is set in processMidi(); smoother is stepped each processBlock().
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>,

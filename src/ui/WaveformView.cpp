@@ -979,7 +979,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             autoSub.addItem (61,  "8 Slices");
             autoSub.addItem (62, "16 Slices");
             autoSub.addItem (63, "32 Slices");
-            const bool hasSample = (totalFrames > 0);
+            const bool hasSample = (ui.sampleNumFrames > 0);
             menu.addSubMenu ("Auto Slice", autoSub, hasSample);
         }
 
