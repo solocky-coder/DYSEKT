@@ -39,6 +39,21 @@ constexpr float kKnobEnd = juce::MathConstants<float>::pi * 2.75f;
 }
 
 SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p) {}
+
+void SliceControlBar::timerCallback()
+{
+    // Advance pulse at ~1.2 Hz (full cycle every ~0.85s)
+    pulsePhase += 1.0f / (30.0f / 1.2f);
+    if (pulsePhase >= 1.0f) pulsePhase -= 1.0f;
+    repaint();
+}
+
+void SliceControlBar::updateMidiLearnPulse()
+{
+    const bool anyArmed = processor.midiLearn.isArmed();
+    if (anyArmed && ! isTimerRunning())  { pulsePhase = 0.0f; startTimerHz (30); }
+    if (! anyArmed && isTimerRunning())  { stopTimer(); repaint(); }
+}
 void SliceControlBar::resized() {}
 
 // =============================================================================
@@ -192,8 +207,13 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
 
  if (armed)
  {
- g.setColour (getTheme().accent.withAlpha (0.11f));
- g.fillRoundedRectangle ((float) x, (float) y, (float) cellW, (float) cellH, 2.f);
+     const float pulse = 0.5f + 0.5f * std::sin (pulsePhase * juce::MathConstants<float>::twoPi);
+     g.setColour (getTheme().accent.withAlpha (0.08f + 0.10f * pulse));
+     g.fillRoundedRectangle ((float) x, (float) y, (float) cellW, (float) cellH, 2.f);
+     g.setColour (getTheme().accent.withAlpha (0.55f + 0.45f * pulse));
+     g.drawRoundedRectangle ((float) x + 0.5f, (float) y + 0.5f,
+                             (float) cellW - 1.f, (float) cellH - 1.f, 2.f,
+                             1.0f + 1.0f * pulse);
  }
 
  drawKnob (g, knobCX, knobCY, kKnobR, normVal, locked, armed, mapped,
@@ -254,8 +274,13 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
 
  if (armed)
  {
- g.setColour (ac.withAlpha (0.11f));
- g.fillRoundedRectangle ((float) x, (float) y, (float) cellW, (float) cellH, 2.f);
+     const float pulse = 0.5f + 0.5f * std::sin (pulsePhase * juce::MathConstants<float>::twoPi);
+     g.setColour (ac.withAlpha (0.08f + 0.10f * pulse));
+     g.fillRoundedRectangle ((float) x, (float) y, (float) cellW, (float) cellH, 2.f);
+     g.setColour (ac.withAlpha (0.55f + 0.45f * pulse));
+     g.drawRoundedRectangle ((float) x + 0.5f, (float) y + 0.5f,
+                             (float) cellW - 1.f, (float) cellH - 1.f, 2.f,
+                             1.0f + 1.0f * pulse);
  }
 
  // ── Label ──────────────────────────────────────────────────────────────
@@ -342,12 +367,24 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     const int cellH = 32;
     const auto& T = getTheme();
     auto cell = juce::Rectangle<int> (x, y, cellW, cellH);
+    const bool armed = (processor.midiLearn.getArmedSlot() == DysektProcessor::FieldSliceStart);
 
-    // Background + accent border — matches TrimDialog style
+    // Background + border — pulses when MIDI learn is armed
     g.setColour (T.darkBar);
     g.fillRoundedRectangle (cell.toFloat(), 3.0f);
-    g.setColour (T.accent.withAlpha (0.55f));
-    g.drawRoundedRectangle (cell.toFloat().reduced (0.5f), 3.0f, 1.0f);
+    if (armed)
+    {
+        const float pulse = 0.5f + 0.5f * std::sin (pulsePhase * juce::MathConstants<float>::twoPi);
+        g.setColour (T.accent.withAlpha (0.08f + 0.10f * pulse));
+        g.fillRoundedRectangle (cell.toFloat(), 3.0f);
+        g.setColour (T.accent.withAlpha (0.55f + 0.45f * pulse));
+        g.drawRoundedRectangle (cell.toFloat().reduced (0.5f), 3.0f, 1.0f + 1.0f * pulse);
+    }
+    else
+    {
+        g.setColour (T.accent.withAlpha (0.55f));
+        g.drawRoundedRectangle (cell.toFloat().reduced (0.5f), 3.0f, 1.0f);
+    }
 
     // Progress bar along bottom edge (shows marker position in file)
     const float frac = (totalFrames > 0)

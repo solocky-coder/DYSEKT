@@ -887,13 +887,14 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
     int sel = ui.selectedSlice;
     int num = ui.numSlices;
     HoveredEdge newEdge = HoveredEdge::None;
-    if (sel >= 0 && sel < num && ! sliceDrawMode && ! altModeActive)
+    if (! sliceDrawMode && ! altModeActive)
     {
-        const auto& s = ui.slices[(size_t) sel];
-        if (s.active)
+        for (int i = 0; i < num; ++i)
         {
+            const auto& s = ui.slices[(size_t) i];
+            if (! s.active) continue;
             int x1 = sampleToPixel (s.startSample);
-            if (std::abs (e.x - x1) < 6) newEdge = HoveredEdge::Left;
+            if (std::abs (e.x - x1) < 6) { newEdge = HoveredEdge::Left; break; }
         }
     }
     if (altModeActive)
@@ -1136,43 +1137,51 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // ── Left-click: slice edge drag ────────────────────────────────────────────
+    // ── Left-click: slice edge drag — works on ANY marker, not just selected ───
     const auto& ui = processor.getUiSliceSnapshot();
     int sel = ui.selectedSlice;
     int num = ui.numSlices;
-    if (!(sliceDrawMode || altModeActive) && sel >= 0 && sel < num)
+    if (!(sliceDrawMode || altModeActive))
     {
-        const auto& s = ui.slices[(size_t) sel];
-        if (s.active)
+        // Find the nearest marker within the 6px hit zone across ALL slices
+        int nearestSlice = -1;
+        int nearestDist  = 7; // just outside the 6px threshold
+        for (int i = 0; i < num; ++i)
         {
-            const int selEnd = processor.sliceManager.getEndForSlice (sel, ui.sampleNumFrames);
-            int x1 = sampleToPixel (s.startSample);
+            const auto& s = ui.slices[(size_t) i];
+            if (! s.active) continue;
+            int dist = std::abs (e.x - sampleToPixel (s.startSample));
+            if (dist < nearestDist) { nearestDist = dist; nearestSlice = i; }
+        }
 
-            if (std::abs (e.x - x1) < 6)
+        if (nearestSlice >= 0)
+        {
+            const auto& s    = ui.slices[(size_t) nearestSlice];
+            const int selEnd = processor.sliceManager.getEndForSlice (nearestSlice, ui.sampleNumFrames);
+
+            DysektProcessor::Command gestureCmd;
+            gestureCmd.type = DysektProcessor::CmdBeginGesture;
+            processor.pushCommand (gestureCmd);
+            dragMode         = DragEdgeLeft;
+            dragSliceIdx     = nearestSlice;
+            dragPreviewStart = s.startSample;
+            dragPreviewEnd   = selEnd;
+            dragOrigStart    = s.startSample;
+            dragOrigEnd      = selEnd;
+            linkedSliceIdx   = -1;
+
+            for (int i = 0; i < num; ++i)
             {
-                DysektProcessor::Command gestureCmd;
-                gestureCmd.type = DysektProcessor::CmdBeginGesture;
-                processor.pushCommand (gestureCmd);
-                dragMode = DragEdgeLeft;
-                dragSliceIdx = sel;
-                dragPreviewStart = s.startSample;
-                dragPreviewEnd = selEnd;
-                dragOrigStart = s.startSample;
-                dragOrigEnd = selEnd;
-                linkedSliceIdx = -1;
-                for (int i = 0; i < num; ++i)
+                if (i == nearestSlice || ! ui.slices[(size_t) i].active) continue;
+                if (processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames) == s.startSample)
                 {
-                    if (i == sel || ! ui.slices[(size_t) i].active) continue;
-                    if (processor.sliceManager.getEndForSlice (i, ui.sampleNumFrames) == s.startSample)
-                    {
-                        linkedSliceIdx = i;
-                        linkedPreviewStart = ui.slices[(size_t) i].startSample;
-                        linkedPreviewEnd = s.startSample;
-                        break;
-                    }
+                    linkedSliceIdx     = i;
+                    linkedPreviewStart = ui.slices[(size_t) i].startSample;
+                    linkedPreviewEnd   = s.startSample;
+                    break;
                 }
-                return;
             }
+            return;
         }
     }
 

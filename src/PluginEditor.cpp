@@ -563,6 +563,7 @@ void DysektEditor::timerCallback()
  if (mixerOpen) mixerPanel.repaint();
 
  headerBar.repaint();
+ sliceControlBar.updateMidiLearnPulse();
  sliceControlBar.repaint();
  if (uiChanged) actionPanel.repaint();
  if (mixerOpen) mixerPanel.updateFromSnapshot();

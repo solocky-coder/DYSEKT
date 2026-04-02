@@ -4,7 +4,8 @@
 
 class DysektProcessor;
 
-class SliceControlBar : public juce::Component
+class SliceControlBar : public juce::Component,
+                        private juce::Timer
 {
 public:
     explicit SliceControlBar (DysektProcessor& p);
@@ -14,6 +15,13 @@ public:
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
+
+    // Called by the parent editor's timer — starts/stops the pulse as needed
+    void updateMidiLearnPulse();
+
+private:
+    void timerCallback() override;
+    float pulsePhase = 0.0f;   // 0..1, advances each timer tick
 
 private:
     struct ParamCell

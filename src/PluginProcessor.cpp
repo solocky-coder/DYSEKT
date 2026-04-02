@@ -901,22 +901,31 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Clamp start against the PREVIOUS slice to prevent overlap.
                 // Slices are sorted by startSample, so slices[idx-1].startSample
                 // is the hard floor for this slice's start.
-                if (idx > 0)
+                end = juce::jmax (end, start + 1);
+                end = juce::jmin (end, maxLen);
+
+                // Cull any preceding slices that the drag has crushed to zero width.
+                // Slice 0 is the sample anchor and is never deleted.
+                // Work backwards so each deleteSlice(j) only shifts indices above j.
+                int cullCount = 0;
+                for (int j = idx - 1; j > 0; --j)
                 {
-                    const int prevStart = sliceManager.getSlice (idx - 1).startSample;
-                    start = juce::jmax (start, prevStart + 64);
-                    // Only ensure end > start — do NOT push end past the caller-supplied
-                    // end value (next slice's current start).  The 64-sample floor is
-                    // handled above by clamping start; pushing end here would corrupt
-                    // slice[idx+1] the same way.
-                    end = juce::jmax (end, start + 1);
-                    end = juce::jmin (end, maxLen);
+                    if (sliceManager.getSlice (j).startSample >= start)
+                    {
+                        sliceManager.deleteSlice (j);
+                        ++cullCount;
+                    }
+                    else
+                        break; // slices are sorted — safe to stop here
                 }
-                s.startSample = start;
+                // After culls, target slice has shifted left by cullCount.
+                idx -= cullCount;
+                if (idx < 0 || idx >= sliceManager.getNumSlices())
+                    break;
+
+                auto& sNew = sliceManager.getSlice (idx);
+                sNew.startSample = start;
                 // Marker model: end boundary = next slice's start.
-                // Under normal operation 'end' equals getEndForSlice(idx) so this
-                // write is a no-op.  It only differs when a genuine constraint
-                // violation (prev + next slice too close) forces a compromise.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
 
@@ -1110,9 +1119,9 @@ void DysektProcessor::handleCommand (const Command& cmd)
             break;
 
         case CmdSelectSlice:
-            sliceManager.selectedSlice.store (
-                juce::jlimit (-1, juce::jmax (-1, sliceManager.getNumSlices() - 1), cmd.intParam1),
-                std::memory_order_relaxed);
+        {
+            const int newSel = juce::jlimit (-1, juce::jmax (-1, sliceManager.getNumSlices() - 1), cmd.intParam1);
+            sliceManager.selectedSlice.store (newSel, std::memory_order_relaxed);
             ccPickedUp.fill (false);  // new slice — absolute knobs must pick up again
             ccSmootherActive.fill (false);
             markerPending        = false;
@@ -1120,7 +1129,21 @@ void DysektProcessor::handleCommand (const Command& cmd)
             markerIdleCounter    = 0;
             markerSmootherSlice  = -1;
             liveDragSliceIdx.store (-1, std::memory_order_release);
+
+            // Proactive re-seed: park the smoother at the new slice's current
+            // start position NOW, before any CC arrives.  When the first CC
+            // passes the pickup gate the glide will start from the correct
+            // position rather than from wherever the smoother was left.
+            if (newSel >= 0 && newSel < sliceManager.getNumSlices())
+            {
+                ccSmoothers[(size_t) FieldSliceStart].setCurrentAndTargetValue (
+                    (float) sliceManager.getSlice (newSel).startSample);
+                markerSmootherSlice = newSel;
+                // ccSmootherActive stays false — smoother is seeded but not running.
+                // It activates only once pickup mode is satisfied.
+            }
             break;
+        }
 
         case CmdSetSliceColour:
         {
@@ -1862,6 +1885,20 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             ccSmootherActive.fill (false);
             markerSmootherSlice = -1;
             lastProcessedSlice  = curSel;
+
+            // Proactive re-seed: park the smoother at the new slice's marker
+            // position before any CC arrives this buffer.  Reactive re-seeding
+            // (detecting the mismatch when a CC arrives) can race with the CC
+            // in the same buffer; seeding here guarantees the smoother is
+            // correct before processMidi() runs.
+            if (curSel >= 0 && curSel < sliceManager.getNumSlices())
+            {
+                ccSmoothers[(size_t) FieldSliceStart].setCurrentAndTargetValue (
+                    (float) sliceManager.getSlice (curSel).startSample);
+                markerSmootherSlice = curSel;
+                // ccSmootherActive stays false — smoother is seeded but not
+                // running until pickup mode is satisfied.
+            }
         }
     }
 
