@@ -498,7 +498,8 @@ void DysektEditor::timerCallback()
  }
  }
 
- float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+    float userScale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+    float scale = userScale * hostScale;
  if (scaleDirty || scale != lastScale)
  {
  scaleDirty = false; lastScale = scale;
@@ -631,6 +632,12 @@ void DysektEditor::applyTheme (const juce::String& themeName)
  processor.sliceManager.setSlicePalette (getTheme().slicePalette);
  saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
  repaint();
+}
+
+void DysektEditor::setScaleFactor (float newScale)
+{
+    hostScale = newScale;
+    scaleDirty = true;
 }
 
 void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)

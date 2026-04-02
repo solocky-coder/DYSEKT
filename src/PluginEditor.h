@@ -38,6 +38,7 @@ public:
 
     bool isInterestedInFileDrag (const juce::StringArray& files) override;
     void filesDropped (const juce::StringArray& files, int x, int y) override;
+    void setScaleFactor (float newScale) override;
 
     juce::StringArray getAvailableThemes();
     void applyTheme (const juce::String& themeName);
@@ -59,6 +60,7 @@ private:
     DysektProcessor& processor;
     float    lastScale             = 1.0f;
     bool     scaleDirty            = true;
+    float    hostScale             = 1.0f;
     float    lastZoom              = -1.0f;
     float    lastScroll            = -1.0f;
     int      timerHz               = 30;
