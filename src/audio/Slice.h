@@ -69,5 +69,13 @@ struct Slice
     int      rrCounter      = 0;        // round-robin playback counter (not saved)
 
     uint32_t lockMask       = 0;
-    juce::Colour colour     { 0.4f, 0.7f, 0.95f, 1.0f };
+    juce::Colour colour     { []() -> juce::Colour {
+        static const juce::uint32 kPal[16] = {
+            0xFF00C8FF, 0xFF00FF87, 0xFFFFE800, 0xFFFF6B00,
+            0xFFFF2D55, 0xFFFF2D9A, 0xFFB44FFF, 0xFF4A80FF,
+            0xFF00BFFF, 0xFF00FFD0, 0xFFA8FF3E, 0xFFFFD700,
+            0xFFFF7F50, 0xFFFF00FF, 0xFFFF3399, 0xFF39FF14,
+        };
+        return juce::Colour (kPal[juce::Random::getSystemRandom().nextInt (16)]);
+    }() };
 };
