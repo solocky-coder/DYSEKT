@@ -19,6 +19,9 @@ public:
     // Called by the parent editor's timer — starts/stops the pulse as needed
     void updateMidiLearnPulse();
 
+    // === NEW: Set selected slice and update marker slider ===
+    void setSelectedSlice (int sliceIndex);
+
 private:
     void timerCallback() override;
     float pulsePhase = 0.0f;   // 0..1, advances each timer tick
@@ -87,6 +90,10 @@ private:
     int activeDragCell = -1;
     float dragStartValue = 0.0f;
     int dragStartY = 0;
+
+    // === NEW: Marker drag state for undo ===
+    float markerDragStartRatio = 0.0f;
+    int currentSliceIndex = -1;
 
     // Snapshot of the cell matched in mouseDown — copied out of cells[] so that
     // paint()'s cells.clear() cannot invalidate the active drag mid-gesture.
