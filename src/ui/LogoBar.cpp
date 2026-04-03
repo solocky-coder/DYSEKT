@@ -81,11 +81,4 @@ void LogoBar::paint (juce::Graphics& g)
     g.drawText ("SAMPLE SLICER", textX, cy + 4, wordW + 20, h - cy - 4,
                 juce::Justification::centredLeft);
 
-    // ── Border frame around the logo bar ─────────────────────────────────
-    const int pad = 3;
-    g.setColour (accent.withAlpha (0.35f));
-    g.drawRoundedRectangle (
-        juce::Rectangle<float> ((float)pad, (float)pad,
-                                (float)(w - pad * 2), (float)(h - pad * 2)),
-        3.0f, 1.0f);
 }

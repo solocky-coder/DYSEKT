@@ -278,6 +278,17 @@ void DysektEditor::paint (juce::Graphics& g)
 
  // NOTE: sliceLane is now collapsed; no separator line needed here
  }
+
+ // ── Logo frame — accent border matching global frame style ──────────
+ if (logoBar.isVisible() && logoBar.getHeight() > 0)
+ {
+  const auto ac = getTheme().accent;
+  const juce::Rectangle<float> logoF (logoBar.getBounds().toFloat());
+  g.setColour (ac.withAlpha (0.18f));
+  g.drawRoundedRectangle (logoF.expanded (1.0f), 5.0f, 1.0f);
+  g.setColour (ac.withAlpha (0.60f));
+  g.drawRoundedRectangle (logoF.reduced (0.5f), 4.0f, 1.5f);
+ }
 }
 
 void DysektEditor::resized()
@@ -301,12 +312,16 @@ void DysektEditor::resized()
  auto centreCol = topRow.removeFromLeft (kCtrlFrameW);
  auto logoRow = centreCol.removeFromTop (kLogoH);
  logoBar.setBounds (logoRow);
- if (auto* cf = headerBar.getControlFrame())
- cf->setBounds (centreCol.removeFromTop (kCtrlFrameH));
-    // Centre the button bar vertically in the remaining centreCol space
+    // Pin buttons to bottom of centreCol (4 px padding)
     {
-        const int btnBarY = centreCol.getY() + (centreCol.getHeight() - kBtnBarH) / 2;
+        const int btnBarY = centreCol.getBottom() - kBtnBarH - 4;
         headerBar.setBounds (centreCol.getX(), btnBarY, centreCol.getWidth(), kBtnBarH);
+        // Centre cf between logo bottom and button bar top
+        if (auto* cf = headerBar.getControlFrame())
+        {
+            const int cfY = centreCol.getY() + (btnBarY - centreCol.getY() - kCtrlFrameH) / 2;
+            cf->setBounds (centreCol.getX(), cfY, centreCol.getWidth(), kCtrlFrameH);
+        }
     }
 
  topRow.removeFromLeft (kMargin);
