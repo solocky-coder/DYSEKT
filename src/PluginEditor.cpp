@@ -243,11 +243,10 @@ void DysektEditor::paint (juce::Graphics& g)
  const auto ac = getTheme().accent;
 
  const int kFrameInset = 4;
- const int kTopGap    = 10;  // gap between header and frame
  const int kFrameX = kMargin;
  const int kFrameW = getWidth() - kMargin * 2;
  const juce::Rectangle outerF (
- (float) kFrameX, (float) sbnd.getY() - kFrameInset - kTopGap,
+ (float) kFrameX, (float) sbnd.getY() - kFrameInset,
  (float) kFrameW, (float) (sbnd.getHeight() + kFrameInset * 2));
  juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
  juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
