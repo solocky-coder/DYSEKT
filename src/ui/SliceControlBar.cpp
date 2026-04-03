@@ -1360,13 +1360,19 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
  const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
  if (liveIdx >= 0)
  {
+ const int commitStart = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
+ const int commitEnd   = processor.liveDragBoundsEnd.load (std::memory_order_relaxed);
  F::Command cmd;
  cmd.type = F::CmdSetSliceBounds;
  cmd.intParam1 = liveIdx;
- cmd.intParam2 = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
- cmd.positions[0] = processor.liveDragBoundsEnd.load (std::memory_order_relaxed);
+ cmd.intParam2 = commitStart;
+ cmd.positions[0] = commitEnd;
  cmd.numPositions = 1;
  processor.pushCommand (cmd);
+ // Bridge the gap between command commit and UI snapshot update so
+ // WaveformView shows the correct position immediately on mouse up.
+ processor.pendingUiOptimisticIdx.store (liveIdx, std::memory_order_relaxed);
+ processor.pendingUiOptimisticSample.store (commitStart, std::memory_order_relaxed);
  }
  }
  }

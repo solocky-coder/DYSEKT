@@ -784,16 +784,17 @@ void WaveformView::drawSlices (juce::Graphics& g)
         }
         else if (dragMode == None)
         {
+            // Fill stays at committed slice bounds; only marker bar tracks live position (see mx)
+        }
+
+        // Marker position for live drag: only the thin bar moves, fill stays at committed bounds
+        int liveMarkerSample = -1;
+        {
             const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
             if (liveIdx == i)
             {
                 const int liveStart = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
-                const int liveEnd   = processor.liveDragBoundsEnd.load (std::memory_order_relaxed);
-                if (liveStart >= 0 && liveEnd > liveStart && liveEnd <= ui.sampleNumFrames)
-                {
-                    drawStartSample = liveStart;
-                    drawEndSample   = liveEnd;
-                }
+                if (liveStart >= 0) liveMarkerSample = liveStart;
             }
         }
 
@@ -801,16 +802,16 @@ void WaveformView::drawSlices (juce::Graphics& g)
         int x2 = std::min (getWidth(), sampleToPixel (drawEndSample));
         int sw = x2 - x1;
         if (sw <= 0) continue;
+        // Marker bar tracks live drag independently of the fill
+        const int mx = (liveMarkerSample >= 0)
+                           ? juce::jlimit (0, getWidth(), sampleToPixel (liveMarkerSample))
+                           : x1;
 
         // 3px breathing room at the top so markers don't touch the frame edge
         const int kTopPad = 3;
         const int markerH = getHeight() - kTopPad;
 
-        // --- COLORED BAR/RECTANGLE AT SLICE START (ALWAYS MATCHES MARKER) ---
-        g.setColour(s.colour.withAlpha(0.92f));
-        g.fillRect(x1, kTopPad, 2, markerH);
-
-        // --- CUBASE-STYLE SLICE OVERLAY ---
+        // --- CUBASE-STYLE SLICE OVERLAY (fill stays at committed bounds during live drag) ---
         g.setColour(s.colour.withAlpha(0.11f));
         g.fillRect(x1, kTopPad, sw, markerH);
 
@@ -819,8 +820,9 @@ void WaveformView::drawSlices (juce::Graphics& g)
         g.drawHorizontalLine(kTopPad, (float)x1, (float)x2);
         g.drawHorizontalLine(getHeight() - 1, (float)x1, (float)x2);
 
+        // --- MARKER BAR: always follows live drag position (mx), not fill left edge ---
         g.setColour(s.colour.withAlpha(0.85f));
-        g.fillRect(x1, kTopPad, 2, markerH);
+        g.fillRect(mx, kTopPad, 2, markerH);
 
         // Selection highlight overlay
         if (i == sel) {
