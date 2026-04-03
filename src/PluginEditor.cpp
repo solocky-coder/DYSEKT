@@ -289,6 +289,18 @@ void DysektEditor::paint (juce::Graphics& g)
   g.setColour (ac.withAlpha (0.60f));
   g.drawRoundedRectangle (logoF.reduced (0.5f), 4.0f, 1.5f);
  }
+
+ // ── Full-window accent frame ─────────────────────────────────────────
+ {
+  const auto ac = getTheme().accent;
+  const juce::Rectangle<float> win (getLocalBounds().toFloat());
+  g.setColour (ac.withAlpha (0.14f));
+  g.drawRoundedRectangle (win.reduced (0.5f), 3.0f, 3.0f);
+  g.setColour (ac.withAlpha (0.72f));
+  g.drawRoundedRectangle (win.reduced (1.5f), 2.5f, 1.5f);
+  g.setColour (ac.withAlpha (0.18f));
+  g.drawRoundedRectangle (win.reduced (3.0f), 2.0f, 1.0f);
+ }
 }
 
 void DysektEditor::resized()

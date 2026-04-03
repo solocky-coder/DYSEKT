@@ -26,7 +26,7 @@ struct ThemeData
     {
         ThemeData t;
         t.name          = "dark";
-        t.background    = juce::Colour (0xFF484644);
+        t.background       = juce::Colour (0xFF000000);
         t.waveformBg    = juce::Colour (0xFF060608);
         t.darkBar       = juce::Colour (0xFF0E0E13);
         t.foreground    = juce::Colour (0xFFCCD0D8);
@@ -65,7 +65,7 @@ struct ThemeData
     {
         ThemeData t;
         t.name             = "shell";
-        t.background       = juce::Colour (0xFF425248);
+        t.background       = juce::Colour (0xFF000000);
         t.waveformBg       = juce::Colour (0xFF080F0C);
         t.darkBar          = juce::Colour (0xFF0E1A14);
         t.foreground       = juce::Colour (0xFF8ECBA0);
@@ -105,7 +105,7 @@ struct ThemeData
     {
         ThemeData t;
         t.name             = "lazy";
-        t.background       = juce::Colour (0xFF484D5A);
+        t.background       = juce::Colour (0xFF000000);
         t.waveformBg       = juce::Colour (0xFF13151A);
         t.darkBar          = juce::Colour (0xFF16181F);
         t.foreground       = juce::Colour (0xFFC8D8E8);
@@ -144,7 +144,7 @@ struct ThemeData
     {
         ThemeData t;
         t.name             = "snow";
-        t.background       = juce::Colour (0xFF505258);
+        t.background       = juce::Colour (0xFF000000);
         t.waveformBg       = juce::Colour (0xFF1C1D21);
         t.darkBar          = juce::Colour (0xFF1E1F23);
         t.foreground       = juce::Colour (0xFFE8E0D4);
@@ -183,7 +183,7 @@ struct ThemeData
     {
         ThemeData t;
         t.name             = "ghost";
-        t.background       = juce::Colour (0xFF424850);
+        t.background       = juce::Colour (0xFF000000);
         t.waveformBg       = juce::Colour (0xFF090B0E);
         t.darkBar          = juce::Colour (0xFF0B0D10);
         t.foreground       = juce::Colour (0xFFC8E8E0);
@@ -222,7 +222,7 @@ struct ThemeData
     {
         ThemeData t;
         t.name             = "hack";
-        t.background       = juce::Colour (0xFF484442);
+        t.background       = juce::Colour (0xFF000000);
         t.waveformBg       = juce::Colour (0xFF050505);
         t.darkBar          = juce::Colour (0xFF070707);
         t.foreground       = juce::Colour (0xFFC8C8C8);
@@ -263,7 +263,7 @@ struct ThemeData
     {
         ThemeData t;
         t.name             = "midnight";
-        t.background       = juce::Colour (0xFF403D58);   // deep purple chassis
+        t.background       = juce::Colour (0xFF000000);   // deep purple chassis
         t.waveformBg       = juce::Colour (0xFF08060F);   // near-void
         t.darkBar          = juce::Colour (0xFF100E1A);   // panel bars
         t.foreground       = juce::Colour (0xFFD8D0F0);   // cool purple-tinted white
@@ -302,7 +302,7 @@ struct ThemeData
     {
         ThemeData t;
         t.name             = "pigments";
-        t.background       = juce::Colour (0xFF3E3E52);   // blue-tinted chassis
+        t.background       = juce::Colour (0xFF000000);   // blue-tinted chassis
         t.waveformBg       = juce::Colour (0xFF09090F);   // deeper for waveform
         t.darkBar          = juce::Colour (0xFF0C0C16);   // panel bars
         t.foreground       = juce::Colour (0xFFDDE6F5);   // cool off-white
