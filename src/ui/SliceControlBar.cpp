@@ -38,21 +38,33 @@ constexpr float kKnobStart = juce::MathConstants<float>::pi * 1.25f;
 constexpr float kKnobEnd = juce::MathConstants<float>::pi * 2.75f;
 }
 
-SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p) {}
+SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
+{
+    startTimerHz (30); // always running so CC-driven marker repaints in real time
+}
 
 void SliceControlBar::timerCallback()
 {
     // Advance pulse at ~1.2 Hz (full cycle every ~0.85s)
     pulsePhase += 1.0f / (30.0f / 1.2f);
     if (pulsePhase >= 1.0f) pulsePhase -= 1.0f;
-    repaint();
+
+    // Real-time repaint for CC-driven marker movement
+    const int curLive = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
+    const bool liveChanged = (curLive != lastLiveDrag);
+    lastLiveDrag = curLive;
+
+    // Repaint if pulse is animating (MIDI learn arm) OR live drag value changed
+    if (processor.midiLearn.isArmed() || liveChanged)
+        repaint();
 }
 
 void SliceControlBar::updateMidiLearnPulse()
 {
-    const bool anyArmed = processor.midiLearn.isArmed();
-    if (anyArmed && ! isTimerRunning())  { pulsePhase = 0.0f; startTimerHz (30); }
-    if (! anyArmed && isTimerRunning())  { stopTimer(); repaint(); }
+    // Timer is always running (started in constructor for real-time CC repaint).
+    // Just reset pulse phase when arming so the blink starts cleanly.
+    if (processor.midiLearn.isArmed())
+        pulsePhase = 0.0f;
 }
 void SliceControlBar::resized() {}
 

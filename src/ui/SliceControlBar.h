@@ -21,7 +21,8 @@ public:
 
 private:
     void timerCallback() override;
-    float pulsePhase = 0.0f;   // 0..1, advances each timer tick
+    float pulsePhase    = 0.0f;   // 0..1, advances each timer tick
+    int   lastLiveDrag  = -1;      // last liveDragBoundsStart value seen, for repaint gating
 
 private:
     struct ParamCell
