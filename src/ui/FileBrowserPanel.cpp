@@ -14,6 +14,7 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     ioThread.startThread();
     browser.addListener (this);
     browser.setLookAndFeel (&smallLAF);
+    smallLAF.refreshTheme();
     addAndMakeVisible (browser);
 
     // ── Audio preview setup ───────────────────────────────────────────────────
