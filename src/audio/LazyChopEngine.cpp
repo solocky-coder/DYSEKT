@@ -133,7 +133,8 @@ int LazyChopEngine::onNote (int note, VoicePool& voicePool, SliceManager& sliceM
         if (firstIdx >= 0)
         {
             auto& s = sliceMgr.getSlice (firstIdx);
-            s.midiNote = note;
+            s.midiNote = nextMidiNote;  // always C2 (rootNote) for slice 1
+            nextMidiNote = std::min (nextMidiNote + 1, 127);
             sliceMgr.rebuildMidiMap();
         }
         return firstIdx;
@@ -194,9 +195,8 @@ int LazyChopEngine::onNote (int note, VoicePool& voicePool, SliceManager& sliceM
         if (newIdx >= 0)
         {
             auto& s = sliceMgr.getSlice (newIdx);
-            s.midiNote = note;
-            nextMidiNote = std::max (nextMidiNote, note + 1);
-            nextMidiNote = std::min (nextMidiNote, 127);
+            s.midiNote = nextMidiNote;  // sequential from C2 regardless of pressed key
+            nextMidiNote = std::min (nextMidiNote + 1, 127);
             sliceMgr.rebuildMidiMap();
             resultIdx = newIdx;
         }
