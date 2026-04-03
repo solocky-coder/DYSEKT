@@ -12,6 +12,7 @@ enum LockBit : uint32_t
     kLockSustain     = 32,
     kLockRelease     = 64,
     kLockMuteGroup   = 128,
+    // 256 was kLockPingPong (removed — merged into kLockLoop)
     kLockStretch       = 512,
     kLockTonality      = 1024,
     kLockFormant       = 2048,
@@ -22,51 +23,50 @@ enum LockBit : uint32_t
     kLockReverse       = 65536,
     kLockOutputBus     = 131072,
     kLockLoop          = 262144,
-    kLockOneShot       = 524288,
-    kLockCentsDetune   = 1048576,
-    kLockPan           = 2097152,
-    kLockFilter        = 4194304,
-    kLockChromaticChannel = 8388608,
-    kLockChromaticLegato  = 16777216,
-    kLockHold              = 33554432,
+    kLockOneShot       = 524288,    // bit 19
+    kLockCentsDetune   = 1048576,   // bit 20
+    kLockPan           = 2097152,   // bit 21
+    kLockFilter        = 4194304,   // bit 22
+    kLockChromaticChannel = 8388608, // bit 23
+    kLockChromaticLegato  = 16777216, // bit 24
+    kLockHold              = 33554432, // bit 25
 };
 
 struct Slice
 {
     bool     active         = false;
     int      startSample    = 0;
+    // endSample REMOVED — in the marker model, end is always derived:
+    //   sliceManager.getEndForSlice(idx, totalFrames)
+    //   = slices[idx+1].startSample  (or totalFrames for the last slice)
     int      midiNote       = 36;
     float    bpm            = 120.0f;
     float    pitchSemitones = 0.0f;
-    int      algorithm      = 0;
+    int      algorithm      = 0;        // 0=Repitch, 1=Stretch
     float    attackSec      = 0.0f;
-    float    holdSec        = 0.0f;
+    float    holdSec        = 0.0f;   // AHDSR hold time in seconds
     float    decaySec       = 0.0f;
     float    sustainLevel   = 1.0f;
     float    releaseSec     = 0.010f;
     int      muteGroup      = 1;
-    int      loopMode       = 0;
+    int      loopMode       = 0;        // 0=Off, 1=Loop, 2=Ping-Pong
     bool     stretchEnabled = false;
     float    tonalityHz     = 0.0f;
     float    formantSemitones = 0.0f;
     bool     formantComp    = false;
-    int      grainMode      = 0;
-    float    volume         = 0.0f;
+    int      grainMode      = 0;        // reserved (was Bungee grain mode — kept for preset compat)
+    float    volume         = 0.0f;     // dB, -100..+24
     bool     releaseTail    = false;
     bool     reverse        = false;
     int      outputBus      = 0;
     bool     oneShot        = false;
-    float    centsDetune    = 0.0f;
-    float    pan            = 0.0f;
-    float    filterCutoff   = 20000.0f;
-    float    filterRes      = 0.0f;
-    int      chromaticChannel = 0;
-    bool     chromaticLegato  = false;
-    int      rrCounter      = 0;
-
-    // === NEW: Per-slice marker ratio system ===
-    int      uuid           = 0;        // Unique ID, never reused after deletion
-    float    markerRatio    = 0.0f;     // 0.0 = slice start, 1.0 = slice end (normalized)
+    float    centsDetune    = 0.0f;     // fine pitch: -100..+100 cents
+    float    pan            = 0.0f;     // stereo pan: -1 (L) .. 0 (C) .. +1 (R)
+    float    filterCutoff   = 20000.0f; // low-pass cutoff Hz: 20..20000
+    float    filterRes      = 0.0f;     // resonance: 0..1
+    int      chromaticChannel = 0;     // 0=off, 1-16 = receive chromatic play on this MIDI channel
+    bool     chromaticLegato  = false; // when true: pitch-only (no speed change), monophonic voice steal
+    int      rrCounter      = 0;        // round-robin playback counter (not saved)
 
     uint32_t lockMask       = 0;
     juce::Colour colour     { 0.4f, 0.7f, 0.95f, 1.0f };

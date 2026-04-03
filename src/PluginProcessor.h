@@ -225,8 +225,6 @@ public:
     LazyChopEngine   lazyChop;
     SampleData       sampleData;
     MidiLearnManager midiLearn;
-    UndoManager      undoMgr;
-    juce::UndoManager juceUndoMgr;
 
     // =========================================================================
     // UI-readable state atomics
@@ -376,6 +374,7 @@ private:
     // =========================================================================
     // Undo / redo
     // =========================================================================
+    UndoManager undoMgr;
     bool gestureSnapshotCaptured    { false };
     int  blocksSinceGestureActivity { 0 };
 
