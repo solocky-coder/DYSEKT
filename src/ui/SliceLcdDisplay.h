@@ -3,32 +3,24 @@
 
 class DysektProcessor;
 
-class SliceLcdDisplay : public juce::Component,
-                         private juce::ScrollBar::Listener
+class SliceLcdDisplay : public juce::Component
 {
 public:
     explicit SliceLcdDisplay (DysektProcessor& p);
 
     // Height the component requests — used by PluginEditor for layout
-    static constexpr int kPreferredHeight = 228;  // 7 visible rows × 14px + padding
+    static constexpr int kPreferredHeight = 292;  // 10 rows × 28px + bezel
 
     void paint    (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
-    void mouseWheelMove (const juce::MouseEvent&,
-                         const juce::MouseWheelDetails& w) override;
-
     void repaintLcd();
     void resized() override;
-    void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override;
-    void lookAndFeelChanged() override;   // re-apply scrollbar theme colours
 
 private:
     // ── Layout constants ──────────────────────────────────────────────────────
-    static constexpr int kVisibleRows   = 7;   // rows shown without scrolling
-    static constexpr int kTotalRows     = 10;  // total rows including scroll
+    static constexpr int kTotalRows     = 10;  // total rows
     static constexpr int kRowH          = 28;  // fixed row height in pixels
-    static constexpr int kScrollW       = 8;   // scrollbar strip width
     static constexpr int kLeftPad      = 6;
     static constexpr int kLabelW       = 46;
     static constexpr int kScanlineAlpha = 28;
@@ -60,6 +52,7 @@ private:
         bool         reverse      = false;
         int          loopMode     = 0;
         bool         oneShot      = false;
+        juce::Colour sliceColour;         // vibrant colour of the selected slice
         int          muteGroup    = 0;
         float        filterCutoff = 20000.0f;
         float        filterRes    = 0.0f;
@@ -77,12 +70,6 @@ private:
     };
 
     DisplayData data;
-
-    // ── Scroll state ──────────────────────────────────────────────────────────
-    juce::ScrollBar scrollBar { true };  // vertical scrollbar
-    int scrollOffsetPx = 0;              // pixels scrolled from top
-
-    void updateScrollBar();              // sync scrollBar range/position to content
 
     // ── Draw helpers ──────────────────────────────────────────────────────────
     void buildDisplayData();

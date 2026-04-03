@@ -79,13 +79,6 @@ SliceLcdDisplay::SliceLcdDisplay (DysektProcessor& p)
     : processor (p)
 {
     setOpaque (true);
-
-    // ── Scrollbar setup ───────────────────────────────────────────────────────
-    scrollBar.setAutoHide (false);
-    scrollBar.addListener (this);
-    addAndMakeVisible (scrollBar);
-    lookAndFeelChanged();   // apply initial theme colours
-    updateScrollBar();
 }
 
 // ── Data building ──────────────────────────────────────────────────────────────
@@ -133,6 +126,7 @@ void SliceLcdDisplay::buildDisplayData()
     data.filterCutoff    = sl.filterCutoff;
     data.filterRes       = sl.filterRes;
     data.sliceLocked     = (sl.lockMask == 0xFFFFFFFFu);
+    data.sliceColour     = sl.colour;
     // Extended fields for scroll rows 7-9
     data.stretchEnabled  = sl.stretchEnabled;
     data.tonalityHz      = sl.tonalityHz;
@@ -148,55 +142,11 @@ void SliceLcdDisplay::buildDisplayData()
 
 void SliceLcdDisplay::repaintLcd()
 {
-    updateScrollBar();
     repaint();
 }
 
-// ── Scrollbar helpers ─────────────────────────────────────────────────────────
-void SliceLcdDisplay::updateScrollBar()
-{
-    const auto screen = getLocalBounds().reduced (4);
-    const int contentH = kTotalRows * kRowH;
-    const int visibleH = kVisibleRows * kRowH;
 
-    scrollBar.setRangeLimits (0.0, contentH);
-    scrollBar.setCurrentRange (scrollOffsetPx, visibleH);
-    scrollBar.setVisible (contentH > visibleH);
-}
-
-void SliceLcdDisplay::scrollBarMoved (juce::ScrollBar*, double newRangeStart)
-{
-    const int contentH = kTotalRows * kRowH;
-    const int visibleH = kVisibleRows * kRowH;
-    const int maxScroll = juce::jmax (0, contentH - visibleH);
-    scrollOffsetPx = juce::jlimit (0, maxScroll, (int) newRangeStart);
-    repaint();
-}
-
-void SliceLcdDisplay::mouseWheelMove (const juce::MouseEvent&,
-                                       const juce::MouseWheelDetails& w)
-{
-    const int contentH  = kTotalRows * kRowH;
-    const int visibleH  = kVisibleRows * kRowH;
-    const int maxScroll = juce::jmax (0, contentH - visibleH);
-
-    scrollOffsetPx = juce::jlimit (0, maxScroll,
-        scrollOffsetPx - juce::roundToInt (w.deltaY * (float) kRowH * 3.0f));
-
-    scrollBar.setCurrentRange (scrollOffsetPx, visibleH);
-    repaint();
-}
-
-// ── Resized ────────────────────────────────────────────────────────────────────
-
-void SliceLcdDisplay::resized()
-{
-    auto screen = getLocalBounds().reduced (4);
-    // Scrollbar: thin strip on right edge of inner screen
-    scrollBar.setBounds (screen.getRight() - kScrollW, screen.getY() + 1,
-                         kScrollW, screen.getHeight() - 2);
-    updateScrollBar();
-}
+void SliceLcdDisplay::resized() {}
 
 // ── Paint ──────────────────────────────────────────────────────────────────────
 
@@ -242,7 +192,7 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
     const int rowH = kRowH;
-    int y = b.getY() + 4 + row * rowH - scrollOffsetPx;
+    int y = b.getY() + 4 + row * rowH;
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
@@ -281,7 +231,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
     const int rowH    = kRowH;
-    const int y       = b.getY() + 4 + row * rowH - scrollOffsetPx;
+    const int y       = b.getY() + 4 + row * rowH;
     const juce::Font  f = DysektLookAndFeel::makeFont (23.0f);
 
     // Skip rows fully outside the visible screen area
@@ -324,7 +274,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
     // ── Right item — left-aligned from the right-column start ────────────────
     // Use 52% split so right column has enough room and never overflows.
     const int rightX  = b.getX() + (b.getWidth() * 52 / 100);
-    const int rightW  = b.getRight() - rightX - kLeftPad - 42 - kScrollW; // leave space for flag column + scrollbar
+    const int rightW  = b.getRight() - rightX - kLeftPad - 42; // leave space for flag column
 
     const int rColonPos = rightStr.indexOfChar (':');
     if (rColonPos > 0)
@@ -366,7 +316,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
 
     // Centre the vertical stack in the screen height
     int fy = screen.getY() + (screen.getHeight() - totalFlagsH) / 2;
-    const int fx = screen.getRight() - flagW - kScrollW - 18;
+    const int fx = screen.getRight() - flagW - 18;
 
     struct Flag { juce::String text; bool on; int fieldId; bool isCycle; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
@@ -466,17 +416,6 @@ void SliceLcdDisplay::drawNoSampleScreen (juce::Graphics& g)
                 b, juce::Justification::centredBottom);
 }
 
-void SliceLcdDisplay::lookAndFeelChanged()
-{
-    // Re-apply scrollbar colours whenever the theme changes
-    scrollBar.setColour (juce::ScrollBar::backgroundColourId,
-                         juce::Colour (0x00000000));   // transparent bg
-    scrollBar.setColour (juce::ScrollBar::thumbColourId,
-                         getTheme().accent.withAlpha (0.60f));
-    scrollBar.setColour (juce::ScrollBar::trackColourId,
-                         getTheme().darkBar.darker (0.4f));
-    scrollBar.repaint();
-}
 
 void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
 {
@@ -564,12 +503,10 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
     if (! data.hasSample)   { drawNoSampleScreen (g); return; }
     if (! data.hasSlice)    { drawNoSliceScreen  (g); return; }
 
-    // ── Clip all row drawing to the inner screen — prevents bleed on scroll ───
+    // ── Clip all row drawing to the inner screen ─────────────────────────────
     auto screen = getLocalBounds().reduced (4);
-    // Clip to screen minus scrollbar strip on the right
-    auto clipScreen = screen.withTrimmedRight (kScrollW + 1);
     g.saveState();
-    g.reduceClipRegion (clipScreen);
+    g.reduceClipRegion (screen);
 
     // ── Row 0:  Header — centred: "SL xx / xx  SAMPLENAME" ──────────────────
     {
@@ -584,10 +521,12 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         auto   screen    = getLocalBounds().reduced (4);
         auto   pal       = LcdColours::fromTheme();
         const int rowH   = kRowH;
-        const int y      = screen.getY() + 4 + 0 * rowH - scrollOffsetPx;
+        const int y      = screen.getY() + 4;
 
-        // Highlight background
-        g.setColour (pal.phosphor.withAlpha (0.10f));
+        // Highlight background — tinted with the slice's vibrant colour
+        g.setColour (data.sliceColour.isTransparent()
+                         ? pal.phosphor.withAlpha (0.10f)
+                         : data.sliceColour.withAlpha (0.18f));
         g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
 
         const juce::Font lblF = DysektLookAndFeel::makeFont (24.0f, true);
@@ -710,5 +649,4 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
 
     g.restoreState();  // end clip region
 
-    // Real ScrollBar widget handles scroll indication — no unicode arrows needed
 }
