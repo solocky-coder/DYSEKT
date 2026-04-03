@@ -15,7 +15,7 @@ void LogoBar::paint (juce::Graphics& g)
     const int  cy = h / 2;
 
     // ── Measure wordmark so we can centre the whole block ─────────────────
-    const float wordmarkSize = 18.0f;
+    const float wordmarkSize = 24.0f;
     auto wordmarkFont = DysektLookAndFeel::makeFont (wordmarkSize, true);
 
     const juce::String dy   = "DY";
@@ -36,7 +36,7 @@ void LogoBar::paint (juce::Graphics& g)
     const int startX  = (w - blockW) / 2;
 
     // ── Waveform-slice icon ───────────────────────────────────────────────
-    const float barH = (float)(h - 16);
+    const float barH = (float)(h - 10);
     const float heights[5] = { 0.55f, 0.90f, 0.48f, 0.80f, 0.52f };
     const int   activeBar  = 1;
 
@@ -80,4 +80,12 @@ void LogoBar::paint (juce::Graphics& g)
     g.setColour (fg.withAlpha (0.85f));
     g.drawText ("SAMPLE SLICER", textX, cy + 4, wordW + 20, h - cy - 4,
                 juce::Justification::centredLeft);
+
+    // ── Border frame around the logo bar ─────────────────────────────────
+    const int pad = 3;
+    g.setColour (accent.withAlpha (0.35f));
+    g.drawRoundedRectangle (
+        juce::Rectangle<float> ((float)pad, (float)pad,
+                                (float)(w - pad * 2), (float)(h - pad * 2)),
+        3.0f, 1.0f);
 }
