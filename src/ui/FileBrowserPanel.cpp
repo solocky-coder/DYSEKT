@@ -138,14 +138,27 @@ void FileBrowserPanel::resized()
 {
     auto bounds = getLocalBounds();
 
-    // ── Bookmark bar at the top ────────────────────────────────────────────
+    // -- Preview bar at the bottom (outside frame)
+    if (previewVisible)
     {
-        auto bmBar = bounds.removeFromTop (kBmH);
-        const int addW = 22;
-        const int gap  = 3;
-        const int n    = bmBtns.size();
+        auto bar = bounds.removeFromBottom (kBarH);
+
+        playStopBtn.setBounds (bar.removeFromLeft (kBarH).reduced (4));
+        volumeSlider.setBounds (bar.removeFromRight (90).reduced (4, 8));
+        fileNameLabel.setBounds (bar.reduced (6, 4));
+    }
+
+    // ── Inner screen area — 4 px inset from the LCD frame border ─────────────
+    auto inner = bounds.reduced (4);
+
+    // ── Bookmark bar at the top of the inner screen ───────────────────────────
+    {
+        auto bmBar = inner.removeFromTop (kBmH);
+        const int addW  = 22;
+        const int gap   = 3;
+        const int n     = bmBtns.size();
         const int avail = bmBar.getWidth() - addW - gap - 4;
-        const int btnW = n > 0 ? juce::jmin (90, juce::jmax (40, (avail - gap * (n - 1)) / n)) : 0;
+        const int btnW  = n > 0 ? juce::jmin (90, juce::jmax (40, (avail - gap * (n - 1)) / n)) : 0;
 
         int bx = bmBar.getX() + 2;
         for (auto* btn : bmBtns)
@@ -157,52 +170,42 @@ void FileBrowserPanel::resized()
                             bmBar.getY() + 4, addW, bmBar.getHeight() - 8);
     }
 
-    // -- Preview bar at the bottom if visible
-    if (previewVisible)
-    {
-        auto bar = bounds.removeFromBottom (kBarH);
-
-        playStopBtn.setBounds (bar.removeFromLeft (kBarH).reduced (4));
-        volumeSlider.setBounds (bar.removeFromRight (90).reduced (4, 8));
-        fileNameLabel.setBounds (bar.reduced (6, 4));
-    }
-
-    // Browser fills remaining space. We give it ~28px extra height below
+    // Browser fills remaining inner space. We give it ~28 px extra height below
     // the visible area so JUCE's internal filename text bar is clipped out.
-    browser.setBounds (bounds.withBottom (bounds.getBottom() + 28));
+    browser.setBounds (inner.withBottom (inner.getBottom() + 28));
 }
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
-    // ── Bookmark bar background ────────────────────────────────────────────
+    auto bounds = getLocalBounds();
+    const auto& T = getTheme();
+
+    // Preview bar background when visible (below the LCD frame)
+    if (previewVisible)
     {
-        const auto& T = getTheme();
-        auto bmRect = getLocalBounds().removeFromTop (kBmH).toFloat();
-        juce::ColourGradient bmGrad (T.darkBar.darker (0.5f), 0, bmRect.getY(),
-                                     T.darkBar.darker (0.3f), 0, bmRect.getBottom(), false);
-        g.setGradientFill (bmGrad);
-        g.fillRect (bmRect);
-        g.setColour (T.accent.withAlpha (0.20f));
-        g.drawLine (bmRect.getX(), bmRect.getBottom(),
-                    bmRect.getRight(), bmRect.getBottom(), 1.0f);
+        auto bar = bounds.removeFromBottom (kBarH);
+        g.setColour (T.darkBar.darker (0.6f));
+        g.fillRect (bar);
+        g.setColour (T.accent.withAlpha (0.25f));
+        g.drawLine ((float) bar.getX(), (float) bar.getY(),
+                    (float) bar.getRight(), (float) bar.getY(), 1.0f);
     }
 
-    // LCD frame
-    const auto ac = getTheme().accent;
-    auto b = getLocalBounds();
-    b.removeFromTop (kBmH);   // skip bookmark bar
+    // ── LCD frame — wraps the full area including the bookmark bar ────────────
+    const auto ac = T.accent;
+    auto b = bounds;
 
     juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
                                     juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
     g.setGradientFill (outerGrad);
-    g.fillRect (b);                                          // sharp corners
+    g.fillRect (b);
 
-    g.setColour (ac.withAlpha (0.20f));
-    g.drawRect (b.toFloat(), 1.0f);                          // sharp border
+    g.setColour (ac.withAlpha (0.65f));              // matches MixerPanel / other frames
+    g.drawRect (b.toFloat(), 1.0f);
 
     auto screen = b.reduced (4);
-    g.setColour (getTheme().darkBar.darker (0.55f));
-    g.fillRect (screen);                                     // sharp inner screen
+    g.setColour (T.darkBar.darker (0.55f));
+    g.fillRect (screen);
 
     g.setColour (juce::Colours::black.withAlpha (0.18f));
     for (int y = screen.getY(); y < screen.getBottom(); y += 2)
@@ -211,20 +214,21 @@ void FileBrowserPanel::paint (juce::Graphics& g)
     juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
                                 juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
     g.setGradientFill (glow);
-    g.fillRect (screen);                                     // sharp glow
+    g.fillRect (screen);
 
     g.setColour (ac.withAlpha (0.12f));
-    g.drawRect (screen.expanded (0), 1.0f);                  // sharp inner border
+    g.drawRect (screen.expanded (0), 1.0f);
 
-    // Preview bar background when visible
-    if (previewVisible)
+    // ── Bookmark bar background (inside the screen) ───────────────────────────
     {
-        auto bar = getLocalBounds().removeFromBottom (kBarH);
-        g.setColour (getTheme().darkBar.darker (0.6f));
-        g.fillRect (bar);
-        g.setColour (getTheme().accent.withAlpha (0.25f));
-        g.drawLine ((float) bar.getX(), (float) bar.getY(),
-                    (float) bar.getRight(), (float) bar.getY(), 1.0f);
+        auto bmRect = screen.removeFromTop (kBmH).toFloat();
+        juce::ColourGradient bmGrad (T.darkBar.darker (0.5f), 0, bmRect.getY(),
+                                     T.darkBar.darker (0.3f), 0, bmRect.getBottom(), false);
+        g.setGradientFill (bmGrad);
+        g.fillRect (bmRect);
+        g.setColour (T.accent.withAlpha (0.20f));
+        g.drawLine (bmRect.getX(), bmRect.getBottom(),
+                    bmRect.getRight(), bmRect.getBottom(), 1.0f);
     }
 }
 
