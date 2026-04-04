@@ -1,4 +1,4 @@
-#include "PluginProcessor.h"
+﻿#include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "audio/GrainEngine.h"
 #include "audio/AudioAnalysis.h"
@@ -1215,6 +1215,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                      msg.getControllerValue(),
                                      outFieldId, outNorm, outIsRelative))
             {
+                const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+
                 // ── Trim region CC: runs regardless of slice count ──────────
                 // FieldSliceStart / FieldTrimOut are hardwired to trim in/out.
                 // This block executes BEFORE the slice guard so it works in trim
@@ -1260,10 +1262,13 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 ? juce::jlimit (0, curEnd - 64,       (int)(outNorm * (float)total))
                                 : juce::jlimit (curStart + 64, total, (int)(outNorm * (float)total));
 
-                            if (! ccSmootherActive[(size_t) sel][(size_t) outFieldId])
-                                ccSmoothers[(size_t) sel][(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
-                            ccSmoothers[(size_t) sel][(size_t) outFieldId].setTargetValue ((float) target);
-                            ccSmootherActive[(size_t) sel][(size_t) outFieldId] = true;
+                            if (sel >= 0 && sel < kMaxCCSlices)
+                            {
+                                if (! ccSmootherActive[(size_t) sel][(size_t) outFieldId])
+                                    ccSmoothers[(size_t) sel][(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
+                                ccSmoothers[(size_t) sel][(size_t) outFieldId].setTargetValue ((float) target);
+                                ccSmootherActive[(size_t) sel][(size_t) outFieldId] = true;
+                            }
                         }
                     }
 
@@ -1271,8 +1276,6 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     if (trimModeActive.load (std::memory_order_relaxed))
                         continue;
                 }
-
-                const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
 
                 // ── Intra-buffer slice-switch guard ───────────────────────────
                 // A note-on and a CC can land in the same MidiBuffer.  If the
