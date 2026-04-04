@@ -323,8 +323,7 @@ void DysektEditor::resized()
  // Centre: LogoBar + HeaderBar (same bounds, buttons flank logo) → DualLcdControlFrame (below)
  auto centreCol = topRow.removeFromLeft (kCtrlFrameW);
  auto logoRow = centreCol.removeFromTop (kLogoH);
- // Centre logo between outer border (y=0) and global frame top (y=kTopStripH)
- logoBar.setBounds (logoRow.withY ((kTopStripH - kLogoH) / 2));
+ logoBar.setBounds (logoRow);
     // Pin buttons to bottom of centreCol (4 px padding)
     {
         const int btnBarY = centreCol.getBottom() - kBtnBarH - 4;
