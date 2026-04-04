@@ -1271,6 +1271,32 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 }
 
                 const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
+
+                // ── Intra-buffer slice-switch guard ───────────────────────────
+                // A note-on and a CC can land in the same MidiBuffer.  If the
+                // selected slice changed since the last CC in this buffer, the
+                // ccPickedUp[] flags from the previous slice are stale for every
+                // field — not just FieldSliceStart (which is handled separately).
+                // Reset all pickup + smoother state now so absolute knobs cannot
+                // jump to their old mapped position on the new slice.
+                if (sel != ccLastDispatchedSel && ccLastDispatchedSel >= 0)
+                {
+                    ccPickedUp.fill (false);
+                    ccSmootherActive.fill (false);
+                    markerSmootherSlice = -1;
+
+                    // Re-seed the slice-start smoother from the new slice's
+                    // actual position so pickup can lock on correctly.
+                    if (sel >= 0 && sel < sliceManager.getNumSlices())
+                    {
+                        ccSmoothers[(size_t) FieldSliceStart].setCurrentAndTargetValue (
+                            (float) sliceManager.getSlice (sel).startSample);
+                        markerSmootherSlice = sel;
+                        // ccSmootherActive stays false — activates only after pickup.
+                    }
+                }
+                ccLastDispatchedSel = sel;
+
                 if (sel >= 0 && sel < sliceManager.getNumSlices())
                 {
                     const auto& sl = sliceManager.getSlice (sel);

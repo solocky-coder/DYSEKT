@@ -265,8 +265,9 @@ public:
     int  markerIdleCounter  = 0;    // counts blocks since last CC message
     bool markerPending       = false; // true while a commit is outstanding
     int  markerPendingSlice  = -1;   // which slice the pending commit is for
-    int  markerSmootherSlice = -1;   // slice active when absolute-CC smoother was seeded
-    int  lastProcessedSlice  = -1;   // detects direct selectedSlice.store() changes between blocks
+    int  markerSmootherSlice  = -1;  // slice active when absolute-CC smoother was seeded
+    int  lastProcessedSlice   = -1;  // detects direct selectedSlice.store() changes between blocks
+    int  ccLastDispatchedSel  = -1;  // intra-buffer slice-switch guard (see processMidi)
 
     // Per-slot smoothed values for CC — prevents audible steps on absolute knobs.
     // Target is set in processMidi(); smoother is stepped each processBlock().
