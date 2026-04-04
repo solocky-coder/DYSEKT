@@ -81,4 +81,17 @@ void LogoBar::paint (juce::Graphics& g)
     g.drawText ("SAMPLE SLICER", textX, cy + 4, wordW + 20, h - cy - 4,
                 juce::Justification::centredLeft);
 
+    // ── Frame border — drawn last so it sits on top of the fill ──────────────
+    // The component already has a 4px layout gap from the outer window border;
+    // withTrimmedTop(3) adds a further 3px so the frame is clearly separated.
+    {
+        const juce::Rectangle<float> fr (getLocalBounds().toFloat().withTrimmedTop (3.0f));
+        g.setColour (accent.withAlpha (0.18f));
+        g.drawRoundedRectangle (fr.expanded (0.5f), 5.0f, 1.0f);
+        g.setColour (accent);                       // full opacity — matches other frames
+        g.drawRoundedRectangle (fr.reduced (0.5f), 4.0f, 1.5f);
+        g.setColour (accent.withAlpha (0.15f));
+        g.drawRoundedRectangle (fr.reduced (2.0f), 3.5f, 1.0f);
+    }
+
 }

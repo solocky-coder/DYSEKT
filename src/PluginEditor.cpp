@@ -279,20 +279,6 @@ void DysektEditor::paint (juce::Graphics& g)
  // NOTE: sliceLane is now collapsed; no separator line needed here
  }
 
- // ── Logo frame — accent border matching global frame style ──────────
- if (logoBar.isVisible() && logoBar.getHeight() > 0)
- {
-  const auto ac = getTheme().accent;
-  // withTrimmedTop(4) creates a visible gap from the outer window border
-  const juce::Rectangle<float> logoF (logoBar.getBounds().toFloat().withTrimmedTop (4.0f));
-  g.setColour (ac.withAlpha (0.18f));
-  g.drawRoundedRectangle (logoF.expanded (1.0f), 5.0f, 1.0f);
-  g.setColour (ac.withAlpha (0.72f));
-  g.drawRoundedRectangle (logoF.reduced (0.5f), 4.0f, 1.5f);
-  g.setColour (ac.withAlpha (0.18f));
-  g.drawRoundedRectangle (logoF.reduced (2.0f), 3.5f, 1.0f);
- }
-
  // ── Full-window accent frame ─────────────────────────────────────────
  {
   const auto ac = getTheme().accent;
