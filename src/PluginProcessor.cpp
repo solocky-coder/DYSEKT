@@ -1208,6 +1208,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
             int   outFieldId   = -1;
             float outNorm      = 0.0f;
             bool  outIsRelative = false;
+            const int prevArmed = midiLearn.getArmedSlot();
             if (midiLearn.processCc (msg.getControllerNumber(),
                                      msg.getControllerValue(),
                                      outFieldId, outNorm, outIsRelative))
@@ -1447,6 +1448,15 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
 
                             if (outIsRelative)
                             {
+                                // Kill any absolute smoother armed during the detection phase.
+                                // The relative path never sets ccSmootherActive[FieldSliceStart];
+                                // any 'true' value here is a stale detection/absolute artefact.
+                                // If left alive the smoother loop in processBlock would override
+                                // every relative handleCommand below and jump the marker to the
+                                // absolute position the smoother was targeting.
+                                ccSmootherActive[(size_t) FieldSliceStart] = false;
+                                markerSmootherSlice = -1;
+
                                 // Relative: commit immediately via handleCommand each buffer.
                                 // This eliminates the idle-commit jump: sliceManager is updated
                                 // atomically each block (including culling), so there is no
@@ -1524,6 +1534,21 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     }
                     uiSnapshotDirty.store (true, std::memory_order_release);
                     skipCcParam:;
+                }
+            }
+            else if (prevArmed >= 0 && midiLearn.getArmedSlot() < 0)
+            {
+                if (prevArmed < kMidiLearnNumSlots)
+                {
+                    ccPickedUp      [(size_t) prevArmed] = false;
+                    ccSmootherActive[(size_t) prevArmed] = false;
+                    if (prevArmed == FieldSliceStart)
+                    {
+                        markerSmootherSlice = -1;
+                        markerPending       = false;
+                        markerPendingSlice  = -1;
+                        markerIdleCounter   = 0;
+                    }
                 }
             }
         }
