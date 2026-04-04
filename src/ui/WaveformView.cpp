@@ -770,8 +770,8 @@ void WaveformView::drawSlices (juce::Graphics& g)
 
         int drawEndSample = processor.sliceManager.getEndForSlice(i, ui.sampleNumFrames);
 
-        // Live preview during drag:
-        if (i == sel && dragSliceIdx == i &&
+        // Live preview during drag: fill tracks dragPreviewStart/End for any dragged slice
+        if (dragSliceIdx == i &&
             (dragMode == DragEdgeLeft || dragMode == MoveSlice))
         {
             drawStartSample = dragPreviewStart;
@@ -1213,6 +1213,16 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             DysektProcessor::Command gestureCmd;
             gestureCmd.type = DysektProcessor::CmdBeginGesture;
             processor.pushCommand (gestureCmd);
+
+            // Auto-select the dragged slice so the LCD and marker slider track it in real time
+            if (nearestSlice != sel)
+            {
+                DysektProcessor::Command selCmd;
+                selCmd.type      = DysektProcessor::CmdSelectSlice;
+                selCmd.intParam1 = nearestSlice;
+                processor.pushCommand (selCmd);
+            }
+
             dragMode         = DragEdgeLeft;
             dragSliceIdx     = nearestSlice;
             dragPreviewStart = s.startSample;
@@ -1303,6 +1313,13 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
             dragPreviewStart = juce::jlimit(0, dragPreviewEnd - 64, pixelToSample(e.x));
         if (linkedSliceIdx >= 0)
             linkedPreviewEnd = dragPreviewStart;
+
+        // Publish live position so SliceControlBar slider and waveform marker bar
+        // both track the drag in real time (same atomics used by the CC/MIDI path)
+        processor.liveDragSliceIdx.store   (dragSliceIdx,    std::memory_order_release);
+        processor.liveDragBoundsStart.store(dragPreviewStart, std::memory_order_relaxed);
+        processor.liveDragBoundsEnd.store  (dragPreviewEnd,   std::memory_order_relaxed);
+
         repaint();
     }
     // TODO: add MoveSlice/other modes if needed

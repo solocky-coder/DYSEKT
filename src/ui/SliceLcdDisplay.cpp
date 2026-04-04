@@ -107,7 +107,17 @@ void SliceLcdDisplay::buildDisplayData()
     const auto& sl   = snap.slices[(size_t) snap.selectedSlice];
     data.midiNote    = sl.midiNote;
     data.sliceName   = sl.name;
-    data.startSample = sl.startSample;
+
+    // During a live drag (waveform or CC), override startSample with the real-time
+    // position so the ST: row updates without waiting for the audio-thread snapshot.
+    {
+        const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
+        const int liveStart = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
+        data.startSample = (liveIdx == snap.selectedSlice && liveStart >= 0)
+                               ? liveStart
+                               : sl.startSample;
+    }
+
     // Marker model: end derived from next slice's start (or sampleNumFrames).
     data.endSample   = processor.sliceManager.getEndForSlice (
                            snap.selectedSlice, snap.sampleNumFrames);
