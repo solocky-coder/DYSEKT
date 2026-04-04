@@ -361,7 +361,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     // ── Full-lane slice colour tint ──────────────────────────────────────
     // Subtle wash across the entire row so each slice is immediately
     // identifiable at a glance, matching the waveform lane colours.
-    g.setColour (sl.colour.withAlpha (selected ? 0.09f : 0.05f));
+    g.setColour (sl.colour.withAlpha (selected ? 0.16f : 0.10f));
     g.fillRect (kNameColW, ry, getWidth() - kNameColW, kRowH);
 
     // Row bottom divider
@@ -376,7 +376,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     g.fillRect (0, ry, 3, kRowH);
 
     // Colour tint on name column background
-    g.setColour (dot.withAlpha (0.07f));
+    g.setColour (dot.withAlpha (0.13f));
     g.fillRect (3, ry, kNameColW - 4, kRowH);
 
     // Slice number — larger font, brighter

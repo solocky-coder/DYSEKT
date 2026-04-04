@@ -67,7 +67,7 @@ void SliceLane::paint (juce::Graphics& g)
     }
 
     // Opacity steps for non-selected slices (5-step cycle, same hue per slice)
-    static constexpr float kOpacity[5] = { 0.11f, 0.19f, 0.27f, 0.19f, 0.11f };
+    static constexpr float kOpacity[5] = { 0.18f, 0.26f, 0.34f, 0.26f, 0.18f };
 
     const int Y1 = 1, Y2 = bodyH - 1;
 
@@ -77,7 +77,7 @@ void SliceLane::paint (juce::Graphics& g)
         const auto& si = vis[(size_t) i];
         if (si.selected)
         {
-            g.setColour (si.col.withAlpha (0.28f));
+            g.setColour (si.col.withAlpha (0.36f));
             g.fillRect (si.x1, Y1, si.x2 - si.x1, Y2 - Y1);
         }
         else
@@ -112,7 +112,7 @@ void SliceLane::paint (juce::Graphics& g)
             g.fillRect (si.x1 + 1, Y2 - 2, sw - 2, 2);
 
             // 4-sided border inset by 1px from each divider
-            g.setColour (si.col.withAlpha (0.70f));
+            g.setColour (si.col.withAlpha (0.80f));
             // top
             g.drawHorizontalLine (Y1,     (float) (si.x1 + 1), (float) (si.x2 - 1));
             // bottom
@@ -125,7 +125,7 @@ void SliceLane::paint (juce::Graphics& g)
         else
         {
             // Hairline bottom tick at full colour brightness (inset 1px)
-            g.setColour (si.col.withAlpha (0.50f));
+            g.setColour (si.col.withAlpha (0.65f));
             g.fillRect (si.x1 + 1, Y2 - 1, sw - 2, 1);
         }
     }

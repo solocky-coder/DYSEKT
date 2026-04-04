@@ -544,7 +544,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         // Highlight background — tinted with the slice's vibrant colour
         g.setColour (data.sliceColour.isTransparent()
                          ? pal.phosphor.withAlpha (0.10f)
-                         : data.sliceColour.withAlpha (0.18f));
+                         : data.sliceColour.withAlpha (0.28f));
         g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
 
         const juce::Font lblF = DysektLookAndFeel::makeFont (24.0f, true);
