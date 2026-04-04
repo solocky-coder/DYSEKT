@@ -784,7 +784,15 @@ void WaveformView::drawSlices (juce::Graphics& g)
         }
         else if (dragMode == None)
         {
-            // Fill stays at committed slice bounds; only marker bar tracks live position (see mx)
+            // No local waveform drag — check if SliceControlBar is driving the marker
+            // via the live atomics (same path the marker bar already uses for mx)
+            const int liveIdx2 = processor.liveDragSliceIdx.load (std::memory_order_acquire);
+            if (liveIdx2 == i)
+            {
+                const int liveStart2 = processor.liveDragBoundsStart.load (std::memory_order_relaxed);
+                if (liveStart2 >= 0)
+                    drawStartSample = liveStart2;
+            }
         }
 
         // Marker position for live drag: only the thin bar moves, fill stays at committed bounds
