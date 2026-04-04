@@ -812,21 +812,21 @@ void WaveformView::drawSlices (juce::Graphics& g)
         const int markerH = getHeight() - kTopPad;
 
         // --- CUBASE-STYLE SLICE OVERLAY (fill stays at committed bounds during live drag) ---
-        g.setColour(s.colour.withAlpha(0.11f));
+        g.setColour(s.colour.withAlpha(0.18f));
         g.fillRect(x1, kTopPad, sw, markerH);
 
         // Strong colored borders: top & bottom
-        g.setColour(s.colour.withAlpha(0.65f));
+        g.setColour(s.colour.withAlpha(0.75f));
         g.drawHorizontalLine(kTopPad, (float)x1, (float)x2);
         g.drawHorizontalLine(getHeight() - 1, (float)x1, (float)x2);
 
         // --- MARKER BAR: always follows live drag position (mx), not fill left edge ---
-        g.setColour(s.colour.withAlpha(0.85f));
-        g.fillRect(mx, kTopPad, 2, markerH);
+        g.setColour(s.colour.withAlpha(0.92f));
+        g.fillRect(mx, kTopPad, 3, markerH);
 
         // Selection highlight overlay
         if (i == sel) {
-            g.setColour(s.colour.withAlpha(0.18f));
+            g.setColour(s.colour.withAlpha(0.22f));
             g.fillRect(x1, kTopPad, sw, markerH);
         }
 
