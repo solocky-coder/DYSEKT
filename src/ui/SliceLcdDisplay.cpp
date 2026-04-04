@@ -497,6 +497,13 @@ void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
 
 void SliceLcdDisplay::paint (juce::Graphics& g)
 {
+    // Clip to rounded LCD boundary — stops accent glow artefacts showing as
+    // black corner notches against the plugin background.
+    {
+        juce::Path clipPath;
+        clipPath.addRoundedRectangle (getLocalBounds().toFloat(), 4.0f);
+        g.reduceClipRegion (clipPath);
+    }
     buildDisplayData();
     drawLcdBackground (g);
 
