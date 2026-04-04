@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "DysektLookAndFeel.h"
 
@@ -45,6 +45,7 @@ private:
 
     void drawTrimKnob (juce::Graphics& g, juce::Rectangle<int> cell,
                        const char* label, int sampleVal, int totalFrames);
+    void showMidiLearnMenu (int fieldId, juce::Point<int> screenPos);
     void onApply();
     void onCancel();
 

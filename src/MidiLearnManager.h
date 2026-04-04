@@ -154,23 +154,32 @@ public:
 
                 // Wider bin-offset window (±8 from 64) handles fast encoder turns
                 // that v4's ±3 window misclassified as absolute.
+                                const bool isDefinitelyRelative = (value <= 10 || value >= 118);
                 const bool isBinOffset = (value >= 56 && value <= 72);
-                const bool isAbsRange  = (value >= 11 && value <= 117) && ! isBinOffset;
+                const bool isAbsRange  = (value >= 11 && value <= 117) && ! isBinOffset && ! isDefinitelyRelative;
 
-                if (isAbsRange)
+                if (isDefinitelyRelative)
                 {
-                    // Require 2 consecutive absolute-range hits before locking.
-                    // This guards against DirectLink init bursts and first-contact
-                    // glitches (e.g. M-Audio Axiom Air 25) which can send a single
-                    // mid-range value before settling into relative delta output.
+                    // Unambiguous twos-complement delta (value 0-10 or 118-127).
+                    // Real absolute encoders never emit these extremes during use.
+                    // Hard-lock immediately to prevent fast-turn false-absolute detection.
+                    encodingForSlot[i].store (kRelTwosComp, std::memory_order_relaxed);
+                    detectLocked   [i].store (true,         std::memory_order_relaxed);
+                    return false;
+                }
+                else if (isAbsRange)
+                {
+                    // Require 4 mid-range hits to lock as absolute.
+                    // Prevents fast-turning relative encoders (which produce
+                    // large delta values like 15 or 113) from being misidentified
+                    // as absolute after just 2 messages -- the root cause of the
+                    // persistent MIDI marker jump bug.
                     const int absH = detectAbsHits[i].fetch_add (1, std::memory_order_relaxed) + 1;
-                    if (absH >= 2)
+                    if (absH >= 4)
                     {
                         encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
                         detectLocked   [i].store (true,      std::memory_order_relaxed);
                     }
-                    // Suppress output during detection — never pass a raw absolute
-                    // value through while we don't yet know the encoder type.
                     return false;
                 }
                 else

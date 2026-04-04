@@ -57,9 +57,6 @@ static constexpr uint32_t kValidLockMask =
     | kLockFormantComp | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
     | kLockOutputBus | kLockLoop | kLockOneShot | kLockCentsDetune
     | kLockPan | kLockFilter;
-// <<--- Place the new constant here:
-static constexpr int FieldTrimOut = 28; // MIDI Learn slot for "Trim Out"
-
 static Slice sanitiseRestoredSlice (Slice s)
 {
     s.startSample = juce::jmax (0, s.startSample);
@@ -1488,6 +1485,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 if (sel >= 0 && sel < kMaxCCSlices)
                                     ccSmootherActive[(size_t) sel][(size_t) FieldSliceStart] = false;
                                 markerSmootherSlice = -1;
+                                markerPending     = false;
+                                markerIdleCounter = 0;
 
                                 // Relative: commit immediately via handleCommand each buffer.
                                 // This eliminates the idle-commit jump: sliceManager is updated

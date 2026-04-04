@@ -1,7 +1,8 @@
-#include "TrimDialog.h"
+﻿#include "TrimDialog.h"
 #include "DysektLookAndFeel.h"
 #include "WaveformView.h"
 #include "../PluginProcessor.h"
+#include "../PluginEditor.h"
 
 TrimDialog::TrimDialog (DysektProcessor& proc, WaveformView& wv)
     : processor (proc), waveformView (wv)
@@ -130,12 +131,47 @@ void TrimDialog::resized()
 //  Mouse — vertical drag moves IN / OUT, shift = fine
 //  Same CC: FieldSliceStart drives IN, FieldSliceEnd drives OUT (in processor)
 // ─────────────────────────────────────────────────────────────────────────────
+void TrimDialog::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos)
+{
+    const bool mapped = processor.midiLearn.isMapped (fieldId);
+    juce::PopupMenu menu;
+    menu.addItem (1, "Learn MIDI CC");
+    if (mapped)
+        menu.addItem (2, "Clear (" + processor.midiLearn.getLabelText (fieldId) + ")");
+    menu.addSeparator();
+    menu.addItem (1000, "Open MIDI Learn Dialog...");
+    auto* topLvl = getTopLevelComponent();
+    float ms = DysektLookAndFeel::getMenuScale();
+    menu.showMenuAsync (
+        juce::PopupMenu::Options()
+            .withTargetScreenArea (juce::Rectangle<int> (screenPos.x, screenPos.y, 1, 1))
+            .withParentComponent (topLvl)
+            .withStandardItemHeight ((int)(24 * ms)),
+        [this, fieldId] (int result) {
+            if (result == 1) { processor.midiLearn.armLearn (fieldId); repaint(); }
+            else if (result == 2) { processor.midiLearn.clearMapping (fieldId); repaint(); }
+            else if (result == 1000)
+            {
+                if (auto* editor = findParentComponentOfClass<DysektEditor>())
+                    editor->keyPressed (juce::KeyPress ('M', juce::ModifierKeys::commandModifier, 0));
+            }
+        }
+    );
+}
 void TrimDialog::mouseDown (const juce::MouseEvent& e)
 {
-    if      (inCell .contains (e.getPosition())) activeDrag = 0;
-    else if (outCell.contains (e.getPosition())) activeDrag = 1;
+    using F = DysektProcessor;
+    if (inCell.contains (e.getPosition()))
+    {
+        if (e.mods.isRightButtonDown()) { showMidiLearnMenu (F::FieldSliceStart, e.getScreenPosition()); return; }
+        activeDrag = 0;
+    }
+    else if (outCell.contains (e.getPosition()))
+    {
+        if (e.mods.isRightButtonDown()) { showMidiLearnMenu (F::FieldTrimOut, e.getScreenPosition()); return; }
+        activeDrag = 1;
+    }
     else return;
-
     dragStartY   = e.getPosition().y;
     dragStartVal = (activeDrag == 0)
         ? processor.trimRegionStart.load (std::memory_order_relaxed)
