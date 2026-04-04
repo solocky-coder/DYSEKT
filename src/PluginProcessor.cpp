@@ -1447,20 +1447,24 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
 
                             if (outIsRelative)
                             {
-                                // Relative: small per-click delta — inherently smooth.
-                                // Use the liveDrag / idle-commit path (same as before).
+                                // Relative: commit immediately via handleCommand each buffer.
+                                // This eliminates the idle-commit jump: sliceManager is updated
+                                // atomically each block (including culling), so there is no
+                                // discontinuity when the encoder stops turning.
+                                // markerPending / idle-commit path is NOT used for CC.
                                 const float sensitivity = (float) total / 300.0f;
-                                const int curLive = markerPending
-                                    ? liveDragBoundsStart.load (std::memory_order_relaxed)
-                                    : sl.startSample;
                                 const int newStart = juce::jlimit (0, slEnd - 64,
-                                    curLive + (int)(outNorm * sensitivity));
+                                    sl.startSample + (int)(outNorm * sensitivity));
+                                // Write to liveDragBoundsStart so SliceControlBar's timer
+                                // detects the change and schedules a repaint each CC arrival.
                                 liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
-                                liveDragBoundsEnd.store   (slEnd,    std::memory_order_relaxed);
-                                liveDragSliceIdx.store    (sel,      std::memory_order_release);
-                                markerPending      = true;
-                                markerPendingSlice = sel;
-                                markerIdleCounter  = 0;
+                                Command ccCmd;
+                                ccCmd.type         = CmdSetSliceBounds;
+                                ccCmd.intParam1    = sel;
+                                ccCmd.intParam2    = newStart;
+                                ccCmd.positions[0] = slEnd;
+                                ccCmd.numPositions = 1;
+                                handleCommand (ccCmd);
                             }
                             else
                             {
