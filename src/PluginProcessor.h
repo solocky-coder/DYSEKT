@@ -254,10 +254,21 @@ public:
     std::atomic<int>   paramsSyncedForSlice   { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
     std::atomic<float> sliceStartPublished    { -1.0f }; // value written when syncing, used to detect real CC moves
 
-    // Pickup mode state — one flag per MIDI learn slot.
-    // Reset when the selected slice changes or a new CC is learned.
-    // Audio-thread write, audio-thread read only.
-    std::array<bool, kMidiLearnNumSlots> ccPickedUp {};
+    // ── Per-slice CC state ───────────────────────────────────────────────────
+    // Each slice independently tracks pickup and smoother state for every
+    // MIDI learn slot.  Switching slices never requires pickup re-acquisition
+    // for a CC that has already been used on that slice — eliminating the
+    // root cause of the cross-slice jump problem.
+    //
+    // Memory: 128 slices × 30 slots × (1 bool + 1 bool + ~32B smoother) ≈ 128 KB
+    // Audio-thread write/read only.
+    static constexpr int kMaxCCSlices = 128; // matches SliceManager::kMaxSlices
+
+    // [sliceIdx][fieldId]
+    std::array<std::array<bool, kMidiLearnNumSlots>, kMaxCCSlices> ccPickedUp {};
+    std::array<std::array<bool, kMidiLearnNumSlots>, kMaxCCSlices> ccSmootherActive {};
+    std::array<std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>,
+               kMidiLearnNumSlots>, kMaxCCSlices> ccSmoothers;
 
     // Commit-on-idle for FieldSliceStart CC — write live drag atomics during
     // movement, commit to SliceManager only after kIdleBlocks of silence.
@@ -268,12 +279,6 @@ public:
     int  markerSmootherSlice  = -1;  // slice active when absolute-CC smoother was seeded
     int  lastProcessedSlice   = -1;  // detects direct selectedSlice.store() changes between blocks
     int  ccLastDispatchedSel  = -1;  // intra-buffer slice-switch guard (see processMidi)
-
-    // Per-slot smoothed values for CC — prevents audible steps on absolute knobs.
-    // Target is set in processMidi(); smoother is stepped each processBlock().
-    std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>,
-               kMidiLearnNumSlots> ccSmoothers;
-    std::array<bool, kMidiLearnNumSlots> ccSmootherActive {};
     std::atomic<float> sliceEndPublished      { -1.0f };
 
     // Shift-preview request (-2 = idle, -1 = stop, >= 0 = start at position)

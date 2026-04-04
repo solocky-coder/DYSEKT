@@ -4,16 +4,21 @@
 #include <atomic>
 
 /**
- *  MidiLearnManager  v4
+ *  MidiLearnManager  v5
  *  ====================
- *  Adds auto-detection of encoder mode on the first kDetectSamples messages
+ *  Auto-detection of encoder mode on the first kDetectSamples messages
  *  after a CC is learned. No manual mode selection required.
  *
  *  Detection logic (audio thread, per slot):
- *    - A value in 11-117 (excl. 63-65 window) → absolute, lock immediately
- *    - Values only in 0-10 or 118-127         → kRelTwosComp, lock after kDetectSamples
- *    - Values only in 61-67                   → kRelBinOffset, lock after kDetectSamples
- *    - Mixed evidence                         → pick sub-mode with most hits
+ *    - Values in 11-117 (excl. 56-72 bin-offset window) → absolute,
+ *      but requires 2 consecutive hits before locking (guards against
+ *      DirectLink init bursts and first-contact glitches, e.g. Axiom Air 25)
+ *    - Values only in 0-10 or 118-127  → kRelTwosComp, lock after kDetectSamples
+ *    - Values only in 56-72            → kRelBinOffset, lock after kDetectSamples
+ *      (wider ±8 window vs v4's ±3 — handles fast encoder turns correctly)
+ *    - Mixed evidence                  → pick sub-mode with most hits
+ *  Output is suppressed during detection so no parameter jumps occur
+ *  on the first N encoder messages after a fresh learn.
  *
  *  THREAD SAFETY
  *  -------------
@@ -39,6 +44,7 @@ public:
         for (auto& a : detectLocked)    a.store (false,     std::memory_order_relaxed);
         for (auto& a : detectRelHits)   a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectBinHits)   a.store (0,         std::memory_order_relaxed);
+        for (auto& a : detectAbsHits)   a.store (0,         std::memory_order_relaxed);
     }
 
     // ── UI-thread API ─────────────────────────────────────────────────────────
@@ -146,14 +152,26 @@ public:
             {
                 const int n = detectCount[i].load (std::memory_order_relaxed);
 
-                const bool isBinOffset = (value >= 61 && value <= 67);
+                // Wider bin-offset window (±8 from 64) handles fast encoder turns
+                // that v4's ±3 window misclassified as absolute.
+                const bool isBinOffset = (value >= 56 && value <= 72);
                 const bool isAbsRange  = (value >= 11 && value <= 117) && ! isBinOffset;
 
                 if (isAbsRange)
                 {
-                    // Absolute value seen — lock immediately
-                    encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
-                    detectLocked   [i].store (true,      std::memory_order_relaxed);
+                    // Require 2 consecutive absolute-range hits before locking.
+                    // This guards against DirectLink init bursts and first-contact
+                    // glitches (e.g. M-Audio Axiom Air 25) which can send a single
+                    // mid-range value before settling into relative delta output.
+                    const int absH = detectAbsHits[i].fetch_add (1, std::memory_order_relaxed) + 1;
+                    if (absH >= 2)
+                    {
+                        encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
+                        detectLocked   [i].store (true,      std::memory_order_relaxed);
+                    }
+                    // Suppress output during detection — never pass a raw absolute
+                    // value through while we don't yet know the encoder type.
+                    return false;
                 }
                 else
                 {
@@ -174,10 +192,9 @@ public:
                     }
                 }
 
-                // During detection output raw absolute (safe for all params)
-                outNorm       = (float) value / 127.0f;
-                outIsRelative = false;
-                return true;
+                // Suppress output during detection — no parameter moves until
+                // encoder type is confirmed. Eliminates jump-on-first-touch.
+                return false;
             }
 
             // ── Normal decode (detection locked) ─────────────────────────────
@@ -265,6 +282,7 @@ private:
         detectLocked [i].store (false, std::memory_order_relaxed);
         detectRelHits[i].store (0,     std::memory_order_relaxed);
         detectBinHits[i].store (0,     std::memory_order_relaxed);
+        detectAbsHits[i].store (0,     std::memory_order_relaxed);
     }
 
     std::array<std::atomic<int>,  kMidiLearnNumSlots> ccForSlot;
@@ -276,4 +294,5 @@ private:
     std::array<std::atomic<bool>, kMidiLearnNumSlots> detectLocked;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectRelHits;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectBinHits;
+    std::array<std::atomic<int>,  kMidiLearnNumSlots> detectAbsHits;
 };

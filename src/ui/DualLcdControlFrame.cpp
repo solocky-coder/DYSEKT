@@ -154,6 +154,20 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         drawIcon (g, waIconArea  .toFloat(), 1, waveMode != 0);
         drawIcon (g, midiFollowIconArea  .toFloat(), 2, midiFollowActive);
         drawIcon (g, bodeIconArea.toFloat(), 3, bodeActive);
+
+        // ── Hover tooltip label ──────────────────────────────────────
+        if (hoveredIcon >= 0)
+        {
+            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "BODE" };
+            const juce::Rectangle<int>* areas[] = { &filIconArea, &waIconArea,
+                                                     &midiFollowIconArea, &bodeIconArea };
+            const auto& area = *areas[hoveredIcon];
+            const int labelY = area.getBottom() + 2;
+            g.setFont (DysektLookAndFeel::makeFont (7.0f));
+            g.setColour (getTheme().accent.withAlpha (0.80f));
+            g.drawText (kLabels[hoveredIcon], area.getX() - 20, labelY, area.getWidth() + 40, 9,
+                        juce::Justification::centred);
+        }
     }
 
     // ── Bottom row: ROOT | PITCH | VOL knobs ─────────────────────────────────
@@ -369,4 +383,29 @@ void DualLcdControlFrame::mouseDoubleClick (const juce::MouseEvent& e)
     };
     textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };
     textEditor->onFocusLost = [this] { textEditor.reset(); repaint(); };
+}
+
+void DualLcdControlFrame::mouseMove (const juce::MouseEvent& e)
+{
+    const auto pos = e.getPosition();
+    int found = -1;
+    if (filIconArea.contains (pos))        found = 0;
+    else if (waIconArea.contains (pos))    found = 1;
+    else if (midiFollowIconArea.contains (pos)) found = 2;
+    else if (bodeIconArea.contains (pos))  found = 3;
+
+    if (found != hoveredIcon)
+    {
+        hoveredIcon = found;
+        repaint();
+    }
+}
+
+void DualLcdControlFrame::mouseExit (const juce::MouseEvent&)
+{
+    if (hoveredIcon != -1)
+    {
+        hoveredIcon = -1;
+        repaint();
+    }
 }

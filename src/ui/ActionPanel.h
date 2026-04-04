@@ -36,5 +36,5 @@ private:
 
     juce::TextButton addSliceBtn    { "ADD"  };
     juce::TextButton lazyChopBtn    { "LAZY" };
-    juce::TextButton shortcutsBtn   { "?"    };
+    juce::TextButton shortcutsBtn   { "HELP" };
 };

@@ -21,6 +21,8 @@ public:
     void mouseDrag    (const juce::MouseEvent& e) override;
     void mouseUp      (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void mouseMove    (const juce::MouseEvent& e) override;
+    void mouseExit    (const juce::MouseEvent& e) override;
 
     std::function<void()> onBrowserToggle;
     std::function<void()> onWaveToggle;
@@ -58,6 +60,7 @@ private:
     juce::Rectangle<int> pitchKnobArea;
     juce::Rectangle<int> volKnobArea;
 
+    int        hoveredIcon   = -1;   // 0=FIL 1=WA 2=MIDI 3=BODE, -1=none
     enum class DragTarget { None, Root, Pitch, Volume };
     DragTarget dragTarget    = DragTarget::None;
     float  dragStartValue    = 0.0f;

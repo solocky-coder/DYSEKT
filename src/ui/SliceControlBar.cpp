@@ -7,6 +7,7 @@ static constexpr int kFieldGlide = 9998;
 #include "UIHelpers.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include "../MidiLearnManager.h"
 #include "../audio/GrainEngine.h"
 #include "../PluginEditor.h"
 
@@ -119,8 +120,17 @@ void SliceControlBar::drawKnob (juce::Graphics& g,
  int cx, int cy, int r,
  float normVal,
  bool locked, bool armed, bool mapped,
- juce::Colour tintOverride)
+ juce::Colour tintOverride,
+ bool hovered)
 {
+ // Hover ring — faint accent circle drawn before everything else so arcs sit on top
+ if (hovered && !armed)
+ {
+     const float fr2 = (float) r + 3.5f;
+     const float fcx2 = (float) cx, fcy2 = (float) cy;
+     g.setColour (getTheme().accent.withAlpha (0.18f));
+     g.drawEllipse (fcx2 - fr2, fcy2 - fr2, fr2 * 2.0f, fr2 * 2.0f, 1.2f);
+ }
  const float angle = kKnobStart + normVal * (kKnobEnd - kKnobStart);
  const float fcx = (float) cx, fcy = (float) cy, fr = (float) r;
 
@@ -216,6 +226,7 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
 
  const bool armed = (processor.midiLearn.getArmedSlot() == fieldId);
  const bool mapped = processor.midiLearn.isMapped (fieldId);
+ const int sel = processor.getUiSliceSnapshot().selectedSlice;
 
  if (armed)
  {
@@ -228,8 +239,47 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
                              1.0f + 1.0f * pulse);
  }
 
+ const bool hovered = (! armed) && (cells.size() > 0) &&
+                       ((int) cells.size() == hoveredCellIdx + 1 ||
+                        (hoveredCellIdx >= 0 && (int) cells.size() == hoveredCellIdx));
+ // Determine if this specific cell is hovered by checking against hoveredCellIdx
+ // (cells is built sequentially so current cell index = cells.size() after push_back)
+ // We compare after push_back below, so pass index = current cells.size() pre-push
+ const int thisCellIdx = (int) cells.size();
  drawKnob (g, knobCX, knobCY, kKnobR, normVal, locked, armed, mapped,
- adsrTintForField (fieldId));
+ adsrTintForField (fieldId), (hoveredCellIdx == thisCellIdx) && !armed);
+
+ // ── Pickup chasing indicator ─────────────────────────────────────────
+ // When a knob is mapped to an absolute CC but hasn't been picked up yet,
+ // draw a ghost arc showing where the CC currently is vs. the parameter.
+ // This makes "silent until catchup" feel intentional rather than broken.
+ if (mapped && !armed
+     && fieldId >= 0 && fieldId < kMidiLearnNumSlots
+     && !processor.midiLearn.isEndless (fieldId)
+     && sel >= 0 && sel < DysektProcessor::kMaxCCSlices
+     && !processor.ccPickedUp[(size_t) sel][(size_t) fieldId])
+ {
+     const float ccNorm  = processor.ccSmoothers[(size_t) sel][(size_t) fieldId].getCurrentValue();
+     // Map raw smoother value back to 0-1 norm for display
+     const float ccDisplayNorm = toNorm (fieldId, ccNorm);
+     const float ccAngle = kKnobStart + ccDisplayNorm * (kKnobEnd - kKnobStart);
+     const float fcx2 = (float) knobCX, fcy2 = (float) knobCY, fr2 = (float) kKnobR;
+
+     // Ghost arc at CC position — dim, dashed appearance via short segments
+     juce::Path chaseArc;
+     chaseArc.addCentredArc (fcx2, fcy2, fr2 + 3.5f, fr2 + 3.5f, 0.f,
+                              kKnobStart, ccAngle, true);
+     g.setColour (getTheme().accent.withAlpha (0.35f));
+     g.strokePath (chaseArc, juce::PathStrokeType (1.5f,
+                   juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+     // Small dot at the CC tip position
+     const float dotAngle = ccAngle - juce::MathConstants<float>::halfPi;
+     const float dotR = fr2 + 3.5f;
+     g.setColour (getTheme().accent.withAlpha (0.65f));
+     g.fillEllipse (fcx2 + dotR * std::cos (dotAngle) - 2.0f,
+                    fcy2 + dotR * std::sin (dotAngle) - 2.0f, 4.0f, 4.0f);
+ }
 
  if (armed || mapped)
  {
@@ -756,6 +806,27 @@ void SliceControlBar::paint (juce::Graphics& g)
  false, true, cw);
  x += cw + 4;
  }
+
+ // ── Separator before chromatic group ────────────────────────────────
+ g.setColour (getTheme().separator.withAlpha (0.5f));
+ g.drawVerticalLine (x + 2, (float) row1y + 4.f, (float) row1y + 28.f);
+ x += 8;
+
+ // CHRO — chromatic channel badge (per-slice)
+ {
+     const bool chromaLocked = (s.lockMask & kLockChromaticChannel) != 0;
+     const int  chVal        = chromaLocked ? s.chromaticChannel : 0;
+     drawChroBadgeCell (g, x, row1y, chVal, chromaLocked, cw);
+     x += cw + 4;
+ }
+
+ // LEGATO — chromatic legato toggle (per-slice)
+ {
+     const bool legatoLocked = (s.lockMask & kLockChromaticLegato) != 0;
+     const bool legatoOn     = legatoLocked ? s.chromaticLegato : false;
+     drawLegatoToggleCell (g, x, row1y, legatoOn, legatoLocked, cw);
+     x += cw + 4;
+ }
  }
  g.setColour (getTheme().separator);
  g.drawHorizontalLine (34, 8.0f, (float) getWidth() - 8.0f);
@@ -1162,6 +1233,13 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  for (int i = 1; i <= 15; ++i) names.add ("Aux " + juce::String (i));
  addItems (names, cur);
  }
+ else if (fieldId == F::FieldChromaticChannel)
+ {
+ int cur = (sl.lockMask & kLockChromaticChannel) ? sl.chromaticChannel : 0;
+ juce::StringArray names; names.add ("Off");
+ for (int i = 1; i <= 16; ++i) names.add ("Channel " + juce::String (i));
+ addItems (names, cur);
+ }
  else
  {
  // Fallback: old-style cycle
@@ -1453,6 +1531,125 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  }
  showTextEditor (cell, currentVal); return;
  }
+}
+
+// =============================================================================
+// drawChroBadgeCell — chromatic channel badge (0=off, 1-16)
+// Clicking cycles 0→1→2→...→16→0. Right-click locks.
+// =============================================================================
+void SliceControlBar::drawChroBadgeCell (juce::Graphics& g, int x, int y,
+                                         int channel, bool locked, int& outWidth)
+{
+    const int cellW = kParamCellWidth;
+    const int cellH = 32;
+    const auto& theme = getTheme();
+    const bool active = (channel > 0);
+
+    // Label
+    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setColour (locked ? theme.lockActive.withAlpha (0.8f)
+                        : theme.foreground.withAlpha (0.42f));
+    g.drawText ("CHRO", x + 4, y + 2, cellW - 4, 12, juce::Justification::centredLeft);
+
+    // Badge
+    const int bx = x + 4, by = y + 14, bw = cellW - 8, bh = 14;
+    g.setColour (active ? (locked ? theme.lockActive.withAlpha (0.15f)
+                                  : theme.accent.withAlpha (0.15f))
+                        : theme.separator.withAlpha (0.25f));
+    g.fillRoundedRectangle ((float)bx, (float)by, (float)bw, (float)bh, 2.5f);
+    g.setColour (active ? (locked ? theme.lockActive : theme.accent)
+                        : (locked ? theme.lockActive.withAlpha (0.5f)
+                                  : theme.foreground.withAlpha (0.22f)));
+    g.drawRoundedRectangle ((float)bx, (float)by, (float)bw, (float)bh, 2.5f, 0.8f);
+
+    g.setFont (DysektLookAndFeel::makeMonoFont (11.0f));
+    g.setColour (active ? (locked ? theme.lockActive : theme.accent)
+                        : (locked ? theme.lockActive.withAlpha (0.5f)
+                                  : theme.foreground.withAlpha (0.28f)));
+    g.drawText (active ? ("CH" + juce::String (channel)) : "OFF",
+                bx, by, bw, bh, juce::Justification::centred);
+
+    outWidth = cellW;
+    ParamCell c {};
+    c.x = x; c.y = y; c.w = cellW; c.h = cellH;
+    c.lockBit = kLockChromaticChannel;
+    c.fieldId = DysektProcessor::FieldChromaticChannel;
+    c.minVal = 0.f; c.maxVal = 16.f; c.step = 1.f;
+    c.isChoice = true;   // click cycles values
+    cells.push_back (c);
+}
+
+// =============================================================================
+// drawLegatoToggleCell — chromatic legato on/off toggle
+// =============================================================================
+void SliceControlBar::drawLegatoToggleCell (juce::Graphics& g, int x, int y,
+                                            bool on, bool locked, int& outWidth)
+{
+    const int cellW = kParamCellWidth;
+    const int cellH = 32;
+    const auto& theme = getTheme();
+
+    // Label
+    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setColour (locked ? theme.lockActive.withAlpha (0.8f)
+                        : theme.foreground.withAlpha (0.42f));
+    g.drawText ("LGTO", x + 4, y + 2, cellW - 4, 12, juce::Justification::centredLeft);
+
+    // Toggle pill
+    const int bx = x + 4, by = y + 14, bw = cellW - 8, bh = 14;
+    const juce::Colour col = on ? (locked ? theme.lockActive : theme.accent)
+                               : (locked ? theme.lockActive.withAlpha (0.4f)
+                                         : theme.foreground.withAlpha (0.18f));
+    g.setColour (col.withAlpha (on ? 0.15f : 0.08f));
+    g.fillRoundedRectangle ((float)bx, (float)by, (float)bw, (float)bh, 2.5f);
+    g.setColour (col);
+    g.drawRoundedRectangle ((float)bx, (float)by, (float)bw, (float)bh, 2.5f, 0.8f);
+
+    g.setFont (DysektLookAndFeel::makeMonoFont (11.0f));
+    g.setColour (col);
+    g.drawText (on ? "ON" : "OFF", bx, by, bw, bh, juce::Justification::centred);
+
+    outWidth = cellW;
+    ParamCell c {};
+    c.x = x; c.y = y; c.w = cellW; c.h = cellH;
+    c.lockBit = kLockChromaticLegato;
+    c.fieldId = DysektProcessor::FieldChromaticLegato;
+    c.minVal = 0.f; c.maxVal = 1.f; c.step = 1.f;
+    c.isBoolean = true;
+    cells.push_back (c);
+}
+
+// =============================================================================
+// mouseMove / mouseExit — hover highlight for knob cells
+// =============================================================================
+void SliceControlBar::mouseMove (const juce::MouseEvent& e)
+{
+    const auto pos = e.getPosition();
+    int found = -1;
+    for (int i = 0; i < (int) cells.size(); ++i)
+    {
+        const auto& c = cells[(size_t) i];
+        if (pos.x >= c.x && pos.x < c.x + c.w &&
+            pos.y >= c.y && pos.y < c.y + c.h)
+        {
+            found = i;
+            break;
+        }
+    }
+    if (found != hoveredCellIdx)
+    {
+        hoveredCellIdx = found;
+        repaint();
+    }
+}
+
+void SliceControlBar::mouseExit (const juce::MouseEvent&)
+{
+    if (hoveredCellIdx != -1)
+    {
+        hoveredCellIdx = -1;
+        repaint();
+    }
 }
 
 // =============================================================================

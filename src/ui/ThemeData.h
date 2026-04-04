@@ -52,10 +52,10 @@ struct ThemeData
         t.slicePalette[9] = juce::Colour (0xFFC60070); // Acid Pink
         t.slicePalette[10]= juce::Colour (0xFF0083C6); // Reactor Blue
         t.slicePalette[11]= juce::Colour (0xFFC69800); // Hazard Amber
-        t.slicePalette[12]= juce::Colour (0xFFC6008C); // Hot Magenta
-        t.slicePalette[13]= juce::Colour (0xFF00C669); // Toxic Lime
-        t.slicePalette[14]= juce::Colour (0xFFC65300); // Molten Orange
-        t.slicePalette[15]= juce::Colour (0xFF009CC6); // Ice Blue
+        t.slicePalette[12]= juce::Colour (0xFFC63060); // Coral Crimson
+        t.slicePalette[13]= juce::Colour (0xFF30A0C6); // Steel Teal
+        t.slicePalette[14]= juce::Colour (0xFFB0C600); // Chartreuse
+        t.slicePalette[15]= juce::Colour (0xFF8060C6); // Lavender
         return t;
     }
 
@@ -91,10 +91,10 @@ struct ThemeData
         t.slicePalette[9 ] = juce::Colour (0xFFCC0073); // Acid Pink
         t.slicePalette[10] = juce::Colour (0xFF0086CC); // Reactor Blue
         t.slicePalette[11] = juce::Colour (0xFFCC9C00); // Hazard Amber
-        t.slicePalette[12] = juce::Colour (0xFFCC0090); // Hot Magenta
-        t.slicePalette[13] = juce::Colour (0xFF00CC6C); // Toxic Lime
-        t.slicePalette[14] = juce::Colour (0xFFCC5500); // Molten Orange
-        t.slicePalette[15] = juce::Colour (0xFF00A0CC); // Ice Blue
+        t.slicePalette[12] = juce::Colour (0xFFCC3060); // Coral Crimson
+        t.slicePalette[13] = juce::Colour (0xFF30A0CC); // Steel Teal
+        t.slicePalette[14] = juce::Colour (0xFFAFCC00); // Chartreuse
+        t.slicePalette[15] = juce::Colour (0xFF8060CC); // Lavender
         return t;
     }
 
@@ -131,10 +131,10 @@ struct ThemeData
         t.slicePalette[9] = juce::Colour (0xFFEA0084); // Acid Pink
         t.slicePalette[10]= juce::Colour (0xFF009AEA); // Reactor Blue
         t.slicePalette[11]= juce::Colour (0xFFEAB400); // Hazard Amber
-        t.slicePalette[12]= juce::Colour (0xFFEA00A5); // Hot Magenta
-        t.slicePalette[13]= juce::Colour (0xFF00EA7C); // Toxic Lime
-        t.slicePalette[14]= juce::Colour (0xFFEA6200); // Molten Orange
-        t.slicePalette[15]= juce::Colour (0xFF00B8EA); // Ice Blue
+        t.slicePalette[12]= juce::Colour (0xFFEA3870); // Coral Crimson
+        t.slicePalette[13]= juce::Colour (0xFF38B8EA); // Steel Teal
+        t.slicePalette[14]= juce::Colour (0xFFCAEA00); // Chartreuse
+        t.slicePalette[15]= juce::Colour (0xFF9070EA); // Lavender
         return t;
     }
 
@@ -170,10 +170,10 @@ struct ThemeData
         t.slicePalette[9] = juce::Colour (0xFFB70067); // Acid Pink
         t.slicePalette[10]= juce::Colour (0xFF0078B7); // Reactor Blue
         t.slicePalette[11]= juce::Colour (0xFFB78D00); // Hazard Amber
-        t.slicePalette[12]= juce::Colour (0xFFB70081); // Hot Magenta
-        t.slicePalette[13]= juce::Colour (0xFF00B761); // Toxic Lime
-        t.slicePalette[14]= juce::Colour (0xFFB74D00); // Molten Orange
-        t.slicePalette[15]= juce::Colour (0xFF0090B7); // Ice Blue
+        t.slicePalette[12]= juce::Colour (0xFFB72C58); // Coral Crimson
+        t.slicePalette[13]= juce::Colour (0xFF2C90B7); // Steel Teal
+        t.slicePalette[14]= juce::Colour (0xFF9EB700); // Chartreuse
+        t.slicePalette[15]= juce::Colour (0xFF7058B7); // Lavender
         return t;
     }
 
@@ -209,10 +209,10 @@ struct ThemeData
         t.slicePalette[9] = juce::Colour (0xFFD8007A); // Acid Pink
         t.slicePalette[10]= juce::Colour (0xFF008ED8); // Reactor Blue
         t.slicePalette[11]= juce::Colour (0xFFD8A600); // Hazard Amber
-        t.slicePalette[12]= juce::Colour (0xFFD80099); // Hot Magenta
-        t.slicePalette[13]= juce::Colour (0xFF00D872); // Toxic Lime
-        t.slicePalette[14]= juce::Colour (0xFFD85A00); // Molten Orange
-        t.slicePalette[15]= juce::Colour (0xFF00AAD8); // Ice Blue
+        t.slicePalette[12]= juce::Colour (0xFFD83468); // Coral Crimson
+        t.slicePalette[13]= juce::Colour (0xFF34AAD8); // Steel Teal
+        t.slicePalette[14]= juce::Colour (0xFFBDD800); // Chartreuse
+        t.slicePalette[15]= juce::Colour (0xFF8868D8); // Lavender
         return t;
     }
 
@@ -248,10 +248,10 @@ struct ThemeData
         t.slicePalette[9] = juce::Colour (0xFFB20064); // Acid Pink
         t.slicePalette[10]= juce::Colour (0xFF0075B2); // Reactor Blue
         t.slicePalette[11]= juce::Colour (0xFFB28900); // Hazard Amber
-        t.slicePalette[12]= juce::Colour (0xFFB2007D); // Hot Magenta
-        t.slicePalette[13]= juce::Colour (0xFF00B25E); // Toxic Lime
-        t.slicePalette[14]= juce::Colour (0xFFB24A00); // Molten Orange
-        t.slicePalette[15]= juce::Colour (0xFF008CB2); // Ice Blue
+        t.slicePalette[12]= juce::Colour (0xFFB22854); // Coral Crimson
+        t.slicePalette[13]= juce::Colour (0xFF288CB2); // Steel Teal
+        t.slicePalette[14]= juce::Colour (0xFF9AB200); // Chartreuse
+        t.slicePalette[15]= juce::Colour (0xFF6850B2); // Lavender
         return t;
     }
 
@@ -289,10 +289,10 @@ struct ThemeData
         t.slicePalette[9 ] = juce::Colour (0xFFFF40A0); // Acid Pink
         t.slicePalette[10] = juce::Colour (0xFF00A8FF); // Sky Blue
         t.slicePalette[11] = juce::Colour (0xFFFFB800); // Gold
-        t.slicePalette[12] = juce::Colour (0xFFFF2DA0); // Hot Magenta
-        t.slicePalette[13] = juce::Colour (0xFF00FFAA); // Mint
-        t.slicePalette[14] = juce::Colour (0xFFFF6B00); // Amber
-        t.slicePalette[15] = juce::Colour (0xFF9B6FFF); // Violet
+        t.slicePalette[12] = juce::Colour (0xFFFF5090); // Coral Crimson
+        t.slicePalette[13] = juce::Colour (0xFF50C8FF); // Steel Teal
+        t.slicePalette[14] = juce::Colour (0xFFD0FF00); // Chartreuse
+        t.slicePalette[15] = juce::Colour (0xFFFF90D8); // Rose Quartz
         return t;
     }
 
@@ -328,10 +328,10 @@ struct ThemeData
         t.slicePalette[9 ] = juce::Colour (0xFFFF40A0); // Acid Pink
         t.slicePalette[10] = juce::Colour (0xFF00A8FF); // Sky Blue
         t.slicePalette[11] = juce::Colour (0xFFFFB800); // Gold
-        t.slicePalette[12] = juce::Colour (0xFFFF2DA0); // Hot Magenta
-        t.slicePalette[13] = juce::Colour (0xFF00FFAA); // Mint
-        t.slicePalette[14] = juce::Colour (0xFFFF6B00); // Amber
-        t.slicePalette[15] = juce::Colour (0xFF5CCCFF); // Pigments Cyan
+        t.slicePalette[12] = juce::Colour (0xFFFF5070); // Coral Crimson
+        t.slicePalette[13] = juce::Colour (0xFF5CFFCC); // Seafoam
+        t.slicePalette[14] = juce::Colour (0xFFCCFF00); // Chartreuse
+        t.slicePalette[15] = juce::Colour (0xFFAA70FF); // Lavender
         return t;
     }
 

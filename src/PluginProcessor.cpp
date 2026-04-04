@@ -201,8 +201,9 @@ void DysektProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
     std::fill (std::begin (heldNotes), std::end (heldNotes), false);
 
     // Initialise CC smoothers — 20 ms ramp gives silky response on absolute knobs
-    for (auto& s : ccSmoothers)
-        s.reset (sampleRate, 0.020);
+    for (auto& sliceRow : ccSmoothers)
+        for (auto& s : sliceRow)
+            s.reset (sampleRate, 0.020);
 }
 
 void DysektProcessor::releaseResources() {}
@@ -1123,8 +1124,9 @@ void DysektProcessor::handleCommand (const Command& cmd)
         {
             const int newSel = juce::jlimit (-1, juce::jmax (-1, sliceManager.getNumSlices() - 1), cmd.intParam1);
             sliceManager.selectedSlice.store (newSel, std::memory_order_relaxed);
-            ccPickedUp.fill (false);  // new slice — absolute knobs must pick up again
-            ccSmootherActive.fill (false);
+            // New slice selected — do NOT reset per-slice CC state.
+            // Each slice independently maintains its own pickup and smoother
+            // state, so switching slices never triggers pickup re-acquisition.
             markerPending        = false;
             markerPendingSlice   = -1;
             markerIdleCounter    = 0;
@@ -1137,7 +1139,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
             // position rather than from wherever the smoother was left.
             if (newSel >= 0 && newSel < sliceManager.getNumSlices())
             {
-                ccSmoothers[(size_t) FieldSliceStart].setCurrentAndTargetValue (
+                ccSmoothers[(size_t) newSel][(size_t) FieldSliceStart].setCurrentAndTargetValue (
                     (float) sliceManager.getSlice (newSel).startSample);
                 markerSmootherSlice = newSel;
                 // ccSmootherActive stays false — smoother is seeded but not running.
@@ -1258,10 +1260,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 ? juce::jlimit (0, curEnd - 64,       (int)(outNorm * (float)total))
                                 : juce::jlimit (curStart + 64, total, (int)(outNorm * (float)total));
 
-                            if (! ccSmootherActive[(size_t) outFieldId])
-                                ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
-                            ccSmoothers[(size_t) outFieldId].setTargetValue ((float) target);
-                            ccSmootherActive[(size_t) outFieldId] = true;
+                            if (! ccSmootherActive[(size_t) sel][(size_t) outFieldId])
+                                ccSmoothers[(size_t) sel][(size_t) outFieldId].setCurrentAndTargetValue ((float) cur);
+                            ccSmoothers[(size_t) sel][(size_t) outFieldId].setTargetValue ((float) target);
+                            ccSmootherActive[(size_t) sel][(size_t) outFieldId] = true;
                         }
                     }
 
@@ -1281,15 +1283,13 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 // jump to their old mapped position on the new slice.
                 if (sel != ccLastDispatchedSel && ccLastDispatchedSel >= 0)
                 {
-                    ccPickedUp.fill (false);
-                    ccSmootherActive.fill (false);
+                    // Per-slice state is independent — no reset needed on slice switch.
+                    // Just re-seed the FieldSliceStart smoother for the new slice
+                    // if it hasn't been seeded yet.
                     markerSmootherSlice = -1;
-
-                    // Re-seed the slice-start smoother from the new slice's
-                    // actual position so pickup can lock on correctly.
                     if (sel >= 0 && sel < sliceManager.getNumSlices())
                     {
-                        ccSmoothers[(size_t) FieldSliceStart].setCurrentAndTargetValue (
+                        ccSmoothers[(size_t) sel][(size_t) FieldSliceStart].setCurrentAndTargetValue (
                             (float) sliceManager.getSlice (sel).startSample);
                         markerSmootherSlice = sel;
                         // ccSmootherActive stays false — activates only after pickup.
@@ -1368,8 +1368,9 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         // turns accumulate correctly into the pending target instead of
                         // stacking deltas on top of a stale (not-yet-smoothed) value.
                         const float cur = (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
-                                           && ccSmootherActive[(size_t) outFieldId])
-                                          ? ccSmoothers[(size_t) outFieldId].getTargetValue()
+                                           && sel >= 0 && sel < kMaxCCSlices
+                                           && ccSmootherActive[(size_t) sel][(size_t) outFieldId])
+                                          ? ccSmoothers[(size_t) sel][(size_t) outFieldId].getTargetValue()
                                           : getCurrentNative (outFieldId);
                         const float sens = getRelSensitivity (outFieldId);
                         const float raw  = cur + outNorm * sens;
@@ -1402,8 +1403,9 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         // Absolute knob: map 0-1 to full native range.
                         // Pickup gate: ignore until the knob reaches the current value.
                         const float curNative = getCurrentNative (outFieldId);
-                        if (outFieldId >= 0 && outFieldId < (int) ccPickedUp.size()
-                            && ! ccPickedUp[(size_t) outFieldId])
+                        if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
+                            && sel >= 0 && sel < kMaxCCSlices
+                            && ! ccPickedUp[(size_t) sel][(size_t) outFieldId])
                         {
                             // Compute what native value outNorm would map to
                             float mappedNative = outNorm;
@@ -1430,7 +1432,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 }
                             }();
                             if (std::abs (mappedNative - curNative) <= rangeSpan * 0.04f)
-                                ccPickedUp[(size_t) outFieldId] = true;
+                                ccPickedUp[(size_t) sel][(size_t) outFieldId] = true;
                             else
                                 goto skipCcParam;  // not picked up yet — suppress
                         }
@@ -1480,7 +1482,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // If left alive the smoother loop in processBlock would override
                                 // every relative handleCommand below and jump the marker to the
                                 // absolute position the smoother was targeting.
-                                ccSmootherActive[(size_t) FieldSliceStart] = false;
+                                if (sel >= 0 && sel < kMaxCCSlices)
+                                    ccSmootherActive[(size_t) sel][(size_t) FieldSliceStart] = false;
                                 markerSmootherSlice = -1;
 
                                 // Relative: commit immediately via handleCommand each buffer.
@@ -1516,18 +1519,19 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // ran at the top of processBlock.  If the smoother is
                                 // tracking a different slice, the pickup gate is stale —
                                 // clear it locally before applying the gate check.
-                                if (sel != markerSmootherSlice && markerSmootherSlice >= 0)
-                                    ccPickedUp[(size_t) outFieldId] = false;
+                                // No cross-slice stale reset needed — each slice has
+                                // its own ccPickedUp state.
 
                                 const float markerNorm = (float) sl.startSample
                                                        / (float) juce::jmax (1, total);
 
-                                if (outFieldId >= 0 && outFieldId < (int) ccPickedUp.size()
-                                    && ! ccPickedUp[(size_t) outFieldId])
+                                if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
+                                    && sel >= 0 && sel < kMaxCCSlices
+                                    && ! ccPickedUp[(size_t) sel][(size_t) outFieldId])
                                 {
                                     // Tolerance: ~1 CC step (1/127 ≈ 0.008).
                                     if (std::abs (outNorm - markerNorm) <= 0.008f)
-                                        ccPickedUp[(size_t) outFieldId] = true;
+                                        ccPickedUp[(size_t) sel][(size_t) outFieldId] = true;
                                     else
                                         goto skipCcParam;   // not picked up yet — suppress
                                 }
@@ -1536,12 +1540,15 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // glides rather than teleports to the target.
                                 const int newStart = juce::jlimit (0, slEnd - 64,
                                     (int) (outNorm * (float) total));
-                                if (! ccSmootherActive[(size_t) outFieldId] || sel != markerSmootherSlice)
-                                    ccSmoothers[(size_t) outFieldId].setCurrentAndTargetValue (
-                                        (float) sl.startSample);
-                                ccSmoothers[(size_t) outFieldId].setTargetValue ((float) newStart);
-                                ccSmootherActive[(size_t) outFieldId] = true;
-                                markerSmootherSlice = sel;
+                                if (sel >= 0 && sel < kMaxCCSlices)
+                                {
+                                    if (! ccSmootherActive[(size_t) sel][(size_t) outFieldId] || sel != markerSmootherSlice)
+                                        ccSmoothers[(size_t) sel][(size_t) outFieldId].setCurrentAndTargetValue (
+                                            (float) sl.startSample);
+                                    ccSmoothers[(size_t) sel][(size_t) outFieldId].setTargetValue ((float) newStart);
+                                    ccSmootherActive[(size_t) sel][(size_t) outFieldId] = true;
+                                    markerSmootherSlice = sel;
+                                }
                             }
 
                             uiSnapshotDirty.store (true, std::memory_order_release);
@@ -1554,8 +1561,11 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         // each buffer, giving a smooth ~20 ms glide to the target.
                         if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots)
                         {
-                            ccSmoothers[(size_t) outFieldId].setTargetValue (nativeVal);
-                            ccSmootherActive[(size_t) outFieldId] = true;
+                            if (sel >= 0 && sel < kMaxCCSlices)
+                            {
+                                ccSmoothers[(size_t) sel][(size_t) outFieldId].setTargetValue (nativeVal);
+                                ccSmootherActive[(size_t) sel][(size_t) outFieldId] = true;
+                            }
                         }
                     }
                     uiSnapshotDirty.store (true, std::memory_order_release);
@@ -1566,8 +1576,12 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
             {
                 if (prevArmed < kMidiLearnNumSlots)
                 {
-                    ccPickedUp      [(size_t) prevArmed] = false;
-                    ccSmootherActive[(size_t) prevArmed] = false;
+                    // Clear pickup/smoother for the re-armed slot across all slices
+                    for (int si = 0; si < kMaxCCSlices; ++si)
+                    {
+                        ccPickedUp      [(size_t) si][(size_t) prevArmed] = false;
+                        ccSmootherActive[(size_t) si][(size_t) prevArmed] = false;
+                    }
                     if (prevArmed == FieldSliceStart)
                     {
                         markerSmootherSlice = -1;
@@ -1934,30 +1948,24 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // ── Detect direct slice changes (not via CmdSelectSlice) ─────────────────
     // selectedSlice can be changed by direct .store() calls (pad triggers, UI
-    // clicks, note-on routing) that bypass CmdSelectSlice entirely.  Those paths
-    // never reach the CmdSelectSlice handler that clears ccPickedUp, so the
-    // pickup gate stays armed from the previous slice and the first CC for the
-    // new slice skips the gate — causing the marker to jump to wherever the CC
-    // controller was left after the last move.  Catch every slice change here,
-    // right before processMidi(), and reset pickup + smoother state regardless
-    // of how the slice was selected.
+    // clicks, note-on routing) that bypass CmdSelectSlice entirely.
+    // With per-slice CC state, switching slices no longer requires any reset —
+    // each slice already has its own independent pickup and smoother state.
+    // We only need to re-seed the FieldSliceStart smoother for the new slice
+    // so pickup detection starts from the correct reference position.
     {
         const int curSel = sliceManager.selectedSlice.load (std::memory_order_relaxed);
         if (curSel != lastProcessedSlice)
         {
-            ccPickedUp.fill      (false);
-            ccSmootherActive.fill (false);
             markerSmootherSlice = -1;
             lastProcessedSlice  = curSel;
 
-            // Proactive re-seed: park the smoother at the new slice's marker
-            // position before any CC arrives this buffer.  Reactive re-seeding
-            // (detecting the mismatch when a CC arrives) can race with the CC
-            // in the same buffer; seeding here guarantees the smoother is
-            // correct before processMidi() runs.
-            if (curSel >= 0 && curSel < sliceManager.getNumSlices())
+            // Proactive re-seed: park the slice-start smoother at the new
+            // slice's marker position before any CC arrives this buffer.
+            if (curSel >= 0 && curSel < sliceManager.getNumSlices()
+                && curSel < kMaxCCSlices)
             {
-                ccSmoothers[(size_t) FieldSliceStart].setCurrentAndTargetValue (
+                ccSmoothers[(size_t) curSel][(size_t) FieldSliceStart].setCurrentAndTargetValue (
                     (float) sliceManager.getSlice (curSel).startSample);
                 markerSmootherSlice = curSel;
                 // ccSmootherActive stays false — smoother is seeded but not
@@ -1978,12 +1986,13 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         const int sel        = sliceManager.selectedSlice.load (std::memory_order_relaxed);
         const bool inTrim    = trimModeActive.load (std::memory_order_relaxed);
 
+        const int smoothSel = sel >= 0 && sel < kMaxCCSlices ? sel : -1;
         for (int i = 0; i < kMidiLearnNumSlots; ++i)
         {
-            if (! ccSmootherActive[i]) continue;
+            if (smoothSel < 0 || ! ccSmootherActive[(size_t) smoothSel][i]) continue;
 
-            ccSmoothers[(size_t) i].skip (numSamples);
-            const float smoothed = ccSmoothers[(size_t) i].getCurrentValue();
+            ccSmoothers[(size_t) smoothSel][(size_t) i].skip (numSamples);
+            const float smoothed = ccSmoothers[(size_t) smoothSel][(size_t) i].getCurrentValue();
 
             if (i == FieldSliceStart || i == FieldTrimOut)
             {
@@ -2046,8 +2055,8 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 uiSnapshotDirty.store (true, std::memory_order_release);
             }
 
-            if (! ccSmoothers[(size_t) i].isSmoothing())
-                ccSmootherActive[i] = false;
+            if (smoothSel >= 0 && ! ccSmoothers[(size_t) smoothSel][(size_t) i].isSmoothing())
+                ccSmootherActive[(size_t) smoothSel][i] = false;
         }
 
         // ── Commit-on-idle for marker CC ──────────────────────────────────────

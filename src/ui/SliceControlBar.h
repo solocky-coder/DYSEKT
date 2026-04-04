@@ -15,6 +15,8 @@ public:
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void mouseMove (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
 
     // Called by the parent editor's timer — starts/stops the pulse as needed
     void updateMidiLearnPulse();
@@ -59,6 +61,14 @@ private:
     void drawMarkerSliderCell (juce::Graphics& g, int x, int y,
                                int sampleVal, int totalFrames, int& outWidth);
 
+    // Chromatic channel badge — cycles 0 (off) through 1-16 on click
+    void drawChroBadgeCell (juce::Graphics& g, int x, int y,
+                            int channel, bool locked, int& outWidth);
+
+    // Chromatic legato toggle
+    void drawLegatoToggleCell (juce::Graphics& g, int x, int y,
+                               bool on, bool locked, int& outWidth);
+
     // Horizontal bipolar slider — used for PAN
     void drawPanSliderCell (juce::Graphics& g, int x, int y,
                             float panValue, bool locked, int& outWidth);
@@ -69,7 +79,7 @@ private:
 
     void drawKnob (juce::Graphics& g, int cx, int cy, int r,
                    float normVal, bool locked, bool armed, bool mapped,
-                   juce::Colour tintOverride = {});
+                   juce::Colour tintOverride = {}, bool hovered = false);
 
     void drawLockIcon (juce::Graphics& g, int x, int y, bool locked);
     void showTextEditor (const ParamCell& cell, float currentValue);
@@ -85,6 +95,7 @@ private:
     DysektProcessor& processor;
 
     // Drag state
+    int hoveredCellIdx = -1;   // index into cells[] under cursor, -1 = none
     int activeDragCell = -1;
     float dragStartValue = 0.0f;
     int dragStartY = 0;
