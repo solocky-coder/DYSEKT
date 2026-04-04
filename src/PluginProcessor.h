@@ -90,6 +90,7 @@ public:
         CmdApplyTrim,
         CmdSetSliceLockAll,  // intParam1 = slice index, floatParam1 = 1.0 lock all / 0.0 unlock all
         CmdSetSliceColour,   // intParam1 = slice index, intParam2 = ARGB colour
+        CmdSetSliceName,     // intParam1 = slice index, stringParam = new name (empty = clear)
     };
 
     // ── Load kind ────────────────────────────────────────────────────────────
@@ -114,6 +115,7 @@ public:
         int         intParam2   { 0 };
         float       floatParam1 { 0.0f };
         juce::File  fileParam;
+        juce::String stringParam;   // used by CmdSetSliceName
         static constexpr int kMaxPositions = SliceManager::kMaxSlices + 2;
         std::array<int, kMaxPositions> positions {};
         int numPositions { 0 };

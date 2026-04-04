@@ -106,6 +106,7 @@ void SliceLcdDisplay::buildDisplayData()
 
     const auto& sl   = snap.slices[(size_t) snap.selectedSlice];
     data.midiNote    = sl.midiNote;
+    data.sliceName   = sl.name;
     data.startSample = sl.startSample;
     // Marker model: end derived from next slice's start (or sampleNumFrames).
     data.endSample   = processor.sliceManager.getEndForSlice (
@@ -573,12 +574,13 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         }
     }
 
-    // ── Row 1:  NOTE:Cx(nnn)  |  ROOT:Cx ─────────────────────────────────────
+    // ── Row 1:  NOTE:Cx(nnn)  |  ROOT:Cx  or  NAME:xxx ──────────────────────
     {
-        // Format: NOTE:C1(036)   ROOT:C1
         juce::String noteStr = "NOTE:" + midiNoteName (data.midiNote).trimEnd()
             + "(" + juce::String (data.midiNote).paddedLeft ('0', 3) + ")";
-        juce::String rootStr = "ROOT:" + midiNoteName (data.rootNote).trimEnd();
+        juce::String rootStr = data.sliceName.isNotEmpty()
+            ? ("NAME:" + data.sliceName.toUpperCase().substring (0, 10))
+            : ("ROOT:" + midiNoteName (data.rootNote).trimEnd());
         drawRowPair (g, 1, noteStr, rootStr);
     }
 

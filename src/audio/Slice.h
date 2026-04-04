@@ -68,6 +68,7 @@ struct Slice
     bool     chromaticLegato  = false; // when true: pitch-only (no speed change), monophonic voice steal
     int      rrCounter      = 0;        // round-robin playback counter (not saved)
 
+    juce::String name;              // user-defined label; empty = show slice number
     uint32_t lockMask       = 0;
     juce::Colour colour     { []() -> juce::Colour {
         static const juce::uint32 kPal[16] = {

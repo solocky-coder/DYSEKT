@@ -667,6 +667,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
         case CmdApplyTrim:
         case CmdSetRootNote:
         case CmdSetSliceColour:
+        case CmdSetSliceName:
         case CmdSetSliceLockAll:
             if (! gestureSnapshotCaptured)
                 captureSnapshot();
@@ -1150,6 +1151,14 @@ void DysektProcessor::handleCommand (const Command& cmd)
             int idx = cmd.intParam1;
             if (idx >= 0 && idx < sliceManager.getNumSlices())
                 sliceManager.getSlice (idx).colour = juce::Colour ((juce::uint32) (unsigned) cmd.intParam2);
+            break;
+        }
+
+        case CmdSetSliceName:
+        {
+            int idx = cmd.intParam1;
+            if (idx >= 0 && idx < sliceManager.getNumSlices())
+                sliceManager.getSlice (idx).name = cmd.stringParam;
             break;
         }
 
@@ -2170,7 +2179,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (19);
+    stream.writeInt (20);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -2232,6 +2241,8 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
         stream.writeInt (s.chromaticChannel);
         // v19 fields
         stream.writeBool (s.chromaticLegato);
+        // v20 fields
+        stream.writeString (s.name);
     }
 
     // v9: store file path only (no PCM)
@@ -2250,7 +2261,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version < 16 || version > 19)
+    if (version < 16 || version > 20)
         return;
 
     // APVTS state
@@ -2313,6 +2324,8 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         parsed.chromaticChannel  = (version >= 18) ? stream.readInt() : 0;
         // v19 fields
         parsed.chromaticLegato   = (version >= 19) ? stream.readBool() : false;
+        // v20 fields
+        parsed.name              = (version >= 20) ? stream.readString() : juce::String();
 
         if (i < validatedNumSlices)
             sliceManager.getSlice (i) = sanitiseRestoredSlice (parsed);

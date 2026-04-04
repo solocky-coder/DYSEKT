@@ -56,6 +56,7 @@ private:
         int          muteGroup    = 0;
         float        filterCutoff = 20000.0f;
         float        filterRes    = 0.0f;
+        juce::String sliceName;           // user-defined name; empty = not set
         // Lock state
         bool         sliceLocked      = false;
         // Extended — scroll rows 7-9

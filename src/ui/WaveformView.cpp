@@ -830,10 +830,22 @@ void WaveformView::drawSlices (juce::Graphics& g)
             g.fillRect(x1, kTopPad, sw, markerH);
         }
 
-        // Slice index label
-        g.setFont(juce::Font(10.0f, juce::Font::bold));
-        g.setColour(s.colour.contrasting(0.8f));
-        g.drawText(juce::String(i + 1), x1 + 4, 3, 16, 12, juce::Justification::left);
+        // Slice label: name (if set) or number — always white, always readable
+        g.setColour (juce::Colours::white);
+        if (s.name.isNotEmpty() && sw > 20)
+        {
+            // Name: centred in slice, font size scales with available width
+            const float nameFontH = juce::jlimit (9.0f, 13.0f, (float)sw * 0.18f);
+            g.setFont (juce::Font (nameFontH, juce::Font::bold));
+            g.drawText (s.name, x1 + 2, kTopPad + 1, sw - 4, 14,
+                        juce::Justification::centred, true);
+        }
+        else
+        {
+            // Number: top-left corner, bold 10pt
+            g.setFont (juce::Font (10.0f, juce::Font::bold));
+            g.drawText (juce::String (i + 1), x1 + 4, 3, 20, 12, juce::Justification::left);
+        }
     }
 }
 
@@ -1034,6 +1046,8 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             menu.addSeparator();
             menu.addItem (2, lockLabel, true, allLocked);
             menu.addSubMenu ("ADSR Lock", adsrSub);
+            menu.addSeparator();
+            menu.addItem (3, "Rename Slice...");
         }
 
         auto* topLvl = getTopLevelComponent();
@@ -1133,6 +1147,41 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     cmd.intParam1 = targetSlice;
                     cmd.intParam2 = (int) kPalARGB[result - 20];
                     processor.pushCommand (cmd);
+                }
+                else if (result == 3)
+                {
+                    // ── Rename Slice ──────────────────────────────────────────
+                    juce::String currentName;
+                    {
+                        const auto& snap = processor.getUiSliceSnapshot();
+                        if (targetSlice >= 0 && targetSlice < snap.numSlices)
+                            currentName = snap.slices[(size_t) targetSlice].name;
+                    }
+                    auto* aw = new juce::AlertWindow (
+                        "Rename Slice",
+                        "Name for slice " + juce::String (targetSlice + 1) + "  (max 14 chars, leave blank to clear):",
+                        juce::MessageBoxIconType::NoIcon);
+                    aw->addTextEditor ("name", currentName, "");
+                    aw->getTextEditor ("name")->setInputRestrictions (14);
+                    aw->addButton ("OK",    1, juce::KeyPress (juce::KeyPress::returnKey));
+                    aw->addButton ("Clear", 2);
+                    aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+                    aw->enterModalState (true,
+                        juce::ModalCallbackFunction::create ([this, targetSlice, aw] (int r) mutable
+                        {
+                            if (r == 1 || r == 2)
+                            {
+                                juce::String newName = (r == 1)
+                                    ? aw->getTextEditorContents ("name").trim()
+                                    : juce::String();
+                                DysektProcessor::Command cmd;
+                                cmd.type        = DysektProcessor::CmdSetSliceName;
+                                cmd.intParam1   = targetSlice;
+                                cmd.stringParam = newName;
+                                processor.pushCommand (cmd);
+                            }
+                        }), true);
+                    return;   // skip the repaint() below — rename is async
                 }
                 repaint();
             });
