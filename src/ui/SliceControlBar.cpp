@@ -470,22 +470,27 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         const float ghostNorm = processor.markerCcGhostNorm.load (std::memory_order_relaxed);
         const bool mapped  = processor.midiLearn.isMapped (DysektProcessor::FieldSliceStart);
         const bool endless = processor.midiLearn.isEndless (DysektProcessor::FieldSliceStart);
-        if (ghostNorm >= 0.0f && mapped && !endless)
-        {
-            // Dim ghost bar at knob position
-            g.setColour (T.accent.withAlpha (0.28f));
-            g.fillRect (bar.withWidth (bar.getWidth() * ghostNorm));
+        const bool showGhost = ghostNorm >= 0.0f && mapped && !endless;
 
-            // Small bright tick at the ghost tip so the target is obvious
-            // at a glance even when the ghost and marker bars overlap
-            const float tipX = bar.getX() + bar.getWidth() * ghostNorm;
-            g.setColour (T.accent.withAlpha (0.75f));
-            g.fillRect (juce::Rectangle<float> (tipX - 1.0f, bar.getY() - 3.0f, 2.0f, bar.getHeight() + 3.0f));
+        // Dim ghost fill first (may be hidden under marker bar if knob < marker)
+        if (showGhost)
+        {
+            g.setColour (T.accent.withAlpha (0.35f));
+            g.fillRect (bar.withWidth (bar.getWidth() * ghostNorm));
         }
 
-        // Actual marker bar (drawn on top so it is always visible)
+        // Solid marker bar drawn next
         g.setColour (T.accent);
         g.fillRect (bar.withWidth (bar.getWidth() * frac));
+
+        // Bright tick drawn LAST — always on top of everything, always visible
+        // regardless of whether the knob is left or right of the marker.
+        if (showGhost)
+        {
+            const float tipX = bar.getX() + bar.getWidth() * ghostNorm;
+            g.setColour (T.accent.brighter (0.4f).withAlpha (0.95f));
+            g.fillRect (juce::Rectangle<float> (tipX - 1.5f, bar.getY() - 5.0f, 3.0f, bar.getHeight() + 5.0f));
+        }
     }
 
     // Label — top half
