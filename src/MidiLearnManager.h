@@ -104,6 +104,7 @@ public:
 
     bool isMapped  (int fieldId) const noexcept { return getMappedCC (fieldId) >= 0; }
     bool isEndless (int fieldId) const noexcept { return getEncoderMode (fieldId) != kAbsolute; }
+    bool isRelative (int fieldId) const noexcept { return isEndless (fieldId); }
 
     bool isDetectionComplete (int fieldId) const noexcept
     {

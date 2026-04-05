@@ -260,6 +260,12 @@ public:
     // knob/fader is vs. where the actual marker is. -1.0f = not active.
     std::atomic<float> markerCcGhostNorm { -1.0f };
 
+    // Relative encoder directional indicator for Marker slider.
+    // markerRelDir: -1 = CCW, 0 = idle, +1 = CW
+    // markerRelLastMs: timestamp of last encoder tick for fade-out
+    std::atomic<int>  markerRelDir    { 0 };
+    std::atomic<int>  markerRelLastMs { 0 };
+
     // ── Per-slice CC state ───────────────────────────────────────────────────
     // Each slice independently tracks pickup and smoother state for every
     // MIDI learn slot.  Switching slices never requires pickup re-acquisition

@@ -64,8 +64,14 @@ void SliceControlBar::updateMidiLearnPulse()
 {
     // Timer is always running (started in constructor for real-time CC repaint).
     // Just reset pulse phase when arming so the blink starts cleanly.
+    // Also keep requesting repaints during the 300ms arrow fade-out window.
     if (processor.midiLearn.isArmed())
         pulsePhase = 0.0f;
+
+    const int lastMs  = processor.markerRelLastMs.load (std::memory_order_relaxed);
+    const int elapsed = (int) juce::Time::getMillisecondCounter() - lastMs;
+    if (processor.markerRelDir.load (std::memory_order_relaxed) != 0 && elapsed < 300)
+        repaint();
 }
 void SliceControlBar::resized() {}
 
@@ -498,6 +504,24 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
                 cell.getX(), midY,
                 cell.getWidth(), cell.getBottom() - midY - 3,
                 juce::Justification::centred, false);
+
+    // Directional arrow — relative encoder only, fades 300ms after last tick
+    {
+        const int dir     = processor.markerRelDir.load    (std::memory_order_relaxed);
+        const int lastMs  = processor.markerRelLastMs.load (std::memory_order_relaxed);
+        const int elapsed = (int) juce::Time::getMillisecondCounter() - lastMs;
+        if (dir != 0 && elapsed < 300)
+        {
+            const float fade = 1.0f - (float) elapsed / 300.0f;
+            g.setFont (DysektLookAndFeel::makeFont (11.0f));
+            g.setColour (T.accent.withAlpha (fade * 0.9f));
+            g.drawText (dir > 0 ? juce::CharPointer_UTF8 ("\xe2\x96\xb6")
+                                : juce::CharPointer_UTF8 ("\xe2\x97\x80"),
+                        cell.getX(), cell.getY() + 2,
+                        cell.getWidth(), cell.getHeight() - 5,
+                        juce::Justification::centred, false);
+        }
+    }
 
     outWidth = cellW;
 

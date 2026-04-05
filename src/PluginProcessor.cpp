@@ -1521,6 +1521,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 markerPending      = true;
                                 markerPendingSlice = sel;
                                 markerIdleCounter  = 0;
+                                // Relative direction indicator for UI arrow
+                                markerRelDir.store    (outNorm > 0.0f ? 1 : -1, std::memory_order_relaxed);
+                                markerRelLastMs.store ((int) juce::Time::getMillisecondCounter(),
+                                                       std::memory_order_relaxed);
                             }
                             else
                             {
@@ -1616,6 +1620,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         markerPendingSlice  = -1;
                         markerIdleCounter   = 0;
                         markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
+                        markerRelDir.store  (0,     std::memory_order_relaxed);
                     }
                 }
             }
@@ -1995,6 +2000,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             // bypasses the pickup gate and jumps the new slice's marker.
             // Also reset the ghost so the UI doesn't show a stale position.
             markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
+            markerRelDir.store      (0,     std::memory_order_relaxed);
             if (curSel >= 0 && curSel < kMaxCCSlices)
             {
                 for (int j = 0; j < kMidiLearnNumSlots; ++j)
