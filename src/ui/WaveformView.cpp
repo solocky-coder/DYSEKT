@@ -815,9 +815,10 @@ void WaveformView::drawSlices (juce::Graphics& g)
                            ? juce::jlimit (0, getWidth(), sampleToPixel (liveMarkerSample))
                            : x1;
 
-        // 3px breathing room at the top so markers don't touch the frame edge
+        // 3px breathing room top and bottom so markers stay inside the frame border
         const int kTopPad = 3;
-        const int markerH = getHeight() - kTopPad;
+        const int kBotPad = 3;
+        const int markerH = getHeight() - kTopPad - kBotPad;
 
         // --- CUBASE-STYLE SLICE OVERLAY (fill stays at committed bounds during live drag) ---
         g.setColour(s.colour.withAlpha(0.18f));
@@ -826,7 +827,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
         // Strong colored borders: top & bottom
         g.setColour(s.colour.withAlpha(0.75f));
         g.drawHorizontalLine(kTopPad, (float)x1, (float)x2);
-        g.drawHorizontalLine(getHeight() - 1, (float)x1, (float)x2);
+        g.drawHorizontalLine(getHeight() - kBotPad, (float)x1, (float)x2);
 
         // --- MARKER BAR: always follows live drag position (mx), not fill left edge ---
         g.setColour(s.colour.withAlpha(0.92f));
