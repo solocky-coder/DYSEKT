@@ -1283,10 +1283,17 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 // jump to their old mapped position on the new slice.
                 if (sel != ccLastDispatchedSel && ccLastDispatchedSel >= 0)
                 {
-                    // Per-slice state is independent — no reset needed on slice switch.
-                    // Just re-seed the FieldSliceStart smoother for the new slice
-                    // if it hasn't been seeded yet.
                     markerSmootherSlice = -1;
+
+                    // Reset pickup for the new slice (same reason as inter-buffer
+                    // detection above: stale ccPickedUp bypasses the gate and causes
+                    // the knob to jump the new slice's marker to the old position).
+                    if (sel >= 0 && sel < kMaxCCSlices)
+                    {
+                        for (int j = 0; j < kMidiLearnNumSlots; ++j)
+                            ccPickedUp[(size_t) sel][j] = false;
+                    }
+
                     if (sel >= 0 && sel < sliceManager.getNumSlices())
                     {
                         ccSmoothers[(size_t) sel][(size_t) FieldSliceStart].setCurrentAndTargetValue (
@@ -1961,6 +1968,17 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         {
             markerSmootherSlice = -1;
             lastProcessedSlice  = curSel;
+
+            // Reset pickup for the newly-selected slice so the knob must
+            // re-acquire position before controlling it.  Without this,
+            // ccPickedUp[curSel] stays true from prior use on that slice,
+            // and the knob (physically at the previous slice's position)
+            // bypasses the pickup gate and jumps the new slice's marker.
+            if (curSel >= 0 && curSel < kMaxCCSlices)
+            {
+                for (int j = 0; j < kMidiLearnNumSlots; ++j)
+                    ccPickedUp[(size_t) curSel][j] = false;
+            }
 
             // Proactive re-seed: park the slice-start smoother at the new
             // slice's marker position before any CC arrives this buffer.
