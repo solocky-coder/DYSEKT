@@ -253,6 +253,12 @@ public:
     std::atomic<int> pendingUiOptimisticSample { -1 };
     std::atomic<int>   paramsSyncedForSlice   { -1 };  // slice index that sliceStartParam/sliceEndParam currently describe
     std::atomic<float> sliceStartPublished    { -1.0f }; // value written when syncing, used to detect real CC moves
+    // Pre-pickup ghost position for FieldSliceStart absolute CC.
+    // Written by the audio thread (processMidi) each time an absolute CC for
+    // FieldSliceStart arrives while ccPickedUp is false. Read by the UI thread
+    // (drawMarkerSliderCell) to draw a ghost cursor showing where the physical
+    // knob/fader is vs. where the actual marker is. -1.0f = not active.
+    std::atomic<float> markerCcGhostNorm { -1.0f };
 
     // ── Per-slice CC state ───────────────────────────────────────────────────
     // Each slice independently tracks pickup and smoother state for every

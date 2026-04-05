@@ -1548,9 +1548,19 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 {
                                     // Tolerance: ~1 CC step (1/127 ≈ 0.008).
                                     if (std::abs (outNorm - markerNorm) <= 0.008f)
+                                    {
                                         ccPickedUp[(size_t) sel][(size_t) outFieldId] = true;
+                                        markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed); // ghost done
+                                    }
                                     else
-                                        goto skipCcParam;   // not picked up yet — suppress
+                                    {
+                                        // Not picked up yet — store the knob's current position
+                                        // as the ghost norm so the UI can show it on the marker
+                                        // slider, making it clear where the knob IS vs. where
+                                        // pickup will occur.
+                                        markerCcGhostNorm.store (outNorm, std::memory_order_relaxed);
+                                        goto skipCcParam;   // suppress parameter move
+                                    }
                                 }
 
                                 // Picked up: route through smoother so the marker
@@ -1605,6 +1615,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         markerPending       = false;
                         markerPendingSlice  = -1;
                         markerIdleCounter   = 0;
+                        markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
                     }
                 }
             }
@@ -1982,6 +1993,8 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             // ccPickedUp[curSel] stays true from prior use on that slice,
             // and the knob (physically at the previous slice's position)
             // bypasses the pickup gate and jumps the new slice's marker.
+            // Also reset the ghost so the UI doesn't show a stale position.
+            markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
             if (curSel >= 0 && curSel < kMaxCCSlices)
             {
                 for (int j = 0; j < kMidiLearnNumSlots; ++j)

@@ -206,12 +206,13 @@ public:
 
                 if (isDefinitelyRelative)
                 {
-                    // Unambiguous twos-complement delta (value 0-10 or 118-127).
-                    // Real absolute encoders never emit these extremes during use.
-                    // Hard-lock immediately to prevent fast-turn false-absolute detection.
+                    // Unambiguous twos-complement delta — lock and FALL THROUGH
+                    // to the decode block below so this very message moves the
+                    // marker. Returning false here would silently eat the first
+                    // CCW tick (value 127 = -1 step) every time detection fires.
                     encodingForSlot[i].store (kRelTwosComp, std::memory_order_relaxed);
                     detectLocked   [i].store (true,         std::memory_order_relaxed);
-                    return false;
+                    // fall through to normal decode
                 }
                 else if (isAbsRange)
                 {
@@ -221,21 +222,22 @@ public:
                     prevDetectValue[i].store (value, std::memory_order_relaxed);
                     if (prev == value)
                     {
+                        // Lock as relative and fall through to decode this message.
                         encodingForSlot[i].store (kRelTwosComp, std::memory_order_relaxed);
                         detectLocked   [i].store (true,         std::memory_order_relaxed);
-                        return false;
+                        // fall through to normal decode
                     }
-
-                    // Require 12 mid-range hits (up from 4) to lock as absolute.
-                    // Gives the repeated-value shortcut 3× more time to fire first
-                    // before committing to kAbsolute.
-                    const int absH = detectAbsHits[i].fetch_add (1, std::memory_order_relaxed) + 1;
-                    if (absH >= 12)
+                    else
                     {
-                        encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
-                        detectLocked   [i].store (true,      std::memory_order_relaxed);
+                        // Require 12 mid-range hits to lock as absolute.
+                        const int absH = detectAbsHits[i].fetch_add (1, std::memory_order_relaxed) + 1;
+                        if (absH >= 12)
+                        {
+                            encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
+                            detectLocked   [i].store (true,      std::memory_order_relaxed);
+                        }
+                        return false;  // still detecting — suppress output
                     }
-                    return false;
                 }
                 else
                 {
@@ -253,12 +255,23 @@ public:
                         const auto mode = (binH >= relH) ? kRelBinOffset : kRelTwosComp;
                         encodingForSlot[i].store (mode, std::memory_order_relaxed);
                         detectLocked   [i].store (true, std::memory_order_relaxed);
+                        // fall through to decode the locking message
+                    }
+                    else
+                    {
+                        // Still accumulating — suppress output until we have enough
+                        // evidence to commit to a mode.
+                        return false;
                     }
                 }
 
-                // Suppress output during detection — no parameter moves until
-                // encoder type is confirmed. Eliminates jump-on-first-touch.
-                return false;
+                // If we reach here, detection just locked on this message.
+                // Fall through to the normal decode block below so the locking
+                // message is not silently eaten.
+                // (The isAbsRange-still-detecting path returns false above,
+                //  so only relative locks reach this point.)
+                if (! detectLocked[i].load (std::memory_order_relaxed))
+                    return false;
             }
 
             // ── Normal decode (detection locked) ─────────────────────────────

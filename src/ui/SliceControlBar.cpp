@@ -456,6 +456,28 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         auto bar = cell.removeFromBottom (3).toFloat();
         g.setColour (T.separator);
         g.fillRect (bar);
+
+        // Ghost bar — shows where the physical knob/fader IS while waiting
+        // for pickup. Only visible when FieldSliceStart is mapped to an
+        // absolute CC and the knob hasn't reached the marker yet.
+        // Gives the user a target to sweep toward instead of turning blind.
+        const float ghostNorm = processor.markerCcGhostNorm.load (std::memory_order_relaxed);
+        const bool mapped  = processor.midiLearn.isMapped (DysektProcessor::FieldSliceStart);
+        const bool endless = processor.midiLearn.isEndless (DysektProcessor::FieldSliceStart);
+        if (ghostNorm >= 0.0f && mapped && !endless)
+        {
+            // Dim ghost bar at knob position
+            g.setColour (T.accent.withAlpha (0.28f));
+            g.fillRect (bar.withWidth (bar.getWidth() * ghostNorm));
+
+            // Small bright tick at the ghost tip so the target is obvious
+            // at a glance even when the ghost and marker bars overlap
+            const float tipX = bar.getX() + bar.getWidth() * ghostNorm;
+            g.setColour (T.accent.withAlpha (0.75f));
+            g.fillRect (juce::Rectangle<float> (tipX - 1.0f, bar.getY() - 3.0f, 2.0f, bar.getHeight() + 3.0f));
+        }
+
+        // Actual marker bar (drawn on top so it is always visible)
         g.setColour (T.accent);
         g.fillRect (bar.withWidth (bar.getWidth() * frac));
     }
