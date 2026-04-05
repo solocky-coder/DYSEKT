@@ -46,6 +46,8 @@ public:
         for (auto& a : detectRelHits)   a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectBinHits)   a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectAbsHits)    a.store (0,  std::memory_order_relaxed);
+        for (auto& a : detectLowHits)    a.store (0,  std::memory_order_relaxed);
+        for (auto& a : detectHighHits)   a.store (0,  std::memory_order_relaxed);
         for (auto& a : prevDetectValue)  a.store (-1, std::memory_order_relaxed);
         for (auto& a : prevLearnValue)   a.store (-1, std::memory_order_relaxed);
     }
@@ -222,33 +224,54 @@ public:
                 const bool isBinOffset = (value >= 56 && value <= 72);
                 const bool isAbsRange  = (value >= 11 && value <= 117) && ! isBinOffset && ! isDefinitelyRelative;
 
-                if (isDefinitelyRelative)
+                // ── Classify this sample into evidence buckets ──────────────
+                //
+                //  isDefinitelyRelative  — values ≤10 or ≥118: outer TwosComp/SignBit range
+                //  isBinOffset           — values 56-72: BinOffset cluster around 64
+                //  isAbsRange            — everything else: could be absolute
+                //
+                // Sign-bit vs TwosComp disambiguation:
+                //   TwosComp uses BOTH sides of 64 (1-63=CW, 65-127=CCW).
+                //   SignBit encodes direction in bit6: CW stays in 1-63 (bit6=0),
+                //   CCW stays in 65-127 (bit6=1, magnitude in bits0-5).
+                //   At first glance both look the same — but a sign-bit encoder
+                //   turning in one physical direction will ONLY send values from
+                //   ONE side of 64 (because bit6 is fixed per direction).
+                //   We track low-side (1-63) and high-side (65-127) hit counts
+                //   separately; after kDetectSamples we check if only one side
+                //   was seen (→ SignBit) or both (→ TwosComp).
+
+                if (isAbsRange)
                 {
-                    // Unambiguous twos-complement delta — lock and FALL THROUGH
-                    // to the decode block below so this very message moves the
-                    // marker. Returning false here would silently eat the first
-                    // CCW tick (value 127 = -1 step) every time detection fires.
-                    encodingForSlot[i].store (kRelTwosComp, std::memory_order_relaxed);
-                    detectLocked   [i].store (true,         std::memory_order_relaxed);
-                    // fall through to normal decode
-                }
-                else if (isAbsRange)
-                {
-                    // If the encoder sends the same value twice in a row it must be
-                    // relative — absolute encoders never repeat during movement.
+                    // Mid-range value: could be absolute, or TwosComp/SignBit
+                    // mid-speed turn. Track it as potential absolute evidence,
+                    // but also record which TwosComp side it landed on.
                     const int prev = prevDetectValue[i].load (std::memory_order_relaxed);
                     prevDetectValue[i].store (value, std::memory_order_relaxed);
                     if (prev == value)
                     {
-                        // Lock as relative and fall through to decode this message.
-                        encodingForSlot[i].store (kRelTwosComp, std::memory_order_relaxed);
-                        detectLocked   [i].store (true,         std::memory_order_relaxed);
-                        // fall through to normal decode
+                        // Same value twice in a row — absolute encoders never
+                        // repeat during movement. Lock as TwosComp/SignBit
+                        // (will be disambiguated below by low/high counts).
+                        // Fall through to the locking logic at end of block.
+                        detectLocked[i].store (false, std::memory_order_relaxed); // ensure we go through accumulation lock
+                        // Force n+1 >= kDetectSamples to trigger lock decision
+                        detectCount[i].store (kDetectSamples, std::memory_order_relaxed);
+                        // Record which side
+                        if (value >= 1 && value <= 63)
+                            detectLowHits [i].fetch_add (1, std::memory_order_relaxed);
+                        else if (value >= 65)
+                            detectHighHits[i].fetch_add (1, std::memory_order_relaxed);
                     }
                     else
                     {
-                        // Require 12 mid-range hits to lock as absolute.
+                        // Require 12 consecutive mid-range unique values to lock absolute.
                         const int absH = detectAbsHits[i].fetch_add (1, std::memory_order_relaxed) + 1;
+                        // Also track which TwosComp side for sign-bit detection
+                        if (value >= 1 && value <= 63)
+                            detectLowHits [i].fetch_add (1, std::memory_order_relaxed);
+                        else if (value >= 65)
+                            detectHighHits[i].fetch_add (1, std::memory_order_relaxed);
                         if (absH >= 12)
                         {
                             encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
@@ -257,30 +280,71 @@ public:
                         return false;  // still detecting — suppress output
                     }
                 }
-                else
+
+                // For all non-absolute values (isDefinitelyRelative or isBinOffset),
+                // accumulate evidence and decide after kDetectSamples.
+                if (! isAbsRange)
                 {
                     if (isBinOffset)
+                    {
                         detectBinHits[i].fetch_add (1, std::memory_order_relaxed);
+                    }
                     else
+                    {
+                        // isDefinitelyRelative — record which side of 64 it's on.
+                        // This is the key sign-bit detector: if an encoder only
+                        // ever sends values on one side (e.g. always ≤63 for CW,
+                        // always ≥65 for CCW), bit6 is the direction flag → SignBit.
+                        if (value >= 1 && value <= 63)
+                            detectLowHits [i].fetch_add (1, std::memory_order_relaxed);
+                        else if (value >= 65)
+                            detectHighHits[i].fetch_add (1, std::memory_order_relaxed);
                         detectRelHits[i].fetch_add (1, std::memory_order_relaxed);
-
+                    }
                     detectCount[i].store (n + 1, std::memory_order_relaxed);
+                }
 
-                    if (n + 1 >= kDetectSamples)
+                // ── Lock decision — fires once we have kDetectSamples evidence ──
+                const int nNow = detectCount[i].load (std::memory_order_relaxed);
+                if (nNow >= kDetectSamples || isAbsRange /* same-value repeat path */)
+                {
+                    const int binH  = detectBinHits [i].load (std::memory_order_relaxed);
+                    const int relH  = detectRelHits [i].load (std::memory_order_relaxed);
+                    const int lowH  = detectLowHits [i].load (std::memory_order_relaxed);
+                    const int highH = detectHighHits[i].load (std::memory_order_relaxed);
+
+                    EncoderMode mode;
+                    if (binH > relH && binH > 0)
                     {
-                        const int binH = detectBinHits[i].load (std::memory_order_relaxed);
-                        const int relH = detectRelHits[i].load (std::memory_order_relaxed);
-                        const auto mode = (binH >= relH) ? kRelBinOffset : kRelTwosComp;
-                        encodingForSlot[i].store (mode, std::memory_order_relaxed);
-                        detectLocked   [i].store (true, std::memory_order_relaxed);
-                        // fall through to decode the locking message
+                        // BinOffset cluster dominates
+                        mode = kRelBinOffset;
+                    }
+                    else if (lowH > 0 && highH == 0)
+                    {
+                        // Only saw values below 64 → CW direction only tested,
+                        // bit6=0 for all → SignBit encoding.
+                        mode = kRelSignBit;
+                    }
+                    else if (highH > 0 && lowH == 0)
+                    {
+                        // Only saw values above 64 → CCW direction only tested,
+                        // bit6=1 for all → SignBit encoding.
+                        mode = kRelSignBit;
                     }
                     else
                     {
-                        // Still accumulating — suppress output until we have enough
-                        // evidence to commit to a mode.
-                        return false;
+                        // Saw both sides — genuine TwosComp (or mixed, default safe).
+                        mode = kRelTwosComp;
                     }
+
+                    encodingForSlot[i].store (mode, std::memory_order_relaxed);
+                    detectLocked   [i].store (true, std::memory_order_relaxed);
+                    // fall through to decode the locking message
+                }
+                else
+                {
+                    // Still accumulating — suppress output.
+                    return false;
                 }
 
                 // If we reach here, detection just locked on this message.
@@ -409,6 +473,8 @@ private:
         detectRelHits[i].store (0,     std::memory_order_relaxed);
         detectBinHits[i].store (0,     std::memory_order_relaxed);
         detectAbsHits  [i].store (0,  std::memory_order_relaxed);
+        detectLowHits  [i].store (0,  std::memory_order_relaxed);
+        detectHighHits [i].store (0,  std::memory_order_relaxed);
         prevDetectValue[i].store (-1, std::memory_order_relaxed);
         prevLearnValue [i].store (-1, std::memory_order_relaxed);
     }
@@ -424,6 +490,8 @@ private:
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectRelHits;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectBinHits;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectAbsHits;
+    std::array<std::atomic<int>,  kMidiLearnNumSlots> detectLowHits;   // TwosComp: values 1-63
+    std::array<std::atomic<int>,  kMidiLearnNumSlots> detectHighHits;  // TwosComp: values 65-127
     std::array<std::atomic<int>,  kMidiLearnNumSlots> prevDetectValue;
     // Learn-capture guard: tracks the last value seen per slot while armed.
     // Prevents background CC transmissions (e.g. DAW sending CC1=0 every buffer)
