@@ -1223,6 +1223,11 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     const int total = sampleData.getNumFrames();
                     if (total > 1)
                     {
+                        // kEndlessSamplesPerStep: fraction of total length moved per encoder click.
+                        // 1/512 ≈ 0.2 % of sample length per step — fine enough for precision
+                        // editing, coarse enough to traverse a 4-bar loop in ~30 clicks.
+                        // BOTH the trim path and the slice-marker path use this constant so
+                        // they feel identical on the encoder.
                         static constexpr float kEndlessSamplesPerStep = 1.0f / 512.0f;
                         const int stepSamples = juce::jmax (1, (int) (total * kEndlessSamplesPerStep));
 
@@ -1500,9 +1505,12 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // atomically each block (including culling), so there is no
                                 // discontinuity when the encoder stops turning.
                                 // markerPending / idle-commit path is NOT used for CC.
-                                const float sensitivity = (float) total / 300.0f;
+                                // Use the same 1/512 step as the trim path so the encoder
+                                // feels identical in both modes and CCW steps (negative outNorm)
+                                // move the marker left correctly.
+                                const int stepSz = juce::jmax (1, (int) (total / 512.0f));
                                 const int newStart = juce::jlimit (0, slEnd - 64,
-                                    sl.startSample + (int)(outNorm * sensitivity));
+                                    sl.startSample + (int)(outNorm * (float) stepSz));
                                 // Write to liveDragBoundsStart so SliceControlBar's timer
                                 // detects the change and schedules a repaint each CC arrival.
                                 liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
