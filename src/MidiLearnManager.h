@@ -45,12 +45,18 @@ public:
         for (auto& a : detectRelHits)   a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectBinHits)   a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectAbsHits)    a.store (0,  std::memory_order_relaxed);
-        for (auto& a : prevDetectValue)   a.store (-1, std::memory_order_relaxed);
+        for (auto& a : prevDetectValue)  a.store (-1, std::memory_order_relaxed);
+        for (auto& a : prevLearnValue)   a.store (-1, std::memory_order_relaxed);
     }
 
     // ── UI-thread API ─────────────────────────────────────────────────────────
 
-    void armLearn (int fieldId) noexcept { armedSlot.store (fieldId, std::memory_order_relaxed); }
+    void armLearn (int fieldId) noexcept
+    {
+        if (fieldId >= 0 && fieldId < kMidiLearnNumSlots)
+            prevLearnValue[fieldId].store (-1, std::memory_order_relaxed);
+        armedSlot.store (fieldId, std::memory_order_relaxed);
+    }
     int  getArmedSlot() const noexcept   { return armedSlot.load (std::memory_order_relaxed); }
     bool isArmed()      const noexcept   { return armedSlot.load (std::memory_order_relaxed) >= 0; }
 
@@ -136,9 +142,48 @@ public:
         const int armed = armedSlot.load (std::memory_order_relaxed);
         if (armed >= 0 && armed < kMidiLearnNumSlots)
         {
-            ccForSlot[armed].store (cc, std::memory_order_relaxed);
-            resetDetection (armed);
-            armedSlot.store (-1, std::memory_order_relaxed);
+            // Movement guard: only capture a CC that is actually changing value.
+            // Background transmissions (DAW sending CC1=0, CC7=100, mod wheel
+            // resting at 0, etc.) repeat the same value every buffer. A real
+            // encoder touch always produces a value different from the previous
+            // message on that CC number.
+            //
+            // Strategy: the first message on any CC while armed just records the
+            // value and the CC number as a candidate. If the next message on the
+            // SAME CC number has a different value we confirm it as the intended
+            // encoder. If it stays the same we keep waiting.
+            //
+            // prevLearnValue is keyed by armed slot (not by CC), so it resets
+            // cleanly whenever the user arms a new slot.
+            const int prev = prevLearnValue[armed].load (std::memory_order_relaxed);
+
+            if (prev < 0)
+            {
+                // First message seen while armed — record it but don't capture yet.
+                // Store the value with a bias of +1 so we can distinguish
+                // "never seen" (-1) from "seen value 0" (stored as 1… wait, bias
+                // breaks for value 127). Use a separate sentinel: store value as
+                // (value | 0x200) so it is always > 127 and != -1.
+                prevLearnValue[armed].store (value | 0x200, std::memory_order_relaxed);
+            }
+            else
+            {
+                // Subsequent message. Extract stored value (strip sentinel bit).
+                const int prevVal = prev & 0x7F;
+                if (value != prevVal)
+                {
+                    // Value changed → this CC is genuinely moving. Capture it.
+                    ccForSlot [armed].store (cc,   std::memory_order_relaxed);
+                    resetDetection (armed);                 // also clears prevLearnValue
+                    armedSlot.store (-1, std::memory_order_relaxed);
+                }
+                else
+                {
+                    // Same value again — still a background static transmission.
+                    // Keep waiting; update stored value in case it drifts later.
+                    prevLearnValue[armed].store (value | 0x200, std::memory_order_relaxed);
+                }
+            }
             return false;
         }
 
@@ -315,6 +360,7 @@ private:
         detectBinHits[i].store (0,     std::memory_order_relaxed);
         detectAbsHits  [i].store (0,  std::memory_order_relaxed);
         prevDetectValue[i].store (-1, std::memory_order_relaxed);
+        prevLearnValue [i].store (-1, std::memory_order_relaxed);
     }
 
     std::array<std::atomic<int>,  kMidiLearnNumSlots> ccForSlot;
@@ -328,4 +374,8 @@ private:
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectBinHits;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectAbsHits;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> prevDetectValue;
+    // Learn-capture guard: tracks the last value seen per slot while armed.
+    // Prevents background CC transmissions (e.g. DAW sending CC1=0 every buffer)
+    // from being captured before the user touches the intended encoder.
+    std::array<std::atomic<int>,  kMidiLearnNumSlots> prevLearnValue;
 };
