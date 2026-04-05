@@ -1223,11 +1223,6 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     const int total = sampleData.getNumFrames();
                     if (total > 1)
                     {
-                        // kEndlessSamplesPerStep: fraction of total length moved per encoder click.
-                        // 1/512 ≈ 0.2 % of sample length per step — fine enough for precision
-                        // editing, coarse enough to traverse a 4-bar loop in ~30 clicks.
-                        // BOTH the trim path and the slice-marker path use this constant so
-                        // they feel identical on the encoder.
                         static constexpr float kEndlessSamplesPerStep = 1.0f / 512.0f;
                         const int stepSamples = juce::jmax (1, (int) (total * kEndlessSamplesPerStep));
 
@@ -1492,35 +1487,40 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // The relative path never sets ccSmootherActive[FieldSliceStart];
                                 // any 'true' value here is a stale detection/absolute artefact.
                                 // If left alive the smoother loop in processBlock would override
-                                // every relative handleCommand below and jump the marker to the
-                                // absolute position the smoother was targeting.
+                                // the live-drag position and jump the marker.
                                 if (sel >= 0 && sel < kMaxCCSlices)
                                     ccSmootherActive[(size_t) sel][(size_t) FieldSliceStart] = false;
                                 markerSmootherSlice = -1;
-                                markerPending     = false;
-                                markerIdleCounter = 0;
 
-                                // Relative: commit immediately via handleCommand each buffer.
-                                // This eliminates the idle-commit jump: sliceManager is updated
-                                // atomically each block (including culling), so there is no
-                                // discontinuity when the encoder stops turning.
-                                // markerPending / idle-commit path is NOT used for CC.
-                                // Use the same 1/512 step as the trim path so the encoder
-                                // feels identical in both modes and CCW steps (negative outNorm)
-                                // move the marker left correctly.
-                                const int stepSz = juce::jmax (1, (int) (total / 512.0f));
+                                // Use the same live-drag + idle-commit path as mouse dragging.
+                                //
+                                // Delta base: read from sl.startSample (the live-preview block
+                                // in drainCommands writes the preview position back there every
+                                // buffer), so rapid turns accumulate correctly without stacking
+                                // deltas on a stale committed value.
+                                //
+                                // liveDragSliceIdx activates the drainCommands live-preview block
+                                // which updates s.startSample at audio buffer rate (~172x/sec)
+                                // rather than once per CC message — this is what gives smooth
+                                // sub-30Hz visual movement identical to mouse dragging.
+                                //
+                                // markerPending arms the idle-commit timer: after kMarkerIdleBlocks
+                                // (~80ms) of encoder silence, CmdSetSliceBounds is fired once to
+                                // commit the final position. liveDragSliceIdx is cleared inside
+                                // the idle-commit block BEFORE handleCommand fires, so the
+                                // live-preview loop cannot re-write startSample after the commit
+                                // — this is what prevents the jump.
+                                const int stepSz  = juce::jmax (1, (int) (total / 512.0f));
                                 const int newStart = juce::jlimit (0, slEnd - 64,
                                     sl.startSample + (int)(outNorm * (float) stepSz));
-                                // Write to liveDragBoundsStart so SliceControlBar's timer
-                                // detects the change and schedules a repaint each CC arrival.
+
                                 liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
-                                Command ccCmd;
-                                ccCmd.type         = CmdSetSliceBounds;
-                                ccCmd.intParam1    = sel;
-                                ccCmd.intParam2    = newStart;
-                                ccCmd.positions[0] = slEnd;
-                                ccCmd.numPositions = 1;
-                                handleCommand (ccCmd);
+                                liveDragBoundsEnd  .store (slEnd,    std::memory_order_relaxed);
+                                liveDragSliceIdx   .store (sel,      std::memory_order_release);
+
+                                markerPending      = true;
+                                markerPendingSlice = sel;
+                                markerIdleCounter  = 0;
                             }
                             else
                             {
@@ -2106,6 +2106,10 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             cmd.intParam2    = juce::jlimit (0, slEnd - 64, newStart);
             cmd.positions[0] = slEnd;
             cmd.numPositions = 1;
+            // Clear liveDragSliceIdx BEFORE handleCommand so the live-preview
+            // block in drainCommands cannot overwrite startSample after the
+            // commit — this is the specific guard that prevents the jump-on-stop.
+            liveDragSliceIdx.store (-1, std::memory_order_release);
             handleCommand (cmd);
             uiSnapshotDirty.store (true, std::memory_order_release);
 
@@ -2113,9 +2117,11 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             pendingUiOptimisticIdx.store(pendSel, std::memory_order_release);
             pendingUiOptimisticSample.store(newStart, std::memory_order_release);
         }
-        // Clear liveDragSliceIdx so the live-preview block in drainCommands
-        // stops overwriting startSample every block after the commit lands.
-        liveDragSliceIdx.store (-1, std::memory_order_release);
+        else
+        {
+            // No valid slice — still clear the live drag so the preview stops.
+            liveDragSliceIdx.store (-1, std::memory_order_release);
+        }
         markerPending      = false;
         markerPendingSlice = -1;
         markerIdleCounter  = 0;
