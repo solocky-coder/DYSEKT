@@ -222,15 +222,27 @@ public:
                 {
                     outNorm = (float)(value - 64);
                 }
-                else
+                else if (mode == kRelTwosComp)
                 {
-                    // Two's complement / sign-bit
+                    // Two's complement: 1-63 = +1..+63, 65-127 = -63..-1
                     if (value == 0 || value == 64)
                         outNorm = 0.0f;
                     else if (value <= 63)
-                        outNorm = (float) value;        // +1 .. +63
+                        outNorm = (float) value;         // +1 .. +63
                     else
-                        outNorm = (float)(value - 128); // -63 .. -1
+                        outNorm = (float)(value - 128);  // -63 .. -1
+                }
+                else // kRelSignBit
+                {
+                    // Sign-bit: bit6 = direction (1=CCW), bits0-5 = magnitude
+                    if (value == 0)
+                        outNorm = 0.0f;
+                    else
+                    {
+                        const int mag = value & 0x3F;           // bits 0-5
+                        outNorm = (value & 0x40) ? -(float)mag  // bit6 set = CW on most encoders
+                                                 :  (float)mag;
+                    }
                 }
             }
             return true;
