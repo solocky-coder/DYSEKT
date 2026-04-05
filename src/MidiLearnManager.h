@@ -44,7 +44,8 @@ public:
         for (auto& a : detectLocked)    a.store (false,     std::memory_order_relaxed);
         for (auto& a : detectRelHits)   a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectBinHits)   a.store (0,         std::memory_order_relaxed);
-        for (auto& a : detectAbsHits)   a.store (0,         std::memory_order_relaxed);
+        for (auto& a : detectAbsHits)    a.store (0,  std::memory_order_relaxed);
+        for (auto& a : prevDetectValue)   a.store (-1, std::memory_order_relaxed);
     }
 
     // ── UI-thread API ─────────────────────────────────────────────────────────
@@ -169,13 +170,22 @@ public:
                 }
                 else if (isAbsRange)
                 {
-                    // Require 4 mid-range hits to lock as absolute.
-                    // Prevents fast-turning relative encoders (which produce
-                    // large delta values like 15 or 113) from being misidentified
-                    // as absolute after just 2 messages -- the root cause of the
-                    // persistent MIDI marker jump bug.
+                    // If the encoder sends the same value twice in a row it must be
+                    // relative — absolute encoders never repeat during movement.
+                    const int prev = prevDetectValue[i].load (std::memory_order_relaxed);
+                    prevDetectValue[i].store (value, std::memory_order_relaxed);
+                    if (prev == value)
+                    {
+                        encodingForSlot[i].store (kRelTwosComp, std::memory_order_relaxed);
+                        detectLocked   [i].store (true,         std::memory_order_relaxed);
+                        return false;
+                    }
+
+                    // Require 12 mid-range hits (up from 4) to lock as absolute.
+                    // Gives the repeated-value shortcut 3× more time to fire first
+                    // before committing to kAbsolute.
                     const int absH = detectAbsHits[i].fetch_add (1, std::memory_order_relaxed) + 1;
-                    if (absH >= 4)
+                    if (absH >= 12)
                     {
                         encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
                         detectLocked   [i].store (true,      std::memory_order_relaxed);
@@ -303,7 +313,8 @@ private:
         detectLocked [i].store (false, std::memory_order_relaxed);
         detectRelHits[i].store (0,     std::memory_order_relaxed);
         detectBinHits[i].store (0,     std::memory_order_relaxed);
-        detectAbsHits[i].store (0,     std::memory_order_relaxed);
+        detectAbsHits  [i].store (0,  std::memory_order_relaxed);
+        prevDetectValue[i].store (-1, std::memory_order_relaxed);
     }
 
     std::array<std::atomic<int>,  kMidiLearnNumSlots> ccForSlot;
@@ -316,4 +327,5 @@ private:
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectRelHits;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectBinHits;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> detectAbsHits;
+    std::array<std::atomic<int>,  kMidiLearnNumSlots> prevDetectValue;
 };
