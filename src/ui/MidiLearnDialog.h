@@ -30,6 +30,7 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
     juce::ComboBox      modeCombo;
     juce::TextButton    armButton  { "LEARN" };
     juce::TextButton    clearButton { "X" };
+    juce::TextButton    flipButton { "FLIP" };
     int                 fieldId { -1 };
     MidiLearnManager*   midiLearn { nullptr };
 
@@ -54,8 +55,13 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
         modeCombo.onChange = [this]
         {
             if (midiLearn && fieldId >= 0)
-                midiLearn->setEncoderMode (fieldId,
-                    (MidiLearnManager::EncoderMode)(modeCombo.getSelectedId() - 1));
+            {
+                const auto mode = (MidiLearnManager::EncoderMode)(modeCombo.getSelectedId() - 1);
+                midiLearn->setEncoderMode (fieldId, mode);
+                const bool isRel = (mode != MidiLearnManager::kAbsolute);
+                flipButton.setEnabled (isRel);
+                flipButton.setAlpha (isRel ? 1.0f : 0.3f);
+            }
         };
         addAndMakeVisible (modeCombo);
 
@@ -97,6 +103,23 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
             }
         };
         addAndMakeVisible (clearButton);
+
+        // Flip button — inverts relative encoder direction for this slot
+        flipButton.setClickingTogglesState (true);
+        flipButton.setColour (juce::TextButton::buttonColourId,
+                              juce::Colour (0xFF1A2830));
+        flipButton.setColour (juce::TextButton::buttonOnColourId,
+                              juce::Colour (0xFF004050));
+        flipButton.setColour (juce::TextButton::textColourOffId,
+                              juce::Colours::white.withAlpha (0.45f));
+        flipButton.setColour (juce::TextButton::textColourOnId,
+                              juce::Colours::lightcyan);
+        flipButton.onClick = [this]
+        {
+            if (midiLearn && fieldId >= 0)
+                midiLearn->setDirectionFlip (fieldId, flipButton.getToggleState());
+        };
+        addAndMakeVisible (flipButton);
     }
 
     void timerCallback() override
@@ -131,8 +154,15 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
         midiLearn = &ml;
         paramLabel.setText (paramName, juce::dontSendNotification);
         ccLabel.setText    (ml.getLabelText (field), juce::dontSendNotification);
-        modeCombo.setSelectedId ((int) ml.getEncoderMode (field) + 1,
-                                 juce::dontSendNotification);
+
+        const auto mode = ml.getEncoderMode (field);
+        modeCombo.setSelectedId ((int) mode + 1, juce::dontSendNotification);
+
+        // Flip only meaningful for relative modes
+        const bool isRel = (mode != MidiLearnManager::kAbsolute);
+        flipButton.setToggleState (ml.getDirectionFlip (field), juce::dontSendNotification);
+        flipButton.setEnabled (isRel);
+        flipButton.setAlpha (isRel ? 1.0f : 0.3f);
 
         // Disarm if re-used for different field
         if (midiLearn->getArmedSlot() != fieldId)
@@ -146,17 +176,19 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
 
     void resized() override
     {
-        const int w   = getWidth(), h = getHeight();
+        const int w      = getWidth(), h = getHeight();
         const int armW   = 64;
         const int clearW = 20;
-        const int col1 = (int)(w * 0.32f);
-        const int col2 = (int)(w * 0.18f);
-        const int col3 = w - col1 - col2 - armW - clearW - 8;
-        paramLabel .setBounds (8,                        0, col1 - 8, h);
-        ccLabel    .setBounds (col1,                     0, col2,     h);
-        armButton  .setBounds (col1 + col2,              2, armW,     h - 4);
-        clearButton.setBounds (col1 + col2 + armW + 2,   2, clearW,   h - 4);
-        modeCombo  .setBounds (col1 + col2 + armW + clearW + 4, 2, col3, h - 4);
+        const int flipW  = 36;
+        const int col1   = (int)(w * 0.32f);
+        const int col2   = (int)(w * 0.18f);
+        const int col3   = w - col1 - col2 - armW - clearW - flipW - 10;
+        paramLabel .setBounds (8,                                       0, col1 - 8, h);
+        ccLabel    .setBounds (col1,                                    0, col2,     h);
+        armButton  .setBounds (col1 + col2,                             2, armW,     h - 4);
+        clearButton.setBounds (col1 + col2 + armW + 2,                  2, clearW,   h - 4);
+        flipButton .setBounds (col1 + col2 + armW + clearW + 4,         2, flipW,    h - 4);
+        modeCombo  .setBounds (col1 + col2 + armW + clearW + flipW + 6, 2, col3,     h - 4);
     }
 };
 

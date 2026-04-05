@@ -40,6 +40,7 @@ public:
     {
         for (auto& a : ccForSlot)       a.store (-1,        std::memory_order_relaxed);
         for (auto& a : encodingForSlot) a.store (kAbsolute, std::memory_order_relaxed);
+        for (auto& a : directionFlip)   a.store (false,     std::memory_order_relaxed);
         for (auto& a : detectCount)     a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectLocked)    a.store (false,     std::memory_order_relaxed);
         for (auto& a : detectRelHits)   a.store (0,         std::memory_order_relaxed);
@@ -66,6 +67,7 @@ public:
         {
             ccForSlot      [fieldId].store (-1,        std::memory_order_relaxed);
             encodingForSlot[fieldId].store (kAbsolute, std::memory_order_relaxed);
+            directionFlip  [fieldId].store (false,     std::memory_order_relaxed);
             resetDetection (fieldId);
         }
     }
@@ -76,6 +78,7 @@ public:
         {
             ccForSlot      [i].store (-1,        std::memory_order_relaxed);
             encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
+            directionFlip  [i].store (false,     std::memory_order_relaxed);
             resetDetection (i);
         }
         armedSlot.store (-1, std::memory_order_relaxed);
@@ -100,6 +103,20 @@ public:
             encodingForSlot[fieldId].store (mode, std::memory_order_relaxed);
             detectLocked   [fieldId].store (true, std::memory_order_relaxed);
         }
+    }
+
+    // Direction flip — inverts the signed delta emitted by processCc for
+    // relative encoders. Useful when auto-detection locked on the wrong
+    // polarity (e.g. CCW values landing in the TwosComp positive range).
+    bool getDirectionFlip (int fieldId) const noexcept
+    {
+        if (fieldId < 0 || fieldId >= kMidiLearnNumSlots) return false;
+        return directionFlip[fieldId].load (std::memory_order_relaxed);
+    }
+    void setDirectionFlip (int fieldId, bool flip) noexcept
+    {
+        if (fieldId >= 0 && fieldId < kMidiLearnNumSlots)
+            directionFlip[fieldId].store (flip, std::memory_order_relaxed);
     }
 
     bool isMapped  (int fieldId) const noexcept { return getMappedCC (fieldId) >= 0; }
@@ -313,6 +330,11 @@ public:
                                                  :  (float)mag;
                     }
                 }
+
+                // Direction flip: invert the signed delta so the user can
+                // correct encoders that auto-detected with the wrong polarity.
+                if (directionFlip[i].load (std::memory_order_relaxed))
+                    outNorm = -outNorm;
             }
             return true;
         }
@@ -333,6 +355,10 @@ public:
         stream.writeInt (kMidiLearnNumSlots);
         for (int i = 0; i < kMidiLearnNumSlots; ++i)
             stream.writeBool (detectLocked[i].load (std::memory_order_relaxed));
+        // v5: persist direction flip
+        stream.writeInt (kMidiLearnNumSlots);
+        for (int i = 0; i < kMidiLearnNumSlots; ++i)
+            stream.writeBool (directionFlip[i].load (std::memory_order_relaxed));
     }
 
     void readState (juce::MemoryInputStream& stream)
@@ -363,6 +389,16 @@ public:
                 detectLocked[i].store (locked, std::memory_order_relaxed);
             }
         }
+        // v5: direction flip
+        if (! stream.isExhausted())
+        {
+            int fCount = stream.readInt();
+            for (int i = 0; i < kMidiLearnNumSlots; ++i)
+            {
+                bool flip = (i < fCount) ? stream.readBool() : false;
+                directionFlip[i].store (flip, std::memory_order_relaxed);
+            }
+        }
     }
 
 private:
@@ -379,6 +415,7 @@ private:
 
     std::array<std::atomic<int>,  kMidiLearnNumSlots> ccForSlot;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> encodingForSlot;
+    std::array<std::atomic<bool>, kMidiLearnNumSlots> directionFlip;
     std::atomic<int> armedSlot { -1 };
 
     // Detection state (audio thread only)
