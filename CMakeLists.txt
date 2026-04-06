@@ -46,6 +46,8 @@ juce_add_binary_data(DysektFonts SOURCES
     src/ui/fonts/JetBrainsMono-Bold.ttf
     src/ui/fonts/BarlowCondensed-Regular.ttf
     src/ui/fonts/BarlowCondensed-SemiBold.ttf
+    src/ui/fonts/Inter-Regular.ttf
+    src/ui/fonts/Inter-SemiBold.ttf
     src/ui/assets/dysekt_logo.svg
     src/ui/assets/Empty.wav
 )
