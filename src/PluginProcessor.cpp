@@ -737,11 +737,13 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
         case CmdToggleLock:
         {
-            int sel = sliceManager.selectedSlice;
+            // intParam1 = target slice index (explicit from UI, not racy selectedSlice)
+            // intParam2 = lock bit to toggle
+            int sel = cmd.intParam1;
             if (sel >= 0 && sel < sliceManager.getNumSlices())
             {
                 auto& s = sliceManager.getSlice (sel);
-                uint32_t bit = (uint32_t) cmd.intParam1;
+                uint32_t bit = (uint32_t) cmd.intParam2;
                 bool turningOn = !(s.lockMask & bit);
 
                 if (turningOn)
@@ -761,7 +763,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockStretch)      s.stretchEnabled    = stretchParam->load()     > 0.5f;
                     else if (bit == kLockReleaseTail)  s.releaseTail       = releaseTailParam->load() > 0.5f;
                     else if (bit == kLockReverse)      s.reverse           = reverseParam->load()     > 0.5f;
-                    else if (bit == kLockOneShot)      s.oneShot           = false;
+                    else if (bit == kLockOneShot)      s.oneShot           = oneShotParam->load() > 0.5f;
                     else if (bit == kLockCentsDetune)  s.centsDetune       = centsDetuneParam->load();
                     else if (bit == kLockTonality)     s.tonalityHz        = tonalityParam->load();
                     else if (bit == kLockFormant)      s.formantSemitones  = formantParam->load();
@@ -929,6 +931,16 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     sliceManager.getSlice (idx + 1).startSample = end;
 
                 sliceManager.rebuildMidiMap();
+
+                // Re-arm pickup for FieldSliceStart after every marker move.
+                // The physical knob is now misaligned from the new position,
+                // so the pickup gate must re-check before the next CC move.
+                // This also re-enables the ghost indicator for the approach.
+                if (idx >= 0 && idx < kMaxCCSlices)
+                {
+                    ccPickedUp[(size_t) idx][(size_t) FieldSliceStart] = false;
+                    markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
+                }
             }
             break;
         }
@@ -1409,8 +1421,11 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     {
                         // Absolute knob: map 0-1 to full native range.
                         // Pickup gate: ignore until the knob reaches the current value.
+                        // FieldSliceStart is excluded here — it has its own gate below
+                        // that also writes markerCcGhostNorm for the ghost indicator.
                         const float curNative = getCurrentNative (outFieldId);
                         if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
+                            && outFieldId != FieldSliceStart
                             && sel >= 0 && sel < kMaxCCSlices
                             && ! ccPickedUp[(size_t) sel][(size_t) outFieldId])
                         {
@@ -1550,10 +1565,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                     && sel >= 0 && sel < kMaxCCSlices
                                     && ! ccPickedUp[(size_t) sel][(size_t) outFieldId])
                                 {
-                                    // Tolerance: 4 CC steps — wide enough that a fast
-                                    // sweep can't skip over the pickup zone between
-                                    // consecutive CC messages.
-                                    if (std::abs (outNorm - markerNorm) <= 0.032f)
+                                    // Tolerance: ~1 CC step (1/127 ≈ 0.008).
+                                    if (std::abs (outNorm - markerNorm) <= 0.008f)
                                     {
                                         ccPickedUp[(size_t) sel][(size_t) outFieldId] = true;
                                         markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed); // ghost done
@@ -2000,12 +2013,9 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             // ccPickedUp[curSel] stays true from prior use on that slice,
             // and the knob (physically at the previous slice's position)
             // bypasses the pickup gate and jumps the new slice's marker.
-            // Do NOT reset markerCcGhostNorm on slice switch — if the user
-            // is mid-sweep when a note triggers a slice change, the ghost
-            // position is still valid. Clearing it here causes the ghost to
-            // flicker during fast knob turns. It resets naturally when pickup
-            // fires (line 1557) or when MIDI learn is re-armed.
-            markerRelDir.store (0, std::memory_order_relaxed);
+            // Also reset the ghost so the UI doesn't show a stale position.
+            markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
+            markerRelDir.store      (0,     std::memory_order_relaxed);
             if (curSel >= 0 && curSel < kMaxCCSlices)
             {
                 for (int j = 0; j < kMidiLearnNumSlots; ++j)
