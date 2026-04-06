@@ -363,7 +363,8 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                     {
                         DysektProcessor::Command cmd;
                         cmd.type      = DysektProcessor::CmdToggleLock;
-                        cmd.intParam1 = (int) bit;
+                        cmd.intParam1 = targetSlice;   // slice to lock — explicit, not racy selectedSlice
+                        cmd.intParam2 = (int) bit;
                         processor.pushCommand (cmd);
                     };
 
