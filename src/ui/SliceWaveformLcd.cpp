@@ -212,10 +212,11 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     env.dx    = juce::jlimit (env.hx + 0.01f, kDX_eff,
                               env.hx + decayNorm * (kDX_eff - env.hx));
     env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
-    env.ay    = 0.20f;   // attack peak: always at top — not user-draggable
+    env.ay    = 0.04f;   // attack peak near top (standard ADSR visual)
     env.sxEnd = kSEnd_eff;
+    // Release node represents fade-out START (standard ADSR), not fade-out end.
     env.rx    = juce::jlimit (kSEnd_eff + 0.01f, kRMax,
-                              kSEnd_eff + releaseNorm * (kRMax - kSEnd_eff));
+                              kRMax - releaseNorm * (kRMax - kSEnd_eff));
 
     // Rebuild node list
     envNodes.clear();
@@ -227,8 +228,8 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     EnvNode h; h.xn = env.hx; h.yn = env.ay; h.role = NodeRole::Hold;
     h.colour = kColHold;    h.label = "H"; envNodes.add (h);
 
-    // Decay node: X-only drag — fixed Y so it doesn't jump when sustain level changes
-    EnvNode d; d.xn = env.dx; d.yn = 0.5f; d.role = NodeRole::Decay;
+    // Decay node sits on the sustain line at decay end (standard ADSR visual).
+    EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
     d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
 
     // Sustain handle: mid of plateau [dx .. kSEnd]
@@ -236,8 +237,8 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     s.xn = (env.dx + env.sxEnd) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
     s.colour = kColSustain; s.label = "S"; envNodes.add (s);
 
-    // Release node: at rEnd (tail end), always at bottom
-    EnvNode r; r.xn = env.rx; r.yn = 0.96f; r.role = NodeRole::Release;
+    // Release node: fade-out start, on sustain level
+    EnvNode r; r.xn = env.rx; r.yn = env.sy; r.role = NodeRole::Release;
     r.colour = kColRelease; r.label = "R"; envNodes.add (r);
 }
 
@@ -263,7 +264,7 @@ void SliceWaveformLcd::commitNodes()
     const float aRatio = env.ax / kAX;
     const float hRatio = (kHX_eff > env.ax) ? (env.hx - env.ax) / (kHX_eff - env.ax) : 0.0f;
     const float dRatio = (kDX_eff > env.hx) ? (env.dx - env.hx) / (kDX_eff - env.hx) : 0.0f;
-    const float rRatio = (kRMax   > kSEnd_eff) ? (env.rx - kSEnd_eff) / (kRMax - kSEnd_eff) : 0.0f;
+    const float rRatio = (kRMax > kSEnd_eff) ? (kRMax - env.rx) / (kRMax - kSEnd_eff) : 0.0f;
     const float attackMs  = juce::jlimit (0.0f, kAttackViewMs,  aRatio * aRatio * kAttackViewMs);
     const float holdMs    = juce::jlimit (0.0f, kHoldViewMs,    hRatio * hRatio * kHoldViewMs);
     const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,   dRatio * dRatio * kDecayViewMs);
@@ -301,7 +302,7 @@ void SliceWaveformLcd::commitNodes()
 
 float SliceWaveformLcd::envAt (float xn) const
 {
-    // Polyline: P0(0,1) → P1(ax,top) → P2(dx,sy) → P3(kSEnd,sy) → P4(rx,1)
+    // Polyline: P0(0,1) → P1(ax,top) → P2(dx,sy) → P3(kSEnd,sy) → P4(rx,sy) → P5(1,1)
     // kSEnd is dynamic — stored in env.sxEnd by buildEnvNodes
     const float kSEnd = env.sxEnd;
     struct Pt { float x, y; };
@@ -311,9 +312,10 @@ float SliceWaveformLcd::envAt (float xn) const
         { env.hx, env.ay },   // hold plateau end (same peak height)
         { env.dx, env.sy },   // end of decay / sustain level
         { kSEnd,  env.sy },   // dynamic end of sustain plateau
-        { env.rx, 1.0f   }    // end of release (silence)
+        { env.rx, env.sy },   // release start
+        { 1.0f,   1.0f   }    // end of release (silence)
     };
-    constexpr int N = 6;
+    constexpr int N = 7;
 
     for (int i = 0; i < N - 1; ++i)
     {
@@ -498,7 +500,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     }
     else if (dragRole == NodeRole::Release)
     {
-        // R: X only — drag right = longer release tail
+        // R: X only — drag left = longer release tail (earlier fade start)
         env.rx = juce::jlimit (kSEnd_eff + 0.01f, kRMax, xn);
     }
 
@@ -509,11 +511,11 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
 
     EnvNode h; h.xn = env.hx; h.yn = env.ay; h.role = NodeRole::Hold;
     h.colour = kColHold;    h.label = "H"; envNodes.add (h);
-    EnvNode d; d.xn = env.dx; d.yn = 0.5f; d.role = NodeRole::Decay;   // fixed Y — X-only drag
+    EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;   // X-only drag, on sustain line
     d.colour = kColDecay;   d.label = "D"; envNodes.add (d);
     EnvNode s; s.xn = (env.dx + kSEnd_eff) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
     s.colour = kColSustain; s.label = "S"; envNodes.add (s);
-    EnvNode r; r.xn = env.rx; r.yn = 0.96f; r.role = NodeRole::Release;
+    EnvNode r; r.xn = env.rx; r.yn = env.sy; r.role = NodeRole::Release;
     r.colour = kColRelease; r.label = "R"; envNodes.add (r);
 
     // Push to params — also updates APVTS knobs so display stays in sync
@@ -676,7 +678,8 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<fl
     envFill.lineTo (px (env.ax), py (env.ay));
     envFill.lineTo (px (env.dx),    py (env.sy));
     envFill.lineTo (px (env.sxEnd), py (env.sy));
-    envFill.lineTo (px (env.rx),    py (1.0f));
+    envFill.lineTo (px (env.rx),    py (env.sy));
+    envFill.lineTo (px (1.0f),      py (1.0f));
     envFill.closeSubPath();
 
     juce::ColourGradient fillGrad (kColDecay.withAlpha (0.08f), 0, oy,
@@ -690,7 +693,8 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<fl
     envLine.lineTo          (px (env.ax), py (env.ay));
     envLine.lineTo          (px (env.dx),    py (env.sy));
     envLine.lineTo          (px (env.sxEnd), py (env.sy));
-    envLine.lineTo          (px (env.rx),    py (1.0f));
+    envLine.lineTo          (px (env.rx),    py (env.sy));
+    envLine.lineTo          (px (1.0f),      py (1.0f));
 
     // Glow pass
     juce::PathStrokeType glowStroke (2.5f);
@@ -717,7 +721,7 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<fl
     // ── Segment labels ────────────────────────────────────────────────────────
     drawSegmentLabel (g, 0.0f, 1.0f, env.ax, env.ay, "FADE IN",  kColAttack,  area);
     drawSegmentLabel (g, env.ax, env.ay, env.dx, env.sy, "DECAY", kColDecay,   area);
-    drawSegmentLabel (g, env.sxEnd, env.sy, env.rx, 1.0f, "FADE OUT", kColRelease, area);
+    drawSegmentLabel (g, env.rx, env.sy, 1.0f, 1.0f, "FADE OUT", kColRelease, area);
 }
 
 void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float>& area)
