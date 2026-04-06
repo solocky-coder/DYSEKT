@@ -355,6 +355,7 @@ void DysektEditor::resized()
  browserPanel.setBounds ({});
  }
 
+ area.removeFromBottom (kMargin); // keep control bar off the outer plugin frame
  auto scbArea = area.removeFromBottom (kSliceCtrlH);
  sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
  area.removeFromBottom (kMargin);
