@@ -929,6 +929,16 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     sliceManager.getSlice (idx + 1).startSample = end;
 
                 sliceManager.rebuildMidiMap();
+
+                // Re-arm pickup for FieldSliceStart after every marker move.
+                // The physical knob is now misaligned from the new position,
+                // so the pickup gate must re-check before the next CC move.
+                // This also re-enables the ghost indicator for the approach.
+                if (idx >= 0 && idx < kMaxCCSlices)
+                {
+                    ccPickedUp[(size_t) idx][(size_t) FieldSliceStart] = false;
+                    markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
+                }
             }
             break;
         }
@@ -1409,8 +1419,11 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     {
                         // Absolute knob: map 0-1 to full native range.
                         // Pickup gate: ignore until the knob reaches the current value.
+                        // FieldSliceStart is excluded here — it has its own gate below
+                        // that also writes markerCcGhostNorm for the ghost indicator.
                         const float curNative = getCurrentNative (outFieldId);
                         if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
+                            && outFieldId != FieldSliceStart
                             && sel >= 0 && sel < kMaxCCSlices
                             && ! ccPickedUp[(size_t) sel][(size_t) outFieldId])
                         {
