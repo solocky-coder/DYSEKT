@@ -650,9 +650,9 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 9, outStr, bpmStr);
     }
 
-    // ── Floating flags — right-edge vertical column (always visible) ──────────
-    drawFlagsRow (g, 6);
-
     g.restoreState();  // end clip region
+
+    // Draw flags outside the rows clip so they stay visible in the bottom gutter.
+    drawFlagsRow (g, 6);
 
 }

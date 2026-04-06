@@ -468,14 +468,21 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
 
     const float ghostNorm = processor.markerCcGhostNorm.load (std::memory_order_relaxed);
     const bool mapped     = processor.midiLearn.isMapped (DysektProcessor::FieldSliceStart);
-    const bool showGhost  = ghostNorm >= 0.0f && mapped;
+    const bool endless    = processor.midiLearn.isEndless (DysektProcessor::FieldSliceStart);
+    const int sel         = processor.getUiSliceSnapshot().selectedSlice;
+    const bool prePickup  = mapped && !endless
+        && sel >= 0 && sel < DysektProcessor::kMaxCCSlices
+        && !processor.ccPickedUp[(size_t) sel][(size_t) DysektProcessor::FieldSliceStart];
+    const bool showGhost  = prePickup;
+    const float pickupStartNorm = frac; // pickup starts at the current marker position
+    const float knobNorm = (ghostNorm >= 0.0f ? ghostNorm : pickupStartNorm);
 
     // Ghost — full-cell-height overlay drawn BEFORE the border so it sits
-    // behind text but is clearly visible. Shows where the physical knob IS
-    // while waiting for pickup; gives the user a target to sweep toward.
+    // behind text but is clearly visible. This marks the pickup start position
+    // (current marker) while pickup is pending.
     if (showGhost)
     {
-        const float ghostX = cell.getX() + ghostNorm * (float) cell.getWidth();
+        const float ghostX = cell.getX() + pickupStartNorm * (float) cell.getWidth();
 
         // Dim fill from left edge to ghost position
         g.setColour (juce::Colours::white.withAlpha (0.08f));
@@ -488,6 +495,17 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         g.setColour (juce::Colours::white.withAlpha (0.85f));
         g.fillRect (juce::Rectangle<float> (clampedX - 1.5f, (float) cell.getY(),
                                              3.0f, (float) cell.getHeight()));
+
+        // Secondary thin tick: physical knob/fader position (when known).
+        if (ghostNorm >= 0.0f)
+        {
+            const float knobX = cell.getX() + knobNorm * (float) cell.getWidth();
+            const float clampedKnobX = juce::jlimit ((float) cell.getX() + 1.0f,
+                                                     (float) cell.getRight() - 1.0f, knobX);
+            g.setColour (juce::Colours::white.withAlpha (0.45f));
+            g.fillRect (juce::Rectangle<float> (clampedKnobX - 1.0f, (float) cell.getY(),
+                                                2.0f, (float) cell.getHeight()));
+        }
     }
 
     {
@@ -499,7 +517,7 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         if (showGhost)
         {
             g.setColour (juce::Colours::white.withAlpha (0.55f));
-            g.fillRect (bar.withWidth (bar.getWidth() * ghostNorm));
+            g.fillRect (bar.withWidth (bar.getWidth() * pickupStartNorm));
         }
 
         // Solid marker bar — theme accent, always on top
