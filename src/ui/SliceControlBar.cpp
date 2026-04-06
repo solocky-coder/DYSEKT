@@ -278,18 +278,18 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
      const float ccAngle = kKnobStart + ccDisplayNorm * (kKnobEnd - kKnobStart);
      const float fcx2 = (float) knobCX, fcy2 = (float) knobCY, fr2 = (float) kKnobR;
 
-     // Ghost arc at CC position — dim, dashed appearance via short segments
+     // Ghost arc at CC position — white so it's visible on every theme
      juce::Path chaseArc;
      chaseArc.addCentredArc (fcx2, fcy2, fr2 + 3.5f, fr2 + 3.5f, 0.f,
                               kKnobStart, ccAngle, true);
-     g.setColour (getTheme().accent.withAlpha (0.35f));
+     g.setColour (juce::Colours::white.withAlpha (0.45f));
      g.strokePath (chaseArc, juce::PathStrokeType (1.5f,
                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-     // Small dot at the CC tip position
+     // Bright dot at CC tip — pure white, fully opaque
      const float dotAngle = ccAngle - juce::MathConstants<float>::halfPi;
      const float dotR = fr2 + 3.5f;
-     g.setColour (getTheme().accent.withAlpha (0.65f));
+     g.setColour (juce::Colours::white.withAlpha (0.90f));
      g.fillEllipse (fcx2 + dotR * std::cos (dotAngle) - 2.0f,
                     fcy2 + dotR * std::sin (dotAngle) - 2.0f, 4.0f, 4.0f);
  }
@@ -476,8 +476,9 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         // Gives the user a target to sweep toward instead of turning blind.
         const float ghostNorm = processor.markerCcGhostNorm.load (std::memory_order_relaxed);
         const bool mapped  = processor.midiLearn.isMapped (DysektProcessor::FieldSliceStart);
-        const bool endless = processor.midiLearn.isEndless (DysektProcessor::FieldSliceStart);
-        const bool showGhost = ghostNorm >= 0.0f && mapped && !endless;
+        // Show ghost whenever markerCcGhostNorm is valid — the processor only
+        // writes it during the absolute-CC pre-pickup phase, so no endless guard needed.
+        const bool showGhost = ghostNorm >= 0.0f && mapped;
 
         // Ghost fill — fixed white-based colour so it's visible on every theme
         // regardless of accent. Drawn first; solid marker bar draws on top.
