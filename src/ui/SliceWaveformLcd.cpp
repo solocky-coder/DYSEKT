@@ -192,11 +192,11 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     static constexpr float kAttackViewMs  = 1000.0f;
     static constexpr float kHoldViewMs    = 5000.0f;
     static constexpr float kDecayViewMs   = 5000.0f;
-    static constexpr float kReleaseViewMs = 5000.0f;
+    const float releaseViewMs = juce::jmax (1.0f, getSliceDurMs());
     const float attackNorm  = std::sqrt (juce::jmin (attackMs  / kAttackViewMs,  1.0f));
     const float holdNorm    = std::sqrt (juce::jmin (holdMs    / kHoldViewMs,    1.0f));
     const float decayNorm   = std::sqrt (juce::jmin (decayMs   / kDecayViewMs,   1.0f));
-    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / kReleaseViewMs, 1.0f));
+    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / releaseViewMs, 1.0f));
 
     env.ax  = juce::jlimit (0.0f, kAX, attackNorm * kAX);
 
@@ -255,7 +255,7 @@ void SliceWaveformLcd::commitNodes()
     static constexpr float kAttackViewMs  = 1000.0f;
     static constexpr float kHoldViewMs    = 5000.0f;
     static constexpr float kDecayViewMs   = 5000.0f;
-    static constexpr float kReleaseViewMs = 5000.0f;
+    const float releaseViewMs = juce::jmax (1.0f, getSliceDurMs());
     const float remain_c  = kRMax - env.ax;
     const float kHX_eff   = env.ax + remain_c * 0.20f;
     const float kDX_eff   = env.ax + remain_c * 0.47f;
@@ -268,7 +268,7 @@ void SliceWaveformLcd::commitNodes()
     const float holdMs    = juce::jlimit (0.0f, kHoldViewMs,    hRatio * hRatio * kHoldViewMs);
     const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,   dRatio * dRatio * kDecayViewMs);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,     (1.0f - env.sy) * 100.0f);
-    const float releaseMs = juce::jlimit (0.0f, kReleaseViewMs, rRatio * rRatio * kReleaseViewMs);
+    const float releaseMs = juce::jlimit (0.0f, releaseViewMs, rRatio * rRatio * releaseViewMs);
 
     // Write to selected slice via CmdSetSliceParam (per-slice, not global)
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
@@ -384,10 +384,62 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
 
         if (bit != 0)
         {
-            DysektProcessor::Command cmd;
-            cmd.type      = DysektProcessor::CmdToggleLock;
-            cmd.intParam1 = (int) bit;
-            processor.pushCommand (cmd);
+            const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+            if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
+            {
+                const auto& s = processor.sliceManager.getSlice (sel);
+                const bool currentlyLocked = (s.lockMask & bit) != 0;
+
+                if (currentlyLocked)
+                {
+                    DysektProcessor::Command cmd;
+                    cmd.type      = DysektProcessor::CmdToggleLock;
+                    cmd.intParam1 = (int) bit;
+                    processor.pushCommand (cmd);
+                }
+                else
+                {
+                    // Preserve the current node value when locking so it doesn't jump.
+                    static constexpr float kAX   = 0.85f;
+                    static constexpr float kRMax = 0.99f;
+                    static constexpr float kAttackViewMs = 1000.0f;
+                    static constexpr float kHoldViewMs   = 5000.0f;
+                    static constexpr float kDecayViewMs  = 5000.0f;
+                    const float releaseViewMs = juce::jmax (1.0f, getSliceDurMs());
+
+                    const float remain_c  = kRMax - env.ax;
+                    const float kHX_eff   = env.ax + remain_c * 0.20f;
+                    const float kDX_eff   = env.ax + remain_c * 0.47f;
+                    const float kSEnd_eff = env.ax + remain_c * 0.65f;
+
+                    const float aRatio = env.ax / kAX;
+                    const float hRatio = (kHX_eff > env.ax) ? (env.hx - env.ax) / (kHX_eff - env.ax) : 0.0f;
+                    const float dRatio = (kDX_eff > env.hx) ? (env.dx - env.hx) / (kDX_eff - env.hx) : 0.0f;
+                    const float rRatio = (kRMax > kSEnd_eff) ? (env.rx - kSEnd_eff) / (kRMax - kSEnd_eff) : 0.0f;
+
+                    const float attackSec  = juce::jlimit (0.0f, kAttackViewMs, aRatio * aRatio * kAttackViewMs) / 1000.0f;
+                    const float holdSec    = juce::jlimit (0.0f, kHoldViewMs,   hRatio * hRatio * kHoldViewMs) / 1000.0f;
+                    const float decaySec   = juce::jlimit (0.0f, kDecayViewMs,  dRatio * dRatio * kDecayViewMs) / 1000.0f;
+                    const float sustainVal = juce::jlimit (0.0f, 1.0f, 1.0f - env.sy);
+                    const float releaseSec = juce::jlimit (0.0f, releaseViewMs, rRatio * rRatio * releaseViewMs) / 1000.0f;
+
+                    auto lockFieldWithValue = [&] (DysektProcessor::SliceParamField field, float value)
+                    {
+                        DysektProcessor::Command c;
+                        c.type        = DysektProcessor::CmdSetSliceParam;
+                        c.intParam1   = (int) field;
+                        c.floatParam1 = value;
+                        processor.pushCommand (c);
+                    };
+
+                    if      (hit == NodeRole::Attack)  lockFieldWithValue (DysektProcessor::FieldAttack,  attackSec);
+                    else if (hit == NodeRole::Hold)    lockFieldWithValue (DysektProcessor::FieldHold,    holdSec);
+                    else if (hit == NodeRole::Decay)   lockFieldWithValue (DysektProcessor::FieldDecay,   decaySec);
+                    else if (hit == NodeRole::Sustain) lockFieldWithValue (DysektProcessor::FieldSustain, sustainVal);
+                    else if (hit == NodeRole::Release) lockFieldWithValue (DysektProcessor::FieldRelease, releaseSec);
+                }
+            }
+            postCommitGuard = 6;
             repaint();
         }
         return;   // don't start a drag on right-click
@@ -740,19 +792,19 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
             }
 
             // Label BELOW node (always inside frame)
-            g.setFont (DysektLookAndFeel::makeFont (hov ? 9.5f : 8.0f, true));
+            g.setFont (DysektLookAndFeel::makeFont (hov ? 11.0f : 9.5f, true));
             g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.85f));
             g.drawText (juce::String (node.label),
-                        juce::Rectangle<float> (cx - 12.0f, cy + r + 2.0f, 24.0f, 10.0f),
+                        juce::Rectangle<float> (cx - 14.0f, cy + r + 2.0f, 28.0f, 12.0f),
                         juce::Justification::centred, false);
 
             // Hover tooltip below label
             if (hov)
             {
-                g.setFont (DysektLookAndFeel::makeFont (7.5f));
+                g.setFont (DysektLookAndFeel::makeFont (8.5f));
                 g.setColour (node.colour.withAlpha (0.75f));
                 g.drawText ("right-click to unlock",
-                            juce::Rectangle<float> (cx - 40.0f, cy + r + 14.0f, 80.0f, 10.0f),
+                            juce::Rectangle<float> (cx - 48.0f, cy + r + 15.0f, 96.0f, 12.0f),
                             juce::Justification::centred, false);
             }
         }
@@ -768,18 +820,18 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
             g.fillEllipse (cx - dr, cy - dr, dr * 2.0f, dr * 2.0f);
 
             // Label BELOW node (always inside frame)
-            g.setFont (DysektLookAndFeel::makeFont (hov ? 9.5f : 8.0f, true));
+            g.setFont (DysektLookAndFeel::makeFont (hov ? 11.0f : 9.5f, true));
             g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.70f));
             g.drawText (juce::String (node.label),
-                        juce::Rectangle<float> (cx - 12.0f, cy + r + 2.0f, 24.0f, 12.0f),
+                        juce::Rectangle<float> (cx - 14.0f, cy + r + 2.0f, 28.0f, 12.0f),
                         juce::Justification::centred, false);
 
             if (hov)
             {
-                g.setFont (DysektLookAndFeel::makeFont (7.5f));
+                g.setFont (DysektLookAndFeel::makeFont (8.5f));
                 g.setColour (node.colour.withAlpha (0.60f));
                 g.drawText ("right-click to lock",
-                            juce::Rectangle<float> (cx - 40.0f, cy + r + 14.0f, 80.0f, 10.0f),
+                            juce::Rectangle<float> (cx - 48.0f, cy + r + 15.0f, 96.0f, 12.0f),
                             juce::Justification::centred, false);
             }
         }

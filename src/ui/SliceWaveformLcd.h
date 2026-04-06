@@ -128,8 +128,8 @@ private:
 
     static constexpr int   kScanlineAlpha = 18;
     static constexpr int   kLeftPad       = 8;
-    static constexpr float kNodeR         = 9.0f;
-    static constexpr float kHitR          = 20.0f;
+    static constexpr float kNodeR         = 11.0f;
+    static constexpr float kHitR          = 24.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SliceWaveformLcd)
 };
