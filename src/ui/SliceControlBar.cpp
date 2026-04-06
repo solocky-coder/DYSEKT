@@ -465,45 +465,46 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     const float frac = (totalFrames > 0)
         ? juce::jlimit (0.0f, 1.0f, (float) sampleVal / (float) totalFrames)
         : 0.0f;
+
+    const float ghostNorm = processor.markerCcGhostNorm.load (std::memory_order_relaxed);
+    const bool mapped     = processor.midiLearn.isMapped (DysektProcessor::FieldSliceStart);
+    const bool showGhost  = ghostNorm >= 0.0f && mapped;
+
+    // Ghost — full-cell-height overlay drawn BEFORE the border so it sits
+    // behind text but is clearly visible. Shows where the physical knob IS
+    // while waiting for pickup; gives the user a target to sweep toward.
+    if (showGhost)
+    {
+        const float ghostX = cell.getX() + ghostNorm * (float) cell.getWidth();
+
+        // Dim fill from left edge to ghost position
+        g.setColour (juce::Colours::white.withAlpha (0.08f));
+        g.fillRect (juce::Rectangle<float> ((float) cell.getX(), (float) cell.getY(),
+                                             ghostX - (float) cell.getX(), (float) cell.getHeight()));
+
+        // Bright 3px vertical tick at ghost position — full cell height
+        const float clampedX = juce::jlimit ((float) cell.getX() + 1.5f,
+                                              (float) cell.getRight() - 1.5f, ghostX);
+        g.setColour (juce::Colours::white.withAlpha (0.85f));
+        g.fillRect (juce::Rectangle<float> (clampedX - 1.5f, (float) cell.getY(),
+                                             3.0f, (float) cell.getHeight()));
+    }
+
     {
         auto bar = cell.removeFromBottom (3).toFloat();
         g.setColour (T.separator);
         g.fillRect (bar);
 
-        // Ghost bar — shows where the physical knob/fader IS while waiting
-        // for pickup. Only visible when FieldSliceStart is mapped to an
-        // absolute CC and the knob hasn't reached the marker yet.
-        // Gives the user a target to sweep toward instead of turning blind.
-        const float ghostNorm = processor.markerCcGhostNorm.load (std::memory_order_relaxed);
-        const bool mapped  = processor.midiLearn.isMapped (DysektProcessor::FieldSliceStart);
-        // Show ghost whenever markerCcGhostNorm is valid — the processor only
-        // writes it during the absolute-CC pre-pickup phase, so no endless guard needed.
-        const bool showGhost = ghostNorm >= 0.0f && mapped;
-
-        // Ghost fill — fixed white-based colour so it's visible on every theme
-        // regardless of accent. Drawn first; solid marker bar draws on top.
+        // Ghost position on the bottom progress strip
         if (showGhost)
         {
-            g.setColour (juce::Colours::white.withAlpha (0.30f));
+            g.setColour (juce::Colours::white.withAlpha (0.55f));
             g.fillRect (bar.withWidth (bar.getWidth() * ghostNorm));
         }
 
-        // Solid marker bar — theme accent, always on top of ghost fill
+        // Solid marker bar — theme accent, always on top
         g.setColour (T.accent);
         g.fillRect (bar.withWidth (bar.getWidth() * frac));
-
-        // Tick — full cell height, pure white, fully opaque.
-        // Theme-independent: readable on every background.
-        if (showGhost)
-        {
-            const float tipX = juce::jlimit (bar.getX() + 2.0f,
-                                             bar.getRight() - 2.0f,
-                                             bar.getX() + bar.getWidth() * ghostNorm);
-            const float tickTop = (float) cell.getY();
-            const float tickH   = bar.getBottom() - tickTop;
-            g.setColour (juce::Colours::white.withAlpha (0.90f));
-            g.fillRect (juce::Rectangle<float> (tipX - 1.5f, tickTop, 3.0f, tickH));
-        }
     }
 
     // Label — top half
