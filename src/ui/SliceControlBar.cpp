@@ -479,20 +479,20 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         const bool endless = processor.midiLearn.isEndless (DysektProcessor::FieldSliceStart);
         const bool showGhost = ghostNorm >= 0.0f && mapped && !endless;
 
-        // Ghost fill — drawn first so the solid marker bar renders on top.
-        // Boosted alpha+brightness so it reads against any theme's dark separator.
+        // Ghost fill — fixed white-based colour so it's visible on every theme
+        // regardless of accent. Drawn first; solid marker bar draws on top.
         if (showGhost)
         {
-            g.setColour (T.accent.brighter (0.25f).withAlpha (0.55f));
+            g.setColour (juce::Colours::white.withAlpha (0.30f));
             g.fillRect (bar.withWidth (bar.getWidth() * ghostNorm));
         }
 
-        // Solid marker bar drawn on top of ghost fill
+        // Solid marker bar — theme accent, always on top of ghost fill
         g.setColour (T.accent);
         g.fillRect (bar.withWidth (bar.getWidth() * frac));
 
-        // Bright tick — spans full cell height so it is unmissable.
-        // Clamped 2px from edges to stay within rounded cell corners.
+        // Tick — full cell height, pure white, fully opaque.
+        // Theme-independent: readable on every background.
         if (showGhost)
         {
             const float tipX = juce::jlimit (bar.getX() + 2.0f,
@@ -500,7 +500,7 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
                                              bar.getX() + bar.getWidth() * ghostNorm);
             const float tickTop = (float) cell.getY();
             const float tickH   = bar.getBottom() - tickTop;
-            g.setColour (T.accent.brighter (0.6f).withAlpha (1.0f));
+            g.setColour (juce::Colours::white.withAlpha (0.90f));
             g.fillRect (juce::Rectangle<float> (tipX - 1.5f, tickTop, 3.0f, tickH));
         }
     }
