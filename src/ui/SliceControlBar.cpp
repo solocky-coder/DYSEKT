@@ -55,8 +55,15 @@ void SliceControlBar::timerCallback()
     const bool liveChanged = (curLive != lastLiveDrag);
     lastLiveDrag = curLive;
 
-    // Repaint if pulse is animating (MIDI learn arm) OR live drag value changed
-    if (processor.midiLearn.isArmed() || liveChanged)
+    // Ghost bar: repaint whenever the pre-pickup ghost position is active.
+    // The audio thread writes markerCcGhostNorm on every absolute CC message
+    // before pickup; without this the UI never repaints to show the ghost.
+    const float ghostNorm = processor.markerCcGhostNorm.load (std::memory_order_relaxed);
+    const bool ghostActive = (ghostNorm >= 0.0f);
+
+    // Repaint if pulse is animating (MIDI learn arm), live drag value changed,
+    // or ghost bar is active (pre-pickup absolute CC sweep in progress).
+    if (processor.midiLearn.isArmed() || liveChanged || ghostActive)
         repaint();
 }
 
@@ -472,24 +479,29 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         const bool endless = processor.midiLearn.isEndless (DysektProcessor::FieldSliceStart);
         const bool showGhost = ghostNorm >= 0.0f && mapped && !endless;
 
-        // Dim ghost fill first (may be hidden under marker bar if knob < marker)
+        // Ghost fill — drawn first so the solid marker bar renders on top.
+        // Boosted alpha+brightness so it reads against any theme's dark separator.
         if (showGhost)
         {
-            g.setColour (T.accent.withAlpha (0.35f));
+            g.setColour (T.accent.brighter (0.25f).withAlpha (0.55f));
             g.fillRect (bar.withWidth (bar.getWidth() * ghostNorm));
         }
 
-        // Solid marker bar drawn next
+        // Solid marker bar drawn on top of ghost fill
         g.setColour (T.accent);
         g.fillRect (bar.withWidth (bar.getWidth() * frac));
 
-        // Bright tick drawn LAST — always on top of everything, always visible
-        // regardless of whether the knob is left or right of the marker.
+        // Bright tick — spans full cell height so it is unmissable.
+        // Clamped 2px from edges to stay within rounded cell corners.
         if (showGhost)
         {
-            const float tipX = bar.getX() + bar.getWidth() * ghostNorm;
-            g.setColour (T.accent.brighter (0.4f).withAlpha (0.95f));
-            g.fillRect (juce::Rectangle<float> (tipX - 1.5f, bar.getY() - 5.0f, 3.0f, bar.getHeight() + 5.0f));
+            const float tipX = juce::jlimit (bar.getX() + 2.0f,
+                                             bar.getRight() - 2.0f,
+                                             bar.getX() + bar.getWidth() * ghostNorm);
+            const float tickTop = (float) cell.getY();
+            const float tickH   = bar.getBottom() - tickTop;
+            g.setColour (T.accent.brighter (0.6f).withAlpha (1.0f));
+            g.fillRect (juce::Rectangle<float> (tipX - 1.5f, tickTop, 3.0f, tickH));
         }
     }
 
