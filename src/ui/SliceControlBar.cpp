@@ -489,12 +489,12 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         g.fillRect (juce::Rectangle<float> ((float) cell.getX(), (float) cell.getY(),
                                              ghostX - (float) cell.getX(), (float) cell.getHeight()));
 
-        // Bright 3px vertical tick at ghost position — full cell height
-        const float clampedX = juce::jlimit ((float) cell.getX() + 1.5f,
-                                              (float) cell.getRight() - 1.5f, ghostX);
+        // Match playhead thickness (1px) for visual consistency.
+        const float clampedX = juce::jlimit ((float) cell.getX() + 0.5f,
+                                              (float) cell.getRight() - 0.5f, ghostX);
         g.setColour (juce::Colours::white.withAlpha (0.85f));
-        g.fillRect (juce::Rectangle<float> (clampedX - 1.5f, (float) cell.getY(),
-                                             3.0f, (float) cell.getHeight()));
+        g.fillRect (juce::Rectangle<float> (clampedX - 0.5f, (float) cell.getY(),
+                                             1.0f, (float) cell.getHeight()));
 
         // Secondary thin tick: physical knob/fader position (when known).
         if (ghostNorm >= 0.0f)
