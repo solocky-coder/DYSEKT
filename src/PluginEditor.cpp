@@ -333,9 +333,13 @@ void DysektEditor::resized()
  auto actionArea = area.removeFromTop (kActionH);
  const int kFX = kMargin;
  const int kFW = getWidth() - kMargin * 2;
+ juce::Rectangle<int> slot;
+ if (mixerOpen || browserOpen)
+ {
  area.removeFromBottom (kMargin);
- auto slot = area.removeFromBottom (kPanelSlotH);
+ slot = area.removeFromBottom (kPanelSlotH);
  area.removeFromBottom (kMargin);
+ }
 
  if (mixerOpen) {
  const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
