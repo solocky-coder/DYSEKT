@@ -212,19 +212,17 @@ void DysektEditor::toggleShortcutsPanel()
 void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
-    if (waveformView.isVisible() && sliceControlBar.isVisible())
+    if (waveformView.isVisible())
     {
         const auto& sbnd = waveformView.getBounds();
-        const auto& cbnd = sliceControlBar.getBounds();
         const auto ac = getTheme().accent;
 
         const int kFrameInset = 4;
         const int kFrameX = kMargin;
         const int kFrameW = getWidth() - kMargin * 2;
-        // Frame spans from just above the waveform down to the bottom of the SCB
         const juce::Rectangle<float> outerF (
             (float) kFrameX, (float) sbnd.getY() - kFrameInset,
-            (float) kFrameW, (float) (cbnd.getBottom() - sbnd.getY() + kFrameInset + 4));
+            (float) kFrameW, (float) (sbnd.getBottom() - sbnd.getY() + kFrameInset * 2));
         juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
                                         juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
         g.setGradientFill (outerGrad);
@@ -297,9 +295,10 @@ void DysektEditor::resized()
         browserPanel.setBounds ({});
     }
 
+    area.removeFromBottom (kMargin);  // bottom margin — SCB sits above plugin edge
     auto scbArea = area.removeFromBottom (kSliceCtrlH);
     sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, kSliceCtrlH));
-    area.removeFromBottom (kMargin);
+    area.removeFromBottom (kMargin);  // gap between SCB and waveform area
 
     const int kFrameInset = 4;
     const int kFrameX = kFX;

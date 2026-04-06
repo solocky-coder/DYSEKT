@@ -636,34 +636,34 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos
 // =============================================================================
 void SliceControlBar::paint (juce::Graphics& g)
 {
- // ── Background fill only — border is drawn by the editor frame ───────────
- // SCB has no own border; it sits inside the editor's outer rounded frame
- // which spans waveform top → SCB bottom, so no overlapping borders.
+ // ── LCD-style frame — matches waveform + LCD screen aesthetic ────────────
  {
+ const auto ac = getTheme().accent;
  auto b = getLocalBounds();
+
  juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
  juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
  g.setGradientFill (outerGrad);
- g.fillRect (b);
+ g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
- // Separator line at top edge to visually divide waveform from SCB
- g.setColour (getTheme().accent.withAlpha (0.25f));
- g.drawHorizontalLine (0, (float) b.getX(), (float) b.getRight());
+ g.setColour (ac.withAlpha (0.65f));
+ g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
  auto screen = b.reduced (4);
- screen.setY (2);
- screen.setHeight (b.getHeight() - 2);
  g.setColour (getTheme().darkBar.darker (0.55f));
- g.fillRect (screen);
+ g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
  g.setColour (juce::Colours::black.withAlpha (0.18f));
  for (int y = screen.getY(); y < screen.getBottom(); y += 2)
  g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
 
- juce::ColourGradient glow (getTheme().accent.withAlpha (0.06f), 0, (float) screen.getY(),
+ juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
  juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
  g.setGradientFill (glow);
- g.fillRect (screen);
+ g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+
+ g.setColour (ac.withAlpha (0.12f));
+ g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
  }
 
  cells.clear();
