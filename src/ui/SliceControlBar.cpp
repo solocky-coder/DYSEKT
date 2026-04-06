@@ -636,21 +636,38 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos
 // =============================================================================
 void SliceControlBar::paint (juce::Graphics& g)
 {
- // ── LCD-style frame — matches waveform + LCD screen aesthetic ────────────
+ // ── LCD-style frame — flat top, rounded bottom only ─────────────────────
+ // Flat top edge so the SCB sits flush under the waveform frame without
+ // overlapping its border or clipping into the corner element.
  {
  const auto ac = getTheme().accent;
  auto b = getLocalBounds();
 
+ // Fill: use a plain rect for the top half + rounded rect for bottom
+ // so the top edge is perfectly flat.
  juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
  juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
  g.setGradientFill (outerGrad);
+ // Rounded bottom only — extend fill rect upward by radius so top is flat
+ g.fillRect (b.getX(), b.getY(), b.getWidth(), 4);
  g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
+ // Border: flat top, rounded bottom — draw sides + bottom arc only
+ juce::Path border;
+ auto br = b.toFloat().reduced (0.5f);
+ border.startNewSubPath (br.getX(), br.getY());
+ border.lineTo (br.getRight(), br.getY());
+ border.lineTo (br.getRight(), br.getBottom() - 4.0f);
+ border.quadraticTo (br.getRight(), br.getBottom(), br.getRight() - 4.0f, br.getBottom());
+ border.lineTo (br.getX() + 4.0f, br.getBottom());
+ border.quadraticTo (br.getX(), br.getBottom(), br.getX(), br.getBottom() - 4.0f);
+ border.lineTo (br.getX(), br.getY());
  g.setColour (ac.withAlpha (0.65f));
- g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
+ g.strokePath (border, juce::PathStrokeType (1.0f));
 
  auto screen = b.reduced (4);
  g.setColour (getTheme().darkBar.darker (0.55f));
+ g.fillRect (screen.getX(), screen.getY(), screen.getWidth(), 2);
  g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
  g.setColour (juce::Colours::black.withAlpha (0.18f));

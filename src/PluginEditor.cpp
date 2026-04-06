@@ -98,7 +98,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  }
 
  setWantsKeyboardFocus (true);
- setResizable (true, true);
+ setResizable (true, false);  // false = no corner grip component — it painted over the frame border
  setResizeLimits (kBaseW, 650, 3840, 2160);
  setSize (kBaseW, kTotalH);
  lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
