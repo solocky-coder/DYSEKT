@@ -190,10 +190,11 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     // Using sliceDurMs as the window caused the node to pin at the right edge
     // once the value exceeded the slice length (e.g. 464ms slice + 5000ms decay).
     const float sliceDurMs_   = juce::jmax (1.0f, getSliceDurMs());
-    const float kAttackViewMs  = sliceDurMs_;
-    const float kHoldViewMs    = sliceDurMs_;
-    const float kDecayViewMs   = sliceDurMs_;
-    const float releaseViewMs  = sliceDurMs_;
+    // Fixed view windows matching SCB knob maxima exactly
+    const float kAttackViewMs  = 1000.0f;   // knob max 1.0s
+    const float kHoldViewMs    = 5000.0f;   // knob max 5.0s
+    const float kDecayViewMs   = 5000.0f;   // knob max 5.0s
+    const float releaseViewMs  = sliceDurMs_;   // knob uses relMaxSec = sliceDur
     const float attackNorm  = std::sqrt (juce::jmin (attackMs  / kAttackViewMs,  1.0f));
     const float holdNorm    = std::sqrt (juce::jmin (holdMs    / kHoldViewMs,    1.0f));
     const float decayNorm   = std::sqrt (juce::jmin (decayMs   / kDecayViewMs,   1.0f));
@@ -254,9 +255,10 @@ void SliceWaveformLcd::commitNodes()
     // Inverse of slice-relative sqrt mapping in buildEnvelopeNodes:
     //   ms = ratio^2 * kXxxViewMs  (inverse of  norm = sqrt(ms/kXxxViewMs))
     const float sliceDurMs_c  = juce::jmax (1.0f, getSliceDurMs());
-    const float kAttackViewMs  = sliceDurMs_c;
-    const float kHoldViewMs    = sliceDurMs_c;
-    const float kDecayViewMs   = sliceDurMs_c;
+    // Must match buildEnvelopeNodes() exactly
+    const float kAttackViewMs  = 1000.0f;
+    const float kHoldViewMs    = 5000.0f;
+    const float kDecayViewMs   = 5000.0f;
     const float releaseViewMs  = sliceDurMs_c;
     const float remain_c  = kRMax - env.ax;
     const float kHX_eff   = env.ax + remain_c * 0.20f;
@@ -405,9 +407,10 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
                     static constexpr float kAX   = 0.85f;
                     static constexpr float kRMax = 0.99f;
                     const float sliceDurMs_l = juce::jmax (1.0f, getSliceDurMs());
-                    const float kAttackViewMs = sliceDurMs_l;
-                    const float kHoldViewMs   = sliceDurMs_l;
-                    const float kDecayViewMs  = sliceDurMs_l;
+                    // Must match buildEnvelopeNodes() exactly
+                    const float kAttackViewMs = 1000.0f;
+                    const float kHoldViewMs   = 5000.0f;
+                    const float kDecayViewMs  = 5000.0f;
                     const float releaseViewMs = sliceDurMs_l;
 
                     const float remain_c  = kRMax - env.ax;
