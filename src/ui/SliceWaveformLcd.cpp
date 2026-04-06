@@ -189,14 +189,14 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     //   Release → 0-5000 ms  (knob max = 5.0s)
     // Using sliceDurMs as the window caused the node to pin at the right edge
     // once the value exceeded the slice length (e.g. 464ms slice + 5000ms decay).
-    static constexpr float kAttackViewMs  = 1000.0f;
-    static constexpr float kHoldViewMs    = 5000.0f;
-    static constexpr float kDecayViewMs   = 5000.0f;
-    const float releaseViewMs = juce::jmax (1.0f, getSliceDurMs());
+    const float sliceDurMs_   = juce::jmax (1.0f, getSliceDurMs());
+    const float kAttackViewMs  = sliceDurMs_;
+    const float kHoldViewMs    = sliceDurMs_;
+    const float kDecayViewMs   = sliceDurMs_;
+    const float releaseViewMs  = sliceDurMs_;
     const float attackNorm  = std::sqrt (juce::jmin (attackMs  / kAttackViewMs,  1.0f));
     const float holdNorm    = std::sqrt (juce::jmin (holdMs    / kHoldViewMs,    1.0f));
     const float decayNorm   = std::sqrt (juce::jmin (decayMs   / kDecayViewMs,   1.0f));
-    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / releaseViewMs, 1.0f));
 
     env.ax  = juce::jlimit (0.0f, kAX, attackNorm * kAX);
 
@@ -215,8 +215,8 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     env.ay    = 0.04f;   // attack peak near top (standard ADSR visual)
     env.sxEnd = kSEnd_eff;
     // Release node represents fade-out START (standard ADSR), not fade-out end.
-    env.rx    = juce::jlimit (kSEnd_eff + 0.01f, kRMax,
-                              kRMax - releaseNorm * (kRMax - kSEnd_eff));
+    env.rx    = juce::jlimit (0.0f, 1.0f,
+                              1.0f - (releaseMs / releaseViewMs));
 
     // Rebuild node list
     envNodes.clear();
@@ -253,10 +253,11 @@ void SliceWaveformLcd::commitNodes()
 
     // Inverse of slice-relative sqrt mapping in buildEnvelopeNodes:
     //   ms = ratio^2 * kXxxViewMs  (inverse of  norm = sqrt(ms/kXxxViewMs))
-    static constexpr float kAttackViewMs  = 1000.0f;
-    static constexpr float kHoldViewMs    = 5000.0f;
-    static constexpr float kDecayViewMs   = 5000.0f;
-    const float releaseViewMs = juce::jmax (1.0f, getSliceDurMs());
+    const float sliceDurMs_c  = juce::jmax (1.0f, getSliceDurMs());
+    const float kAttackViewMs  = sliceDurMs_c;
+    const float kHoldViewMs    = sliceDurMs_c;
+    const float kDecayViewMs   = sliceDurMs_c;
+    const float releaseViewMs  = sliceDurMs_c;
     const float remain_c  = kRMax - env.ax;
     const float kHX_eff   = env.ax + remain_c * 0.20f;
     const float kDX_eff   = env.ax + remain_c * 0.47f;
@@ -264,12 +265,11 @@ void SliceWaveformLcd::commitNodes()
     const float aRatio = env.ax / kAX;
     const float hRatio = (kHX_eff > env.ax) ? (env.hx - env.ax) / (kHX_eff - env.ax) : 0.0f;
     const float dRatio = (kDX_eff > env.hx) ? (env.dx - env.hx) / (kDX_eff - env.hx) : 0.0f;
-    const float rRatio = (kRMax > kSEnd_eff) ? (kRMax - env.rx) / (kRMax - kSEnd_eff) : 0.0f;
     const float attackMs  = juce::jlimit (0.0f, kAttackViewMs,  aRatio * aRatio * kAttackViewMs);
     const float holdMs    = juce::jlimit (0.0f, kHoldViewMs,    hRatio * hRatio * kHoldViewMs);
     const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,   dRatio * dRatio * kDecayViewMs);
     const float sustainPc = juce::jlimit (0.0f, 100.0f,     (1.0f - env.sy) * 100.0f);
-    const float releaseMs = juce::jlimit (0.0f, releaseViewMs, rRatio * rRatio * releaseViewMs);
+    const float releaseMs = juce::jlimit (0.0f, releaseViewMs, (1.0f - env.rx) * releaseViewMs);
 
     // Write to selected slice via CmdSetSliceParam (per-slice, not global)
     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
@@ -404,10 +404,11 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
                     // Preserve the current node value when locking so it doesn't jump.
                     static constexpr float kAX   = 0.85f;
                     static constexpr float kRMax = 0.99f;
-                    static constexpr float kAttackViewMs = 1000.0f;
-                    static constexpr float kHoldViewMs   = 5000.0f;
-                    static constexpr float kDecayViewMs  = 5000.0f;
-                    const float releaseViewMs = juce::jmax (1.0f, getSliceDurMs());
+                    const float sliceDurMs_l = juce::jmax (1.0f, getSliceDurMs());
+                    const float kAttackViewMs = sliceDurMs_l;
+                    const float kHoldViewMs   = sliceDurMs_l;
+                    const float kDecayViewMs  = sliceDurMs_l;
+                    const float releaseViewMs = sliceDurMs_l;
 
                     const float remain_c  = kRMax - env.ax;
                     const float kHX_eff   = env.ax + remain_c * 0.20f;
@@ -417,13 +418,12 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
                     const float aRatio = env.ax / kAX;
                     const float hRatio = (kHX_eff > env.ax) ? (env.hx - env.ax) / (kHX_eff - env.ax) : 0.0f;
                     const float dRatio = (kDX_eff > env.hx) ? (env.dx - env.hx) / (kDX_eff - env.hx) : 0.0f;
-                    const float rRatio = (kRMax > kSEnd_eff) ? (env.rx - kSEnd_eff) / (kRMax - kSEnd_eff) : 0.0f;
 
                     const float attackSec  = juce::jlimit (0.0f, kAttackViewMs, aRatio * aRatio * kAttackViewMs) / 1000.0f;
                     const float holdSec    = juce::jlimit (0.0f, kHoldViewMs,   hRatio * hRatio * kHoldViewMs) / 1000.0f;
                     const float decaySec   = juce::jlimit (0.0f, kDecayViewMs,  dRatio * dRatio * kDecayViewMs) / 1000.0f;
                     const float sustainVal = juce::jlimit (0.0f, 1.0f, 1.0f - env.sy);
-                    const float releaseSec = juce::jlimit (0.0f, releaseViewMs, rRatio * rRatio * releaseViewMs) / 1000.0f;
+                    const float releaseSec = juce::jlimit (0.0f, releaseViewMs, (1.0f - env.rx) * releaseViewMs) / 1000.0f;
 
                     auto lockFieldWithValue = [&] (DysektProcessor::SliceParamField field, float value)
                     {
@@ -459,8 +459,9 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     const float ox = screenArea.getX();
     const float oy = screenArea.getY();
 
-    const float xn = juce::jlimit (0.01f, 0.99f, (e.position.x - ox) / W);
-    const float yn = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
+    const float xn  = juce::jlimit (0.01f, 0.99f, (e.position.x - ox) / W);
+    const float rxn = juce::jlimit (0.0f,  1.0f,  (e.position.x - ox) / W);  // full-range for R
+    const float yn  = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
 
     // Dynamic layout — must match buildEnvelopeNodes exactly
     static constexpr float kAX   = 0.85f;   // attack spans up to 85% of display
@@ -478,9 +479,9 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     const float kSEnd_eff = env.ax + remain * 0.65f;
     env.sxEnd = kSEnd_eff;
 
-    // Clamp D and R into their (possibly shifted) zones
-    env.dx = juce::jlimit (env.ax + 0.01f, kDX_eff,       env.dx);
-    env.rx = juce::jlimit (kSEnd_eff + 0.01f, kRMax,       env.rx);
+    // Clamp D into its zone; R is free to span the full display width
+    env.dx = juce::jlimit (env.ax + 0.01f, kDX_eff, env.dx);
+    env.rx = juce::jlimit (0.0f,            1.0f,    env.rx);
 
     if (dragRole == NodeRole::Hold)
     {
@@ -501,7 +502,9 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
     else if (dragRole == NodeRole::Release)
     {
         // R: X only — drag left = longer release tail (earlier fade start)
-        env.rx = juce::jlimit (kSEnd_eff + 0.01f, kRMax, xn);
+        // Full range [0,1]: R at 1.0 = no fade (clean cut at slice end)
+        //                   R at 0.0 = fade starts at slice beginning
+        env.rx = rxn;
     }
 
     // Rebuild envNodes[] from updated env.* (no param read during drag)
