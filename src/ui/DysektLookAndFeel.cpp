@@ -18,9 +18,9 @@ DysektLookAndFeel::DysektLookAndFeel()
 
     // Labels / UI text — Barlow Condensed (sharp, narrow, technical)
     regularTypeface = juce::Typeface::createSystemTypefaceFor (
-        BinaryData::BarlowCondensedRegular_ttf, BinaryData::BarlowCondensedRegular_ttfSize);
+        BinaryData::Inter_Regular_ttf, BinaryData::Inter_Regular_ttfSize);
     boldTypeface = juce::Typeface::createSystemTypefaceFor (
-        BinaryData::BarlowCondensedSemiBold_ttf, BinaryData::BarlowCondensedSemiBold_ttfSize);
+        BinaryData::Inter_SemiBold_ttf, BinaryData::Inter_SemiBold_ttfSize);
 
     // Values / numbers — JetBrains Mono (monospaced, digits never jump width)
     monoTypeface = juce::Typeface::createSystemTypefaceFor (
