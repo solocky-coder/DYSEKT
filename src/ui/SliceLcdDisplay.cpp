@@ -39,6 +39,12 @@ namespace LcdColours
     }
 }
 
+namespace
+{
+    // Reserve a bottom strip so data rows never collide with the flag pills.
+    constexpr int kFlagsBottomGutter = 26;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 juce::String SliceLcdDisplay::midiNoteName (int note)
@@ -312,22 +318,21 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
 
 void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
 {
-    // ── Flags drawn as a VERTICAL column on the RIGHT edge of the screen ──────
+    // ── Flags drawn as a HORIZONTAL row at the BOTTOM of the screen ───────────
     // Greyed out when inactive, full phosphor when active.
     const auto pal = LcdColours::fromTheme();
     auto screen = getLocalBounds().reduced (4);
 
-    const juce::Font flagFont = DysektLookAndFeel::makeFont (17.0f, true);
-    const int pad    = 5;
-    const int flagW  = 48;   // fixed pill width
-    const int flagH  = 22;   // pill height
-    const int flagGap = 5;   // gap between pills
+    const juce::Font flagFont = DysektLookAndFeel::makeFont (14.0f, true);
+    const int pad     = 4;
+    const int flagH   = 18;
+    const int flagGap = 4;
     const int numFlags = 7;
-    const int totalFlagsH = numFlags * flagH + (numFlags - 1) * flagGap;
-
-    // Centre the vertical stack in the screen height
-    int fy = screen.getY() + (screen.getHeight() - totalFlagsH) / 2;
-    const int fx = screen.getRight() - flagW - 18;
+    const int availableW = screen.getWidth() - kLeftPad * 2;
+    const int flagW = juce::jmax (34, (availableW - (numFlags - 1) * flagGap) / numFlags);
+    const int totalFlagsW = numFlags * flagW + (numFlags - 1) * flagGap;
+    const int fx0 = screen.getX() + (screen.getWidth() - totalFlagsW) / 2;
+    const int fy  = screen.getBottom() - flagH - 4;
 
     struct Flag { juce::String text; bool on; int fieldId; bool isCycle; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
@@ -346,6 +351,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     flagHitRects.clear();
 
     g.setFont (flagFont);
+    int fx = fx0;
     for (auto& f : flags)
     {
         juce::Rectangle<int> box (fx, fy, flagW, flagH);
@@ -362,27 +368,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
                     box.getWidth() - pad * 2, box.getHeight(),
                     juce::Justification::centred, false);
 
-        fy += flagH + flagGap;
-    }
-
-    // Filter badge (display-only, not clickable)
-    if (data.filterCutoff < 19000.0f)
-    {
-        juce::String fStr;
-        if (data.filterCutoff >= 1000.0f)
-            fStr = "FLT:" + juce::String (data.filterCutoff / 1000.0f, 1) + "k";
-        else
-            fStr = "FLT:" + juce::String (juce::roundToInt (data.filterCutoff)) + "Hz";
-
-        juce::Rectangle<int> fbox (fx, fy + flagGap, flagW, flagH);
-        g.setColour (pal.phosphor.withAlpha (0.15f));
-        g.fillRoundedRectangle (fbox.toFloat(), 2.0f);
-        g.setColour (pal.flagOn);
-        g.drawRoundedRectangle (fbox.toFloat(), 2.0f, 1.0f);
-        g.setColour (pal.flagOn);
-        g.drawText (fStr, fbox.getX() + pad, fbox.getY(),
-                    fbox.getWidth() - pad * 2, fbox.getHeight(),
-                    juce::Justification::centred, false);
+        fx += flagW + flagGap;
     }
 }
 
@@ -521,10 +507,11 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
     if (! data.hasSample)   { drawNoSampleScreen (g); return; }
     if (! data.hasSlice)    { drawNoSliceScreen  (g); return; }
 
-    // ── Clip all row drawing to the inner screen ─────────────────────────────
+    // ── Clip all row drawing to the inner screen, minus reserved flags gutter ─
     auto screen = getLocalBounds().reduced (4);
+    auto rowsClip = screen.withTrimmedBottom (kFlagsBottomGutter);
     g.saveState();
-    g.reduceClipRegion (screen);
+    g.reduceClipRegion (rowsClip);
 
     // ── Row 0:  Header — centred: "SL xx / xx  SAMPLENAME" ──────────────────
     {
