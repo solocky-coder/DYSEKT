@@ -1,0 +1,272 @@
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_audio_devices/juce_audio_devices.h>
+#include <juce_audio_formats/juce_audio_formats.h>
+#include "DysektLookAndFeel.h"
+
+class DysektProcessor;
+
+// ── Tiny LookAndFeel override to shrink the file-list font ───────────────────
+class SmallListLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    SmallListLookAndFeel() {}
+
+    void refreshTheme()
+    {
+        const auto& t = getTheme();
+        setColour (juce::ListBox::backgroundColourId, t.darkBar.darker (0.3f));
+        setColour (juce::DirectoryContentsDisplayComponent::textColourId, t.foreground.withAlpha (0.75f));
+        setColour (juce::DirectoryContentsDisplayComponent::highlightColourId, t.accent.withAlpha (0.12f));
+        setColour (juce::DirectoryContentsDisplayComponent::highlightedTextColourId, t.accent);
+        setColour (juce::FileChooserDialogBox::titleTextColourId, t.foreground.withAlpha (0.75f));
+        setColour (juce::TextEditor::backgroundColourId, t.darkBar.darker (0.3f));
+        setColour (juce::TextEditor::textColourId, t.accent);
+        setColour (juce::TextEditor::outlineColourId, t.separator);
+        setColour (juce::Label::backgroundColourId, t.darkBar.darker (0.3f));
+        setColour (juce::Label::textColourId, t.foreground.withAlpha (0.75f));
+    }
+
+    void drawPopupMenuBackground (juce::Graphics& g, int w, int h) override
+    {
+        g.fillAll (getTheme().darkBar);
+        g.setColour (getTheme().separator);
+        g.drawRect (0, 0, w, h, 1);
+    }
+
+    void drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area,
+                            bool isSeparator, bool isActive, bool isHighlighted,
+                            bool isTicked, bool, const juce::String& text,
+                            const juce::String&, const juce::Drawable*,
+                            const juce::Colour*) override
+    {
+        if (isSeparator)
+        {
+            g.setColour (getTheme().separator);
+            g.fillRect (area.reduced (4, 0).withHeight (1).withY (area.getCentreY()));
+            return;
+        }
+        if (isHighlighted && isActive)
+        {
+            g.setColour (getTheme().accent.withAlpha (0.15f));
+            g.fillRect (area);
+        }
+        const int dotZone = 16;
+        if (isTicked)
+        {
+            g.setColour (getTheme().accent);
+            g.fillRect (area.getX() + 6, area.getCentreY() - 2, 4, 4);
+        }
+        const auto textCol = isTicked ? getTheme().accent
+                           : isActive ? getTheme().foreground
+                                      : getTheme().foreground.withAlpha (0.4f);
+        g.setColour (textCol);
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (13.0f)));
+        g.drawText (text,
+                    area.withLeft (area.getX() + dotZone)
+                        .withRight (area.getRight() - 4),
+                    juce::Justification::centredLeft);
+    }
+
+    juce::Font getPopupMenuFont() override { return juce::Font (juce::FontOptions{}.withHeight (13.0f)); }
+
+    void drawComboBox (juce::Graphics& g, int width, int height, bool,
+                       int buttonX, int, int, int, juce::ComboBox& box) override
+    {
+        const auto& t = getTheme();
+        // Sharp background
+        g.setColour (t.darkBar.darker (0.3f));
+        g.fillRect (0, 0, width, height);
+        // Sharp border
+        g.setColour (box.hasKeyboardFocus (false) ? t.accent.withAlpha (0.5f) : t.separator);
+        g.drawRect (0, 0, width, height, 1);
+        // Centred arrow — sharp V shape, no unicode
+        const int cx = buttonX + (width - buttonX) / 2;
+        const int cy = height / 2;
+        g.setColour (t.foreground.withAlpha (0.85f));
+        g.drawLine ((float)(cx - 4), (float)(cy - 2), (float)(cx),     (float)(cy + 2), 1.5f);
+        g.drawLine ((float)(cx),     (float)(cy + 2), (float)(cx + 4), (float)(cy - 2), 1.5f);
+    }
+
+    juce::Font getComboBoxFont (juce::ComboBox&) override
+    {
+        return juce::Font (juce::FontOptions{}.withHeight (11.0f));
+    }
+
+    void positionComboBoxText (juce::ComboBox& box, juce::Label& label) override
+    {
+        label.setBounds (4, 1, box.getWidth() - 28, box.getHeight() - 2);
+        label.setFont (getComboBoxFont (box));
+        label.setColour (juce::Label::textColourId, getTheme().foreground);
+        label.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    }
+
+    void drawFileBrowserRow (juce::Graphics& g, int width, int height,
+                             const juce::File&, const juce::String& filename,
+                             juce::Image*, const juce::String& fileSizeDescription,
+                             const juce::String&, bool, bool isItemSelected,
+                             int, juce::DirectoryContentsDisplayComponent&) override
+    {
+        const auto& t = getTheme();
+        const auto bgHighlight  = t.accent.withAlpha (0.12f);
+        const auto textNormal   = t.foreground.withAlpha (0.75f);
+        const auto textSelected = t.accent;
+
+        if (isItemSelected)
+        {
+            g.setColour (bgHighlight);
+            g.fillAll();
+        }
+
+        const auto textCol = isItemSelected ? textSelected : textNormal;
+        g.setColour (textCol);
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
+        g.drawText (filename, 2, 0, width - 4, height, juce::Justification::centredLeft, true);
+
+        if (! fileSizeDescription.isEmpty())
+        {
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f)));
+            g.setColour (textCol.withAlpha (0.6f));
+            g.drawText (fileSizeDescription, width - 80, 0, 78, height,
+                        juce::Justification::centredRight, true);
+        }
+    }
+
+    int smallRowHeight() const { return 18; }
+};
+
+// ── Play/Stop icon button ─────────────────────────────────────
+class IconButton : public juce::Button
+{
+public:
+    IconButton() : juce::Button ("IconButton") {}
+    void paintButton (juce::Graphics& g, bool isMouseOver, bool isButtonDown) override
+    {
+        auto area = getLocalBounds().toFloat().reduced (5.0f);
+
+        // Background hover/press effect
+        if (isButtonDown)
+            g.setColour (getTheme().accent.withAlpha (0.18f));
+        else if (isMouseOver)
+            g.setColour (getTheme().accent.withAlpha (0.12f));
+        else
+            g.setColour (getTheme().accent.withAlpha (0.08f));
+        g.fillEllipse (area);
+
+        // Icon color
+        g.setColour (getTheme().accent.withAlpha (0.95f));
+
+        if (state == Playing)
+        {
+            // Draw stop icon (square)
+            float iconSize = std::min (area.getWidth(), area.getHeight()) * 0.50f;
+            juce::Rectangle<float> r = area.withSizeKeepingCentre (iconSize, iconSize);
+            g.fillRect (r);
+        }
+        else
+        {
+            // Draw play icon (triangle)
+            juce::Path triangle;
+            auto cx = area.getCentreX();
+            auto cy = area.getCentreY();
+            float s = std::min (area.getWidth(), area.getHeight()) * 0.58f;
+            triangle.addTriangle (cx - s/3.1f, cy - s/2.0f,
+                                  cx - s/3.1f, cy + s/2.0f,
+                                  cx + s/1.5f, cy);
+            g.fillPath (triangle);
+        }
+    }
+    enum IconState { Stopped, Playing };
+    void setState (IconState s) { state = s; repaint(); }
+    IconState getState() const { return state; }
+private:
+    IconState state = Stopped;
+};
+
+// ── Removable bookmark button (right-click → remove) ────────────────────────
+class RemovableButton : public juce::TextButton
+{
+public:
+    std::function<void()> onRightClick;
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isRightButtonDown() && onRightClick)
+            onRightClick();
+        else
+            juce::TextButton::mouseDown (e);
+    }
+};
+
+class FileBrowserPanel : public juce::Component,
+                         private juce::FileBrowserListener,
+                         private juce::ChangeListener
+{
+public:
+    explicit FileBrowserPanel (DysektProcessor& p);
+    ~FileBrowserPanel() override;
+
+    void resized() override;
+    void paint   (juce::Graphics& g) override;
+
+    void refreshTheme();
+
+    std::function<void()> onFileLoaded;
+    std::function<void (const juce::File&)> onLoadRequest;
+
+private:
+    void selectionChanged() override {}
+    void fileClicked       (const juce::File& f, const juce::MouseEvent&) override;
+    void fileDoubleClicked (const juce::File& f) override;
+    void browserRootChanged (const juce::File&) override {}
+
+    void changeListenerCallback (juce::ChangeBroadcaster*) override;
+
+    void startPreview (const juce::File& f);
+    void stopPreview();
+    void updatePlayButton();
+
+    DysektProcessor& processor;
+
+    // ── Cloud bookmarks ───────────────────────────────────────────────────────
+    struct Bookmark
+    {
+        juce::String name;
+        juce::File   path;
+        bool         removable = true;   // false = auto-detected, always shown
+    };
+
+    juce::Array<Bookmark>              bookmarks;
+    juce::OwnedArray<RemovableButton>  bmBtns;
+    juce::TextButton                   addBmBtn;
+    std::unique_ptr<juce::FileChooser> fileChooser;
+
+    void detectCloudFolders();
+    void loadCustomBookmarks();
+    void saveCustomBookmarks();
+    void rebuildBookmarkBar();
+
+    static constexpr int kBmH = 28;
+
+
+    SmallListLookAndFeel           smallLAF;
+    juce::WildcardFileFilter       fileFilter;
+    juce::TimeSliceThread          ioThread  { "FileBrowserIO" };
+    juce::DirectoryContentsList    dirList;
+    juce::FileBrowserComponent     browser;
+
+    juce::AudioDeviceManager       deviceManager;
+    juce::AudioFormatManager       formatManager;
+    juce::AudioTransportSource     transport;
+    juce::AudioSourcePlayer        sourcePlayer;
+    std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
+
+    juce::File                     previewFile;
+    bool                           previewVisible = false;
+
+    IconButton                     playStopBtn;
+    juce::Slider                   volumeSlider;
+    juce::Label                    fileNameLabel;
+
+    static constexpr int kBarH = 36;
+};
