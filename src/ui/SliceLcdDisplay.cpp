@@ -24,25 +24,19 @@ namespace LcdColours
         p.background = bg;
         p.bezel      = bg.brighter (0.12f);
         p.phosphor   = ac;
-        p.dim        = ac.withAlpha (0.18f).withMultipliedSaturation (0.6f)
+        p.dim        = ac.withAlpha (0.30f).withMultipliedSaturation (0.7f)
                         .overlaidWith (bg);
         p.highlight  = ac.brighter (0.5f);
-        p.labelCol   = ac.withAlpha (0.70f);
+        p.labelCol   = ac.withAlpha (0.65f);
         p.scanline   = juce::Colours::black;
         p.cursor     = ac;
         p.noDataCol  = ac.withAlpha (0.15f).overlaidWith (bg);
         p.border     = ac.withAlpha (0.12f).overlaidWith (bg);
         p.flagOn     = ac;
-        p.flagOff    = ac.withAlpha (0.45f);          // dim but visible
+        p.flagOff    = ac.withAlpha (0.50f);          // dim but visible
         p.flagBg     = bg.brighter (0.25f);           // visible pill outline against screen bg
         return p;
     }
-}
-
-namespace
-{
-    // Reserve a bottom strip so data rows never collide with the flag pills.
-    constexpr int kFlagsBottomGutter = 26;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -214,8 +208,8 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
 
-    const juce::Font labelFont = DysektLookAndFeel::makeFont (24.0f, true);
-    const juce::Font valueFont = DysektLookAndFeel::makeFont (26.0f);
+    const juce::Font labelFont = DysektLookAndFeel::makeFont (17.0f, true);
+    const juce::Font valueFont = DysektLookAndFeel::makeMonoFont (18.0f);
 
     if (highlight)
     {
@@ -249,7 +243,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
     auto b = getLocalBounds().reduced (4);
     const int rowH    = kRowH;
     const int y       = b.getY() + 4 + row * rowH;
-    const juce::Font  f = DysektLookAndFeel::makeFont (23.0f);
+    const juce::Font  f = DysektLookAndFeel::makeMonoFont (18.0f);
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
@@ -318,21 +312,22 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
 
 void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
 {
-    // ── Flags drawn as a HORIZONTAL row at the BOTTOM of the screen ───────────
+    // ── Flags drawn as a VERTICAL column on the RIGHT edge of the screen ──────
     // Greyed out when inactive, full phosphor when active.
     const auto pal = LcdColours::fromTheme();
     auto screen = getLocalBounds().reduced (4);
 
-    const juce::Font flagFont = DysektLookAndFeel::makeFont (14.0f, true);
-    const int pad     = 4;
-    const int flagH   = 18;
-    const int flagGap = 4;
+    const juce::Font flagFont = DysektLookAndFeel::makeMonoFont (13.0f, true);
+    const int pad    = 5;
+    const int flagW  = 48;   // fixed pill width
+    const int flagH  = 22;   // pill height
+    const int flagGap = 5;   // gap between pills
     const int numFlags = 7;
-    const int availableW = screen.getWidth() - kLeftPad * 2;
-    const int flagW = juce::jmax (34, (availableW - (numFlags - 1) * flagGap) / numFlags);
-    const int totalFlagsW = numFlags * flagW + (numFlags - 1) * flagGap;
-    const int fx0 = screen.getX() + (screen.getWidth() - totalFlagsW) / 2;
-    const int fy  = screen.getBottom() - flagH - 4;
+    const int totalFlagsH = numFlags * flagH + (numFlags - 1) * flagGap;
+
+    // Centre the vertical stack in the screen height
+    int fy = screen.getY() + (screen.getHeight() - totalFlagsH) / 2;
+    const int fx = screen.getRight() - flagW - 18;
 
     struct Flag { juce::String text; bool on; int fieldId; bool isCycle; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
@@ -351,7 +346,6 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     flagHitRects.clear();
 
     g.setFont (flagFont);
-    int fx = fx0;
     for (auto& f : flags)
     {
         juce::Rectangle<int> box (fx, fy, flagW, flagH);
@@ -368,7 +362,27 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
                     box.getWidth() - pad * 2, box.getHeight(),
                     juce::Justification::centred, false);
 
-        fx += flagW + flagGap;
+        fy += flagH + flagGap;
+    }
+
+    // Filter badge (display-only, not clickable)
+    if (data.filterCutoff < 19000.0f)
+    {
+        juce::String fStr;
+        if (data.filterCutoff >= 1000.0f)
+            fStr = "FLT:" + juce::String (data.filterCutoff / 1000.0f, 1) + "k";
+        else
+            fStr = "FLT:" + juce::String (juce::roundToInt (data.filterCutoff)) + "Hz";
+
+        juce::Rectangle<int> fbox (fx, fy + flagGap, flagW, flagH);
+        g.setColour (pal.phosphor.withAlpha (0.15f));
+        g.fillRoundedRectangle (fbox.toFloat(), 2.0f);
+        g.setColour (pal.flagOn);
+        g.drawRoundedRectangle (fbox.toFloat(), 2.0f, 1.0f);
+        g.setColour (pal.flagOn);
+        g.drawText (fStr, fbox.getX() + pad, fbox.getY(),
+                    fbox.getWidth() - pad * 2, fbox.getHeight(),
+                    juce::Justification::centred, false);
     }
 }
 
@@ -507,11 +521,10 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
     if (! data.hasSample)   { drawNoSampleScreen (g); return; }
     if (! data.hasSlice)    { drawNoSliceScreen  (g); return; }
 
-    // ── Clip all row drawing to the inner screen, minus reserved flags gutter ─
+    // ── Clip all row drawing to the inner screen ─────────────────────────────
     auto screen = getLocalBounds().reduced (4);
-    auto rowsClip = screen.withTrimmedBottom (kFlagsBottomGutter);
     g.saveState();
-    g.reduceClipRegion (rowsClip);
+    g.reduceClipRegion (screen);
 
     // ── Row 0:  Header — centred: "SL xx / xx  SAMPLENAME" ──────────────────
     {
@@ -534,8 +547,8 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
                          : data.sliceColour.withAlpha (0.28f));
         g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
 
-        const juce::Font lblF = DysektLookAndFeel::makeFont (24.0f, true);
-        const juce::Font valF = DysektLookAndFeel::makeFont (26.0f);
+        const juce::Font lblF = DysektLookAndFeel::makeFont (18.0f, true);
+        const juce::Font valF = DysektLookAndFeel::makeMonoFont (18.0f);
         const int lblW = lblF.getStringWidth (sliceStr);
         const int gap  = 8;
         const int valW = valF.getStringWidth (nameStr);
@@ -555,7 +568,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         // Lock badge: small pill on the far right when slice is locked
         if (data.sliceLocked)
         {
-            const juce::Font lkF = DysektLookAndFeel::makeFont (16.0f, true);
+            const juce::Font lkF = DysektLookAndFeel::makeFont (13.0f, true);
             const juce::String lkStr = "LOCK";
             const int lkW = lkF.getStringWidth (lkStr) + 6;
             const int lkX = screen.getRight() - lkW - 6;
@@ -617,13 +630,13 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 5, detStr, hldStr);
     }
 
-    // ── Row 6:  ATK/DEC  |  SUS/REL  +  badge flags ─────────────────────────
+    // ── Row 6:  ADSR: A:xxxms D:xxxms S:xxx% R:xxxms ────────────────────────
     {
-        juce::String adsrLeft  = "A:" + formatMs (data.attackSec).trimEnd()
-            + " D:" + formatMs (data.decaySec).trimEnd();
-        juce::String adsrRight = "S:" + juce::String (juce::roundToInt (data.sustainLevel * 100.0f)) + "%"
+        juce::String adsrStr = "A:" + formatMs (data.attackSec).trimEnd()
+            + " D:" + formatMs (data.decaySec).trimEnd()
+            + " S:" + juce::String (juce::roundToInt (data.sustainLevel * 100.0f)) + "%"
             + " R:" + formatMs (data.releaseSec).trimEnd();
-        drawRowPair (g, 6, adsrLeft, adsrRight);
+        drawRow (g, 6, "ADSR:", adsrStr);
     }
 
     // ── Row 7:  FMNT:+x.xst  |  TONAL:xxxxHz ────────────────────────────────
@@ -650,9 +663,9 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 9, outStr, bpmStr);
     }
 
-    g.restoreState();  // end clip region
-
-    // Draw flags outside the rows clip so they stay visible in the bottom gutter.
+    // ── Floating flags — right-edge vertical column (always visible) ──────────
     drawFlagsRow (g, 6);
+
+    g.restoreState();  // end clip region
 
 }
