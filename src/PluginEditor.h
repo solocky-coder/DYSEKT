@@ -77,6 +77,7 @@ private:
 
     std::unique_ptr<TrimSession>     trimSession;
     std::unique_ptr<TrimDialog>      trimDialog;
+    std::unique_ptr<juce::Component> trimConfirmOverlay;
     std::unique_ptr<MidiLearnDialog> midiLearnDialog;
 
     DysektLookAndFeel lnf;
