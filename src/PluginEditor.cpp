@@ -98,7 +98,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  }
 
  setWantsKeyboardFocus (true);
- setResizable (true, false);  // false = no corner grip component — it painted over the frame border
+ setResizable (true, true);
  setResizeLimits (kBaseW, 650, 3840, 2160);
  setSize (kBaseW, kTotalH);
  lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
@@ -167,26 +167,27 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
             return;
         }
 
-        // Long sample (≥5s) — ask the user
-        juce::MessageBoxOptions opts = juce::MessageBoxOptions::makeOptionsYesNo (
-            juce::MessageBoxIconType::QuestionIcon,
+        // Long sample (≥5s) — ask inside the plugin (themed, no native OS dialog)
+        confirmOverlay = std::make_unique<ConfirmOverlay> (
             "Trim Sample?",
             "This sample is long.  Would you like to trim it before slicing?",
             "Trim",
             "No Thanks");
-
-        juce::AlertWindow::showAsync (opts, [this, file] (int choice)
+        addAndMakeVisible (*confirmOverlay);
+        confirmOverlay->setBounds (getLocalBounds());
+        confirmOverlay->toFront (true);
+        confirmOverlay->onResult = [this, file] (bool trim)
         {
-            if (choice == 1)
-                showTrimMode (file);   // Yes — enter trim mode
+            confirmOverlay.reset();
+            if (trim)
+                showTrimMode (file);
             else
             {
-                // No — load directly; user slices manually or via right-click
                 processor.loadFileAsync (file);
                 processor.zoom.store (1.0f);
                 processor.scroll.store (0.0f);
             }
-        });
+        };
         return;
     }
     showTrimMode (file);
@@ -333,13 +334,9 @@ void DysektEditor::resized()
  auto actionArea = area.removeFromTop (kActionH);
  const int kFX = kMargin;
  const int kFW = getWidth() - kMargin * 2;
- juce::Rectangle<int> slot;
- if (mixerOpen || browserOpen)
- {
  area.removeFromBottom (kMargin);
- slot = area.removeFromBottom (kPanelSlotH);
+ auto slot = area.removeFromBottom (kPanelSlotH);
  area.removeFromBottom (kMargin);
- }
 
  if (mixerOpen) {
  const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
@@ -355,7 +352,6 @@ void DysektEditor::resized()
  browserPanel.setBounds ({});
  }
 
- area.removeFromBottom (kMargin); // keep control bar off the outer plugin frame
  auto scbArea = area.removeFromBottom (kSliceCtrlH);
  sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
  area.removeFromBottom (kMargin);
@@ -386,6 +382,8 @@ void DysektEditor::resized()
 
  if (midiLearnDialog != nullptr)
  midiLearnDialog->setBounds (getLocalBounds().reduced (40));
+ if (confirmOverlay != nullptr)
+ confirmOverlay->setBounds (getLocalBounds());
 }
 
 void DysektEditor::toggleMixerPanel()
