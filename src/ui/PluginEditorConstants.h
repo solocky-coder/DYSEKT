@@ -2,8 +2,10 @@
 
 constexpr int kBaseW      = 1130;
 constexpr int kLogoH      = 52;
-// kLcdRowH depends on SliceLcdDisplay::kPreferredHeight — must include SliceLcdDisplay.h first
+// kLcdRowH — info LCD (SliceLcdDisplay) natural height
 constexpr int kLcdRowH    = SliceLcdDisplay::kPreferredHeight + 12;
+// kWaveformLcdRowH — waveform/ADSR LCD height (taller for detailed ADSR editing)
+constexpr int kWaveformLcdRowH = 400;
 constexpr int kSliceLaneH = 36;
 constexpr int kScrollbarH = 28;
 constexpr int kSliceCtrlH = 72;
@@ -21,7 +23,7 @@ constexpr int kBtnBarH    = 38;
 // Two 20px buttons + 4px row gap + 6px top/bottom padding = 50px.
 constexpr int kBtnRowH    = 50;
 
-constexpr int kBaseHCore  = kLogoH + kLcdRowH + kSliceLaneH + kScrollbarH
+constexpr int kBaseHCore  = kLogoH + kWaveformLcdRowH + kSliceLaneH + kScrollbarH
                            + kSliceCtrlH + kActionH + 120;
 constexpr int kTotalH     = kBaseHCore + kPanelSlotH + 16;
 constexpr int kMargin     = 8;
