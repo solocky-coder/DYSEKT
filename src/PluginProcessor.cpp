@@ -906,6 +906,20 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Cull any preceding slices that the drag has crushed to zero width.
                 // Slice 0 is the sample anchor and is never deleted.
                 // Work backwards so each deleteSlice(j) only shifts indices above j.
+                //
+                // MIDI note inheritance: when slice idx crushes into slice j,
+                // the surviving slice should take on the MIDI note of the lowest
+                // crushed slice — i.e. the note that was already assigned to the
+                // position it now occupies.  Capture it before culling.
+                int inheritedMidiNote = -1;  // -1 = no cull, keep own note
+                for (int j = idx - 1; j > 0; --j)
+                {
+                    if (sliceManager.getSlice (j).startSample >= start)
+                        inheritedMidiNote = sliceManager.getSlice (j).midiNote; // lowest wins
+                    else
+                        break;
+                }
+
                 int cullCount = 0;
                 for (int j = idx - 1; j > 0; --j)
                 {
@@ -924,6 +938,10 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
                 auto& sNew = sliceManager.getSlice (idx);
                 sNew.startSample = start;
+                // Inherit the MIDI note of the crushed slice so the surviving
+                // slice responds to the same note it replaced.
+                if (inheritedMidiNote >= 0)
+                    sNew.midiNote = inheritedMidiNote;
                 // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
