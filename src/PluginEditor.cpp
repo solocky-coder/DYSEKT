@@ -98,7 +98,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  }
 
  setWantsKeyboardFocus (true);
- setResizable (true, true);
+ setResizable (true, false);
  setResizeLimits (kBaseW, 650, 3840, 2160);
  setSize (kBaseW, kTotalH);
  lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
@@ -284,12 +284,10 @@ void DysektEditor::paint (juce::Graphics& g)
  {
   const auto ac = getTheme().accent;
   const juce::Rectangle<float> win (getLocalBounds().toFloat());
+  g.setColour (ac.withAlpha (0.60f));
+  g.drawRoundedRectangle (win.reduced (2.0f), 2.5f, 1.5f);
   g.setColour (ac.withAlpha (0.14f));
-  g.drawRoundedRectangle (win.reduced (0.5f), 3.0f, 3.0f);
-  g.setColour (ac.withAlpha (0.72f));
-  g.drawRoundedRectangle (win.reduced (1.5f), 2.5f, 1.5f);
-  g.setColour (ac.withAlpha (0.18f));
-  g.drawRoundedRectangle (win.reduced (3.0f), 2.0f, 1.0f);
+  g.drawRoundedRectangle (win.reduced (4.0f), 2.0f, 1.0f);
  }
 }
 
