@@ -737,13 +737,11 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
         case CmdToggleLock:
         {
-            // intParam1 = target slice index (explicit from UI, not racy selectedSlice)
-            // intParam2 = lock bit to toggle
-            int sel = cmd.intParam1;
+            int sel = sliceManager.selectedSlice;
             if (sel >= 0 && sel < sliceManager.getNumSlices())
             {
                 auto& s = sliceManager.getSlice (sel);
-                uint32_t bit = (uint32_t) cmd.intParam2;
+                uint32_t bit = (uint32_t) cmd.intParam1;
                 bool turningOn = !(s.lockMask & bit);
 
                 if (turningOn)
@@ -763,7 +761,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockStretch)      s.stretchEnabled    = stretchParam->load()     > 0.5f;
                     else if (bit == kLockReleaseTail)  s.releaseTail       = releaseTailParam->load() > 0.5f;
                     else if (bit == kLockReverse)      s.reverse           = reverseParam->load()     > 0.5f;
-                    else if (bit == kLockOneShot)      s.oneShot           = oneShotParam->load() > 0.5f;
+                    else if (bit == kLockOneShot)      s.oneShot           = false;
                     else if (bit == kLockCentsDetune)  s.centsDetune       = centsDetuneParam->load();
                     else if (bit == kLockTonality)     s.tonalityHz        = tonalityParam->load();
                     else if (bit == kLockFormant)      s.formantSemitones  = formantParam->load();
@@ -1525,7 +1523,11 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // the idle-commit block BEFORE handleCommand fires, so the
                                 // live-preview loop cannot re-write startSample after the commit
                                 // — this is what prevents the jump.
-                                const int stepSz  = juce::jmax (1, (int) (total / 512.0f));
+                                // Step size scales with waveform zoom — when zoomed in,
+                                // each encoder click moves fewer samples, giving finer
+                                // resolution proportional to the visible window.
+                                const float markerZoom = juce::jmax (1.0f, zoom.load (std::memory_order_relaxed));
+                                const int stepSz  = juce::jmax (1, (int) (total / (512.0f * markerZoom)));
                                 const int newStart = juce::jlimit (0, slEnd - 64,
                                     sl.startSample + (int)(outNorm * (float) stepSz));
 
@@ -1558,8 +1560,19 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // No cross-slice stale reset needed — each slice has
                                 // its own ccPickedUp state.
 
-                                const float markerNorm = (float) sl.startSample
-                                                       / (float) juce::jmax (1, total);
+                                // Pickup gate: compare outNorm against the marker's
+                                // position within the visible window (zoom-space norm).
+                                const float gateZoom   = juce::jmax (1.0f, zoom.load (std::memory_order_relaxed));
+                                const float gateSc     = scroll.load (std::memory_order_relaxed);
+                                const int   gateVisLen = juce::jmax (1, (int) ((float) total / gateZoom));
+                                const int   gateMaxVS  = juce::jmax (0, total - gateVisLen);
+                                const int   gateVisStart = juce::jlimit (0, gateMaxVS, (int) (gateSc * (float) gateMaxVS));
+                                // If marker is outside visible window, use global norm for pickup
+                                const bool markerInView = (sl.startSample >= gateVisStart
+                                                           && sl.startSample < gateVisStart + gateVisLen);
+                                const float markerNorm = markerInView
+                                    ? (float)(sl.startSample - gateVisStart) / (float) gateVisLen
+                                    : (float) sl.startSample / (float) juce::jmax (1, total);
 
                                 if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
                                     && sel >= 0 && sel < kMaxCCSlices
@@ -1582,10 +1595,16 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                     }
                                 }
 
-                                // Picked up: route through smoother so the marker
-                                // glides rather than teleports to the target.
+                                // Picked up: map CC 0→1 across the waveform's visible
+                                // window (zoom/scroll) so resolution improves when zoomed in.
+                                // At zoom=1 this is identical to the previous full-range mapping.
+                                const float absZoom   = juce::jmax (1.0f, zoom.load (std::memory_order_relaxed));
+                                const float absSc     = scroll.load (std::memory_order_relaxed);
+                                const int   visLen    = juce::jmax (1, (int) ((float) total / absZoom));
+                                const int   maxVStart = juce::jmax (0, total - visLen);
+                                const int   visStart  = juce::jlimit (0, maxVStart, (int) (absSc * (float) maxVStart));
                                 const int newStart = juce::jlimit (0, slEnd - 64,
-                                    (int) (outNorm * (float) total));
+                                    visStart + (int) (outNorm * (float) visLen));
                                 if (sel >= 0 && sel < kMaxCCSlices)
                                 {
                                     if (! ccSmootherActive[(size_t) sel][(size_t) outFieldId] || sel != markerSmootherSlice)
