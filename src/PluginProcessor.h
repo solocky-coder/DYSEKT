@@ -107,7 +107,7 @@ public:
         SampleStateMissingAwaitingRelink = 2,
     };
 
-    // ── Command ──────────────────────────────────────────────────────────────
+    // ── Command ──────────────────���───────────────────────────────────────────
     struct Command
     {
         CommandType type        { CmdNone };
@@ -137,7 +137,7 @@ public:
         bool         snapToZeroCrossing { false };
     };
 
-    // ── Oscilloscope ring buffer size ─────────────────────────────────────────
+    // ── Oscilloscope ring buffer size ─────────────────��───────────────────────
     static constexpr int kOscRingBufferSize = 4096;  // must be power of 2
 
     // =========================================================================
@@ -265,6 +265,20 @@ public:
     // markerRelLastMs: timestamp of last encoder tick for fade-out
     std::atomic<int>  markerRelDir    { 0 };
     std::atomic<int>  markerRelLastMs { 0 };
+
+    // Fine window state for post-pickup absolute CC marker control.
+    // After pickup, the CC maps to a narrow window (kMarkerFineWindowNorm * totalSamples)
+    // centred on the marker position at the moment of pickup, giving ~7x finer resolution.
+    // Indexed by slice. Audio-thread only — no atomics needed.
+    static constexpr float kMarkerFineWindowNorm = 0.20f; // full knob sweep = 20% of sample
+    float markerFinePickupCcNorm   [128] {};   // CC norm (0-1) at pickup moment, -1 = not set
+    float markerFinePickupMarkerNorm[128] {};   // marker norm at pickup moment
+    // UI: expose fine window for ghost bar drawing (UI thread reads)
+    std::atomic<float> markerFineWindowLo { -1.0f }; // low edge norm, -1 = inactive
+    std::atomic<float> markerFineWindowHi { -1.0f }; // high edge norm
+    // User toggle: when true the post-pickup fine window is active;
+    // when false the CC maps the full sample range directly (normal mode).
+    std::atomic<bool>  markerFineMode     { false };
 
     // ── Per-slice CC state ───────────────────────────────────────────────────
     // Each slice independently tracks pickup and smoother state for every

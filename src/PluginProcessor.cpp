@@ -1292,6 +1292,13 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     {
                         for (int j = 0; j < kMidiLearnNumSlots; ++j)
                             ccPickedUp[(size_t) sel][j] = false;
+                        if (sel < 128)
+                        {
+                            markerFinePickupCcNorm    [(size_t) sel] = -1.0f;
+                            markerFinePickupMarkerNorm[(size_t) sel] = -1.0f;
+                        }
+                        markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
+                        markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
                     }
 
                     if (sel >= 0 && sel < sliceManager.getNumSlices())
@@ -1541,7 +1548,15 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 {
                                     // Tolerance: ~1 CC step (1/127 ≈ 0.008).
                                     if (std::abs (outNorm - markerNorm) <= 0.008f)
+                                    {
                                         ccPickedUp[(size_t) sel][(size_t) outFieldId] = true;
+                                        // Record pickup reference point for fine window.
+                                        if (sel < 128)
+                                        {
+                                            markerFinePickupCcNorm    [(size_t) sel] = outNorm;
+                                            markerFinePickupMarkerNorm[(size_t) sel] = markerNorm;
+                                        }
+                                    }
                                     else
                                     {
                                         markerCcGhostNorm.store (outNorm, std::memory_order_relaxed);
@@ -1549,13 +1564,61 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                     }
                                 }
 
-                                // Picked up — clear the ghost bar (knob has caught up).
+                                // ── Post-pickup: normal or fine mode ─────────────────────
+                                const bool fineEnabled = markerFineMode.load (std::memory_order_relaxed);
+
+                                // Clear the ghost bar — replaced by window edges in fine mode.
                                 markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
 
-                                // Picked up: route through smoother so the marker
-                                // glides rather than teleports to the target.
+                                float fineTarget;
+                                if (fineEnabled)
+                                {
+                                    // CC physical extremes (bottom 2% or top 2%) re-arm pickup
+                                    // so the user can jump to a completely different region.
+                                    const bool atExtreme = (outNorm < 0.02f || outNorm > 0.98f);
+                                    if (atExtreme && sel >= 0 && sel < kMaxCCSlices && sel < 128)
+                                    {
+                                        ccPickedUp[(size_t) sel][(size_t) outFieldId] = false;
+                                        markerFinePickupCcNorm[(size_t) sel]    = -1.0f;
+                                        markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
+                                        markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
+                                        markerCcGhostNorm.store (outNorm, std::memory_order_relaxed);
+                                        goto skipCcParam;
+                                    }
+
+                                    // Fine window: full knob travel = kMarkerFineWindowNorm of sample.
+                                    if (sel >= 0 && sel < 128
+                                        && markerFinePickupCcNorm[(size_t) sel] >= 0.0f)
+                                    {
+                                        const float pickupCc  = markerFinePickupCcNorm    [(size_t) sel];
+                                        const float pickupMkr = markerFinePickupMarkerNorm[(size_t) sel];
+                                        const float delta     = outNorm - pickupCc;
+                                        fineTarget = juce::jlimit (0.0f, 1.0f,
+                                            pickupMkr + delta * kMarkerFineWindowNorm);
+
+                                        // Publish window edges for the UI
+                                        const float halfW = kMarkerFineWindowNorm * 0.5f;
+                                        markerFineWindowLo.store (juce::jlimit (0.0f, 1.0f, pickupMkr - halfW),
+                                                                  std::memory_order_relaxed);
+                                        markerFineWindowHi.store (juce::jlimit (0.0f, 1.0f, pickupMkr + halfW),
+                                                                  std::memory_order_relaxed);
+                                    }
+                                    else
+                                    {
+                                        fineTarget = markerNorm; // fallback
+                                    }
+                                }
+                                else
+                                {
+                                    // Normal mode: CC maps full sample range directly.
+                                    fineTarget = outNorm;
+                                    markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
+                                    markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
+                                }
+
+                                // Route target through smoother.
                                 const int newStart = juce::jlimit (0, slEnd - 64,
-                                    (int) (outNorm * (float) total));
+                                    (int) (fineTarget * (float) total));
                                 if (sel >= 0 && sel < kMaxCCSlices)
                                 {
                                     if (! ccSmootherActive[(size_t) sel][(size_t) outFieldId] || sel != markerSmootherSlice)
@@ -1983,6 +2046,13 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             {
                 for (int j = 0; j < kMidiLearnNumSlots; ++j)
                     ccPickedUp[(size_t) curSel][j] = false;
+                if (curSel < 128)
+                {
+                    markerFinePickupCcNorm    [(size_t) curSel] = -1.0f;
+                    markerFinePickupMarkerNorm[(size_t) curSel] = -1.0f;
+                }
+                markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
+                markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
             }
 
             // Proactive re-seed: park the slice-start smoother at the new
