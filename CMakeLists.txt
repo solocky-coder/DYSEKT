@@ -36,9 +36,9 @@ juce_add_plugin(Dysekt
     EDITOR_WANTS_KEYBOARD_FOCUS TRUE
 )
 
-# FIX: Force MSVC to use UTF-8 to prevent random character corruption
+# FIXED: Use source-charset ONLY to fix character reading without breaking Nuendo compatibility
 if (MSVC)
-    target_compile_options(Dysekt PRIVATE /utf-8)
+    target_compile_options(Dysekt PRIVATE /source-charset:utf-8)
 endif()
 
 juce_add_binary_data(DysektFonts SOURCES
