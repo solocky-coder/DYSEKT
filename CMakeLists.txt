@@ -7,11 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 
 # --- sfizz (SF2 / SFZ soundfont engine) ---
-# Clone with: git submodule add https://github.com/sfztools/sfizz.git sfizz
-#             git submodule update --init --recursive sfizz
 if(FALSE)
-    set(SFIZZ_CLIENTS OFF CACHE BOOL "" FORCE)      # don't build stand-alone apps
-    set(SFIZZ_SHARED  OFF CACHE BOOL "" FORCE)      # static lib only
+    set(SFIZZ_CLIENTS OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_SHARED  OFF CACHE BOOL "" FORCE)
     set(SFIZZ_JACK    OFF CACHE BOOL "" FORCE)
     set(SFIZZ_LV2     OFF CACHE BOOL "" FORCE)
     set(SFIZZ_VST     OFF CACHE BOOL "" FORCE)
@@ -22,11 +20,10 @@ if(FALSE)
     message(STATUS "sfizz found — SF2/SFZ support enabled")
 else()
     set(DYSEKT_HAS_SFIZZ FALSE)
-    message(STATUS "sfizz NOT found at ./sfizz — SF2/SFZ support disabled. "
-                   "Run: git submodule add https://github.com/sfztools/sfizz.git sfizz")
+    message(STATUS "sfizz NOT found at ./sfizz — SF2/SFZ support disabled.")
 endif()
 
-
+# Define the target
 juce_add_plugin(Dysekt
     COMPANY_NAME "DunSoft"
     PLUGIN_MANUFACTURER_CODE Dnst
@@ -38,6 +35,11 @@ juce_add_plugin(Dysekt
     NEEDS_MIDI_OUTPUT TRUE
     EDITOR_WANTS_KEYBOARD_FOCUS TRUE
 )
+
+# FIX: Force MSVC to use UTF-8 to prevent random character corruption
+if (MSVC)
+    target_compile_options(Dysekt PRIVATE /utf-8)
+endif()
 
 juce_add_binary_data(DysektFonts SOURCES
     src/ui/fonts/IBMPlexSans-Regular.ttf
