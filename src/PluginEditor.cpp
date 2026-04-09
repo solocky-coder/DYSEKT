@@ -296,20 +296,16 @@ void DysektEditor::resized()
  auto area = juce::Rectangle (0, 0, getWidth(), getHeight());
 
  // ── New combined top strip ─────────────────────────────────────────────
- // kWaveformLcdRowH drives the top strip height so the ADSR waveform LCD
- // is tall enough for detailed envelope editing.  The SliceLcdDisplay (left)
- // and centre column use that same height — the info LCD just has extra dark
- // bezel space below its fixed-height rows.
- const int kTopStripH = kLogoH + kWaveformLcdRowH;
+ // The old 52px logoBar row and the LCD row are merged into one strip.
+ // SliceLcdDisplay (left) and SliceWaveformLcd (right) are taller; the
+ // centre column stacks: LogoBar → button row (HeaderBar) → Global Frame.
+ const int kTopStripH = kLogoH + kLcdRowH;
  auto topArea = area.removeFromTop (kTopStripH);
  auto topRow = topArea.reduced (kMargin, 4);
 
- // Left: SliceLcdDisplay — constrained to its natural height, top-aligned
+ // Left: SliceLcdDisplay — full strip height
  const int sideW = (topRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
- {
-     auto leftCol = topRow.removeFromLeft (sideW);
-     sliceLcd.setBounds (leftCol.withHeight (juce::jmin (leftCol.getHeight(), kLcdRowH)));
- }
+ sliceLcd.setBounds (topRow.removeFromLeft (sideW));
  topRow.removeFromLeft (kMargin);
 
  // Centre: LogoBar + HeaderBar (same bounds, buttons flank logo) → DualLcdControlFrame (below)
@@ -330,7 +326,7 @@ void DysektEditor::resized()
 
  topRow.removeFromLeft (kMargin);
 
- // Right: SliceWaveformLcd — full kWaveformLcdRowH height for detailed ADSR editing
+ // Right: SliceWaveformLcd — full strip height
  sliceWaveformLcd.setBounds (topRow);
 
  auto actionArea = area.removeFromTop (kActionH);
