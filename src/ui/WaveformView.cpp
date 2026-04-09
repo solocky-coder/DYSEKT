@@ -868,7 +868,7 @@ void WaveformView::resized()
         trimOutPoint = juce::jlimit(trimInPoint + 1, totalFrames, trimOutPoint);
     }
     midiSliceBtn.setBounds (0, 0, getWidth(), kMidiOverlayH);
-}
+
 
 void WaveformView::setMidiSliceActive (bool active)
 {
@@ -1120,8 +1120,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 {
                     DysektProcessor::Command cmd;
                     cmd.type = DysektProcessor::CmdToggleLock;
-                    cmd.intParam1 = targetSlice;   // slice to lock — explicit, not racy selectedSlice
-                    cmd.intParam2 = (int) bit;
+                    cmd.intParam1 = (int) bit;
                     processor.pushCommand (cmd);
                 };
 
@@ -1167,31 +1166,8 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                         if (targetSlice >= 0 && targetSlice < snap.numSlices)
                             currentName = snap.slices[(size_t) targetSlice].name;
                     }
-                    auto* aw = new juce::AlertWindow (
-                        "Rename Slice",
-                        "Name for slice " + juce::String (targetSlice + 1) + "  (max 14 chars, leave blank to clear):",
-                        juce::MessageBoxIconType::NoIcon);
-                    aw->addTextEditor ("name", currentName, "");
-                    aw->getTextEditor ("name")->setInputRestrictions (14);
-                    aw->addButton ("OK",    1, juce::KeyPress (juce::KeyPress::returnKey));
-                    aw->addButton ("Clear", 2);
-                    aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-                    aw->enterModalState (true,
-                        juce::ModalCallbackFunction::create ([this, targetSlice, aw] (int r) mutable
-                        {
-                            if (r == 1 || r == 2)
-                            {
-                                juce::String newName = (r == 1)
-                                    ? aw->getTextEditorContents ("name").trim()
-                                    : juce::String();
-                                DysektProcessor::Command cmd;
-                                cmd.type        = DysektProcessor::CmdSetSliceName;
-                                cmd.intParam1   = targetSlice;
-                                cmd.stringParam = newName;
-                                processor.pushCommand (cmd);
-                            }
-                        }), true);
-                    return;   // skip the repaint() below — rename is async
+                    showRenameEditor (targetSlice, currentName);
+                    return;   // editor is async
                 }
                 repaint();
             });
@@ -1383,6 +1359,60 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
     dragPreviewStart = 0;
     dragPreviewEnd = 0;
     drawStartedFromAlt = false;
+    repaint();
+}
+
+// =============================================================================
+// Inline slice rename editor
+// =============================================================================
+
+void WaveformView::showRenameEditor (int sliceIdx, const juce::String& currentName)
+{
+    renameEditor.reset();
+    renameSliceIdx = sliceIdx;
+
+    constexpr int kEdW = 200;
+    constexpr int kEdH = 24;
+    const int edX = (getWidth()  - kEdW) / 2;
+    const int edY = (getHeight() - kEdH) / 2;
+
+    renameEditor = std::make_unique<juce::TextEditor>();
+    addAndMakeVisible (*renameEditor);
+    renameEditor->setBounds (edX, edY, kEdW, kEdH);
+    renameEditor->setFont (DysektLookAndFeel::makeFont (13.0f));
+    renameEditor->setInputRestrictions (14);
+    renameEditor->setColour (juce::TextEditor::backgroundColourId,
+                             getTheme().darkBar.brighter (0.2f));
+    renameEditor->setColour (juce::TextEditor::textColourId,
+                             getTheme().foreground);
+    renameEditor->setColour (juce::TextEditor::outlineColourId,
+                             getTheme().accent);
+    renameEditor->setColour (juce::TextEditor::focusedOutlineColourId,
+                             getTheme().accent);
+    renameEditor->setColour (juce::TextEditor::highlightColourId,
+                             getTheme().accent.withAlpha (0.4f));
+    renameEditor->setColour (juce::TextEditor::highlightedTextColourId,
+                             getTheme().foreground);
+    renameEditor->setText (currentName, false);
+    renameEditor->selectAll();
+    renameEditor->grabKeyboardFocus();
+
+    renameEditor->onReturnKey = [this] { commitRename(); };
+    renameEditor->onEscapeKey = [this] { renameEditor.reset(); repaint(); };
+    renameEditor->onFocusLost = [this] { commitRename(); };
+}
+
+void WaveformView::commitRename()
+{
+    if (! renameEditor || renameSliceIdx < 0) { renameEditor.reset(); return; }
+    const juce::String newName = renameEditor->getText().trim();
+    renameEditor.reset();
+    DysektProcessor::Command cmd;
+    cmd.type        = DysektProcessor::CmdSetSliceName;
+    cmd.intParam1   = renameSliceIdx;
+    cmd.stringParam = newName;
+    processor.pushCommand (cmd);
+    renameSliceIdx  = -1;
     repaint();
 }
 

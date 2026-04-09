@@ -71,6 +71,13 @@ public:
 
     juce::TextButton midiSliceBtn;
 
+    // Inline slice rename editor — shown directly on the waveform,
+    // themed, no OS dialog.
+    std::unique_ptr<juce::TextEditor> renameEditor;
+    int renameSliceIdx = -1;
+    void showRenameEditor (int sliceIdx, const juce::String& currentName);
+    void commitRename();
+
 private:
     struct ViewState
     {
