@@ -737,13 +737,11 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
         case CmdToggleLock:
         {
-            // intParam1 = target slice index (explicit from UI, not racy selectedSlice)
-            // intParam2 = lock bit to toggle
-            int sel = cmd.intParam1;
+            int sel = sliceManager.selectedSlice;
             if (sel >= 0 && sel < sliceManager.getNumSlices())
             {
                 auto& s = sliceManager.getSlice (sel);
-                uint32_t bit = (uint32_t) cmd.intParam2;
+                uint32_t bit = (uint32_t) cmd.intParam1;
                 bool turningOn = !(s.lockMask & bit);
 
                 if (turningOn)
@@ -763,7 +761,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockStretch)      s.stretchEnabled    = stretchParam->load()     > 0.5f;
                     else if (bit == kLockReleaseTail)  s.releaseTail       = releaseTailParam->load() > 0.5f;
                     else if (bit == kLockReverse)      s.reverse           = reverseParam->load()     > 0.5f;
-                    else if (bit == kLockOneShot)      s.oneShot           = oneShotParam->load() > 0.5f;
+                    else if (bit == kLockOneShot)      s.oneShot           = false;
                     else if (bit == kLockCentsDetune)  s.centsDetune       = centsDetuneParam->load();
                     else if (bit == kLockTonality)     s.tonalityHz        = tonalityParam->load();
                     else if (bit == kLockFormant)      s.formantSemitones  = formantParam->load();
