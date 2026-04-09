@@ -1542,8 +1542,14 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                     if (std::abs (outNorm - markerNorm) <= 0.008f)
                                         ccPickedUp[(size_t) sel][(size_t) outFieldId] = true;
                                     else
+                                    {
+                                        markerCcGhostNorm.store (outNorm, std::memory_order_relaxed);
                                         goto skipCcParam;   // not picked up yet — suppress
+                                    }
                                 }
+
+                                // Picked up — clear the ghost bar (knob has caught up).
+                                markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
 
                                 // Picked up: route through smoother so the marker
                                 // glides rather than teleports to the target.
