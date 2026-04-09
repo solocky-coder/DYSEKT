@@ -1,3 +1,4 @@
+#include "DysektLookAndFeel.h"
 #include "MidiLearnDialog.h"
 
 // ── Parameter name table (must match SliceParamField order) ──────────────────
@@ -74,7 +75,7 @@ void MidiLearnDialog::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xFF263036));
     g.fillRect (0, 0, getWidth(), 36);
     g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (15.f, juce::Font::bold));
+    g.setFont (DysektLookAndFeel::makeFont (15.0f, true));
     g.drawText ("MIDI Learn Assignments", 0, 0, getWidth(), 36,
                 juce::Justification::centred);
 
@@ -87,7 +88,7 @@ void MidiLearnDialog::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xFF263036));
     g.fillRect (10, hdrY, w, hdrH);
     g.setColour (juce::Colours::white.withAlpha (0.55f));
-    g.setFont (juce::Font (10.f, juce::Font::bold));
+    g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
     g.drawText ("PARAMETER",   18,         hdrY, (int)(w * 0.32f),       hdrH, juce::Justification::centredLeft);
     g.drawText ("CC",          10 + (int)(w * 0.32f), hdrY, (int)(w * 0.18f), hdrH, juce::Justification::centredLeft);
     g.drawText ("ENCODER MODE", 10 + (int)(w * 0.32f) + (int)(w * 0.18f) + 88, hdrY,

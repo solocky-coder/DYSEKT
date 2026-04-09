@@ -65,7 +65,7 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
         };
         addAndMakeVisible (modeCombo);
 
-        // ARM button — blinks while waiting for CC
+        // ARM button -- blinks while waiting for CC
         armButton.setColour (juce::TextButton::buttonColourId,
                              juce::Colour (0xFF1A3040));
         armButton.setColour (juce::TextButton::textColourOffId,
@@ -99,12 +99,12 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
             if (midiLearn && fieldId >= 0)
             {
                 midiLearn->clearMapping (fieldId);
-                ccLabel.setText ("—", juce::dontSendNotification);
+                ccLabel.setText ("--", juce::dontSendNotification);
             }
         };
         addAndMakeVisible (clearButton);
 
-        // Flip button — inverts relative encoder direction for this slot
+        // Flip button -- inverts relative encoder direction for this slot
         flipButton.setClickingTogglesState (true);
         flipButton.setColour (juce::TextButton::buttonColourId,
                               juce::Colour (0xFF1A2830));

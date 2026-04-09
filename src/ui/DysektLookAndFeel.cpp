@@ -52,6 +52,13 @@ juce::Font DysektLookAndFeel::makeMonoFont (float pointSize, bool bold)
 
 juce::Typeface::Ptr DysektLookAndFeel::getTypefaceForFont (const juce::Font& f)
 {
+    // If the font was explicitly constructed with a typeface, honour it.
+    // This prevents remapping system / JUCE-internal typefaces used to render
+    // special Unicode glyphs (arrows, checkmarks, symbols) that our embedded
+    // fonts do not cover, which would otherwise produce garbage characters.
+    if (f.getTypefacePtr() != nullptr)
+        return f.getTypefacePtr();
+
     if (f.isBold())
         return boldTypeface;
     return regularTypeface;
