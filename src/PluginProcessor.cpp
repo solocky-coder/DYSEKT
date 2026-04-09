@@ -1411,6 +1411,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         // Pickup gate: ignore until the knob reaches the current value.
                         const float curNative = getCurrentNative (outFieldId);
                         if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
+                            && outFieldId != FieldSliceStart  // FieldSliceStart has its own pickup + ghost logic below
                             && sel >= 0 && sel < kMaxCCSlices
                             && ! ccPickedUp[(size_t) sel][(size_t) outFieldId])
                         {
