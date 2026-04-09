@@ -246,9 +246,10 @@ void DysektEditor::paint (juce::Graphics& g)
  const int kFrameInset = 4;
  const int kFrameX = kMargin;
  const int kFrameW = getWidth() - kMargin * 2;
+ const int trimExtra = (trimDialog != nullptr) ? kTrimBarH : 0;
  const juce::Rectangle outerF (
  (float) kFrameX, (float) sbnd.getY() - kFrameInset,
- (float) kFrameW, (float) (sbnd.getHeight() + kFrameInset * 2));
+ (float) kFrameW, (float) (sbnd.getHeight() + trimExtra + kFrameInset * 2));
  juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
  juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
  g.setGradientFill (outerGrad);
@@ -326,14 +327,18 @@ void DysektEditor::resized()
 
  topRow.removeFromLeft (kMargin);
 
- // Right: SliceWaveformLcd — full strip height
+ // Right: SliceWaveformLcd — full kWaveformLcdRowH height for detailed ADSR editing
  sliceWaveformLcd.setBounds (topRow);
 
  auto actionArea = area.removeFromTop (kActionH);
  const int kFX = kMargin;
  const int kFW = getWidth() - kMargin * 2;
+
+ // Only reserve panel slot space when a panel is actually open — avoids
+ // eating into the waveform area when panels are closed and the user resizes.
  area.removeFromBottom (kMargin);
- auto slot = area.removeFromBottom (kPanelSlotH);
+ const int slotH = (mixerOpen || browserOpen) ? kPanelSlotH : 0;
+ auto slot = area.removeFromBottom (slotH);
  area.removeFromBottom (kMargin);
 
  if (mixerOpen) {
@@ -350,9 +355,14 @@ void DysektEditor::resized()
  browserPanel.setBounds ({});
  }
 
+ // Hide SCB in trim mode so it doesn't cover the trim waveform.
+ if (trimDialog != nullptr) {
+ sliceControlBar.setBounds ({});
+ } else {
  auto scbArea = area.removeFromBottom (kSliceCtrlH);
  sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
  area.removeFromBottom (kMargin);
+ }
 
  const int kFrameInset = 4;
  const int kFrameX = kFX;
