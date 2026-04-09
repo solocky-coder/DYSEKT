@@ -477,11 +477,13 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     const float pickupStartNorm = frac; // pickup starts at the current marker position
     const float knobNorm = (ghostNorm >= 0.0f ? ghostNorm : pickupStartNorm);
 
-    // Ghost — full-cell-height overlay drawn BEFORE the border so it sits
-    // behind text but is clearly visible. This marks the pickup start position
-    // (current marker) while pickup is pending.
+    // Ghost — overlay drawn inside the rounded rect boundary.
+    // Clip to the cell interior so ticks don't bleed outside the rounded corners.
     if (showGhost)
     {
+        g.saveState();
+        g.reduceClipRegion (cell.reduced (2));
+
         const float ghostX = cell.getX() + pickupStartNorm * (float) cell.getWidth();
 
         // Dim fill from left edge to ghost position
@@ -489,14 +491,14 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         g.fillRect (juce::Rectangle<float> ((float) cell.getX(), (float) cell.getY(),
                                              ghostX - (float) cell.getX(), (float) cell.getHeight()));
 
-        // Match playhead thickness (1px) for visual consistency.
+        // Bright tick at the pickup / marker position
         const float clampedX = juce::jlimit ((float) cell.getX() + 0.5f,
                                               (float) cell.getRight() - 0.5f, ghostX);
         g.setColour (juce::Colours::white.withAlpha (0.85f));
         g.fillRect (juce::Rectangle<float> (clampedX - 0.5f, (float) cell.getY(),
                                              1.0f, (float) cell.getHeight()));
 
-        // Secondary thin tick: physical knob/fader position (when known).
+        // Secondary thin tick: physical knob position (when known)
         if (ghostNorm >= 0.0f)
         {
             const float knobX = cell.getX() + knobNorm * (float) cell.getWidth();
@@ -506,6 +508,8 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
             g.fillRect (juce::Rectangle<float> (clampedKnobX - 1.0f, (float) cell.getY(),
                                                 2.0f, (float) cell.getHeight()));
         }
+
+        g.restoreState();
     }
 
     {
