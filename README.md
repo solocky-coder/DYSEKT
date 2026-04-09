@@ -2,7 +2,7 @@
 
 
 
-> INTERSECT is licensed under the GNU General Public License v3.0. DYSEKT inherits that licence — source code is open and free to modify and redistribute under the same terms.
+> DYSEKT is licensed under the GNU General Public License v3.0. — source code is open and free to modify and redistribute under the same terms.
 
 
 ## Licence
