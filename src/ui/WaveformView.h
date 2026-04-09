@@ -55,6 +55,7 @@ public:
     // Callback for file load requests (routed through trim dialog if set)
     std::function<void (const juce::File&)> onLoadRequest;
     std::function<void()> onShortcutsToggle;
+    std::function<void (int sliceIdx, const juce::String& currentName)> onRenameRequest;
 
     // Legacy 2-state toggle (kept for any callers that still use it)
     void setSoftWaveform (bool soft) { setWaveformMode (soft ? 1 : 0); }

@@ -16,6 +16,7 @@
 #include "ui/TrimDialog.h"
 #include "ui/MidiLearnDialog.h"
 #include "ui/ConfirmOverlay.h"
+#include "ui/RenameOverlay.h"
 #include "TrimSession.h"
 #include "ui/SliceLcdDisplay.h"
 #include "ui/SliceWaveformLcd.h"
@@ -80,6 +81,7 @@ private:
     std::unique_ptr<TrimDialog>      trimDialog;
     std::unique_ptr<MidiLearnDialog> midiLearnDialog;
     std::unique_ptr<ConfirmOverlay>  confirmOverlay;
+    std::unique_ptr<RenameOverlay>   renameOverlay;
 
     DysektLookAndFeel lnf;
 
