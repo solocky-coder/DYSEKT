@@ -906,11 +906,15 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Cull any preceding slices that the drag has crushed to zero width.
                 // Slice 0 is the sample anchor and is never deleted.
                 // Work backwards so each deleteSlice(j) only shifts indices above j.
+                // Record the lowest crushed index so the dragged slice inherits
+                // that position's number and MIDI note after the cull.
                 int cullCount = 0;
+                int lowestCrushedIdx = -1;  // smallest index deleted (walk backwards, so last assigned = lowest)
                 for (int j = idx - 1; j > 0; --j)
                 {
                     if (sliceManager.getSlice (j).startSample >= start)
                     {
+                        lowestCrushedIdx = j;
                         sliceManager.deleteSlice (j);
                         ++cullCount;
                     }
@@ -927,6 +931,13 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
+
+                // Pre-seed the dragged slice's note to the lowest crushed position
+                // so that rebuildMidiMap()'s sequential reassignment gives it the
+                // correct number (the one it crushed into).
+                if (cullCount > 0 && lowestCrushedIdx > 0)
+                    sNew.midiNote = juce::jlimit (0, 127,
+                        sliceManager.rootNote.load (std::memory_order_relaxed) + lowestCrushedIdx);
 
                 sliceManager.rebuildMidiMap();
             }
