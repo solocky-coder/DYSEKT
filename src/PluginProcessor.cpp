@@ -102,6 +102,7 @@ static bool isCriticalCommand (DysektProcessor::CommandType type)
         case DysektProcessor::CmdDuplicateSlice:
         case DysektProcessor::CmdSplitSlice:
         case DysektProcessor::CmdTransientChop:
+        case DysektProcessor::CmdEqualChop:
         case DysektProcessor::CmdRelinkFile:
         case DysektProcessor::CmdUndo:
         case DysektProcessor::CmdRedo:
@@ -737,11 +738,13 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
         case CmdToggleLock:
         {
-            int sel = sliceManager.selectedSlice;
+            // intParam1 = target slice index (explicit from WaveformView, not
+            //             racy selectedSlice), intParam2 = lock bit constant.
+            int sel = cmd.intParam1;
             if (sel >= 0 && sel < sliceManager.getNumSlices())
             {
                 auto& s = sliceManager.getSlice (sel);
-                uint32_t bit = (uint32_t) cmd.intParam1;
+                uint32_t bit = (uint32_t) cmd.intParam2;
                 bool turningOn = !(s.lockMask & bit);
 
                 if (turningOn)
