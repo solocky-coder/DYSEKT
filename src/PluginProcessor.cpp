@@ -592,7 +592,6 @@ UndoManager::Snapshot DysektProcessor::makeSnapshot()
     snap.numSlices = sliceManager.getNumSlices();
     snap.selectedSlice = sliceManager.selectedSlice;
     snap.rootNote = sliceManager.rootNote.load();
-    snap.apvtsState = apvts.copyState();
     snap.midiSelectsSlice = midiSelectsSlice.load();
     snap.snapToZeroCrossing = snapToZeroCrossing.load();
     return snap;
@@ -610,7 +609,6 @@ void DysektProcessor::restoreSnapshot (const UndoManager::Snapshot& snap)
     sliceManager.setNumSlices (snap.numSlices);
     sliceManager.selectedSlice = snap.selectedSlice;
     sliceManager.rootNote.store (snap.rootNote);
-    apvts.replaceState (snap.apvtsState);
     midiSelectsSlice.store (snap.midiSelectsSlice);
     snapToZeroCrossing.store (snap.snapToZeroCrossing);
     sliceManager.rebuildMidiMap();
