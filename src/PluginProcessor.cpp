@@ -906,25 +906,44 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Cull any preceding slices that the drag has crushed to zero width.
                 // Slice 0 is the sample anchor and is never deleted.
                 // Work backwards so each deleteSlice(j) only shifts indices above j.
-                // Record the lowest crushed index so the dragged slice inherits
-                // that position's number and MIDI note after the cull.
                 int cullCount = 0;
-                int lowestCrushedIdx = -1;  // smallest index deleted (walk backwards, so last assigned = lowest)
                 for (int j = idx - 1; j > 0; --j)
                 {
                     if (sliceManager.getSlice (j).startSample >= start)
                     {
-                        lowestCrushedIdx = j;
                         sliceManager.deleteSlice (j);
                         ++cullCount;
                     }
                     else
                         break; // slices are sorted — safe to stop here
                 }
+
                 // After culls, target slice has shifted left by cullCount.
                 idx -= cullCount;
                 if (idx < 0 || idx >= sliceManager.getNumSlices())
                     break;
+
+                // BUG FIX 1: selectedSlice goes stale after cull.
+                // deleteSlice() only clamps selectedSlice when it's past the end;
+                // it never corrects it when the dragged slice shifts leftward.
+                // Fix: if the dragged slice WAS the selected one, update the index.
+                {
+                    const int prevIdx = idx + cullCount;  // original index before culls
+                    if (cullCount > 0
+                        && sliceManager.selectedSlice.load (std::memory_order_relaxed) == prevIdx)
+                        sliceManager.selectedSlice.store (idx, std::memory_order_relaxed);
+                }
+
+                // BUG FIX 2: liveDragSliceIdx stale after cull.
+                // The per-buffer live-preview block uses liveDragSliceIdx to write
+                // startSample every block.  If culling shifted the dragged slice left,
+                // liveIdx is stale and the block overwrites the WRONG slice until mouseUp.
+                if (cullCount > 0)
+                {
+                    const int prevIdx = idx + cullCount;
+                    if (liveDragSliceIdx.load (std::memory_order_acquire) == prevIdx)
+                        liveDragSliceIdx.store (idx, std::memory_order_release);
+                }
 
                 auto& sNew = sliceManager.getSlice (idx);
                 sNew.startSample = start;
@@ -932,13 +951,9 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
 
-                // Pre-seed the dragged slice's note to the lowest crushed position
-                // so that rebuildMidiMap()'s sequential reassignment gives it the
-                // correct number (the one it crushed into).
-                if (cullCount > 0 && lowestCrushedIdx > 0)
-                    sNew.midiNote = juce::jlimit (0, 127,
-                        sliceManager.rootNote.load (std::memory_order_relaxed) + lowestCrushedIdx);
-
+                // rebuildMidiMap() reassigns notes sequentially by array position,
+                // so the dragged slice automatically gets the number of the slot
+                // it crushed into (root + idx after cull = root + lowestCrushedIdx).
                 sliceManager.rebuildMidiMap();
             }
             break;
