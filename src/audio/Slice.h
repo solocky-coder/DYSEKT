@@ -71,12 +71,22 @@ struct Slice
     juce::String name;              // user-defined label; empty = show slice number
     uint32_t lockMask       = 0;
     juce::Colour colour     { []() -> juce::Colour {
-        static const juce::uint32 kPal[16] = {
-            0xFF00C8FF, 0xFF00FF87, 0xFFFFE800, 0xFFFF6B00,
-            0xFFFF2D55, 0xFFFF2D9A, 0xFFB44FFF, 0xFF4A80FF,
-            0xFF00BFFF, 0xFF00FFD0, 0xFFA8FF3E, 0xFFFFD700,
-            0xFFFF7F50, 0xFFFF00FF, 0xFFFF3399, 0xFF39FF14,
+        static const juce::uint32 kPal[32] = {
+            // Reds / Oranges
+            0xFFD82626, 0xFFF45F3D, 0xFFAD541E, 0xFFF28D0C,
+            // Yellows / Golds
+            0xFFE0BC51, 0xFFC1B60A, 0xFFC2D826, 0xFFBBF43D,
+            // Greens
+            0xFF66AD1E, 0xFF54F20C, 0xFF63E051, 0xFF0AC115, 0xFF26D852,
+            // Teals / Cyans
+            0xFF3DF48D, 0xFF1EAD77, 0xFF0CF2C7, 0xFF51E0E0, 0xFF0A9FC1,
+            // Blues
+            0xFF2695D8, 0xFF3D8DF4, 0xFF1E42AD, 0xFF0C1BF2,
+            // Purples
+            0xFF6351E0, 0xFF430AC1, 0xFF7F26D8, 0xFFBB3DF4, 0xFF9B1EAD,
+            // Pinks / Magentas
+            0xFFF20CE3, 0xFFE051BC, 0xFFC10A71, 0xFFD82669, 0xFFF43D5F,
         };
-        return juce::Colour (kPal[juce::Random::getSystemRandom().nextInt (16)]);
+        return juce::Colour (kPal[juce::Random::getSystemRandom().nextInt (32)]);
     }() };
 };
