@@ -47,18 +47,6 @@ void SliceManager::sortByStart()
         }
         slices[(size_t)(j + 1)] = key;
     }
-
-    // Re-assign MIDI notes sequentially after sort so that positional index
-    // always matches MIDI mapping (C2 = slice 1, C#2 = slice 2, etc.).
-    // This ensures that when a marker crosses another, it takes that position's
-    // MIDI note number — not its original one.
-    {
-        const int root = rootNote.load();
-        int noteIdx = 0;
-        for (int i = 0; i < numSlices; ++i)
-            if (slices[(size_t) i].active)
-                slices[(size_t) i].midiNote = std::min (root + noteIdx++, 127);
-    }
 }
 
 // =============================================================================
@@ -259,14 +247,6 @@ void SliceManager::clearAll()
 
 void SliceManager::rebuildMidiMap()
 {
-    // Re-assign MIDI notes sequentially so note order always matches display order.
-    // This ensures that after any slice deletion or reorder, slice N plays on
-    // rootNote + N with no gaps or skips.
-    const int root = rootNote.load (std::memory_order_relaxed);
-    for (int i = 0; i < numSlices; ++i)
-        if (slices[(size_t) i].active)
-            slices[(size_t) i].midiNote = juce::jlimit (0, 127, root + i);
-
     midiMap.fill (-1);
     for (int i = 0; i < numSlices; ++i)
     {
