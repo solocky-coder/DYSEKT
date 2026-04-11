@@ -544,6 +544,7 @@ void DysektEditor::ensureDefaultThemes()
     write ("ghost", ThemeData::ghostTheme());
     write ("hack",  ThemeData::hackTheme());
     write ("pigments", ThemeData::pigmentsTheme());
+    write ("cr8",   ThemeData::cr8Theme());
 }
 
 juce::StringArray DysektEditor::getAvailableThemes()
@@ -571,13 +572,14 @@ void DysektEditor::applyTheme (const juce::String& themeName)
             repaint(); return;
         }
     }
-    if (themeName == "shell")      setTheme (ThemeData::shellTheme());
-    else if (themeName == "lazy")  setTheme (ThemeData::lazyTheme());
-    else if (themeName == "snow")  setTheme (ThemeData::snowTheme());
-    else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
-    else if (themeName == "hack")  setTheme (ThemeData::hackTheme());
+    if (themeName == "shell")         setTheme (ThemeData::shellTheme());
+    else if (themeName == "lazy")     setTheme (ThemeData::lazyTheme());
+    else if (themeName == "snow")     setTheme (ThemeData::snowTheme());
+    else if (themeName == "ghost")    setTheme (ThemeData::ghostTheme());
+    else if (themeName == "hack")     setTheme (ThemeData::hackTheme());
     else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
-    else                           setTheme (ThemeData::darkTheme());
+    else if (themeName == "cr8")      setTheme (ThemeData::cr8Theme());
+    else                              setTheme (ThemeData::darkTheme());
     processor.sliceManager.setSlicePalette (getTheme().slicePalette);
     saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
     repaint();

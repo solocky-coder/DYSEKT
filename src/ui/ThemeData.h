@@ -296,6 +296,45 @@ struct ThemeData
         return t;
     }
 
+    // ── CR8 ──────────────────────────────────────────────────────────────────
+    // Burnt orange accent · Deep charcoal · Steel panels — Waves CR8 inspired
+    static ThemeData cr8Theme()
+    {
+        ThemeData t;
+        t.name             = "cr8";
+        t.background       = juce::Colour (0xFF0C0D0E);   // near-black warm chassis
+        t.waveformBg       = juce::Colour (0xFF131518);   // dark steel waveform bg
+        t.darkBar          = juce::Colour (0xFF181A1D);   // panel bars
+        t.foreground       = juce::Colour (0xFFDDD5C8);   // warm off-white
+        t.header           = juce::Colour (0xFF101214);   // top bar
+        t.waveform         = juce::Colour (0xFFD96010);   // burnt orange
+        t.selectionOverlay = juce::Colour (0xFF2E1800);   // deep amber tint
+        t.lockActive       = juce::Colour (0xFFD96010);   // burnt orange
+        t.lockInactive     = juce::Colour (0xFF2A2C30);   // steel inactive
+        t.gridLine         = juce::Colour (0xFF1C1E22);   // barely-visible warm grid
+        t.accent           = juce::Colour (0xFFD96010);   // burnt orange
+        t.button           = juce::Colour (0xFF22252A);   // elevated steel panel
+        t.buttonHover      = juce::Colour (0xFF2E3238);   // hover lift
+        t.separator        = juce::Colour (0xFF282B30);   // steel divider
+        t.slicePalette[0 ] = juce::Colour (0xFFD96010); // Burnt Orange (accent)
+        t.slicePalette[1 ] = juce::Colour (0xFF10A8D9); // Steel Blue
+        t.slicePalette[2 ] = juce::Colour (0xFFD9C010); // Warm Yellow
+        t.slicePalette[3 ] = juce::Colour (0xFF10D978); // Mint
+        t.slicePalette[4 ] = juce::Colour (0xFFD91060); // Crimson
+        t.slicePalette[5 ] = juce::Colour (0xFF8810D9); // Violet
+        t.slicePalette[6 ] = juce::Colour (0xFF10D9C0); // Teal
+        t.slicePalette[7 ] = juce::Colour (0xFFD93010); // Alarm Red
+        t.slicePalette[8 ] = juce::Colour (0xFF50D910); // Lime
+        t.slicePalette[9 ] = juce::Colour (0xFFD910A0); // Acid Pink
+        t.slicePalette[10] = juce::Colour (0xFF1080D9); // Reactor Blue
+        t.slicePalette[11] = juce::Colour (0xFFD98010); // Hazard Amber
+        t.slicePalette[12] = juce::Colour (0xFFD94070); // Coral
+        t.slicePalette[13] = juce::Colour (0xFF40A8D9); // Ice Blue
+        t.slicePalette[14] = juce::Colour (0xFFA8D910); // Chartreuse
+        t.slicePalette[15] = juce::Colour (0xFF9060D9); // Lavender
+        return t;
+    }
+
     // ── PIGMENTS ──────────────────────────────────────────────────────────────
     // Deep navy-black · Electric cyan accent · Arturia Pigments-inspired
     static ThemeData pigmentsTheme()
@@ -345,6 +384,7 @@ struct ThemeData
         ThemeData t = darkTheme(); // defaults
         if (text.contains("name: midnight")) return midnightTheme();
         if (text.contains("name: pigments")) return pigmentsTheme();
+        if (text.contains("name: cr8"))      return cr8Theme();
 
         for (auto line : juce::StringArray::fromLines (text))
         {
