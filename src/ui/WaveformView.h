@@ -129,6 +129,7 @@ private:
     int  trimInPoint   = 0;       // trim-in marker position in samples (DragTrimIn path)
     int  trimOutPoint  = 0;       // trim-out marker position in samples (DragTrimOut path)
     bool trimDragging  = false;   // true while user is actively dragging a trim handle
+    int  trimHoverX    = -1;      // last mouse X in trim mode (-1 = not hovering)
     int  trimStart     = 0;       // trim-in marker position in samples (enterTrimMode path)
     int  trimEnd       = 0;       // trim-out marker position in samples (enterTrimMode path)
     mutable ViewState cachedPaintViewState;   // valid only between paint() start and end
