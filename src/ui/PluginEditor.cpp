@@ -78,6 +78,26 @@ DysektEditor::DysektEditor (DysektProcessor& p)
         resized();
     };
 
+    waveformView.onRenameRequest = [this] (int sliceIdx, const juce::String& currentName)
+    {
+        renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
+        renameOverlay->setBounds (getLocalBounds());
+        renameOverlay->onResult = [this, sliceIdx] (const juce::String& newName, bool cancelled)
+        {
+            if (! cancelled)
+            {
+                DysektProcessor::Command cmd;
+                cmd.type        = DysektProcessor::CmdSetSliceName;
+                cmd.intParam1   = sliceIdx;
+                cmd.stringParam = newName;
+                processor.pushCommand (cmd);
+            }
+            renameOverlay.reset();
+        };
+        addAndMakeVisible (*renameOverlay);
+        renameOverlay->toFront (true);
+    };
+
     headerBar.onBodeToggle = [this] { toggleMixerPanel(); };
     headerBar.onBrowserToggle = [this] { toggleBrowserPanel(); };
     headerBar.onWaveToggle = [this] { toggleSoftWave(); };
@@ -326,6 +346,9 @@ void DysektEditor::resized()
 
     if (midiLearnDialog != nullptr)
         midiLearnDialog->setBounds (getLocalBounds().reduced (40));
+
+    if (renameOverlay != nullptr)
+        renameOverlay->setBounds (getLocalBounds());
 }
 
 void DysektEditor::toggleMixerPanel()

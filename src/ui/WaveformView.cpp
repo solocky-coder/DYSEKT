@@ -1160,38 +1160,16 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                 }
                 else if (result == 3)
                 {
-                    // ── Rename Slice ──────────────────────────────────────────
+                    // ── Rename Slice — delegate to themed RenameOverlay ──────
                     juce::String currentName;
                     {
                         const auto& snap = processor.getUiSliceSnapshot();
                         if (targetSlice >= 0 && targetSlice < snap.numSlices)
                             currentName = snap.slices[(size_t) targetSlice].name;
                     }
-                    auto* aw = new juce::AlertWindow (
-                        "Rename Slice",
-                        "Name for slice " + juce::String (targetSlice + 1) + "  (max 14 chars, leave blank to clear):",
-                        juce::MessageBoxIconType::NoIcon);
-                    aw->addTextEditor ("name", currentName, "");
-                    aw->getTextEditor ("name")->setInputRestrictions (14);
-                    aw->addButton ("OK",    1, juce::KeyPress (juce::KeyPress::returnKey));
-                    aw->addButton ("Clear", 2);
-                    aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-                    aw->enterModalState (true,
-                        juce::ModalCallbackFunction::create ([this, targetSlice, aw] (int r) mutable
-                        {
-                            if (r == 1 || r == 2)
-                            {
-                                juce::String newName = (r == 1)
-                                    ? aw->getTextEditorContents ("name").trim()
-                                    : juce::String();
-                                DysektProcessor::Command cmd;
-                                cmd.type        = DysektProcessor::CmdSetSliceName;
-                                cmd.intParam1   = targetSlice;
-                                cmd.stringParam = newName;
-                                processor.pushCommand (cmd);
-                            }
-                        }), true);
-                    return;   // skip the repaint() below — rename is async
+                    if (onRenameRequest)
+                        onRenameRequest (targetSlice, currentName);
+                    return;   // async — skip repaint below
                 }
                 repaint();
             });
