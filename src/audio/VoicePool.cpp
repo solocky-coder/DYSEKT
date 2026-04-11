@@ -233,10 +233,11 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     const bool isOneShot = s.oneShot || (p.globalOneShot > 0.5f);
 
     // In one-shot mode the envelope decays to silence autonomously.
-    // If decay is zero (the default), the voice would go Done almost instantly.
-    // Default it to the slice duration so the envelope naturally covers the full slice.
-    if (isOneShot && decay < 0.001f)
-        decay = sliceDurSec;
+    // Use the slice duration as the minimum decay so the envelope always covers
+    // the full slice. The knob can push decay longer (tail past slice end),
+    // but can never cut it shorter than the slice itself.
+    if (isOneShot)
+        decay = std::max (decay, sliceDurSec);
 
     // Resolve hold time for this slice.
     const float holdSec = sm.resolveParam (sliceIdx, kLockHold,
