@@ -227,10 +227,10 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     const float sliceDurSec = (float)(sliceEnd - s.startSample) / (float)sampleRate;
     attack = juce::jmin (attack, sliceDurSec);
 
-    // Resolve one-shot flag here so it can be passed to the envelope.
-    const bool isOneShot = sm.resolveParam (sliceIdx, kLockOneShot,
-                                             s.oneShot ? 1.0f : 0.0f,
-                                             p.globalOneShot > 0.5f ? 1.0f : 0.0f) > 0.5f;
+    // Resolve one-shot flag: slice value takes priority over global when set,
+    // regardless of lock bit — one-shot is a per-slice property, not a global default.
+    // (globalOneShot is intentionally always false; see PluginProcessor.)
+    const bool isOneShot = s.oneShot || (p.globalOneShot > 0.5f);
 
     // Resolve hold time for this slice.
     const float holdSec = sm.resolveParam (sliceIdx, kLockHold,
