@@ -906,6 +906,20 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Cull any preceding slices that the drag has crushed to zero width.
                 // Slice 0 is the sample anchor and is never deleted.
                 // Work backwards so each deleteSlice(j) only shifts indices above j.
+                //
+                // MIDI note inheritance: when slice idx crushes into slice j,
+                // the surviving slice should take on the MIDI note of the lowest
+                // crushed slice — i.e. the note that was already assigned to the
+                // position it now occupies.  Capture it before culling.
+                int inheritedMidiNote = -1;  // -1 = no cull, keep own note
+                for (int j = idx - 1; j > 0; --j)
+                {
+                    if (sliceManager.getSlice (j).startSample >= start)
+                        inheritedMidiNote = sliceManager.getSlice (j).midiNote; // lowest wins
+                    else
+                        break;
+                }
+
                 int cullCount = 0;
                 for (int j = idx - 1; j > 0; --j)
                 {
@@ -917,44 +931,32 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else
                         break; // slices are sorted — safe to stop here
                 }
-
                 // After culls, target slice has shifted left by cullCount.
                 idx -= cullCount;
                 if (idx < 0 || idx >= sliceManager.getNumSlices())
                     break;
 
-                // BUG FIX 1: selectedSlice goes stale after cull.
-                // deleteSlice() only clamps selectedSlice when it's past the end;
-                // it never corrects it when the dragged slice shifts leftward.
-                // Fix: if the dragged slice WAS the selected one, update the index.
-                {
-                    const int prevIdx = idx + cullCount;  // original index before culls
-                    if (cullCount > 0
-                        && sliceManager.selectedSlice.load (std::memory_order_relaxed) == prevIdx)
-                        sliceManager.selectedSlice.store (idx, std::memory_order_relaxed);
-                }
-
-                // BUG FIX 2: liveDragSliceIdx stale after cull.
-                // The per-buffer live-preview block uses liveDragSliceIdx to write
-                // startSample every block.  If culling shifted the dragged slice left,
-                // liveIdx is stale and the block overwrites the WRONG slice until mouseUp.
-                if (cullCount > 0)
-                {
-                    const int prevIdx = idx + cullCount;
-                    if (liveDragSliceIdx.load (std::memory_order_acquire) == prevIdx)
-                        liveDragSliceIdx.store (idx, std::memory_order_release);
-                }
-
                 auto& sNew = sliceManager.getSlice (idx);
                 sNew.startSample = start;
+                // Inherit the MIDI note of the crushed slice so the surviving
+                // slice responds to the same note it replaced.
+                if (inheritedMidiNote >= 0)
+                    sNew.midiNote = inheritedMidiNote;
                 // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
 
-                // rebuildMidiMap() reassigns notes sequentially by array position,
-                // so the dragged slice automatically gets the number of the slot
-                // it crushed into (root + idx after cull = root + lowestCrushedIdx).
                 sliceManager.rebuildMidiMap();
+
+                // Re-arm pickup for FieldSliceStart after every marker move.
+                // The physical knob is now misaligned from the new position,
+                // so the pickup gate must re-check before the next CC move.
+                // This also re-enables the ghost indicator for the approach.
+                if (idx >= 0 && idx < kMaxCCSlices)
+                {
+                    ccPickedUp[(size_t) idx][(size_t) FieldSliceStart] = false;
+                    markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
+                }
             }
             break;
         }
@@ -1318,13 +1320,6 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     {
                         for (int j = 0; j < kMidiLearnNumSlots; ++j)
                             ccPickedUp[(size_t) sel][j] = false;
-                        if (sel < 128)
-                        {
-                            markerFinePickupCcNorm    [(size_t) sel] = -1.0f;
-                            markerFinePickupMarkerNorm[(size_t) sel] = -1.0f;
-                        }
-                        markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
-                        markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
                     }
 
                     if (sel >= 0 && sel < sliceManager.getNumSlices())
@@ -1442,9 +1437,11 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     {
                         // Absolute knob: map 0-1 to full native range.
                         // Pickup gate: ignore until the knob reaches the current value.
+                        // FieldSliceStart is excluded here — it has its own gate below
+                        // that also writes markerCcGhostNorm for the ghost indicator.
                         const float curNative = getCurrentNative (outFieldId);
                         if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
-                            && outFieldId != FieldSliceStart  // FieldSliceStart has its own pickup + ghost logic below
+                            && outFieldId != FieldSliceStart
                             && sel >= 0 && sel < kMaxCCSlices
                             && ! ccPickedUp[(size_t) sel][(size_t) outFieldId])
                         {
@@ -1521,32 +1518,48 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // The relative path never sets ccSmootherActive[FieldSliceStart];
                                 // any 'true' value here is a stale detection/absolute artefact.
                                 // If left alive the smoother loop in processBlock would override
-                                // every relative handleCommand below and jump the marker to the
-                                // absolute position the smoother was targeting.
+                                // the live-drag position and jump the marker.
                                 if (sel >= 0 && sel < kMaxCCSlices)
                                     ccSmootherActive[(size_t) sel][(size_t) FieldSliceStart] = false;
                                 markerSmootherSlice = -1;
-                                markerPending     = false;
-                                markerIdleCounter = 0;
 
-                                // Relative: commit immediately via handleCommand each buffer.
-                                // This eliminates the idle-commit jump: sliceManager is updated
-                                // atomically each block (including culling), so there is no
-                                // discontinuity when the encoder stops turning.
-                                // markerPending / idle-commit path is NOT used for CC.
-                                const float sensitivity = (float) total / 300.0f;
+                                // Use the same live-drag + idle-commit path as mouse dragging.
+                                //
+                                // Delta base: read from sl.startSample (the live-preview block
+                                // in drainCommands writes the preview position back there every
+                                // buffer), so rapid turns accumulate correctly without stacking
+                                // deltas on a stale committed value.
+                                //
+                                // liveDragSliceIdx activates the drainCommands live-preview block
+                                // which updates s.startSample at audio buffer rate (~172x/sec)
+                                // rather than once per CC message — this is what gives smooth
+                                // sub-30Hz visual movement identical to mouse dragging.
+                                //
+                                // markerPending arms the idle-commit timer: after kMarkerIdleBlocks
+                                // (~80ms) of encoder silence, CmdSetSliceBounds is fired once to
+                                // commit the final position. liveDragSliceIdx is cleared inside
+                                // the idle-commit block BEFORE handleCommand fires, so the
+                                // live-preview loop cannot re-write startSample after the commit
+                                // — this is what prevents the jump.
+                                // Step size scales with waveform zoom — when zoomed in,
+                                // each encoder click moves fewer samples, giving finer
+                                // resolution proportional to the visible window.
+                                const float markerZoom = juce::jmax (1.0f, zoom.load (std::memory_order_relaxed));
+                                const int stepSz  = juce::jmax (1, (int) (total / (512.0f * markerZoom)));
                                 const int newStart = juce::jlimit (0, slEnd - 64,
-                                    sl.startSample + (int)(outNorm * sensitivity));
-                                // Write to liveDragBoundsStart so SliceControlBar's timer
-                                // detects the change and schedules a repaint each CC arrival.
+                                    sl.startSample + (int)(outNorm * (float) stepSz));
+
                                 liveDragBoundsStart.store (newStart, std::memory_order_relaxed);
-                                Command ccCmd;
-                                ccCmd.type         = CmdSetSliceBounds;
-                                ccCmd.intParam1    = sel;
-                                ccCmd.intParam2    = newStart;
-                                ccCmd.positions[0] = slEnd;
-                                ccCmd.numPositions = 1;
-                                handleCommand (ccCmd);
+                                liveDragBoundsEnd  .store (slEnd,    std::memory_order_relaxed);
+                                liveDragSliceIdx   .store (sel,      std::memory_order_release);
+
+                                markerPending      = true;
+                                markerPendingSlice = sel;
+                                markerIdleCounter  = 0;
+                                // Relative direction indicator for UI arrow
+                                markerRelDir.store    (outNorm > 0.0f ? 1 : -1, std::memory_order_relaxed);
+                                markerRelLastMs.store ((int) juce::Time::getMillisecondCounter(),
+                                                       std::memory_order_relaxed);
                             }
                             else
                             {
@@ -1565,8 +1578,19 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                 // No cross-slice stale reset needed — each slice has
                                 // its own ccPickedUp state.
 
-                                const float markerNorm = (float) sl.startSample
-                                                       / (float) juce::jmax (1, total);
+                                // Pickup gate: compare outNorm against the marker's
+                                // position within the visible window (zoom-space norm).
+                                const float gateZoom   = juce::jmax (1.0f, zoom.load (std::memory_order_relaxed));
+                                const float gateSc     = scroll.load (std::memory_order_relaxed);
+                                const int   gateVisLen = juce::jmax (1, (int) ((float) total / gateZoom));
+                                const int   gateMaxVS  = juce::jmax (0, total - gateVisLen);
+                                const int   gateVisStart = juce::jlimit (0, gateMaxVS, (int) (gateSc * (float) gateMaxVS));
+                                // If marker is outside visible window, use global norm for pickup
+                                const bool markerInView = (sl.startSample >= gateVisStart
+                                                           && sl.startSample < gateVisStart + gateVisLen);
+                                const float markerNorm = markerInView
+                                    ? (float)(sl.startSample - gateVisStart) / (float) gateVisLen
+                                    : (float) sl.startSample / (float) juce::jmax (1, total);
 
                                 if (outFieldId >= 0 && outFieldId < kMidiLearnNumSlots
                                     && sel >= 0 && sel < kMaxCCSlices
@@ -1576,75 +1600,29 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                     if (std::abs (outNorm - markerNorm) <= 0.008f)
                                     {
                                         ccPickedUp[(size_t) sel][(size_t) outFieldId] = true;
-                                        // Record pickup reference point for fine window.
-                                        if (sel < 128)
-                                        {
-                                            markerFinePickupCcNorm    [(size_t) sel] = outNorm;
-                                            markerFinePickupMarkerNorm[(size_t) sel] = markerNorm;
-                                        }
+                                        markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed); // ghost done
                                     }
                                     else
                                     {
+                                        // Not picked up yet — store the knob's current position
+                                        // as the ghost norm so the UI can show it on the marker
+                                        // slider, making it clear where the knob IS vs. where
+                                        // pickup will occur.
                                         markerCcGhostNorm.store (outNorm, std::memory_order_relaxed);
-                                        goto skipCcParam;   // not picked up yet — suppress
+                                        goto skipCcParam;   // suppress parameter move
                                     }
                                 }
 
-                                // ── Post-pickup: normal or fine mode ─────────────────────
-                                const bool fineEnabled = markerFineMode.load (std::memory_order_relaxed);
-
-                                // Clear the ghost bar — replaced by window edges in fine mode.
-                                markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
-
-                                float fineTarget;
-                                if (fineEnabled)
-                                {
-                                    // CC physical extremes (bottom 2% or top 2%) re-arm pickup
-                                    // so the user can jump to a completely different region.
-                                    const bool atExtreme = (outNorm < 0.02f || outNorm > 0.98f);
-                                    if (atExtreme && sel >= 0 && sel < kMaxCCSlices && sel < 128)
-                                    {
-                                        ccPickedUp[(size_t) sel][(size_t) outFieldId] = false;
-                                        markerFinePickupCcNorm[(size_t) sel]    = -1.0f;
-                                        markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
-                                        markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
-                                        markerCcGhostNorm.store (outNorm, std::memory_order_relaxed);
-                                        goto skipCcParam;
-                                    }
-
-                                    // Fine window: full knob travel = kMarkerFineWindowNorm of sample.
-                                    if (sel >= 0 && sel < 128
-                                        && markerFinePickupCcNorm[(size_t) sel] >= 0.0f)
-                                    {
-                                        const float pickupCc  = markerFinePickupCcNorm    [(size_t) sel];
-                                        const float pickupMkr = markerFinePickupMarkerNorm[(size_t) sel];
-                                        const float delta     = outNorm - pickupCc;
-                                        fineTarget = juce::jlimit (0.0f, 1.0f,
-                                            pickupMkr + delta * kMarkerFineWindowNorm);
-
-                                        // Publish window edges for the UI
-                                        const float halfW = kMarkerFineWindowNorm * 0.5f;
-                                        markerFineWindowLo.store (juce::jlimit (0.0f, 1.0f, pickupMkr - halfW),
-                                                                  std::memory_order_relaxed);
-                                        markerFineWindowHi.store (juce::jlimit (0.0f, 1.0f, pickupMkr + halfW),
-                                                                  std::memory_order_relaxed);
-                                    }
-                                    else
-                                    {
-                                        fineTarget = markerNorm; // fallback
-                                    }
-                                }
-                                else
-                                {
-                                    // Normal mode: CC maps full sample range directly.
-                                    fineTarget = outNorm;
-                                    markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
-                                    markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
-                                }
-
-                                // Route target through smoother.
+                                // Picked up: map CC 0→1 across the waveform's visible
+                                // window (zoom/scroll) so resolution improves when zoomed in.
+                                // At zoom=1 this is identical to the previous full-range mapping.
+                                const float absZoom   = juce::jmax (1.0f, zoom.load (std::memory_order_relaxed));
+                                const float absSc     = scroll.load (std::memory_order_relaxed);
+                                const int   visLen    = juce::jmax (1, (int) ((float) total / absZoom));
+                                const int   maxVStart = juce::jmax (0, total - visLen);
+                                const int   visStart  = juce::jlimit (0, maxVStart, (int) (absSc * (float) maxVStart));
                                 const int newStart = juce::jlimit (0, slEnd - 64,
-                                    (int) (fineTarget * (float) total));
+                                    visStart + (int) (outNorm * (float) visLen));
                                 if (sel >= 0 && sel < kMaxCCSlices)
                                 {
                                     if (! ccSmootherActive[(size_t) sel][(size_t) outFieldId] || sel != markerSmootherSlice)
@@ -1693,6 +1671,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         markerPending       = false;
                         markerPendingSlice  = -1;
                         markerIdleCounter   = 0;
+                        markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
+                        markerRelDir.store  (0,     std::memory_order_relaxed);
                     }
                 }
             }
@@ -1834,8 +1814,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     {
                         if (midiSelectsSlice.load (std::memory_order_relaxed))
                         {
+                            const int previous = sliceManager.selectedSlice.load (std::memory_order_relaxed);
                             sliceManager.selectedSlice.store (sliceIdx, std::memory_order_relaxed);
-                            uiSnapshotDirty.store (true, std::memory_order_release);
+                            if (previous != sliceIdx)
+                                uiSnapshotDirty.store (true, std::memory_order_release);
                         }
 
                         int voiceIdx = voicePool.allocate();
@@ -2068,17 +2050,13 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             // ccPickedUp[curSel] stays true from prior use on that slice,
             // and the knob (physically at the previous slice's position)
             // bypasses the pickup gate and jumps the new slice's marker.
+            // Also reset the ghost so the UI doesn't show a stale position.
+            markerCcGhostNorm.store (-1.0f, std::memory_order_relaxed);
+            markerRelDir.store      (0,     std::memory_order_relaxed);
             if (curSel >= 0 && curSel < kMaxCCSlices)
             {
                 for (int j = 0; j < kMidiLearnNumSlots; ++j)
                     ccPickedUp[(size_t) curSel][j] = false;
-                if (curSel < 128)
-                {
-                    markerFinePickupCcNorm    [(size_t) curSel] = -1.0f;
-                    markerFinePickupMarkerNorm[(size_t) curSel] = -1.0f;
-                }
-                markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
-                markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
             }
 
             // Proactive re-seed: park the slice-start smoother at the new
@@ -2199,6 +2177,10 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             cmd.intParam2    = juce::jlimit (0, slEnd - 64, newStart);
             cmd.positions[0] = slEnd;
             cmd.numPositions = 1;
+            // Clear liveDragSliceIdx BEFORE handleCommand so the live-preview
+            // block in drainCommands cannot overwrite startSample after the
+            // commit — this is the specific guard that prevents the jump-on-stop.
+            liveDragSliceIdx.store (-1, std::memory_order_release);
             handleCommand (cmd);
             uiSnapshotDirty.store (true, std::memory_order_release);
 
@@ -2206,9 +2188,11 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             pendingUiOptimisticIdx.store(pendSel, std::memory_order_release);
             pendingUiOptimisticSample.store(newStart, std::memory_order_release);
         }
-        // Clear liveDragSliceIdx so the live-preview block in drainCommands
-        // stops overwriting startSample every block after the commit lands.
-        liveDragSliceIdx.store (-1, std::memory_order_release);
+        else
+        {
+            // No valid slice — still clear the live drag so the preview stops.
+            liveDragSliceIdx.store (-1, std::memory_order_release);
+        }
         markerPending      = false;
         markerPendingSlice = -1;
         markerIdleCounter  = 0;
