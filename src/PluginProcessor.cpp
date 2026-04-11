@@ -906,6 +906,28 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Cull any preceding slices that the drag has crushed to zero width.
                 // Slice 0 is the sample anchor and is never deleted.
                 // Work backwards so each deleteSlice(j) only shifts indices above j.
+                //
+                // Before deleting, capture the identity (name + MIDI note) of the
+                // lowest-indexed crushed slice — that is the slice the dragged marker
+                // is physically overtaking, so the overtaking slice inherits it.
+                juce::String inheritedName;
+                int          inheritedMidiNote = -1;  // -1 = nothing to inherit
+
+                // First pass: find outermost (lowest-index) crushed slice.
+                for (int j = idx - 1; j > 0; --j)
+                {
+                    if (sliceManager.getSlice (j).startSample >= start)
+                    {
+                        // This is a candidate; keep scanning — we want the lowest j.
+                        const auto& cand = sliceManager.getSlice (j);
+                        inheritedName     = cand.name;
+                        inheritedMidiNote = cand.midiNote;
+                    }
+                    else
+                        break;
+                }
+
+                // Second pass: delete (backwards so indices stay valid).
                 int cullCount = 0;
                 for (int j = idx - 1; j > 0; --j)
                 {
@@ -924,6 +946,13 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
                 auto& sNew = sliceManager.getSlice (idx);
                 sNew.startSample = start;
+
+                // Apply inherited identity when a crush occurred.
+                if (inheritedMidiNote >= 0)
+                {
+                    sNew.name     = inheritedName;
+                    sNew.midiNote = inheritedMidiNote;
+                }
                 // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;

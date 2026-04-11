@@ -60,25 +60,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
  waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
  waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
- waveformView.onRenameRequest   = [this] (int sliceIdx, const juce::String& currentName)
- {
-     renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
-     addAndMakeVisible (*renameOverlay);
-     renameOverlay->setBounds (getLocalBounds());
-     renameOverlay->toFront (true);
-     renameOverlay->onResult = [this, sliceIdx] (const juce::String& newName, bool cancelled)
-     {
-         renameOverlay.reset();
-         if (! cancelled)
-         {
-             DysektProcessor::Command cmd;
-             cmd.type        = DysektProcessor::CmdSetSliceName;
-             cmd.intParam1   = sliceIdx;
-             cmd.stringParam = newName;
-             processor.pushCommand (cmd);
-         }
-     };
- };
  waveformView.onTrimApplied = [this] (int s, int e)
  {
  processor.applyTrimToCurrentSample (s, e);

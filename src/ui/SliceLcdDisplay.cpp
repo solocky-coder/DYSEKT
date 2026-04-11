@@ -408,6 +408,54 @@ void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
 
     const auto pos = e.getPosition();
 
+    // ── NAME row: click opens inline text editor ──────────────────────────────
+    if (nameRowHitRect.contains (pos))
+    {
+        if (nameTextEditor) { nameTextEditor.reset(); repaint(); }
+
+        const auto pal = LcdColours::fromTheme();
+        nameTextEditor = std::make_unique<juce::TextEditor>();
+        addAndMakeVisible (*nameTextEditor);
+
+        // Position editor over the right half of row 1
+        auto edBounds = nameRowHitRect.reduced (2, 4);
+        nameTextEditor->setBounds (edBounds);
+        nameTextEditor->setFont (DysektLookAndFeel::makeFont (14.0f));
+        nameTextEditor->setColour (juce::TextEditor::backgroundColourId,
+                                   getTheme().darkBar.brighter (0.2f));
+        nameTextEditor->setColour (juce::TextEditor::textColourId,    pal.phosphor);
+        nameTextEditor->setColour (juce::TextEditor::outlineColourId, pal.phosphor.withAlpha (0.7f));
+        nameTextEditor->setInputRestrictions (14);
+
+        // Seed with current custom name (not the slice number fallback)
+        nameTextEditor->setText (data.sliceName, false);
+        nameTextEditor->selectAll();
+        nameTextEditor->grabKeyboardFocus();
+
+        const int sliceIdx = data.sliceIndex;
+
+        auto commit = [this, sliceIdx]
+        {
+            if (! nameTextEditor) return;
+            juce::String newName = nameTextEditor->getText().trim();
+            nameTextEditor.reset();
+            DysektProcessor::Command cmd;
+            cmd.type        = DysektProcessor::CmdSetSliceName;
+            cmd.intParam1   = sliceIdx;
+            cmd.stringParam = newName;
+            processor.pushCommand (cmd);
+            repaint();
+        };
+
+        nameTextEditor->onReturnKey  = commit;
+        nameTextEditor->onEscapeKey  = [this] { nameTextEditor.reset(); repaint(); };
+        nameTextEditor->onFocusLost  = commit;
+        return;
+    }
+
+    // Dismiss any open editor on a click elsewhere
+    if (nameTextEditor) { nameTextEditor.reset(); repaint(); }
+
     for (const auto& hit : flagHitRects)
     {
         if (! hit.bounds.contains (pos)) continue;
@@ -559,14 +607,26 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         }
     }
 
-    // ── Row 1:  NOTE:Cx(nnn)  |  ROOT:Cx  or  NAME:xxx ──────────────────────
+    // ── Row 1:  NOTE:Cx(nnn)  |  NAME:xx (slice number or custom name) ───────
     {
         juce::String noteStr = "NOTE:" + midiNoteName (data.midiNote).trimEnd()
             + "(" + juce::String (data.midiNote).paddedLeft ('0', 3) + ")";
-        juce::String rootStr = data.sliceName.isNotEmpty()
-            ? ("NAME:" + data.sliceName.toUpperCase().substring (0, 10))
-            : ("ROOT:" + midiNoteName (data.rootNote).trimEnd());
-        drawRowPair (g, 1, noteStr, rootStr);
+
+        // NAME always shows: custom name if set, otherwise the slice number
+        juce::String nameVal = data.sliceName.isNotEmpty()
+            ? data.sliceName.toUpperCase().substring (0, 10)
+            : juce::String (data.sliceIndex + 1);
+        juce::String nameStr = "NAME:" + nameVal;
+
+        // Record the right-side hit area for this row (right half of screen)
+        {
+            auto scr = getLocalBounds().reduced (4);
+            const int rightX = scr.getX() + (scr.getWidth() * 52 / 100);
+            nameRowHitRect = { rightX, scr.getY() + 4 + 1 * kRowH,
+                               scr.getRight() - rightX, kRowH };
+        }
+
+        drawRowPair (g, 1, noteStr, nameStr);
     }
 
     // ── Row 2:  ST:nnnnn  |  END:nnnnn ───────────────────────────────────────

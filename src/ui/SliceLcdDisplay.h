@@ -102,5 +102,11 @@ private:
  };
  std::vector<FlagHitRect> flagHitRects;
 
+ // ── NAME row hit rect (updated each paint, used by mouseDown) ────────────
+ juce::Rectangle<int> nameRowHitRect;
+
+ // ── Inline text editor for NAME editing ──────────────────────────────────
+ std::unique_ptr<juce::TextEditor> nameTextEditor;
+
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SliceLcdDisplay)
 };

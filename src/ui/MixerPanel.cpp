@@ -430,20 +430,30 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     g.setColour (dot.withAlpha (0.13f));
     g.fillRect (3, ry, kNameColW - 4, kRowH);
 
-    // Slice number — larger font, brighter
+    // Slice number / custom name
     g.setFont (DysektLookAndFeel::makeFont (12.0f));
     g.setColour (dot.withAlpha (selected ? 0.95f : 0.65f));
-    g.drawText (juce::String (idx + 1).paddedLeft ('0', 2),
-                8, ry, 30, kRowH, juce::Justification::centredLeft);
+    if (sl.name.isNotEmpty())
+    {
+        // Custom name set — show it in the name column
+        g.drawText (sl.name.toUpperCase().substring (0, 9),
+                    5, ry, kNameColW - 8, kRowH, juce::Justification::centredLeft);
+    }
+    else
+    {
+        // No custom name — show padded slice number
+        g.drawText (juce::String (idx + 1).paddedLeft ('0', 2),
+                    8, ry, 30, kRowH, juce::Justification::centredLeft);
 
-    // Duration
-    const double srate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
-    const int end = processor.sliceManager.getEndForSlice (idx, snap.sampleNumFrames);
-    const double lenSec = (end - sl.startSample) / srate;
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
-    g.setColour (theme.foreground.withAlpha (0.30f));
-    g.drawText (juce::String (lenSec, 2) + "s",
-                40, ry, kNameColW - 42, kRowH, juce::Justification::centredLeft);
+        // Duration (only when no custom name, to keep layout clean)
+        const double srate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
+        const int end = processor.sliceManager.getEndForSlice (idx, snap.sampleNumFrames);
+        const double lenSec = (end - sl.startSample) / srate;
+        g.setFont (DysektLookAndFeel::makeFont (11.0f));
+        g.setColour (theme.foreground.withAlpha (0.30f));
+        g.drawText (juce::String (lenSec, 2) + "s",
+                    40, ry, kNameColW - 42, kRowH, juce::Justification::centredLeft);
+    }
 
     // ── Knob columns ────────────────────────────────────────────────────
     const int kcy = ry + kRowH / 2;
@@ -943,6 +953,56 @@ void MixerPanel::mouseUp (const juce::MouseEvent&)
 void MixerPanel::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const Cell c = hitTest (e.getPosition());
+
+    // ── Name column double-click: open inline rename editor ─────────────────
+    if (! c.isMaster && c.row >= 0)
+    {
+        const auto& snap = processor.getUiSliceSnapshot();
+        if (c.row < snap.numSlices && e.getPosition().x < kNameColW)
+        {
+            const auto& sl = snap.slices[(size_t) c.row];
+            const auto& theme = getTheme();
+            const int ry = kHeaderH + c.row * kRowH;
+            const juce::Rectangle<int> nameArea (3, ry + 2, kNameColW - 6, kRowH - 4);
+
+            // Select the row first
+            DysektProcessor::Command sel;
+            sel.type = DysektProcessor::CmdSelectSlice;
+            sel.intParam1 = c.row;
+            processor.pushCommand (sel);
+
+            textEditor = std::make_unique<juce::TextEditor>();
+            addAndMakeVisible (*textEditor);
+            textEditor->setBounds (nameArea);
+            textEditor->setFont (DysektLookAndFeel::makeFont (11.0f));
+            textEditor->setColour (juce::TextEditor::backgroundColourId, theme.darkBar.brighter (0.15f));
+            textEditor->setColour (juce::TextEditor::textColourId,       theme.foreground);
+            textEditor->setColour (juce::TextEditor::outlineColourId,    theme.accent);
+            textEditor->setInputRestrictions (14);
+            textEditor->setText (sl.name, false);
+            textEditor->selectAll();
+            textEditor->grabKeyboardFocus();
+
+            const int rowIdx = c.row;
+            auto commit = [this, rowIdx]
+            {
+                if (! textEditor) return;
+                juce::String newName = textEditor->getText().trim();
+                textEditor.reset();
+                DysektProcessor::Command cmd;
+                cmd.type        = DysektProcessor::CmdSetSliceName;
+                cmd.intParam1   = rowIdx;
+                cmd.stringParam = newName;
+                processor.pushCommand (cmd);
+                repaint();
+            };
+            textEditor->onReturnKey = commit;
+            textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };
+            textEditor->onFocusLost = commit;
+            return;
+        }
+    }
+
     if (c.col == ColMute || c.col == ColOut || c.col == ColLegato) return;
     if (!c.isMaster && (c.row < 0)) return;
     if (c.isMaster && c.col >= ColFcut) return;
