@@ -108,6 +108,9 @@ private:
     juce::Rectangle<int> rootNoteArea;
     bool draggingRootNote = false;
 
+    // Fine-mode toggle badge — hit area updated each paint, checked in mouseDown.
+    juce::Rectangle<int> markerFineModeToggleArea;
+
     // Text editor overlay
     std::unique_ptr<juce::TextEditor> textEditor;
 };

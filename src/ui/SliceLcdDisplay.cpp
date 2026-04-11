@@ -39,12 +39,6 @@ namespace LcdColours
     }
 }
 
-namespace
-{
-    // Reserve a bottom strip so data rows never collide with the flag pills.
-    constexpr int kFlagsBottomGutter = 26;
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 juce::String SliceLcdDisplay::midiNoteName (int note)
@@ -104,7 +98,6 @@ void SliceLcdDisplay::buildDisplayData()
     if (! data.hasSample || snap.selectedSlice < 0 || snap.selectedSlice >= snap.numSlices)
     {
         data.hasSlice = false;
-        nameHitRect = {};
         return;
     }
 
@@ -292,7 +285,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
     // ── Right item — left-aligned from the right-column start ────────────────
     // Use 52% split so right column has enough room and never overflows.
     const int rightX  = b.getX() + (b.getWidth() * 52 / 100);
-    const int rightW  = b.getRight() - rightX - kLeftPad - 42; // leave space for flag column
+    const int rightW  = b.getRight() - rightX - kLeftPad;
 
     const int rColonPos = rightStr.indexOfChar (':');
     if (rColonPos > 0)
@@ -319,52 +312,46 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
 
 void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
 {
-    // ── Flags drawn as a HORIZONTAL row at the BOTTOM of the screen ───────────
-    // Greyed out when inactive, full phosphor when active.
+    // ── Flags drawn as a HORIZONTAL strip along the BOTTOM of the screen ──────
     const auto pal = LcdColours::fromTheme();
     auto screen = getLocalBounds().reduced (4);
 
-    const juce::Font flagFont = DysektLookAndFeel::makeFont (14.0f, true);
-    const int pad     = 4;
-    const int flagH   = 18;
+    const juce::Font flagFont = DysektLookAndFeel::makeFont (16.0f, true);
+    const int flagH   = 22;
     const int flagGap = 4;
-    const int numFlags = 7;
-    const int availableW = screen.getWidth() - kLeftPad * 2;
-    const int flagW = juce::jmax (34, (availableW - (numFlags - 1) * flagGap) / numFlags);
-    const int totalFlagsW = numFlags * flagW + (numFlags - 1) * flagGap;
-    const int fx0 = screen.getX() + (screen.getWidth() - totalFlagsW) / 2;
-    const int fy  = screen.getBottom() - flagH - 4;
+    const int pad     = 3;
+    const int stripY  = screen.getBottom() - flagH - 3;
 
     struct Flag { juce::String text; bool on; int fieldId; bool isCycle; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
     Flag flags[] = {
-        { "REV",  data.reverse,        DysektProcessor::FieldReverse,       false },
-        { loopStr, data.loopMode > 0,  DysektProcessor::FieldLoop,          true  },
-        { "1SH",  data.oneShot,        DysektProcessor::FieldOneShot,       false },
+        { "REV",  data.reverse,        DysektProcessor::FieldReverse,        false },
+        { loopStr, data.loopMode > 0,  DysektProcessor::FieldLoop,           true  },
+        { "1SH",  data.oneShot,        DysektProcessor::FieldOneShot,        false },
         { "MUT:" + (data.muteGroup > 0 ? juce::String (data.muteGroup) : juce::String ("-")),
-                  data.muteGroup > 0,  DysektProcessor::FieldMuteGroup,     true  },
-        { "STR",  data.stretchEnabled, DysektProcessor::FieldStretchEnabled, false },
-        { "TAIL", data.releaseTail,    DysektProcessor::FieldReleaseTail,   false },
-        { "FMC",  data.formantComp,    DysektProcessor::FieldFormantComp,   false },
+                  data.muteGroup > 0,  DysektProcessor::FieldMuteGroup,      true  },
+        { "STR",  data.stretchEnabled, DysektProcessor::FieldStretchEnabled,  false },
+        { "TAIL", data.releaseTail,    DysektProcessor::FieldReleaseTail,    false },
+        { "FMC",  data.formantComp,    DysektProcessor::FieldFormantComp,    false },
     };
 
-    // Rebuild hit rects each paint
+    const int numFlags  = (int) std::size (flags);
+    const int availW    = screen.getWidth() - 2 * kLeftPad - flagGap * (numFlags - 1);
+    const int flagW     = availW / numFlags;
+
     flagHitRects.clear();
 
     g.setFont (flagFont);
-    int fx = fx0;
+    int fx = screen.getX() + kLeftPad;
     for (auto& f : flags)
     {
-        juce::Rectangle<int> box (fx, fy, flagW, flagH);
-
-        // Store hit rect
+        juce::Rectangle<int> box (fx, stripY, flagW, flagH);
         flagHitRects.push_back ({ box, f.fieldId, f.isCycle });
 
         g.setColour (f.on ? pal.phosphor.withAlpha (0.15f) : pal.flagBg);
         g.fillRoundedRectangle (box.toFloat(), 2.0f);
         g.setColour (f.on ? pal.flagOn : pal.flagOff);
         g.drawRoundedRectangle (box.toFloat(), 2.0f, 1.0f);
-        g.setColour (f.on ? pal.flagOn : pal.flagOff);
         g.drawText (f.text, box.getX() + pad, box.getY(),
                     box.getWidth() - pad * 2, box.getHeight(),
                     juce::Justification::centred, false);
@@ -420,14 +407,6 @@ void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
     if (! data.hasSlice) return;
 
     const auto pos = e.getPosition();
-
-    // ── NAME field click → open rename overlay ────────────────────────────
-    if (nameHitRect.contains (pos))
-    {
-        if (onRenameRequest)
-            onRenameRequest (data.sliceIndex, data.sliceName);
-        return;
-    }
 
     for (const auto& hit : flagHitRects)
     {
@@ -503,8 +482,9 @@ void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
 
 void SliceLcdDisplay::paint (juce::Graphics& g)
 {
-    // Clip to rounded LCD boundary — stops accent glow artefacts showing as
-    // black corner notches against the plugin background.
+    // Fill corners with plugin background before clipping so no white dots appear.
+    g.fillAll (getTheme().background);
+    // Clip to rounded LCD boundary.
     {
         juce::Path clipPath;
         clipPath.addRoundedRectangle (getLocalBounds().toFloat(), 4.0f);
@@ -516,11 +496,10 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
     if (! data.hasSample)   { drawNoSampleScreen (g); return; }
     if (! data.hasSlice)    { drawNoSliceScreen  (g); return; }
 
-    // ── Clip all row drawing to the inner screen, minus reserved flags gutter ─
+    // ── Clip all row drawing to the inner screen ─────────────────────────────
     auto screen = getLocalBounds().reduced (4);
-    auto rowsClip = screen.withTrimmedBottom (kFlagsBottomGutter);
     g.saveState();
-    g.reduceClipRegion (rowsClip);
+    g.reduceClipRegion (screen);
 
     // ── Row 0:  Header — centred: "SL xx / xx  SAMPLENAME" ──────────────────
     {
@@ -580,31 +559,14 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         }
     }
 
-    // ── Row 1:  NOTE:Cx(nnn)  |  NAME:xx (slice number or user label) ────
+    // ── Row 1:  NOTE:Cx(nnn)  |  ROOT:Cx  or  NAME:xxx ──────────────────────
     {
         juce::String noteStr = "NOTE:" + midiNoteName (data.midiNote).trimEnd()
             + "(" + juce::String (data.midiNote).paddedLeft ('0', 3) + ")";
-        juce::String nameVal = data.sliceName.isNotEmpty()
-            ? data.sliceName.toUpperCase().substring (0, 10)
-            : juce::String (data.sliceIndex + 1).paddedLeft ('0', 2);
-        juce::String nameStr = "NAME:" + nameVal;
-        drawRowPair (g, 1, noteStr, nameStr);
-
-        // Record hit rect for the right (NAME) half of row 1
-        {
-            auto b2   = getLocalBounds().reduced (4);
-            const int rowH  = kRowH;
-            const int y     = b2.getY() + 4 + 1 * rowH;
-            const int rightX = b2.getX() + (b2.getWidth() * 52 / 100);
-            nameHitRect = { rightX, y, b2.getRight() - rightX - kLeftPad, rowH };
-
-            // Subtle underline to signal it is editable
-            const auto pal2 = LcdColours::fromTheme();
-            g.setColour (pal2.phosphor.withAlpha (0.30f));
-            g.drawHorizontalLine (nameHitRect.getBottom() - 3,
-                                  (float) nameHitRect.getX(),
-                                  (float) nameHitRect.getRight());
-        }
+        juce::String rootStr = data.sliceName.isNotEmpty()
+            ? ("NAME:" + data.sliceName.toUpperCase().substring (0, 10))
+            : ("ROOT:" + midiNoteName (data.rootNote).trimEnd());
+        drawRowPair (g, 1, noteStr, rootStr);
     }
 
     // ── Row 2:  ST:nnnnn  |  END:nnnnn ───────────────────────────────────────
@@ -676,9 +638,9 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 9, outStr, bpmStr);
     }
 
-    g.restoreState();  // end clip region
-
-    // Draw flags outside the rows clip so they stay visible in the bottom gutter.
+    // ── Floating flags — right-edge vertical column (always visible) ──────────
     drawFlagsRow (g, 6);
+
+    g.restoreState();  // end clip region
 
 }
