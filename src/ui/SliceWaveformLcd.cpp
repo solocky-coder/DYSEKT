@@ -29,7 +29,7 @@ static const juce::Colour kColHold    { 0xFFFF00FF };   // Hot Magenta
 SliceWaveformLcd::SliceWaveformLcd (DysektProcessor& p)
     : processor (p)
 {
-    setOpaque (true);
+    setOpaque (false); // rounded corners — must not claim full opaque coverage
     setMouseCursor (juce::MouseCursor::NormalCursor);
 }
 
