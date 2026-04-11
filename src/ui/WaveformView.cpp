@@ -1320,6 +1320,7 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
         cmd.intParam2 = dragPreviewStart;
         cmd.positions[0] = dragPreviewEnd;
         cmd.numPositions = 1;
+        cmd.isCommit = true;   // final commit — triggers crush name/note inheritance
         processor.pushCommand(cmd);
 
         if (linkedSliceIdx >= 0)

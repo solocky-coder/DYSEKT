@@ -908,13 +908,17 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Slice 0 is the sample anchor and is never deleted.
                 // Work backwards so each deleteSlice(j) only shifts indices above j.
                 //
-                // Inherit identity from the slice immediately adjacent to the dragged
-                // marker (j = idx-1) — that is the first slice the marker crosses.
-                // Only capture if that slice is actually being crushed.
+                // Inherit identity (name + MIDI note) from the immediately adjacent
+                // slice (idx-1) — the first slice the marker physically crosses.
+                // Only do this on the final mouseUp commit, not during live drag ticks,
+                // so the result is deterministic regardless of how many coalesced
+                // CmdSetSliceBounds fired during the drag.
                 juce::String inheritedName;
                 int          inheritedMidiNote = -1;  // -1 = nothing to inherit
 
-                if (idx - 1 > 0 && sliceManager.getSlice (idx - 1).startSample >= start)
+                if (cmd.isCommit
+                    && idx - 1 > 0
+                    && sliceManager.getSlice (idx - 1).startSample >= start)
                 {
                     const auto& cand  = sliceManager.getSlice (idx - 1);
                     inheritedName     = cand.name.toUpperCase();

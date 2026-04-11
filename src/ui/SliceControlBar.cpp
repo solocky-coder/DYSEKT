@@ -1599,6 +1599,7 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
  cmd.intParam2 = commitStart;
  cmd.positions[0] = commitEnd;
  cmd.numPositions = 1;
+ cmd.isCommit = true;   // final commit — triggers crush name/note inheritance
  processor.pushCommand (cmd);
  // Bridge the gap between command commit and UI snapshot update so
  // WaveformView shows the correct position immediately on mouse up.

@@ -119,6 +119,7 @@ public:
         static constexpr int kMaxPositions = SliceManager::kMaxSlices + 2;
         std::array<int, kMaxPositions> positions {};
         int numPositions { 0 };
+        bool isCommit { false };    // CmdSetSliceBounds: true = mouseUp final commit, triggers crush inheritance
     };
 
     // ── UI snapshot (double-buffered, written on audio thread) ───────────────
