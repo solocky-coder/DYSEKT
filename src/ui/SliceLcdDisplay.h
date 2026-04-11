@@ -15,6 +15,9 @@ public:
  void paint (juce::Graphics& g) override;
  void mouseDown (const juce::MouseEvent& e) override;
 
+ /** Fired when the user clicks the NAME field; wire up to show RenameOverlay. */
+ std::function<void (int sliceIdx, const juce::String& currentName)> onRenameRequest;
+
  void repaintLcd();
  void resized() override;
 
@@ -101,6 +104,9 @@ private:
  bool isCycle;
  };
  std::vector<FlagHitRect> flagHitRects;
+
+ // ── NAME field hit rect (Row 1 right side) ────────────────────────────
+ juce::Rectangle<int> nameHitRect;
 
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SliceLcdDisplay)
 };

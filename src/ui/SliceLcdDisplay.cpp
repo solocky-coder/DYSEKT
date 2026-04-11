@@ -98,6 +98,7 @@ void SliceLcdDisplay::buildDisplayData()
     if (! data.hasSample || snap.selectedSlice < 0 || snap.selectedSlice >= snap.numSlices)
     {
         data.hasSlice = false;
+        nameHitRect = {};
         return;
     }
 
@@ -408,6 +409,14 @@ void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
 
     const auto pos = e.getPosition();
 
+    // ── NAME field click → open rename overlay ────────────────────────────
+    if (nameHitRect.contains (pos))
+    {
+        if (onRenameRequest)
+            onRenameRequest (data.sliceIndex, data.sliceName);
+        return;
+    }
+
     for (const auto& hit : flagHitRects)
     {
         if (! hit.bounds.contains (pos)) continue;
@@ -559,14 +568,32 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         }
     }
 
-    // ── Row 1:  NOTE:Cx(nnn)  |  ROOT:Cx  or  NAME:xxx ──────────────────────
+    // ── Row 1:  NOTE:Cx(nnn)  |  NAME:xx (slice number or user label) ────
     {
         juce::String noteStr = "NOTE:" + midiNoteName (data.midiNote).trimEnd()
             + "(" + juce::String (data.midiNote).paddedLeft ('0', 3) + ")";
-        juce::String rootStr = data.sliceName.isNotEmpty()
-            ? ("NAME:" + data.sliceName.toUpperCase().substring (0, 10))
-            : ("ROOT:" + midiNoteName (data.rootNote).trimEnd());
-        drawRowPair (g, 1, noteStr, rootStr);
+        // NAME always shows: user label if set, otherwise zero-padded slice number
+        juce::String nameVal = data.sliceName.isNotEmpty()
+            ? data.sliceName.toUpperCase().substring (0, 10)
+            : juce::String (data.sliceIndex + 1).paddedLeft ('0', 2);
+        juce::String nameStr = "NAME:" + nameVal;
+        drawRowPair (g, 1, noteStr, nameStr);
+
+        // Record hit rect for the right (NAME) half of row 1 so mouseDown can detect clicks
+        {
+            auto b   = getLocalBounds().reduced (4);
+            const int rowH  = kRowH;
+            const int y     = b.getY() + 4 + 1 * rowH;
+            const int rightX = b.getX() + (b.getWidth() * 52 / 100);
+            nameHitRect = { rightX, y, b.getRight() - rightX - kLeftPad, rowH };
+
+            // Subtle underline on the NAME value to signal it is editable
+            const auto pal2 = LcdColours::fromTheme();
+            g.setColour (pal2.phosphor.withAlpha (0.30f));
+            g.drawHorizontalLine (nameHitRect.getBottom() - 3,
+                                  (float) nameHitRect.getX(),
+                                  (float) nameHitRect.getRight());
+        }
     }
 
     // ── Row 2:  ST:nnnnn  |  END:nnnnn ───────────────────────────────────────

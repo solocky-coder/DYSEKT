@@ -430,20 +430,26 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     g.setColour (dot.withAlpha (0.13f));
     g.fillRect (3, ry, kNameColW - 4, kRowH);
 
-    // Slice number — larger font, brighter
+    // Slice number / name — user label if set, otherwise zero-padded number
     g.setFont (DysektLookAndFeel::makeFont (12.0f));
     g.setColour (dot.withAlpha (selected ? 0.95f : 0.65f));
-    g.drawText (juce::String (idx + 1).paddedLeft ('0', 2),
-                8, ry, 30, kRowH, juce::Justification::centredLeft);
+    const juce::String nameLabel = sl.name.isNotEmpty()
+        ? sl.name.toUpperCase().substring (0, 7)
+        : juce::String (idx + 1).paddedLeft ('0', 2);
+    g.drawText (nameLabel,
+                8, ry, kNameColW - 12, kRowH, juce::Justification::centredLeft);
 
-    // Duration
-    const double srate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
-    const int end = processor.sliceManager.getEndForSlice (idx, snap.sampleNumFrames);
-    const double lenSec = (end - sl.startSample) / srate;
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
-    g.setColour (theme.foreground.withAlpha (0.30f));
-    g.drawText (juce::String (lenSec, 2) + "s",
-                40, ry, kNameColW - 42, kRowH, juce::Justification::centredLeft);
+    // Duration (only shown when no user name is set, to avoid crowding)
+    if (sl.name.isEmpty())
+    {
+        const double srate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
+        const int end = processor.sliceManager.getEndForSlice (idx, snap.sampleNumFrames);
+        const double lenSec = (end - sl.startSample) / srate;
+        g.setFont (DysektLookAndFeel::makeFont (11.0f));
+        g.setColour (theme.foreground.withAlpha (0.30f));
+        g.drawText (juce::String (lenSec, 2) + "s",
+                    40, ry, kNameColW - 42, kRowH, juce::Justification::centredLeft);
+    }
 
     // ── Knob columns ────────────────────────────────────────────────────
     const int kcy = ry + kRowH / 2;
