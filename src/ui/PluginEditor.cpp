@@ -550,13 +550,17 @@ void DysektEditor::ensureDefaultThemes()
 
 juce::StringArray DysektEditor::getAvailableThemes()
 {
-    juce::StringArray names;
+    // Always start with the full built-in list in display order
+    juce::StringArray names { "dark", "shell", "lazy", "snow", "ghost",
+                              "hack", "pigments", "midnight", "cr8" };
+
+    // Append any user-created themes found on disk that aren't already listed
     for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
     {
         auto t = ThemeData::fromThemeFile (f.loadFileAsString());
-        if (t.name.isNotEmpty()) names.add (t.name);
+        if (t.name.isNotEmpty() && ! names.contains (t.name))
+            names.add (t.name);
     }
-    if (names.isEmpty()) { names.add ("dark"); names.add ("shell"); }
     return names;
 }
 
