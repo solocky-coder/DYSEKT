@@ -59,6 +59,11 @@ public:
     void rebuildMidiMap();
     int  midiNoteToSlice (int note) const;
 
+    /** After a rebuildMidiMap() call, pin one slice to a specific MIDI note,
+     *  updating both the slice's midiNote field and the internal midiMap lookup.
+     *  Call this after rebuildMidiMap() — not before. */
+    void pinSliceMidiNote (int sliceIdx, int note);
+
     float resolveParam (int sliceIdx, LockBit lockBit, float sliceValue, float globalDefault) const;
 
     Slice&       getSlice (int idx)       { return slices[(size_t) idx]; }

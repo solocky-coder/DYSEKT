@@ -295,6 +295,25 @@ int SliceManager::midiNoteToSlice (int note) const
     return midiMap[(size_t) note];
 }
 
+void SliceManager::pinSliceMidiNote (int sliceIdx, int note)
+{
+    if (sliceIdx < 0 || sliceIdx >= numSlices) return;
+    note = juce::jlimit (0, 127, note);
+
+    // Remove the old mapping for this slice's current note.
+    const int oldNote = slices[(size_t) sliceIdx].midiNote;
+    if (oldNote >= 0 && oldNote < 128 && midiMap[(size_t) oldNote] == sliceIdx)
+        midiMap[(size_t) oldNote] = -1;
+
+    // If something else already owns the target note, evict it first.
+    if (midiMap[(size_t) note] >= 0 && midiMap[(size_t) note] != sliceIdx)
+        slices[(size_t) midiMap[(size_t) note]].midiNote = -1;
+
+    // Assign.
+    slices[(size_t) sliceIdx].midiNote = note;
+    midiMap[(size_t) note]             = sliceIdx;
+}
+
 
 // =============================================================================
 //  resolveParam

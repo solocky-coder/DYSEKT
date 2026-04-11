@@ -83,6 +83,7 @@ static Slice sanitiseRestoredSlice (Slice s)
     s.filterCutoff = juce::jlimit (20.0f, 20000.0f, s.filterCutoff);
     s.filterRes    = juce::jlimit (0.0f, 1.0f, s.filterRes);
     s.lockMask &= kValidLockMask;
+    s.name = s.name.toUpperCase();
     return s;
 }
 
@@ -907,27 +908,20 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Slice 0 is the sample anchor and is never deleted.
                 // Work backwards so each deleteSlice(j) only shifts indices above j.
                 //
-                // Before deleting, capture the identity (name + MIDI note) of the
-                // lowest-indexed crushed slice — that is the slice the dragged marker
-                // is physically overtaking, so the overtaking slice inherits it.
+                // Inherit identity from the slice immediately adjacent to the dragged
+                // marker (j = idx-1) — that is the first slice the marker crosses.
+                // Only capture if that slice is actually being crushed.
                 juce::String inheritedName;
                 int          inheritedMidiNote = -1;  // -1 = nothing to inherit
 
-                // First pass: find outermost (lowest-index) crushed slice.
-                for (int j = idx - 1; j > 0; --j)
+                if (idx - 1 > 0 && sliceManager.getSlice (idx - 1).startSample >= start)
                 {
-                    if (sliceManager.getSlice (j).startSample >= start)
-                    {
-                        // This is a candidate; keep scanning — we want the lowest j.
-                        const auto& cand = sliceManager.getSlice (j);
-                        inheritedName     = cand.name;
-                        inheritedMidiNote = cand.midiNote;
-                    }
-                    else
-                        break;
+                    const auto& cand  = sliceManager.getSlice (idx - 1);
+                    inheritedName     = cand.name.toUpperCase();
+                    inheritedMidiNote = cand.midiNote;
                 }
 
-                // Second pass: delete (backwards so indices stay valid).
+                // Delete all crushed slices (backwards so indices stay valid).
                 int cullCount = 0;
                 for (int j = idx - 1; j > 0; --j)
                 {
@@ -947,17 +941,21 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 auto& sNew = sliceManager.getSlice (idx);
                 sNew.startSample = start;
 
-                // Apply inherited identity when a crush occurred.
+                // Apply inherited name before rebuild (rebuild doesn't touch name).
                 if (inheritedMidiNote >= 0)
-                {
-                    sNew.name     = inheritedName;
-                    sNew.midiNote = inheritedMidiNote;
-                }
+                    sNew.name = inheritedName;
+
                 // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
 
                 sliceManager.rebuildMidiMap();
+
+                // Re-apply inherited MIDI note AFTER rebuildMidiMap() — rebuild
+                // unconditionally reassigns notes sequentially and would overwrite it.
+                // pinSliceMidiNote patches both the slice field and the lookup map.
+                if (inheritedMidiNote >= 0)
+                    sliceManager.pinSliceMidiNote (idx, inheritedMidiNote);
             }
             break;
         }
@@ -1186,7 +1184,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
         {
             int idx = cmd.intParam1;
             if (idx >= 0 && idx < sliceManager.getNumSlices())
-                sliceManager.getSlice (idx).name = cmd.stringParam;
+                sliceManager.getSlice (idx).name = cmd.stringParam.toUpperCase();
             break;
         }
 
