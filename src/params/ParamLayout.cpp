@@ -159,5 +159,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.01f),
         0.0f));
 
+    // v20: global Poly/Mono switch
+    params.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParamIds::globalMono, 1 },
+        "Global Mono",
+        false));
+
     return { params.begin(), params.end() };
 }

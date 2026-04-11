@@ -134,6 +134,7 @@ void SliceLcdDisplay::buildDisplayData()
     data.loopMode    = sl.loopMode;
     data.oneShot     = sl.oneShot;
     data.muteGroup   = sl.muteGroup;
+    data.globalMono  = processor.apvts.getRawParameterValue (ParamIds::globalMono)->load() > 0.5f;
     data.filterCutoff    = sl.filterCutoff;
     data.filterRes       = sl.filterRes;
     data.sliceLocked     = (sl.lockMask == 0xFFFFFFFFu);
@@ -328,8 +329,8 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
         { "REV",  data.reverse,        DysektProcessor::FieldReverse,        false },
         { loopStr, data.loopMode > 0,  DysektProcessor::FieldLoop,           true  },
         { "1SH",  data.oneShot,        DysektProcessor::FieldOneShot,        false },
-        { "MUT:" + (data.muteGroup > 0 ? juce::String (data.muteGroup) : juce::String ("-")),
-                  data.muteGroup > 0,  DysektProcessor::FieldMuteGroup,      true  },
+        { data.globalMono ? "MONO" : "POLY",
+                  data.globalMono,     DysektProcessor::FieldGlobalMono,     false },
         { "STR",  data.stretchEnabled, DysektProcessor::FieldStretchEnabled,  false },
         { "TAIL", data.releaseTail,    DysektProcessor::FieldReleaseTail,    false },
         { "FMC",  data.formantComp,    DysektProcessor::FieldFormantComp,    false },
@@ -505,9 +506,9 @@ void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
                 repaint();
                 return;
             }
-            case F::FieldMuteGroup:
-                // Cycle: 0 → 1 → 2 → ... → 8 → 0
-                cmd.floatParam1 = (float)((data.muteGroup + 1) % 9);
+            case F::FieldGlobalMono:
+                // Toggle global Poly/Mono
+                cmd.floatParam1 = data.globalMono ? 0.0f : 1.0f;
                 break;
             case F::FieldStretchEnabled:
                 cmd.floatParam1 = data.stretchEnabled ? 0.0f : 1.0f;

@@ -54,7 +54,8 @@ private:
  int loopMode = 0;
  bool oneShot = false;
  juce::Colour sliceColour;
- int muteGroup = 0;
+ int muteGroup = 0;   // kept for serialization compat — not displayed
+ bool globalMono = false;
  float filterCutoff = 20000.0f;
  float filterRes = 0.0f;
  juce::String sliceName;

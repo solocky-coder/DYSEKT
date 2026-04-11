@@ -199,11 +199,24 @@ void MixerPanel::drawKnobInRow (juce::Graphics& g, int cx, int cy,
 }
 
 void MixerPanel::drawMuteBadge (juce::Graphics& g, int cx, int cy,
-                                  int muteGroup, bool locked) const
+                                  int muteGroup, bool locked, bool dimmed) const
 {
     const auto& theme = getTheme();
     const int bw = 18, bh = 16;
     const juce::Rectangle<float> r ((float)(cx - bw/2), (float)(cy - bh/2), (float)bw, (float)bh);
+
+    // When global MONO is on, render the badge fully greyed out
+    if (dimmed)
+    {
+        g.setColour (theme.separator.withAlpha (0.18f));
+        g.fillRoundedRectangle (r, 2.5f);
+        g.setColour (theme.foreground.withAlpha (0.15f));
+        g.drawRoundedRectangle (r, 2.5f, 0.8f);
+        g.setFont (DysektLookAndFeel::makeFont (11.0f));
+        g.setColour (theme.foreground.withAlpha (0.15f));
+        g.drawText (juce::String (muteGroup), r.toNearestInt(), juce::Justification::centred);
+        return;
+    }
 
     const bool active = (muteGroup > 0);
     g.setColour (active ? (locked ? theme.lockActive.withAlpha (0.15f)
@@ -539,7 +552,8 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
         const bool mg_locked = (sl.lockMask & kLockMuteGroup) != 0;
         const int x = colX (ColMute);
         const int cx = x + kKnobColW / 2;
-        drawMuteBadge (g, cx, kcy, sl.muteGroup, mg_locked);
+        const bool monoOn = processor.apvts.getRawParameterValue (ParamIds::globalMono)->load() > 0.5f;
+        drawMuteBadge (g, cx, kcy, sl.muteGroup, mg_locked, monoOn);
     }
 
     // CHRO — chromatic MIDI channel badge

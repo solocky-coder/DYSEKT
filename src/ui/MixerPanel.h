@@ -81,7 +81,7 @@ private:
     void drawKnobInRow (juce::Graphics&, int cx, int cy, float norm,
                         bool locked, bool isMaster = false) const;
     void drawMuteBadge (juce::Graphics&, int cx, int cy,
-                        int muteGroup, bool locked) const;
+                        int muteGroup, bool locked, bool dimmed) const;
     void drawChroBadge (juce::Graphics&, int cx, int cy, int channel, bool locked) const;
     void drawMeter     (juce::Graphics&, int x, int y, int w, int h,
                         float peakL, float peakR, juce::Colour tint, int sliceIdx) const;

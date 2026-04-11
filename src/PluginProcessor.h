@@ -59,6 +59,7 @@ public:
         FieldChromaticLegato,  // 27 - per-slice chromatic legato (bool)
         FieldTrimOut = 28,     // 28 - trim-out marker via MIDI CC
         FieldHold = 29,        // 29 - per-slice AHDSR hold time (seconds)
+        FieldGlobalMono = 30,  // 30 - global Poly/Mono switch (bool)
     };
 
     // ── Command types ────────────────────────────────────────────────────────
@@ -434,6 +435,7 @@ private:
     std::atomic<float>* algoParam         { nullptr };
 
     std::atomic<float>* muteGroupParam    { nullptr };
+    std::atomic<float>* monoParam         { nullptr };
     std::atomic<float>* stretchParam      { nullptr };
     std::atomic<float>* tonalityParam     { nullptr };
     std::atomic<float>* formantParam      { nullptr };

@@ -34,4 +34,7 @@ namespace ParamIds
     inline const juce::String defaultPan          { "defaultPan" };
     inline const juce::String defaultFilterCutoff { "defaultFilterCutoff" };
     inline const juce::String defaultFilterRes    { "defaultFilterRes" };
+
+    // v20 additions
+    inline const juce::String globalMono          { "globalMono" };
 }

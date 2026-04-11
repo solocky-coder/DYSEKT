@@ -146,6 +146,7 @@ DysektProcessor::DysektProcessor()
     releaseParam   = apvts.getRawParameterValue (ParamIds::defaultRelease);
     holdParam      = apvts.getRawParameterValue (ParamIds::defaultHold);
     muteGroupParam = apvts.getRawParameterValue (ParamIds::defaultMuteGroup);
+    monoParam      = apvts.getRawParameterValue (ParamIds::globalMono);
     stretchParam   = apvts.getRawParameterValue (ParamIds::defaultStretchEnabled);
     tonalityParam  = apvts.getRawParameterValue (ParamIds::defaultTonality);
     formantParam   = apvts.getRawParameterValue (ParamIds::defaultFormant);
@@ -846,6 +847,11 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldSustain:   s.sustainLevel = val;   s.lockMask |= kLockSustain;   break;
                     case FieldRelease:   s.releaseSec = val;     s.lockMask |= kLockRelease;   break;
                     case FieldMuteGroup: s.muteGroup = (int) val; s.lockMask |= kLockMuteGroup; break;
+                    case FieldGlobalMono:
+                        // Global param — write directly to APVTS, not per-slice
+                        if (auto* p2 = apvts.getParameter (ParamIds::globalMono))
+                            p2->setValueNotifyingHost (val > 0.5f ? 1.0f : 0.0f);
+                        break;
                     case FieldStretchEnabled: s.stretchEnabled = val > 0.5f; s.lockMask |= kLockStretch; break;
                     case FieldTonality:  s.tonalityHz = val;        s.lockMask |= kLockTonality;    break;
                     case FieldFormant:   s.formantSemitones = val;   s.lockMask |= kLockFormant;     break;
@@ -1810,9 +1816,12 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         if (! retuned)
                         {
                             int voiceIdx = voicePool.allocate();
-                            int mg = (int) sliceManager.resolveParam (ci, kLockMuteGroup,
-                                                                        (float) cs.muteGroup,
-                                                                        (float) p.globalMuteGroup);
+                            const bool globalMono = monoParam->load() > 0.5f;
+                            int mg = (globalMono && cs.chromaticChannel == 0)
+                                       ? (ci + 1)
+                                       : (int) sliceManager.resolveParam (ci, kLockMuteGroup,
+                                                                           (float) cs.muteGroup,
+                                                                           (float) p.globalMuteGroup);
                             voicePool.muteGroup (mg, voiceIdx);
                             if (legato)
                                 voicePool.killVoicesForChromaticLegato (ci);
@@ -1845,8 +1854,11 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
 
                         int voiceIdx = voicePool.allocate();
                         const auto& s = sliceManager.getSlice (sliceIdx);
-                        int mg = (int) sliceManager.resolveParam (sliceIdx, kLockMuteGroup,
-                                                                  (float) s.muteGroup, (float) p.globalMuteGroup);
+                        const bool globalMono = monoParam->load() > 0.5f;
+                        int mg = (globalMono && s.chromaticChannel == 0)
+                                   ? (sliceIdx + 1)
+                                   : (int) sliceManager.resolveParam (sliceIdx, kLockMuteGroup,
+                                                                       (float) s.muteGroup, (float) p.globalMuteGroup);
                         voicePool.muteGroup (mg, voiceIdx);
                         p.sliceIdx = sliceIdx;
                         voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
