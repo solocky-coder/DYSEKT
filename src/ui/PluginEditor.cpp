@@ -544,6 +544,7 @@ void DysektEditor::ensureDefaultThemes()
     write ("ghost", ThemeData::ghostTheme());
     write ("hack",  ThemeData::hackTheme());
     write ("pigments", ThemeData::pigmentsTheme());
+    write ("midnight", ThemeData::midnightTheme());
     write ("cr8",   ThemeData::cr8Theme());
 }
 
@@ -578,6 +579,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
     else if (themeName == "ghost")    setTheme (ThemeData::ghostTheme());
     else if (themeName == "hack")     setTheme (ThemeData::hackTheme());
     else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
+    else if (themeName == "midnight") setTheme (ThemeData::midnightTheme());
     else if (themeName == "cr8")      setTheme (ThemeData::cr8Theme());
     else                              setTheme (ThemeData::darkTheme());
     processor.sliceManager.setSlicePalette (getTheme().slicePalette);
