@@ -439,7 +439,7 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
     g.drawText (nameLabel,
                 8, ry, kNameColW - 12, kRowH, juce::Justification::centredLeft);
 
-    // Duration (only shown when no user name is set, to avoid crowding)
+    // Duration — only shown when no user label is set
     if (sl.name.isEmpty())
     {
         const double srate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;

@@ -1157,7 +1157,6 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     cmd.intParam2 = (int) kPalARGB[result - 20];
                     processor.pushCommand (cmd);
                 }
-
                 repaint();
             });
         return;

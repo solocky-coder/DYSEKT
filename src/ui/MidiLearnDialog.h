@@ -99,7 +99,7 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
             if (midiLearn && fieldId >= 0)
             {
                 midiLearn->clearMapping (fieldId);
-                ccLabel.setText (juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x94")), juce::dontSendNotification);
+                ccLabel.setText ("—", juce::dontSendNotification);
             }
         };
         addAndMakeVisible (clearButton);

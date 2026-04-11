@@ -60,25 +60,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
  waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
  waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
- waveformView.onRenameRequest   = [this] (int sliceIdx, const juce::String& currentName)
- {
-     renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
-     addAndMakeVisible (*renameOverlay);
-     renameOverlay->setBounds (getLocalBounds());
-     renameOverlay->toFront (true);
-     renameOverlay->onResult = [this, sliceIdx] (const juce::String& newName, bool cancelled)
-     {
-         renameOverlay.reset();
-         if (! cancelled)
-         {
-             DysektProcessor::Command cmd;
-             cmd.type        = DysektProcessor::CmdSetSliceName;
-             cmd.intParam1   = sliceIdx;
-             cmd.stringParam = newName;
-             processor.pushCommand (cmd);
-         }
-     };
- };
  sliceLcd.onRenameRequest = [this] (int sliceIdx, const juce::String& currentName)
  {
      renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
@@ -136,7 +117,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  }
 
  setWantsKeyboardFocus (true);
- setResizable (true, false);
+ setResizable (true, false);  // false = no corner grip component — it painted over the frame border
  setResizeLimits (kBaseW, 650, 3840, 2160);
  setSize (kBaseW, kTotalH);
  lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
@@ -205,27 +186,106 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
             return;
         }
 
-        // Long sample (≥5s) — ask inside the plugin (themed, no native OS dialog)
-        confirmOverlay = std::make_unique<ConfirmOverlay> (
-            "Trim Sample?",
-            "This sample is long.  Would you like to trim it before slicing?",
-            "Trim",
-            "No Thanks");
-        addAndMakeVisible (*confirmOverlay);
-        confirmOverlay->setBounds (getLocalBounds());
-        confirmOverlay->toFront (true);
-        confirmOverlay->onResult = [this, file] (bool trim)
+        // Long sample (≥5s) — ask the user with an in-plugin themed overlay
+        // (replaces AlertWindow::showAsync which spawned a native OS window
+        //  outside the plugin bounds and ignored the current theme)
         {
-            confirmOverlay.reset();
-            if (trim)
-                showTrimMode (file);
-            else
+            struct TrimConfirmOverlay : public juce::Component
             {
+                std::function<void(bool)> onResult;
+
+                TrimConfirmOverlay()
+                {
+                    setInterceptsMouseClicks (true, true);
+                }
+
+                void paint (juce::Graphics& g) override
+                {
+                    const auto& T = getTheme();
+
+                    // Dim the entire plugin
+                    g.setColour (juce::Colours::black.withAlpha (0.55f));
+                    g.fillAll();
+
+                    // Card
+                    const int cardW = juce::jmin (360, getWidth() - 48);
+                    const int cardH = 128;
+                    const int cardX = (getWidth()  - cardW) / 2;
+                    const int cardY = (getHeight() - cardH) / 2;
+                    const auto card = juce::Rectangle<int> (cardX, cardY, cardW, cardH);
+
+                    g.setColour (T.header);
+                    g.fillRoundedRectangle (card.toFloat(), 6.0f);
+                    g.setColour (T.accent.withAlpha (0.45f));
+                    g.drawRoundedRectangle (card.toFloat().reduced (0.5f), 6.0f, 1.0f);
+
+                    // Title
+                    g.setFont (DysektLookAndFeel::makeFont (13.0f, true));
+                    g.setColour (T.accent);
+                    g.drawText ("TRIM SAMPLE?",
+                                cardX, cardY + 14, cardW, 18,
+                                juce::Justification::centred, false);
+
+                    // Body
+                    g.setFont (DysektLookAndFeel::makeFont (11.0f));
+                    g.setColour (T.foreground.withAlpha (0.85f));
+                    g.drawText ("This sample is long.  Trim before slicing?",
+                                cardX + 12, cardY + 38, cardW - 24, 16,
+                                juce::Justification::centred, false);
+                }
+
+                void resized() override
+                {
+                    const int cardW = juce::jmin (360, getWidth() - 48);
+                    const int cardH = 128;
+                    const int cardX = (getWidth()  - cardW) / 2;
+                    const int cardY = (getHeight() - cardH) / 2;
+
+                    const int btnW = 100, btnH = 26, btnGap = 12;
+                    const int totalBtnW = btnW * 2 + btnGap;
+                    const int btnY = cardY + cardH - btnH - 14;
+                    const int btnStartX = cardX + (cardW - totalBtnW) / 2;
+
+                    if (getNumChildComponents() == 2)
+                    {
+                        getChildComponent(0)->setBounds (btnStartX,           btnY, btnW, btnH);
+                        getChildComponent(1)->setBounds (btnStartX + btnW + btnGap, btnY, btnW, btnH);
+                    }
+                }
+            };
+
+            auto* overlay = new TrimConfirmOverlay();
+            overlay->setBounds (getLocalBounds());
+
+            auto* trimBtn   = new juce::TextButton ("TRIM");
+            auto* noBtn     = new juce::TextButton ("NO THANKS");
+
+            trimBtn->setColour (juce::TextButton::buttonColourId,  getTheme().accent.withAlpha (0.85f));
+            trimBtn->setColour (juce::TextButton::textColourOffId, juce::Colours::black);
+            noBtn->setColour  (juce::TextButton::buttonColourId,  getTheme().button);
+            noBtn->setColour  (juce::TextButton::textColourOffId, getTheme().foreground);
+
+            overlay->addAndMakeVisible (trimBtn);
+            overlay->addAndMakeVisible (noBtn);
+            overlay->resized();
+
+            trimConfirmOverlay.reset (overlay);
+            addAndMakeVisible (*trimConfirmOverlay);
+            trimConfirmOverlay->toFront (false);
+
+            trimBtn->onClick = [this, file]
+            {
+                trimConfirmOverlay.reset();
+                showTrimMode (file);
+            };
+            noBtn->onClick = [this, file]
+            {
+                trimConfirmOverlay.reset();
                 processor.loadFileAsync (file);
                 processor.zoom.store (1.0f);
                 processor.scroll.store (0.0f);
-            }
-        };
+            };
+        }
         return;
     }
     showTrimMode (file);
@@ -284,10 +344,9 @@ void DysektEditor::paint (juce::Graphics& g)
  const int kFrameInset = 4;
  const int kFrameX = kMargin;
  const int kFrameW = getWidth() - kMargin * 2;
- const int trimExtra = (trimDialog != nullptr) ? kTrimBarH : 0;
  const juce::Rectangle outerF (
  (float) kFrameX, (float) sbnd.getY() - kFrameInset,
- (float) kFrameW, (float) (sbnd.getHeight() + trimExtra + kFrameInset * 2));
+ (float) kFrameW, (float) (sbnd.getHeight() + kFrameInset * 2));
  juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
  juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
  g.setGradientFill (outerGrad);
@@ -319,29 +378,16 @@ void DysektEditor::paint (juce::Graphics& g)
  // NOTE: sliceLane is now collapsed; no separator line needed here
  }
 
-
-    // ── Logo frame — accent border matching global frame style ──────────────────
-    if (logoBar.isVisible() && logoBar.getHeight() > 0)
-    {
-        const auto ac = getTheme().accent;
-        // withTrimmedTop(4) creates a visible gap from the outer window border
-        const juce::Rectangle<float> logoF (logoBar.getBounds().toFloat().withTrimmedTop (4.0f));
-        g.setColour (ac.withAlpha (0.18f));
-        g.drawRoundedRectangle (logoF.expanded (1.0f), 5.0f, 1.0f);
-        g.setColour (ac.withAlpha (0.72f));
-        g.drawRoundedRectangle (logoF.reduced (0.5f), 4.0f, 1.5f);
-        g.setColour (ac.withAlpha (0.18f));
-        g.drawRoundedRectangle (logoF.reduced (2.0f), 3.5f, 1.0f);
-    }
-
  // ── Full-window accent frame ─────────────────────────────────────────
  {
   const auto ac = getTheme().accent;
   const juce::Rectangle<float> win (getLocalBounds().toFloat());
-  g.setColour (ac.withAlpha (0.60f));
-  g.drawRoundedRectangle (win.reduced (2.0f), 2.5f, 1.5f);
   g.setColour (ac.withAlpha (0.14f));
-  g.drawRoundedRectangle (win.reduced (4.0f), 2.0f, 1.0f);
+  g.drawRoundedRectangle (win.reduced (0.5f), 3.0f, 3.0f);
+  g.setColour (ac.withAlpha (0.72f));
+  g.drawRoundedRectangle (win.reduced (1.5f), 2.5f, 1.5f);
+  g.setColour (ac.withAlpha (0.18f));
+  g.drawRoundedRectangle (win.reduced (3.0f), 2.0f, 1.0f);
  }
 }
 
@@ -380,19 +426,19 @@ void DysektEditor::resized()
 
  topRow.removeFromLeft (kMargin);
 
- // Right: SliceWaveformLcd — full kWaveformLcdRowH height for detailed ADSR editing
+ // Right: SliceWaveformLcd — full strip height
  sliceWaveformLcd.setBounds (topRow);
 
  auto actionArea = area.removeFromTop (kActionH);
  const int kFX = kMargin;
  const int kFW = getWidth() - kMargin * 2;
-
- // Only reserve panel slot space when a panel is actually open — avoids
- // eating into the waveform area when panels are closed and the user resizes.
+ juce::Rectangle<int> slot;
+ if (mixerOpen || browserOpen)
+ {
  area.removeFromBottom (kMargin);
- const int slotH = (mixerOpen || browserOpen) ? kPanelSlotH : 0;
- auto slot = area.removeFromBottom (slotH);
+ slot = area.removeFromBottom (kPanelSlotH);
  area.removeFromBottom (kMargin);
+ }
 
  if (mixerOpen) {
  const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
@@ -408,14 +454,10 @@ void DysektEditor::resized()
  browserPanel.setBounds ({});
  }
 
- // Hide SCB in trim mode so it doesn't cover the trim waveform.
- if (trimDialog != nullptr) {
- sliceControlBar.setBounds ({});
- } else {
+ area.removeFromBottom (kMargin); // keep control bar off the outer plugin frame
  auto scbArea = area.removeFromBottom (kSliceCtrlH);
  sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
  area.removeFromBottom (kMargin);
- }
 
  const int kFrameInset = 4;
  const int kFrameX = kFX;
@@ -443,8 +485,6 @@ void DysektEditor::resized()
 
  if (midiLearnDialog != nullptr)
  midiLearnDialog->setBounds (getLocalBounds().reduced (40));
- if (confirmOverlay != nullptr)
- confirmOverlay->setBounds (getLocalBounds());
 }
 
 void DysektEditor::toggleMixerPanel()

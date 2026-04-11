@@ -466,72 +466,46 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         ? juce::jlimit (0.0f, 1.0f, (float) sampleVal / (float) totalFrames)
         : 0.0f;
 
-    const float ghostNorm   = processor.markerCcGhostNorm.load   (std::memory_order_relaxed);
-    const float fineWinLo   = processor.markerFineWindowLo.load  (std::memory_order_relaxed);
-    const float fineWinHi   = processor.markerFineWindowHi.load  (std::memory_order_relaxed);
-    const bool mapped       = processor.midiLearn.isMapped  (DysektProcessor::FieldSliceStart);
-    const bool endless      = processor.midiLearn.isEndless (DysektProcessor::FieldSliceStart);
-    const int sel           = processor.getUiSliceSnapshot().selectedSlice;
-    const bool prePickup    = mapped && !endless
+    const float ghostNorm = processor.markerCcGhostNorm.load (std::memory_order_relaxed);
+    const bool mapped     = processor.midiLearn.isMapped (DysektProcessor::FieldSliceStart);
+    const bool endless    = processor.midiLearn.isEndless (DysektProcessor::FieldSliceStart);
+    const int sel         = processor.getUiSliceSnapshot().selectedSlice;
+    const bool prePickup  = mapped && !endless
         && sel >= 0 && sel < DysektProcessor::kMaxCCSlices
         && !processor.ccPickedUp[(size_t) sel][(size_t) DysektProcessor::FieldSliceStart];
-    const bool fineActive   = mapped && !endless && !prePickup
-        && fineWinLo >= 0.0f && fineWinHi > fineWinLo;
+    const bool showGhost  = prePickup;
+    const float pickupStartNorm = frac; // pickup starts at the current marker position
+    const float knobNorm = (ghostNorm >= 0.0f ? ghostNorm : pickupStartNorm);
 
-    // ── Pre-pickup ghost overlay (clip to cell interior) ─────────────────
-    if (prePickup)
+    // Ghost — full-cell-height overlay drawn BEFORE the border so it sits
+    // behind text but is clearly visible. This marks the pickup start position
+    // (current marker) while pickup is pending.
+    if (showGhost)
     {
-        g.saveState();
-        g.reduceClipRegion (cell.reduced (2));
+        const float ghostX = cell.getX() + pickupStartNorm * (float) cell.getWidth();
 
-        // Dim fill from 0 to marker position (the target the knob must reach)
-        const float markerX = cell.getX() + frac * (float) cell.getWidth();
+        // Dim fill from left edge to ghost position
         g.setColour (juce::Colours::white.withAlpha (0.08f));
         g.fillRect (juce::Rectangle<float> ((float) cell.getX(), (float) cell.getY(),
-                                             markerX - (float) cell.getX(), (float) cell.getHeight()));
+                                             ghostX - (float) cell.getX(), (float) cell.getHeight()));
 
-        // Bright tick at the marker (pickup target)
-        const float clampedMkr = juce::jlimit ((float) cell.getX() + 0.5f,
-                                                (float) cell.getRight() - 0.5f, markerX);
+        // Match playhead thickness (1px) for visual consistency.
+        const float clampedX = juce::jlimit ((float) cell.getX() + 0.5f,
+                                              (float) cell.getRight() - 0.5f, ghostX);
         g.setColour (juce::Colours::white.withAlpha (0.85f));
-        g.fillRect (juce::Rectangle<float> (clampedMkr - 0.5f, (float) cell.getY(),
+        g.fillRect (juce::Rectangle<float> (clampedX - 0.5f, (float) cell.getY(),
                                              1.0f, (float) cell.getHeight()));
 
-        // Physical knob position tick (when known)
+        // Secondary thin tick: physical knob/fader position (when known).
         if (ghostNorm >= 0.0f)
         {
-            const float knobX = cell.getX() + ghostNorm * (float) cell.getWidth();
-            const float clampedKnob = juce::jlimit ((float) cell.getX() + 1.0f,
-                                                    (float) cell.getRight() - 1.0f, knobX);
+            const float knobX = cell.getX() + knobNorm * (float) cell.getWidth();
+            const float clampedKnobX = juce::jlimit ((float) cell.getX() + 1.0f,
+                                                     (float) cell.getRight() - 1.0f, knobX);
             g.setColour (juce::Colours::white.withAlpha (0.45f));
-            g.fillRect (juce::Rectangle<float> (clampedKnob - 1.0f, (float) cell.getY(),
+            g.fillRect (juce::Rectangle<float> (clampedKnobX - 1.0f, (float) cell.getY(),
                                                 2.0f, (float) cell.getHeight()));
         }
-
-        g.restoreState();
-    }
-
-    // ── Post-pickup fine window overlay ───────────────────────────────────
-    if (fineActive)
-    {
-        g.saveState();
-        g.reduceClipRegion (cell.reduced (2));
-
-        const float loX = cell.getX() + fineWinLo * (float) cell.getWidth();
-        const float hiX = cell.getX() + fineWinHi * (float) cell.getWidth();
-
-        // Shaded band showing the fine window range
-        g.setColour (T.accent.withAlpha (0.10f));
-        g.fillRect (juce::Rectangle<float> (loX, (float) cell.getY(),
-                                             hiX - loX, (float) cell.getHeight()));
-
-        // Edge tick — low boundary
-        g.setColour (T.accent.withAlpha (0.55f));
-        g.fillRect (juce::Rectangle<float> (loX, (float) cell.getY(), 1.0f, (float) cell.getHeight()));
-        // Edge tick — high boundary
-        g.fillRect (juce::Rectangle<float> (hiX - 1.0f, (float) cell.getY(), 1.0f, (float) cell.getHeight()));
-
-        g.restoreState();
     }
 
     {
@@ -539,21 +513,11 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         g.setColour (T.separator);
         g.fillRect (bar);
 
-        // Ghost position on the bottom progress strip (pre-pickup only)
-        if (prePickup)
+        // Ghost position on the bottom progress strip
+        if (showGhost)
         {
             g.setColour (juce::Colours::white.withAlpha (0.55f));
-            g.fillRect (bar.withWidth (bar.getWidth() * frac));
-        }
-
-        // Fine window edges on the bottom strip
-        if (fineActive)
-        {
-            g.setColour (T.accent.withAlpha (0.60f));
-            const float loX = bar.getX() + fineWinLo * bar.getWidth();
-            const float hiX = bar.getX() + fineWinHi * bar.getWidth();
-            g.fillRect (juce::Rectangle<float> (loX, bar.getY(), 1.0f, bar.getHeight()));
-            g.fillRect (juce::Rectangle<float> (hiX - 1.0f, bar.getY(), 1.0f, bar.getHeight()));
+            g.fillRect (bar.withWidth (bar.getWidth() * pickupStartNorm));
         }
 
         // Solid marker bar — theme accent, always on top
@@ -561,36 +525,13 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         g.fillRect (bar.withWidth (bar.getWidth() * frac));
     }
 
-    // FINE toggle badge — top-right corner, only when a CC is mapped
-    const bool showFineBadge = mapped && !endless;
-    if (showFineBadge)
-    {
-        const bool fineOn = processor.markerFineMode.load (std::memory_order_relaxed);
-        const int bw = 22, bh = 10;
-        const int bx = cell.getRight() - bw - 2;
-        const int by = cell.getY() + 2;
-        markerFineModeToggleArea = juce::Rectangle<int> (bx, by, bw, bh);
-
-        g.setColour (fineOn ? T.accent.withAlpha (0.85f) : T.foreground.withAlpha (0.18f));
-        g.fillRoundedRectangle (markerFineModeToggleArea.toFloat(), 2.0f);
-        g.setFont (DysektLookAndFeel::makeFont (7.5f));
-        g.setColour (fineOn ? T.darkBar : T.foreground.withAlpha (0.45f));
-        g.drawText ("FINE", markerFineModeToggleArea, juce::Justification::centred, false);
-    }
-    else
-    {
-        markerFineModeToggleArea = {};
-    }
-
     // Label — top half
     const int midY = cell.getY() + cell.getHeight() / 2;
     g.setFont (DysektLookAndFeel::makeFont (8.0f));
     g.setColour (T.accent.withAlpha (0.65f));
-    // Shrink label area if fine badge is shown
-    const int labelW = showFineBadge ? (cell.getWidth() - 26) : cell.getWidth();
     g.drawText ("MARKER",
                 cell.getX(), cell.getY() + 2,
-                labelW, midY - cell.getY() - 2,
+                cell.getWidth(), midY - cell.getY() - 2,
                 juce::Justification::centred, false);
 
     // Value — bottom half
@@ -1191,21 +1132,6 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  activeDragCell = -1; draggingRootNote = false;
  auto pos = e.getPosition();
  const auto& ui = processor.getUiSliceSnapshot();
-
- // FINE mode toggle badge — check before cell loop so it doesn't start a drag
- if (!markerFineModeToggleArea.isEmpty() && markerFineModeToggleArea.contains (pos))
- {
-     const bool cur = processor.markerFineMode.load (std::memory_order_relaxed);
-     processor.markerFineMode.store (!cur, std::memory_order_relaxed);
-     // Switching to normal mode: clear fine window UI state
-     if (cur)
-     {
-         processor.markerFineWindowLo.store (-1.0f, std::memory_order_relaxed);
-         processor.markerFineWindowHi.store (-1.0f, std::memory_order_relaxed);
-     }
-     repaint();
-     return;
- }
 
  if (ui.numSlices == 0 && rootNoteArea.contains (pos))
  {
