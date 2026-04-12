@@ -1,5 +1,6 @@
 #include "WaveformOverview.h"
 #include "../PluginProcessor.h"
+#include "DysektLookAndFeel.h"   // getTheme()
 
 //==============================================================================
 WaveformOverview::WaveformOverview (DysektProcessor& p)
@@ -14,21 +15,20 @@ void WaveformOverview::repaintOverview()
 }
 
 //==============================================================================
-// Viewport rect
-// Mirrors WaveformView::buildViewState():
+// Viewport rect — mirrors WaveformView::buildViewState():
 //   visibleLen   = numFrames / zoom
 //   maxStart     = numFrames - visibleLen
 //   visibleStart = scroll * maxStart
-// Then maps to pixel fractions of our component width.
+// Maps to pixel fractions of the *screen* rectangle (not the whole component).
 //==============================================================================
-juce::Rectangle<float> WaveformOverview::viewportRect() const
+juce::Rectangle<float> WaveformOverview::viewportRect (const juce::Rectangle<int>& screen) const
 {
     auto snap = processor.sampleData.getSnapshot();
     if (! snap || snap->buffer.getNumSamples() == 0)
-        return { 0.0f, 0.0f, (float) getWidth(), (float) getHeight() };
+        return screen.toFloat();
 
-    const float W   = (float) getWidth();
-    const float H   = (float) getHeight();
+    const float W   = (float) screen.getWidth();
+    const float H   = (float) screen.getHeight();
     const int   nf  = snap->buffer.getNumSamples();
     const float z   = juce::jmax (1.0f, processor.zoom.load());
     const float sc  = processor.scroll.load();
@@ -37,14 +37,14 @@ juce::Rectangle<float> WaveformOverview::viewportRect() const
     const int maxStart = juce::jmax (0, nf - visLen);
     const int visStart = juce::jlimit (0, maxStart, (int) (sc * (float) maxStart));
 
-    const float x0 = (float) visStart        / (float) nf * W;
-    const float x1 = (float) (visStart + visLen) / (float) nf * W;
+    const float x0 = (float) screen.getX() + (float) visStart        / (float) nf * W;
+    const float x1 = (float) screen.getX() + (float) (visStart + visLen) / (float) nf * W;
 
-    return { x0, 0.0f, juce::jmax (1.0f, x1 - x0), H };
+    return { x0, (float) screen.getY(), juce::jmax (1.0f, x1 - x0), H };
 }
 
 //==============================================================================
-// Peak cache
+// Peak cache — one max-abs value per pixel column of the screen area
 //==============================================================================
 void WaveformOverview::rebuildPeaks()
 {
@@ -57,6 +57,7 @@ void WaveformOverview::rebuildPeaks()
         return;
     }
 
+    // Use the full component width; we offset rendering by the screen inset in paint()
     const int W  = getWidth();
     const int nf = snap->buffer.getNumSamples();
     const int ch = snap->buffer.getNumChannels();
@@ -85,6 +86,256 @@ void WaveformOverview::rebuildPeaks()
 }
 
 //==============================================================================
+// Mini waveform — renders all 8 modes inside the screen rect
+//==============================================================================
+void WaveformOverview::drawMiniWaveform (juce::Graphics& g,
+                                          const juce::Rectangle<int>& screen,
+                                          const juce::Rectangle<float>& vr) const
+{
+    if (peaks.empty()) return;
+
+    const int W   = screen.getWidth();
+    const int H   = screen.getHeight();
+    const int ox  = screen.getX();
+    const int oy  = screen.getY();
+    const int numPeaks = juce::jmin ((int) peaks.size(), W);
+    if (numPeaks <= 0) return;
+
+    const float cy    = (float) oy + (float) H * 0.5f;
+    const float scale = (float) H * 0.42f;   // slightly tighter than the main view
+
+    const juce::Colour waveCol = getTheme().waveform;
+
+    // Helper: pixel index inside 'screen' -> component-space x
+    auto px2x = [&] (int px) -> float { return (float) (ox + px); };
+
+    switch (waveformMode)
+    {
+        // ── Mode 0 : Hard ──────────────────────────────────────────────────
+        default:
+        case 0:
+        {
+            juce::Path fillPath;
+            fillPath.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                fillPath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+            for (int px = numPeaks - 1; px >= 0; --px)
+                fillPath.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+            fillPath.closeSubPath();
+
+            g.setColour (waveCol);
+            g.fillPath (fillPath);
+            break;
+        }
+
+        // ── Mode 1 : Soft ──────────────────────────────────────────────────
+        case 1:
+        {
+            juce::Path fillPath;
+            fillPath.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                fillPath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+            for (int px = numPeaks - 1; px >= 0; --px)
+                fillPath.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+            fillPath.closeSubPath();
+
+            g.setColour (waveCol.withAlpha (0.70f));
+            g.fillPath (fillPath);
+
+            juce::Path topLine;
+            topLine.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                topLine.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+            g.setColour (waveCol.withAlpha (0.95f));
+            g.strokePath (topLine, juce::PathStrokeType (1.2f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 2 : Outline ───────────────────────────────────────────────
+        case 2:
+        {
+            juce::Path topPath, botPath;
+            topPath.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+            botPath.startNewSubPath (px2x (0), cy + peaks[0] * scale);
+            for (int px = 1; px < numPeaks; ++px)
+            {
+                topPath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                botPath.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+            }
+            g.setColour (waveCol.withAlpha (0.25f));
+            g.strokePath (topPath, juce::PathStrokeType (2.5f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath (botPath, juce::PathStrokeType (2.5f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (waveCol.withAlpha (0.90f));
+            g.strokePath (topPath, juce::PathStrokeType (1.0f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath (botPath, juce::PathStrokeType (1.0f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 3 : Rectified ─────────────────────────────────────────────
+        case 3:
+        {
+            const float baseline  = (float) oy + (float) H * 0.85f;
+            const float rectScale = scale * 1.6f;
+
+            juce::Path rectPath;
+            rectPath.startNewSubPath (px2x (0), baseline - peaks[0] * rectScale);
+            for (int px = 1; px < numPeaks; ++px)
+                rectPath.lineTo (px2x (px), baseline - peaks[(size_t) px] * rectScale);
+            rectPath.lineTo (px2x (numPeaks - 1), baseline);
+            rectPath.lineTo (px2x (0), baseline);
+            rectPath.closeSubPath();
+
+            juce::ColourGradient grad (waveCol.withAlpha (0.60f), 0.0f, (float) oy,
+                                       waveCol.withAlpha (0.05f), 0.0f, (float) (oy + H), false);
+            g.setGradientFill (grad);
+            g.fillPath (rectPath);
+
+            juce::Path topLine;
+            topLine.startNewSubPath (px2x (0), baseline - peaks[0] * rectScale);
+            for (int px = 1; px < numPeaks; ++px)
+                topLine.lineTo (px2x (px), baseline - peaks[(size_t) px] * rectScale);
+            g.setColour (waveCol.withAlpha (0.90f));
+            g.strokePath (topLine, juce::PathStrokeType (1.1f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 4 : Mirrored ──────────────────────────────────────────────
+        case 4:
+        {
+            juce::Path upperPath, lowerPath;
+            upperPath.startNewSubPath (px2x (0), cy);
+            lowerPath.startNewSubPath (px2x (0), cy);
+            for (int px = 0; px < numPeaks; ++px)
+            {
+                upperPath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                lowerPath.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+            }
+            upperPath.lineTo (px2x (numPeaks - 1), cy);
+            upperPath.closeSubPath();
+            lowerPath.lineTo (px2x (numPeaks - 1), cy);
+            lowerPath.closeSubPath();
+
+            g.setColour (waveCol.withAlpha (0.75f));
+            g.fillPath (upperPath);
+            g.setColour (waveCol.withAlpha (0.35f));
+            g.fillPath (lowerPath);
+
+            juce::Path edgePath;
+            edgePath.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                edgePath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+            g.setColour (waveCol.withAlpha (0.90f));
+            g.strokePath (edgePath, juce::PathStrokeType (1.0f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 5 : Bars ──────────────────────────────────────────────────
+        case 5:
+        {
+            for (int px = 0; px < numPeaks; ++px)
+            {
+                float topY = cy - peaks[(size_t) px] * scale;
+                float botY = cy + peaks[(size_t) px] * scale;
+                float barH = juce::jmax (1.0f, botY - topY);
+                float alpha = 0.4f + peaks[(size_t) px] * 0.55f;
+                g.setColour (waveCol.withAlpha (alpha));
+                g.fillRect (px2x (px), topY, 1.0f, barH);
+            }
+            break;
+        }
+
+        // ── Mode 6 : RMS ───────────────────────────────────────────────────
+        case 6:
+        {
+            juce::Path rmsPath;
+            rmsPath.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                rmsPath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+            for (int px = numPeaks - 1; px >= 0; --px)
+                rmsPath.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+            rmsPath.closeSubPath();
+
+            juce::ColourGradient grad (
+                waveCol.withAlpha (0.0f), 0.0f, 0.0f,
+                waveCol.withAlpha (0.0f), 0.0f, (float) (oy + H), false);
+            grad.addColour (0.35, waveCol.withAlpha (0.22f));
+            grad.addColour (0.5,  waveCol.withAlpha (0.36f));
+            grad.addColour (0.65, waveCol.withAlpha (0.22f));
+            g.setGradientFill (grad);
+            g.fillPath (rmsPath);
+
+            juce::Path rmsLine;
+            rmsLine.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+            for (int px = 1; px < numPeaks; ++px)
+                rmsLine.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+            g.setColour (waveCol.withAlpha (0.28f));
+            g.strokePath (rmsLine, juce::PathStrokeType (3.0f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (waveCol.withAlpha (0.95f));
+            g.strokePath (rmsLine, juce::PathStrokeType (1.1f,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            break;
+        }
+
+        // ── Mode 7 : Stepped ───────────────────────────────────────────────
+        case 7:
+        {
+            const int stepW = juce::jmax (2, W / juce::jmax (1, numPeaks / 4));
+            juce::Path stepFill;
+            bool started = false;
+            float lastY = cy;
+            for (int px = 0; px < numPeaks; px += stepW)
+            {
+                float y = cy - peaks[(size_t) px] * scale;
+                if (! started) { stepFill.startNewSubPath (px2x (px), y); started = true; }
+                else { stepFill.lineTo (px2x (px), lastY); stepFill.lineTo (px2x (px), y); }
+                stepFill.lineTo (px2x (juce::jmin (px + stepW, numPeaks - 1)), y);
+                lastY = y;
+            }
+            juce::Path mirrorFill = stepFill;
+            // Close upper half
+            juce::Path upper = stepFill;
+            upper.lineTo (px2x (numPeaks - 1), cy);
+            upper.lineTo (px2x (0), cy);
+            upper.closeSubPath();
+
+            // Build lower mirror
+            juce::Path lower;
+            bool startedLow = false;
+            float lastYL = cy;
+            for (int px = 0; px < numPeaks; px += stepW)
+            {
+                float y = cy + peaks[(size_t) px] * scale;
+                if (! startedLow) { lower.startNewSubPath (px2x (px), y); startedLow = true; }
+                else { lower.lineTo (px2x (px), lastYL); lower.lineTo (px2x (px), y); }
+                lower.lineTo (px2x (juce::jmin (px + stepW, numPeaks - 1)), y);
+                lastYL = y;
+            }
+            lower.lineTo (px2x (numPeaks - 1), cy);
+            lower.lineTo (px2x (0), cy);
+            lower.closeSubPath();
+
+            g.setColour (waveCol.withAlpha (0.70f));
+            g.fillPath (upper);
+            g.setColour (waveCol.withAlpha (0.30f));
+            g.fillPath (lower);
+
+            // Top edge outline
+            g.setColour (waveCol.withAlpha (0.95f));
+            g.strokePath (stepFill, juce::PathStrokeType (1.0f));
+            break;
+        }
+    }
+}
+
+//==============================================================================
 // Paint
 //==============================================================================
 void WaveformOverview::paint (juce::Graphics& g)
@@ -99,122 +350,151 @@ void WaveformOverview::paint (juce::Graphics& g)
             rebuildPeaks();
     }
 
-    const auto  bounds = getLocalBounds().toFloat();
-    const float W      = bounds.getWidth();
-    const float H      = bounds.getHeight();
-    const float mid    = H * 0.5f;
+    // ── LCD-style frame — identical to SliceControlBar::paint() ─────────────
+    const auto ac = getTheme().accent;
+    auto b = getLocalBounds();
 
-    // Background
-    g.setColour (juce::Colour (0xff0c0d0e));
-    g.fillRoundedRectangle (bounds, 2.0f);
+    juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
+                                    juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+    g.setGradientFill (outerGrad);
+    g.fillRoundedRectangle (b.toFloat(), 4.0f);
+
+    // Outer glow halo
+    g.setColour (ac.withAlpha (0.18f));
+    g.drawRoundedRectangle (b.toFloat().expanded (1.0f), 5.0f, 1.0f);
+    // Border
+    g.setColour (ac.withAlpha (0.65f));
+    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
+
+    auto screen = b.reduced (4);
+    g.setColour (getTheme().darkBar.darker (0.55f));
+    g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+
+    // Scanline texture
+    g.setColour (juce::Colours::black.withAlpha (0.18f));
+    for (int y = screen.getY(); y < screen.getBottom(); y += 2)
+        g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
+
+    // Top glow
+    juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, (float) screen.getY(),
+                                juce::Colours::transparentBlack, 0.f, (float) (screen.getY() + 18), false);
+    g.setGradientFill (glow);
+    g.fillRoundedRectangle (screen.toFloat(), 2.0f);
+
+    // Screen border
+    g.setColour (ac.withAlpha (0.12f));
+    g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
+    // ── End frame ─────────────────────────────────────────────────────────────
+
+    const float W = (float) screen.getWidth();
+    const float H = (float) screen.getHeight();
+    const auto  vr = viewportRect (screen);
 
     if (hasSample && ! peaks.empty())
     {
-        const auto vr = viewportRect();
+        // Clip drawing to screen interior
+        g.reduceClipRegion (screen);
 
-        // Draw waveform — two colours: brighter inside viewport
-        for (int px = 0; px < (int) peaks.size(); ++px)
-        {
-            const float amp    = peaks[(size_t) px] * (mid * 0.85f);
-            const bool  inside = ((float) px >= vr.getX() && (float) px < vr.getRight());
-            g.setColour (inside ? juce::Colour (0xff4a5568)
-                                : juce::Colour (0xff252930));
-            g.drawVerticalLine (px, mid - amp, mid + amp + 1.0f);
-        }
+        // ── Waveform — rendered in theme waveform colour, mode-aware ──────
+        drawMiniWaveform (g, screen, vr);
 
-        // Dim areas outside viewport
-        g.setColour (juce::Colour (0x44000000));
-        if (vr.getX() > 0.0f)
-            g.fillRect (0.0f, 0.0f, vr.getX(), H);
-        if (vr.getRight() < W)
-            g.fillRect (vr.getRight(), 0.0f, W - vr.getRight(), H);
+        // Dim outside viewport
+        g.setColour (juce::Colours::black.withAlpha (0.38f));
+        if (vr.getX() > (float) screen.getX())
+            g.fillRect ((float) screen.getX(), (float) screen.getY(),
+                        vr.getX() - (float) screen.getX(), H);
+        if (vr.getRight() < (float) screen.getRight())
+            g.fillRect (vr.getRight(), (float) screen.getY(),
+                        (float) screen.getRight() - vr.getRight(), H);
 
-        // Viewport fill
-        g.setColour (juce::Colour (0x15d96010));
+        // Viewport tint fill
+        g.setColour (ac.withAlpha (0.10f));
         g.fillRect (vr);
 
         // Viewport border
-        g.setColour (juce::Colour (0xffd96010));
+        g.setColour (ac.withAlpha (0.85f));
         g.drawRect (vr, 1.0f);
 
         // Left handle
-        const juce::Rectangle<float> lh (vr.getX(), 0.0f, (float) kHandleW, H);
-        g.setColour (juce::Colour (0xffd96010));
+        const juce::Rectangle<float> lh (vr.getX(), (float) screen.getY(),
+                                          (float) kHandleW, H);
+        g.setColour (ac.withAlpha (0.90f));
         g.fillRect (lh);
-        g.setColour (juce::Colour (0x55000000));
+        const float mid = (float) screen.getCentreY();
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
         for (int i = -1; i <= 1; ++i)
             g.drawHorizontalLine ((int) (mid + (float) i * 3.0f),
                                   lh.getX() + 1.5f, lh.getRight() - 1.5f);
 
         // Right handle
-        const juce::Rectangle<float> rh (vr.getRight() - (float) kHandleW, 0.0f, (float) kHandleW, H);
-        g.setColour (juce::Colour (0xffd96010));
+        const juce::Rectangle<float> rh (vr.getRight() - (float) kHandleW,
+                                          (float) screen.getY(), (float) kHandleW, H);
+        g.setColour (ac.withAlpha (0.90f));
         g.fillRect (rh);
-        g.setColour (juce::Colour (0x55000000));
         for (int i = -1; i <= 1; ++i)
             g.drawHorizontalLine ((int) (mid + (float) i * 3.0f),
                                   rh.getX() + 1.5f, rh.getRight() - 1.5f);
     }
     else
     {
-        g.setColour (juce::Colour (0xff1c1e22));
-        g.drawHorizontalLine ((int) mid, 0.0f, W);
+        // No sample — dim centre line
+        g.setColour (getTheme().foreground.withAlpha (0.10f));
+        g.drawHorizontalLine (screen.getCentreY(),
+                              (float) screen.getX(), (float) screen.getRight());
     }
-
-    // Outer border
-    g.setColour (juce::Colour (0xff1c1e22));
-    g.drawRoundedRectangle (bounds.reduced (0.5f), 2.0f, 1.0f);
 }
 
 //==============================================================================
-// Mouse
+// Mouse — all hit-testing now in screen-space
 //==============================================================================
 void WaveformOverview::mouseDown (const juce::MouseEvent& e)
 {
     auto snap = processor.sampleData.getSnapshot();
     if (! snap || snap->buffer.getNumSamples() == 0) return;
 
+    auto screen = getLocalBounds().reduced (4);
+
     isDragging      = true;
     dragStartScroll = processor.scroll.load();
     dragStartZoom   = juce::jmax (1.0f, processor.zoom.load());
     dragStartX      = e.x;
 
-    const float W  = (float) getWidth();
+    const float W  = (float) screen.getWidth();
     const float mx = (float) e.x;
-    const auto  vr = viewportRect();
+    const auto  vr = viewportRect (screen);
     const int   nf = snap->buffer.getNumSamples();
 
-    const juce::Rectangle<float> lh (vr.getX(),
-                                     0.0f, (float) kHandleW, (float) getHeight());
+    const juce::Rectangle<float> lh (vr.getX(), (float) screen.getY(),
+                                      (float) kHandleW, (float) screen.getHeight());
     const juce::Rectangle<float> rh (vr.getRight() - (float) kHandleW,
-                                     0.0f, (float) kHandleW, (float) getHeight());
+                                      (float) screen.getY(), (float) kHandleW, (float) screen.getHeight());
 
     if (lh.contains (mx, (float) e.y))
     {
         dragMode       = DragMode::ResizeLeft;
-        dragFixedFrac  = vr.getRight() / W;          // right edge stays fixed (as fraction of nf)
-        dragMovingFrac = vr.getX()     / W;           // left edge moves
+        dragFixedFrac  = (vr.getRight() - (float) screen.getX()) / W;
+        dragMovingFrac = (vr.getX()     - (float) screen.getX()) / W;
     }
     else if (rh.contains (mx, (float) e.y))
     {
         dragMode       = DragMode::ResizeRight;
-        dragFixedFrac  = vr.getX()     / W;           // left edge stays fixed
-        dragMovingFrac = vr.getRight() / W;            // right edge moves
+        dragFixedFrac  = (vr.getX()     - (float) screen.getX()) / W;
+        dragMovingFrac = (vr.getRight() - (float) screen.getX()) / W;
     }
     else if (vr.contains (mx, (float) e.y))
     {
-        dragMode       = DragMode::Scroll;
-        // Store click offset within viewport as fraction of component width
-        dragFixedFrac  = (mx - vr.getX()) / W;
+        dragMode      = DragMode::Scroll;
+        dragFixedFrac = (mx - vr.getX()) / W;   // offset within viewport
     }
     else
     {
         // Click outside: jump-scroll so viewport centres on click
         dragMode = DragMode::Scroll;
 
-        const int   visLen   = juce::jlimit (1, nf, (int) ((float) nf / dragStartZoom));
-        const int   maxStart = juce::jmax (1, nf - visLen);
-        const float clickSample = (mx / W) * (float) nf;
+        const int   visLen    = juce::jlimit (1, nf, (int) ((float) nf / dragStartZoom));
+        const int   maxStart  = juce::jmax (1, nf - visLen);
+        const float clickFrac = (mx - (float) screen.getX()) / W;
+        const float clickSample = clickFrac * (float) nf;
         const float newStart    = juce::jlimit (0.0f, (float) maxStart,
                                                  clickSample - (float) visLen * 0.5f);
         processor.scroll.store (newStart / (float) maxStart);
@@ -232,13 +512,13 @@ void WaveformOverview::mouseDrag (const juce::MouseEvent& e)
     auto snap = processor.sampleData.getSnapshot();
     if (! snap || snap->buffer.getNumSamples() == 0) return;
 
-    const float W   = (float) getWidth();
+    auto screen = getLocalBounds().reduced (4);
+    const float W   = (float) screen.getWidth();
     const int   nf  = snap->buffer.getNumSamples();
-    const float dxF = (float) (e.x - dragStartX) / W;   // movement as fraction of component width
+    const float dxF = (float) (e.x - dragStartX) / W;
 
     if (dragMode == DragMode::Scroll)
     {
-        // dxF is fraction of numFrames; convert to scroll (0..1 over maxStart)
         const int   visLen   = juce::jlimit (1, nf, (int) ((float) nf / dragStartZoom));
         const int   maxStart = juce::jmax (1, nf - visLen);
         const float dScroll  = dxF * (float) nf / (float) maxStart;
@@ -246,7 +526,6 @@ void WaveformOverview::mouseDrag (const juce::MouseEvent& e)
     }
     else if (dragMode == DragMode::ResizeLeft)
     {
-        // dragFixedFrac = right edge (fixed), dragMovingFrac = left edge at drag start
         const float rightFrac = dragFixedFrac;
         const float leftFrac  = juce::jlimit (0.0f,
                                                rightFrac - kMinViewFrac,
@@ -256,14 +535,12 @@ void WaveformOverview::mouseDrag (const juce::MouseEvent& e)
 
         const int visLen   = juce::jlimit (1, nf, (int) ((float) nf / newZoom));
         const int maxStart = juce::jmax (1, nf - visLen);
-        // leftFrac = visStart / numFrames  =>  visStart = leftFrac * nf
         const float newStart = leftFrac * (float) nf;
         processor.zoom.store   (newZoom);
         processor.scroll.store (juce::jlimit (0.0f, 1.0f, newStart / (float) maxStart));
     }
     else if (dragMode == DragMode::ResizeRight)
     {
-        // dragFixedFrac = left edge (fixed), dragMovingFrac = right edge at drag start
         const float leftFrac  = dragFixedFrac;
         const float rightFrac = juce::jlimit (leftFrac + kMinViewFrac,
                                                1.0f,
@@ -294,20 +571,20 @@ void WaveformOverview::mouseWheelMove (const juce::MouseEvent& e,
     auto snap = processor.sampleData.getSnapshot();
     if (! snap || snap->buffer.getNumSamples() == 0) return;
 
-    const float W        = (float) getWidth();
+    auto screen = getLocalBounds().reduced (4);
+    const float W        = (float) screen.getWidth();
     const int   nf       = snap->buffer.getNumSamples();
     const float oldZoom  = juce::jmax (1.0f, processor.zoom.load());
     const float oldSc    = processor.scroll.load();
 
     const float newZoom  = juce::jmax (1.0f, oldZoom * (1.0f + w.deltaY * kZoomWheelSens));
 
-    // Keep the sample under the cursor stationary
-    const float anchorFrac  = (float) e.x / W;                         // fraction of component
-    const float anchorSample = anchorFrac * (float) nf;                // sample index
+    // Anchor to cursor — keep the sample under the mouse stationary
+    const float anchorFrac   = ((float) e.x - (float) screen.getX()) / W;
+    const float anchorSample = anchorFrac * (float) nf;
 
     const float newVisLen   = (float) nf / newZoom;
     const float newMaxStart = juce::jmax (1.0f, (float) nf - newVisLen);
-    // newStart = anchorSample - anchorFrac * newVisLen  (keeps cursor-sample fixed)
     const float newStart    = anchorSample - anchorFrac * newVisLen;
 
     processor.zoom.store   (newZoom);

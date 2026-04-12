@@ -229,6 +229,7 @@ void DysektEditor::toggleSoftWave()
 {
  waveformMode = (waveformMode + 1) % 8;
  waveformView.setWaveformMode (waveformMode);
+ waveformOverview.setWaveformMode (waveformMode);
  actionPanel.setWaveActive (waveformMode != 0);
  headerBar.setBrowserActive (browserOpen);
  headerBar.setWaveMode (waveformMode);
@@ -746,6 +747,7 @@ void DysektEditor::loadUserSettings()
  applyTheme (themeName);
 
  waveformView.setWaveformMode (waveformMode);
+ waveformOverview.setWaveformMode (waveformMode);
  headerBar.setWaveMode (waveformMode);
  actionPanel.setWaveActive (waveformMode != 0);
 
