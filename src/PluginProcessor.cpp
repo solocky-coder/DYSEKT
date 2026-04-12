@@ -83,7 +83,6 @@ static Slice sanitiseRestoredSlice (Slice s)
     s.filterCutoff = juce::jlimit (20.0f, 20000.0f, s.filterCutoff);
     s.filterRes    = juce::jlimit (0.0f, 1.0f, s.filterRes);
     s.lockMask &= kValidLockMask;
-    s.name = s.name.toUpperCase();
     return s;
 }
 
@@ -146,7 +145,6 @@ DysektProcessor::DysektProcessor()
     releaseParam   = apvts.getRawParameterValue (ParamIds::defaultRelease);
     holdParam      = apvts.getRawParameterValue (ParamIds::defaultHold);
     muteGroupParam = apvts.getRawParameterValue (ParamIds::defaultMuteGroup);
-    monoParam      = apvts.getRawParameterValue (ParamIds::globalMono);
     stretchParam   = apvts.getRawParameterValue (ParamIds::defaultStretchEnabled);
     tonalityParam  = apvts.getRawParameterValue (ParamIds::defaultTonality);
     formantParam   = apvts.getRawParameterValue (ParamIds::defaultFormant);
@@ -847,11 +845,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldSustain:   s.sustainLevel = val;   s.lockMask |= kLockSustain;   break;
                     case FieldRelease:   s.releaseSec = val;     s.lockMask |= kLockRelease;   break;
                     case FieldMuteGroup: s.muteGroup = (int) val; s.lockMask |= kLockMuteGroup; break;
-                    case FieldGlobalMono:
-                        // Global param — write directly to APVTS, not per-slice
-                        if (auto* p2 = apvts.getParameter (ParamIds::globalMono))
-                            p2->setValueNotifyingHost (val > 0.5f ? 1.0f : 0.0f);
-                        break;
                     case FieldStretchEnabled: s.stretchEnabled = val > 0.5f; s.lockMask |= kLockStretch; break;
                     case FieldTonality:  s.tonalityHz = val;        s.lockMask |= kLockTonality;    break;
                     case FieldFormant:   s.formantSemitones = val;   s.lockMask |= kLockFormant;     break;
@@ -903,15 +896,64 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 if (end - start < 64)
                     start = juce::jmax (0, end - 64);
                 const int totalF = sampleData.getBuffer().getNumSamples();
+                int oldEnd = sliceManager.getEndForSlice (idx, totalF);
+                // Clamp start against the PREVIOUS slice to prevent overlap.
+                // Slices are sorted by startSample, so slices[idx-1].startSample
+                // is the hard floor for this slice's start.
                 end = juce::jmax (end, start + 1);
                 end = juce::jmin (end, maxLen);
 
+                // Cull any preceding slices that the drag has crushed to zero width.
+                // Slice 0 is the sample anchor and is never deleted.
+                // Work backwards so each deleteSlice(j) only shifts indices above j.
+                int cullCount = 0;
+                for (int j = idx - 1; j > 0; --j)
+                {
+                    if (sliceManager.getSlice (j).startSample >= start)
+                    {
+                        sliceManager.deleteSlice (j);
+                        ++cullCount;
+                    }
+                    else
+                        break; // slices are sorted — safe to stop here
+                }
+
+                // After culls, target slice has shifted left by cullCount.
+                idx -= cullCount;
+                if (idx < 0 || idx >= sliceManager.getNumSlices())
+                    break;
+
+                // BUG FIX 1: selectedSlice goes stale after cull.
+                // deleteSlice() only clamps selectedSlice when it's past the end;
+                // it never corrects it when the dragged slice shifts leftward.
+                // Fix: if the dragged slice WAS the selected one, update the index.
+                {
+                    const int prevIdx = idx + cullCount;  // original index before culls
+                    if (cullCount > 0
+                        && sliceManager.selectedSlice.load (std::memory_order_relaxed) == prevIdx)
+                        sliceManager.selectedSlice.store (idx, std::memory_order_relaxed);
+                }
+
+                // BUG FIX 2: liveDragSliceIdx stale after cull.
+                // The per-buffer live-preview block uses liveDragSliceIdx to write
+                // startSample every block.  If culling shifted the dragged slice left,
+                // liveIdx is stale and the block overwrites the WRONG slice until mouseUp.
+                if (cullCount > 0)
+                {
+                    const int prevIdx = idx + cullCount;
+                    if (liveDragSliceIdx.load (std::memory_order_acquire) == prevIdx)
+                        liveDragSliceIdx.store (idx, std::memory_order_release);
+                }
+
                 auto& sNew = sliceManager.getSlice (idx);
                 sNew.startSample = start;
-
+                // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
 
+                // rebuildMidiMap() reassigns notes sequentially by array position,
+                // so the dragged slice automatically gets the number of the slot
+                // it crushed into (root + idx after cull = root + lowestCrushedIdx).
                 sliceManager.rebuildMidiMap();
             }
             break;
@@ -1141,7 +1183,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
         {
             int idx = cmd.intParam1;
             if (idx >= 0 && idx < sliceManager.getNumSlices())
-                sliceManager.getSlice (idx).name = cmd.stringParam.toUpperCase();
+                sliceManager.getSlice (idx).name = cmd.stringParam;
             break;
         }
 
@@ -1763,12 +1805,9 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         if (! retuned)
                         {
                             int voiceIdx = voicePool.allocate();
-                            const bool globalMono = monoParam->load() > 0.5f;
-                            int mg = (globalMono && cs.chromaticChannel == 0)
-                                       ? (ci + 1)
-                                       : (int) sliceManager.resolveParam (ci, kLockMuteGroup,
-                                                                           (float) cs.muteGroup,
-                                                                           (float) p.globalMuteGroup);
+                            int mg = (int) sliceManager.resolveParam (ci, kLockMuteGroup,
+                                                                        (float) cs.muteGroup,
+                                                                        (float) p.globalMuteGroup);
                             voicePool.muteGroup (mg, voiceIdx);
                             if (legato)
                                 voicePool.killVoicesForChromaticLegato (ci);
@@ -1801,11 +1840,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
 
                         int voiceIdx = voicePool.allocate();
                         const auto& s = sliceManager.getSlice (sliceIdx);
-                        const bool globalMono = monoParam->load() > 0.5f;
-                        int mg = (globalMono && s.chromaticChannel == 0)
-                                   ? (sliceIdx + 1)
-                                   : (int) sliceManager.resolveParam (sliceIdx, kLockMuteGroup,
-                                                                       (float) s.muteGroup, (float) p.globalMuteGroup);
+                        int mg = (int) sliceManager.resolveParam (sliceIdx, kLockMuteGroup,
+                                                                  (float) s.muteGroup, (float) p.globalMuteGroup);
                         voicePool.muteGroup (mg, voiceIdx);
                         p.sliceIdx = sliceIdx;
                         voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
