@@ -628,9 +628,10 @@ void DysektEditor::ensureDefaultThemes()
  write ("hack", ThemeData::hackTheme());
  write ("midnight", ThemeData::midnightTheme());
  write ("pigments", ThemeData::pigmentsTheme());
+ write ("cr8",      ThemeData::cr8Theme());
 
  // Remove any .dysektstyle files not in the approved list
- static const juce::StringArray knownThemes { "dark", "shell", "lazy", "snow", "ghost", "hack", "midnight", "pigments" };
+ static const juce::StringArray knownThemes { "dark", "shell", "lazy", "snow", "ghost", "hack", "midnight", "pigments", "cr8" };
  for (auto& f : dir.findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
  {
  if (! knownThemes.contains (f.getFileNameWithoutExtension()))
@@ -640,13 +641,14 @@ void DysektEditor::ensureDefaultThemes()
 
 juce::StringArray DysektEditor::getAvailableThemes()
 {
- juce::StringArray names;
+ juce::StringArray names { "dark", "shell", "lazy", "snow", "ghost",
+                           "hack", "pigments", "midnight", "cr8" };
  for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
  {
- auto t = ThemeData::fromThemeFile (f.loadFileAsString());
- if (t.name.isNotEmpty()) names.add (t.name);
+  auto t = ThemeData::fromThemeFile (f.loadFileAsString());
+  if (t.name.isNotEmpty() && !names.contains (t.name))
+   names.add (t.name);
  }
- if (names.isEmpty()) { names.add ("dark"); names.add ("shell"); }
  return names;
 }
 
@@ -670,6 +672,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
  else if (themeName == "hack") setTheme (ThemeData::hackTheme());
  else if (themeName == "midnight") setTheme (ThemeData::midnightTheme());
  else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
+ else if (themeName == "cr8")      setTheme (ThemeData::cr8Theme());
  else setTheme (ThemeData::darkTheme());
  processor.sliceManager.setSlicePalette (getTheme().slicePalette);
  saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
