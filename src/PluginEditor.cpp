@@ -392,19 +392,26 @@ void DysektEditor::resized()
  browserPanel.setBounds ({});
  }
 
- // Hide SCB in trim mode so it doesn't cover the trim waveform.
- if (trimDialog != nullptr) {
- sliceControlBar.setBounds ({});
- } else {
- auto scbArea = area.removeFromBottom (kSliceCtrlH);
- sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
- area.removeFromBottom (kMargin);
-
- // WaveformOverview minimap/zoom strip sits just above the SCB
+ // Hide SCB and overview in trim mode; show both (overview centred in gap) otherwise.
  constexpr int kOverviewH = 28;
- area.removeFromBottom (2);
- auto overviewArea = area.removeFromBottom (kOverviewH);
- waveformOverview.setBounds (kFX, overviewArea.getY(), kFW, kOverviewH);
+ if (trimDialog != nullptr) {
+     sliceControlBar.setBounds ({});
+     waveformOverview.setBounds ({});
+ } else {
+     // SCB at the bottom
+     auto scbArea = area.removeFromBottom (kSliceCtrlH);
+     sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
+
+     // Gap between waveform frame and SCB frame
+     area.removeFromBottom (kMargin);
+
+     // Overview vertically centred in whatever gap remains
+     const int gapH      = area.getHeight();
+     const int overviewY = area.getY() + juce::jmax (0, (gapH - kOverviewH) / 2);
+     waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
+
+     // Consume the full gap so frameBot is computed at the waveform area bottom
+     area.removeFromBottom (gapH);
  }
 
  const int kFrameInset = 4;
