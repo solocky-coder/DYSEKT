@@ -22,6 +22,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  sliceWaveformLcd (p),
  sliceLane (p),
  waveformView (p),
+ waveformOverview (p),
  sliceControlBar(p),
  actionPanel (p, waveformView),
 
@@ -42,6 +43,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
  addAndMakeVisible (sliceLane);
  addAndMakeVisible (waveformView);
+ addAndMakeVisible (waveformOverview);
  addAndMakeVisible (sliceControlBar);
  addAndMakeVisible (actionPanel);
 
@@ -60,6 +62,25 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
  waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
  waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
+ waveformView.onRenameRequest   = [this] (int sliceIdx, const juce::String& currentName)
+ {
+     renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
+     addAndMakeVisible (*renameOverlay);
+     renameOverlay->setBounds (getLocalBounds());
+     renameOverlay->toFront (true);
+     renameOverlay->onResult = [this, sliceIdx] (const juce::String& newName, bool cancelled)
+     {
+         renameOverlay.reset();
+         if (! cancelled)
+         {
+             DysektProcessor::Command cmd;
+             cmd.type        = DysektProcessor::CmdSetSliceName;
+             cmd.intParam1   = sliceIdx;
+             cmd.stringParam = newName;
+             processor.pushCommand (cmd);
+         }
+     };
+ };
  waveformView.onTrimApplied = [this] (int s, int e)
  {
  processor.applyTrimToCurrentSample (s, e);
@@ -377,6 +398,12 @@ void DysektEditor::resized()
  auto scbArea = area.removeFromBottom (kSliceCtrlH);
  sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
  area.removeFromBottom (kMargin);
+
+ // WaveformOverview minimap/zoom strip sits just above the SCB
+ constexpr int kOverviewH = 28;
+ area.removeFromBottom (2);
+ auto overviewArea = area.removeFromBottom (kOverviewH);
+ waveformOverview.setBounds (kFX, overviewArea.getY(), kFW, kOverviewH);
  }
 
  const int kFrameInset = 4;
@@ -603,6 +630,7 @@ void DysektEditor::timerCallback()
  if (laneNeedsRepaint) sliceLane.repaint();
  sliceLcd.repaintLcd();
  sliceWaveformLcd.repaintLcd();
+ waveformOverview.repaintOverview();
  if (mixerOpen) mixerPanel.repaint();
 
  headerBar.repaint();
@@ -628,20 +656,25 @@ void DysektEditor::ensureDefaultThemes()
  write ("hack", ThemeData::hackTheme());
  write ("midnight", ThemeData::midnightTheme());
  write ("pigments", ThemeData::pigmentsTheme());
- write ("cr8",      ThemeData::cr8Theme());
 
+ // Remove any .dysektstyle files not in the approved list
+ static const juce::StringArray knownThemes { "dark", "shell", "lazy", "snow", "ghost", "hack", "midnight", "pigments" };
+ for (auto& f : dir.findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
+ {
+ if (! knownThemes.contains (f.getFileNameWithoutExtension()))
+ f.deleteFile();
+ }
 }
 
 juce::StringArray DysektEditor::getAvailableThemes()
 {
- juce::StringArray names { "dark", "shell", "lazy", "snow", "ghost",
-                           "hack", "pigments", "midnight", "cr8" };
+ juce::StringArray names;
  for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
  {
-  auto t = ThemeData::fromThemeFile (f.loadFileAsString());
-  if (t.name.isNotEmpty() && !names.contains (t.name))
-   names.add (t.name);
+ auto t = ThemeData::fromThemeFile (f.loadFileAsString());
+ if (t.name.isNotEmpty()) names.add (t.name);
  }
+ if (names.isEmpty()) { names.add ("dark"); names.add ("shell"); }
  return names;
 }
 
@@ -665,7 +698,6 @@ void DysektEditor::applyTheme (const juce::String& themeName)
  else if (themeName == "hack") setTheme (ThemeData::hackTheme());
  else if (themeName == "midnight") setTheme (ThemeData::midnightTheme());
  else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
- else if (themeName == "cr8")      setTheme (ThemeData::cr8Theme());
  else setTheme (ThemeData::darkTheme());
  processor.sliceManager.setSlicePalette (getTheme().slicePalette);
  saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
