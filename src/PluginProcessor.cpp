@@ -932,16 +932,27 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 }
 
                 // Delete all crushed slices (backwards so indices stay valid).
+                // Guard with isCommit for the same reason as the inherit block above:
+                // running the cull on live-drag ticks causes index drift — the stale
+                // cmd.intParam1 (original idx) then points to the NEXT slice on
+                // subsequent ticks, overwriting its startSample with the drag position
+                // ("removes markers after it") and leaving idx-1==0 on commit so the
+                // inherit guard fires false and the name/MIDI note are never taken over.
+                // Deferring to commit keeps indices stable throughout the drag and lets
+                // both the inherit check and the cull see the correct, un-shifted idx.
                 int cullCount = 0;
-                for (int j = idx - 1; j > 0; --j)
+                if (cmd.isCommit)
                 {
-                    if (sliceManager.getSlice (j).startSample >= start)
+                    for (int j = idx - 1; j > 0; --j)
                     {
-                        sliceManager.deleteSlice (j);
-                        ++cullCount;
+                        if (sliceManager.getSlice (j).startSample >= start)
+                        {
+                            sliceManager.deleteSlice (j);
+                            ++cullCount;
+                        }
+                        else
+                            break; // slices are sorted — safe to stop here
                     }
-                    else
-                        break; // slices are sorted — safe to stop here
                 }
                 // After culls, target slice has shifted left by cullCount.
                 idx -= cullCount;
