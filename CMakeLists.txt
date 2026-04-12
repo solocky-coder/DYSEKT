@@ -81,6 +81,7 @@ target_sources(Dysekt PRIVATE
     src/ui/ShortcutsPanel.cpp
     src/ui/SliceWaveformLcd.cpp
     src/ui/DualLcdControlFrame.cpp
+    src/ui/WaveformOverview.cpp
 )
 
 target_include_directories(Dysekt PRIVATE
