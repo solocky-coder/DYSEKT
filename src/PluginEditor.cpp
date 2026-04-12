@@ -630,13 +630,6 @@ void DysektEditor::ensureDefaultThemes()
  write ("pigments", ThemeData::pigmentsTheme());
  write ("cr8",      ThemeData::cr8Theme());
 
- // Remove any .dysektstyle files not in the approved list
- static const juce::StringArray knownThemes { "dark", "shell", "lazy", "snow", "ghost", "hack", "midnight", "pigments", "cr8" };
- for (auto& f : dir.findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
- {
- if (! knownThemes.contains (f.getFileNameWithoutExtension()))
- f.deleteFile();
- }
 }
 
 juce::StringArray DysektEditor::getAvailableThemes()
