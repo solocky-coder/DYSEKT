@@ -846,7 +846,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
             // Name: centred in slice, font size scales with available width
             const float nameFontH = juce::jlimit (9.0f, 13.0f, (float)sw * 0.18f);
             g.setFont (juce::Font (nameFontH, juce::Font::bold));
-            g.drawText (s.name, x1 + 2, kTopPad + 1, sw - 4, 14,
+            g.drawText (s.name.toUpperCase(), x1 + 2, kTopPad + 1, sw - 4, 14,
                         juce::Justification::centred, true);
         }
         else
@@ -1351,54 +1351,27 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
     // ---- SLICE EDGE DRAG: commit marker move ----
     if ((dragMode == DragEdgeLeft || dragMode == MoveSlice) && dragSliceIdx >= 0)
     {
-        // Crush-to-delete: if the dragged marker reached or crossed the previous
-        // marker, delete the dragged slice (same as right-click -> Delete Slice).
-        // The previous slice stays in place unchanged.
-        bool crushedIntoPrevious = false;
-        if (dragSliceIdx > 0)   // slice 0 is the sample anchor, cannot be deleted
+        DysektProcessor::Command cmd;
+        cmd.type = DysektProcessor::CmdSetSliceBounds;
+        cmd.intParam1 = dragSliceIdx;
+        cmd.intParam2 = dragPreviewStart;
+        cmd.positions[0] = dragPreviewEnd;
+        cmd.numPositions = 1;
+        processor.pushCommand(cmd);
+
+        if (linkedSliceIdx >= 0)
         {
-            const auto& snap = processor.getUiSliceSnapshot();
-            for (int j = dragSliceIdx - 1; j >= 0; --j)
-            {
-                if (j < snap.numSlices && snap.slices[(size_t) j].active)
-                {
-                    if (dragPreviewStart <= snap.slices[(size_t) j].startSample)
-                    {
-                        crushedIntoPrevious = true;
-                        DysektProcessor::Command delCmd;
-                        delCmd.type      = DysektProcessor::CmdDeleteSlice;
-                        delCmd.intParam1 = dragSliceIdx;
-                        processor.pushCommand (delCmd);
-                    }
-                    break;  // only check immediate predecessor
-                }
-            }
+            DysektProcessor::Command lCmd;
+            lCmd.type = DysektProcessor::CmdSetSliceBounds;
+            lCmd.intParam1 = linkedSliceIdx;
+            lCmd.intParam2 = linkedPreviewStart;
+            lCmd.positions[0] = linkedPreviewEnd;
+            lCmd.numPositions = 1;
+            processor.pushCommand(lCmd);
         }
 
-        if (! crushedIntoPrevious)
-        {
-            DysektProcessor::Command cmd;
-            cmd.type = DysektProcessor::CmdSetSliceBounds;
-            cmd.intParam1 = dragSliceIdx;
-            cmd.intParam2 = dragPreviewStart;
-            cmd.positions[0] = dragPreviewEnd;
-            cmd.numPositions = 1;
-            processor.pushCommand(cmd);
-
-            if (linkedSliceIdx >= 0)
-            {
-                DysektProcessor::Command lCmd;
-                lCmd.type = DysektProcessor::CmdSetSliceBounds;
-                lCmd.intParam1 = linkedSliceIdx;
-                lCmd.intParam2 = linkedPreviewStart;
-                lCmd.positions[0] = linkedPreviewEnd;
-                lCmd.numPositions = 1;
-                processor.pushCommand(lCmd);
-            }
-
-            optimisticSliceIdx = dragSliceIdx;
-            optimisticStartSample = dragPreviewStart;
-        }
+        optimisticSliceIdx = dragSliceIdx;
+        optimisticStartSample = dragPreviewStart;
     }
 
     processor.liveDragSliceIdx.store (-1, std::memory_order_release);
