@@ -906,37 +906,11 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 end = juce::jmax (end, start + 1);
                 end = juce::jmin (end, maxLen);
 
-                // Cull any preceding slices that the drag has crushed to zero width.
+                // Cull any preceding slices the drag has crushed to zero width.
+                // Deferred to commit so indices stay stable across all live-drag ticks.
                 // Slice 0 is the sample anchor and is never deleted.
-                // Work backwards so each deleteSlice(j) only shifts indices above j.
-                //
-                // Inherit identity (name + MIDI note) from the immediately adjacent
-                // slice (idx-1) so the surviving marker steps into its position and
-                // the MIDI note sequence stays gapless.
-                // Only do this on the final mouseUp commit, not during live drag ticks,
-                // so the result is deterministic regardless of how many coalesced
-                // CmdSetSliceBounds fired during the drag.
-                juce::String inheritedName;
-                int          inheritedMidiNote = -1;  // -1 = nothing to inherit
-
-                if (cmd.isCommit
-                    && idx - 1 >= 1
-                    && sliceManager.getSlice (idx - 1).startSample >= start)
-                {
-                    const auto& cand  = sliceManager.getSlice (idx - 1);
-                    inheritedName     = cand.name.toUpperCase();
-                    inheritedMidiNote = cand.midiNote;
-                }
-
-                // Delete all crushed slices (backwards so indices stay valid).
-                // Guard with isCommit for the same reason as the inherit block above:
-                // running the cull on live-drag ticks causes index drift — the stale
-                // cmd.intParam1 (original idx) then points to the NEXT slice on
-                // subsequent ticks, overwriting its startSample with the drag position
-                // ("removes markers after it") and leaving idx-1==0 on commit so the
-                // inherit guard fires false and the name/MIDI note are never taken over.
-                // Deferring to commit keeps indices stable throughout the drag and lets
-                // both the inherit check and the cull see the correct, un-shifted idx.
+                // After culling, rebuildMidiMap() reassigns notes sequentially so the
+                // note sequence stays gapless automatically — no inherit logic needed.
                 int cullCount = 0;
                 if (cmd.isCommit)
                 {
@@ -948,7 +922,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                             ++cullCount;
                         }
                         else
-                            break; // slices are sorted — safe to stop here
+                            break;
                     }
                 }
                 // After culls, target slice has shifted left by cullCount.
@@ -959,21 +933,13 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 auto& sNew = sliceManager.getSlice (idx);
                 sNew.startSample = start;
 
-                // Apply inherited name before rebuild (rebuild doesn't touch name).
-                if (inheritedMidiNote >= 0)
-                    sNew.name = inheritedName;
-
                 // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
 
+                // Reassigns MIDI notes sequentially (root+i) so the note sequence
+                // stays gapless after any cull — no manual inherit needed.
                 sliceManager.rebuildMidiMap();
-
-                // Re-apply inherited MIDI note AFTER rebuildMidiMap() — rebuild
-                // unconditionally reassigns notes sequentially and would overwrite it.
-                // pinSliceMidiNote patches both the slice field and the lookup map.
-                if (inheritedMidiNote >= 0)
-                    sliceManager.pinSliceMidiNote (idx, inheritedMidiNote);
             }
             break;
         }
