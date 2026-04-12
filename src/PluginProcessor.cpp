@@ -903,10 +903,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 if (end - start < 64)
                     start = juce::jmax (0, end - 64);
                 const int totalF = sampleData.getBuffer().getNumSamples();
-                int oldEnd = sliceManager.getEndForSlice (idx, totalF);
-                // Clamp start against the PREVIOUS slice to prevent overlap.
-                // Slices are sorted by startSample, so slices[idx-1].startSample
-                // is the hard floor for this slice's start.
                 end = juce::jmax (end, start + 1);
                 end = juce::jmin (end, maxLen);
 
@@ -915,7 +911,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // Work backwards so each deleteSlice(j) only shifts indices above j.
                 //
                 // Inherit identity (name + MIDI note) from the immediately adjacent
-                // slice (idx-1) — the first slice the marker physically crosses.
+                // slice (idx-1) so the surviving marker steps into its position and
+                // the MIDI note sequence stays gapless.
                 // Only do this on the final mouseUp commit, not during live drag ticks,
                 // so the result is deterministic regardless of how many coalesced
                 // CmdSetSliceBounds fired during the drag.
@@ -923,7 +920,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 int          inheritedMidiNote = -1;  // -1 = nothing to inherit
 
                 if (cmd.isCommit
-                    && idx - 1 > 0
+                    && idx - 1 >= 1
                     && sliceManager.getSlice (idx - 1).startSample >= start)
                 {
                     const auto& cand  = sliceManager.getSlice (idx - 1);
