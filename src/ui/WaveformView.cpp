@@ -253,196 +253,38 @@ void WaveformView::paintLazyChopOverlay (juce::Graphics& g)
 void WaveformView::paintTrimOverlay (juce::Graphics& g)
 {
     if (! trimMode) return;
-
     const int w = getWidth();
     const int h = getHeight();
-    const auto ac = getTheme().accent;
-    const double sr = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
 
     auto sampleSnap = processor.sampleData.getSnapshot();
     int totalFrames = sampleSnap ? sampleSnap->buffer.getNumSamples() : 1;
 
-    int clampedTrimIn  = juce::jlimit (0, totalFrames - 1, trimInPoint);
-    int clampedTrimOut = juce::jlimit (clampedTrimIn + 1, totalFrames, trimOutPoint);
+    int clampedTrimIn  = juce::jlimit(0, totalFrames - 1, trimInPoint);
+    int clampedTrimOut = juce::jlimit(clampedTrimIn + 1, totalFrames, trimOutPoint);
 
     const int x1 = juce::jlimit (0, w - 1, sampleToPixel (clampedTrimIn));
     const int x2 = juce::jlimit (x1 + 1, w - 1, sampleToPixel (clampedTrimOut));
-
-    // ── Ruler strip ───────────────────────────────────────────────────────────
-    static constexpr int kRulerH = 16;
-    static constexpr int kPadX   = 3;   // inset matching frame corner radius
-
-    // Clip everything to the rounded frame boundary so nothing bleeds into corners
-    g.saveState();
-    {
-        juce::Path clip;
-        clip.addRoundedRectangle (getLocalBounds().toFloat(), 2.0f);
-        g.reduceClipRegion (clip);
-    }
-
-    // Dark ruler background
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillRect (0, 0, w, kRulerH);
-    // Bottom border line
-    g.setColour (ac.withAlpha (0.25f));
-    g.drawHorizontalLine (kRulerH - 1, 0.0f, (float) w);
-
-    // Adaptive tick spacing — choose the smallest interval that gives ≥40px between ticks
-    const double totalSecs = (double) totalFrames / sr;
-    // Candidate intervals in seconds
-    static const double kIntervals[] = { 0.001, 0.002, 0.005,
-                                          0.010, 0.025, 0.050,
-                                          0.100, 0.250, 0.500,
-                                          1.000, 2.000, 5.000,
-                                          10.0,  30.0,  60.0 };
-    double majorInterval = 1.0;
-    for (double iv : kIntervals)
-    {
-        double pxPerInterval = (iv / totalSecs) * (double) w;
-        if (pxPerInterval >= 40.0) { majorInterval = iv; break; }
-    }
-    const double minorInterval = majorInterval / 5.0;
-
-    // Helper: sample position → time string
-    auto formatTime = [] (double secs) -> juce::String
-    {
-        if (secs < 1.0)
-        {
-            int ms = juce::roundToInt (secs * 1000.0);
-            return juce::String (ms) + "ms";
-        }
-        // Show up to 3 decimal places, trimming trailing zeros
-        juce::String s = juce::String (secs, 3);
-        while (s.endsWith ("0")) s = s.dropLastCharacters (1);
-        if (s.endsWith ("."))    s = s.dropLastCharacters (1);
-        return s + "s";
-    };
-
-    // Draw minor ticks
-    g.setColour (ac.withAlpha (0.18f));
-    for (double t = 0.0; t <= totalSecs + minorInterval * 0.5; t += minorInterval)
-    {
-        int px = sampleToPixel ((int) (t * sr));
-        if (px < 0 || px >= w) continue;
-        g.drawVerticalLine (px, (float)(kRulerH - 4), (float)(kRulerH - 1));
-    }
-
-    // Draw major ticks + labels
-    g.setFont (DysektLookAndFeel::makeFont (8.0f));
-    for (double t = 0.0; t <= totalSecs + majorInterval * 0.5; t += majorInterval)
-    {
-        int px = sampleToPixel ((int) (t * sr));
-        if (px < 0 || px >= w) continue;
-
-        g.setColour (ac.withAlpha (0.40f));
-        g.drawVerticalLine (px, 1.0f, (float)(kRulerH - 1));
-
-        juce::String label = formatTime (t);
-        const int labelW = 48;
-        int lx = px + 3;
-        if (lx + labelW > w) lx = px - labelW - 1;  // flip if near right edge
-        g.setColour (ac.withAlpha (0.65f));
-        g.drawText (label, lx, 1, labelW, kRulerH - 3, juce::Justification::centredLeft, false);
-    }
-
-    // ── Waveform shading (below ruler) ────────────────────────────────────────
-    const int waveTop = kRulerH;
+    const auto ac = getTheme().accent;
 
     g.setColour (juce::Colours::black.withAlpha (0.55f));
-    if (x1 > 0)     g.fillRect (0,      waveTop, x1,          h - waveTop);
-    if (x2 < w - 1) g.fillRect (x2 + 1, waveTop, w - x2 - 1, h - waveTop);
+    if (x1 > 0) g.fillRect (0, 0, x1, h);
+    if (x2 < w - 1) g.fillRect (x2 + 1, 0, w - x2 - 1, h);
 
-    // Active region very subtle tint
-    g.setColour (ac.withAlpha (0.04f));
-    if (x2 > x1) g.fillRect (x1, waveTop, x2 - x1, h - waveTop);
-
-    // ── Trim handle lines + triangles ─────────────────────────────────────────
     g.setColour (ac.withAlpha (0.90f));
-    g.drawVerticalLine (x1, (float) waveTop, (float) h);
+    g.drawVerticalLine (x1, 0.0f, (float) h);
     {
         juce::Path tri;
-        tri.addTriangle ((float) x1, (float) waveTop,
-                         (float) x1 + 10.0f, (float) waveTop,
-                         (float) x1, (float)(waveTop + 10));
+        tri.addTriangle ((float) x1, 0.0f, (float) x1 + 10.0f, 0.0f, (float) x1, 10.0f);
         g.fillPath (tri);
     }
-    g.drawVerticalLine (x2, (float) waveTop, (float) h);
+    g.drawVerticalLine (x2, 0.0f, (float) h);
     {
         juce::Path tri;
-        tri.addTriangle ((float) x2, (float) waveTop,
-                         (float) x2 - 10.0f, (float) waveTop,
-                         (float) x2, (float)(waveTop + 10));
+        tri.addTriangle ((float) x2, 0.0f, (float) x2 - 10.0f, 0.0f, (float) x2, 10.0f);
         g.fillPath (tri);
     }
-
-    // ── IN / OUT callout labels on ruler ─────────────────────────────────────
-    auto drawCallout = [&] (int px, int sample, bool isIn)
-    {
-        const double secs = (double) sample / sr;
-        juce::String label = (isIn ? "IN  " : "OUT ") + formatTime (secs);
-
-        g.setFont (DysektLookAndFeel::makeFont (8.5f, true));
-        const int labW = 68;
-        const int labH = kRulerH - 2;
-
-        // Position: IN label to the right of handle, OUT to the left
-        int lx = isIn ? (px + 3) : (px - labW - 3);
-        lx = juce::jlimit (1, w - labW - 1, lx);
-
-        // Pill background
-        g.setColour (ac.withAlpha (0.85f));
-        g.fillRoundedRectangle ((float) lx - 2, 1.0f, (float) labW + 4, (float) labH, 2.0f);
-
-        g.setColour (juce::Colours::black.withAlpha (0.92f));
-        g.drawText (label, lx, 1, labW, labH, juce::Justification::centred, false);
-    };
-
-    drawCallout (x1, clampedTrimIn,  true);
-    drawCallout (x2, clampedTrimOut, false);
-
-    // ── Duration badge (centre of active region, on ruler) ───────────────────
-    {
-        const double durSecs = (double)(clampedTrimOut - clampedTrimIn) / sr;
-        juce::String durLabel = juce::String (char (0xce)) + juce::String (char (0x94))
-                                + " " + formatTime (durSecs);   // Δ symbol via UTF-8 literal
-        // Use a plain ASCII delta to avoid encoding issues
-        durLabel = "DUR " + formatTime (durSecs);
-
-        const int midX = (x1 + x2) / 2;
-        const int labW = 72;
-        const int lx   = juce::jlimit (1, w - labW - 1, midX - labW / 2);
-
-        g.setFont (DysektLookAndFeel::makeFont (8.0f));
-        g.setColour (ac.withAlpha (0.30f));
-        g.drawText (durLabel, lx, 1, labW, kRulerH - 3, juce::Justification::centred, false);
-    }
-
-    // ── Live cursor readout ───────────────────────────────────────────────────
-    if (trimHoverX >= 0 && trimHoverX < w)
-    {
-        const int hoverSample = juce::jlimit (0, totalFrames, pixelToSample (trimHoverX));
-        const double hoverSecs = (double) hoverSample / sr;
-
-        juce::String cursorLabel = formatTime (hoverSecs);
-        const int labW = 52;
-        const int labH = kRulerH - 2;
-        int lx = trimHoverX + 5;
-        if (lx + labW > w) lx = trimHoverX - labW - 5;
-        lx = juce::jlimit (1, w - labW - 1, lx);
-
-        // Cursor line through full ruler height
-        g.setColour (juce::Colours::white.withAlpha (0.35f));
-        g.drawVerticalLine (trimHoverX, 0.0f, (float) kRulerH);
-
-        // Floating time tag
-        g.setColour (juce::Colours::black.withAlpha (0.80f));
-        g.fillRoundedRectangle ((float) lx - 2, 1.0f, (float) labW + 4, (float) labH, 2.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.90f));
-        g.setFont (DysektLookAndFeel::makeFont (8.5f));
-        g.drawText (cursorLabel, lx, 1, labW, labH, juce::Justification::centred, false);
-    }
-
-    g.restoreState();
+    g.setColour (ac.withAlpha (0.04f));
+    if (x2 > x1) g.fillRect (x1, 0, x2 - x1, h);
 }
 
 void WaveformView::paintTransientMarkers (juce::Graphics& g)
@@ -1004,7 +846,7 @@ void WaveformView::drawSlices (juce::Graphics& g)
             // Name: centred in slice, font size scales with available width
             const float nameFontH = juce::jlimit (9.0f, 13.0f, (float)sw * 0.18f);
             g.setFont (juce::Font (nameFontH, juce::Font::bold));
-            g.drawText (s.name.toUpperCase(), x1 + 2, kTopPad + 1, sw - 4, 14,
+            g.drawText (s.name, x1 + 2, kTopPad + 1, sw - 4, 14,
                         juce::Justification::centred, true);
         }
         else
@@ -1060,7 +902,6 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
             setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
         else
             setMouseCursor (juce::MouseCursor::NormalCursor);
-        if (e.x != trimHoverX) { trimHoverX = e.x; repaint(); }
         return;
     }
     auto sampleSnap = processor.sampleData.getSnapshot();
@@ -1092,11 +933,7 @@ void WaveformView::mouseMove (const juce::MouseEvent& e)
 }
 
 void WaveformView::mouseEnter (const juce::MouseEvent& e) { mouseMove (e); }
-void WaveformView::mouseExit  (const juce::MouseEvent&)
-{
-    if (trimHoverX != -1) { trimHoverX = -1; repaint(); }
-    if (hoveredEdge != HoveredEdge::None) { hoveredEdge = HoveredEdge::None; repaint(); }
-}
+void WaveformView::mouseExit  (const juce::MouseEvent&)   { if (hoveredEdge != HoveredEdge::None) { hoveredEdge = HoveredEdge::None; repaint(); } }
 void WaveformView::modifierKeysChanged (const juce::ModifierKeys& mods) { syncAltStateFromMods (mods); }
 
 void WaveformView::mouseDown (const juce::MouseEvent& e)
@@ -1218,6 +1055,8 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             menu.addSeparator();
             menu.addItem (2, lockLabel, true, allLocked);
             menu.addSubMenu ("ADSR Lock", adsrSub);
+            menu.addSeparator();
+            menu.addItem (3, "Rename Slice...");
         }
 
         auto* topLvl = getTopLevelComponent();
@@ -1318,6 +1157,41 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     cmd.intParam1 = targetSlice;
                     cmd.intParam2 = (int) kPalARGB[result - 20];
                     processor.pushCommand (cmd);
+                }
+                else if (result == 3)
+                {
+                    // ── Rename Slice ──────────────────────────────────────────
+                    juce::String currentName;
+                    {
+                        const auto& snap = processor.getUiSliceSnapshot();
+                        if (targetSlice >= 0 && targetSlice < snap.numSlices)
+                            currentName = snap.slices[(size_t) targetSlice].name;
+                    }
+                    auto* aw = new juce::AlertWindow (
+                        "Rename Slice",
+                        "Name for slice " + juce::String (targetSlice + 1) + "  (max 14 chars, leave blank to clear):",
+                        juce::MessageBoxIconType::NoIcon);
+                    aw->addTextEditor ("name", currentName, "");
+                    aw->getTextEditor ("name")->setInputRestrictions (14);
+                    aw->addButton ("OK",    1, juce::KeyPress (juce::KeyPress::returnKey));
+                    aw->addButton ("Clear", 2);
+                    aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+                    aw->enterModalState (true,
+                        juce::ModalCallbackFunction::create ([this, targetSlice, aw] (int r) mutable
+                        {
+                            if (r == 1 || r == 2)
+                            {
+                                juce::String newName = (r == 1)
+                                    ? aw->getTextEditorContents ("name").trim()
+                                    : juce::String();
+                                DysektProcessor::Command cmd;
+                                cmd.type        = DysektProcessor::CmdSetSliceName;
+                                cmd.intParam1   = targetSlice;
+                                cmd.stringParam = newName;
+                                processor.pushCommand (cmd);
+                            }
+                        }), true);
+                    return;   // skip the repaint() below — rename is async
                 }
                 repaint();
             });
@@ -1436,7 +1310,6 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
             trimInPoint = juce::jlimit(0, trimOutPoint - minLen, newSample);
         else if (dragMode == DragTrimOut)
             trimOutPoint = juce::jlimit(trimInPoint + minLen, totalFrames, newSample);
-        trimHoverX = e.x;
         repaint();
         return;
     }
@@ -1478,28 +1351,54 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
     // ---- SLICE EDGE DRAG: commit marker move ----
     if ((dragMode == DragEdgeLeft || dragMode == MoveSlice) && dragSliceIdx >= 0)
     {
-        DysektProcessor::Command cmd;
-        cmd.type = DysektProcessor::CmdSetSliceBounds;
-        cmd.intParam1 = dragSliceIdx;
-        cmd.intParam2 = dragPreviewStart;
-        cmd.positions[0] = dragPreviewEnd;
-        cmd.numPositions = 1;
-        cmd.isCommit = true;
-        processor.pushCommand(cmd);
-
-        if (linkedSliceIdx >= 0)
+        // Crush-to-delete: if the dragged marker reached or crossed the previous
+        // marker, delete the dragged slice (same as right-click -> Delete Slice).
+        // The previous slice stays in place unchanged.
+        bool crushedIntoPrevious = false;
+        if (dragSliceIdx > 0)   // slice 0 is the sample anchor, cannot be deleted
         {
-            DysektProcessor::Command lCmd;
-            lCmd.type         = DysektProcessor::CmdSetSliceBounds;
-            lCmd.intParam1    = linkedSliceIdx;
-            lCmd.intParam2    = linkedPreviewStart;
-            lCmd.positions[0] = linkedPreviewEnd;
-            lCmd.numPositions = 1;
-            processor.pushCommand(lCmd);
+            const auto& snap = processor.getUiSliceSnapshot();
+            for (int j = dragSliceIdx - 1; j >= 0; --j)
+            {
+                if (j < snap.numSlices && snap.slices[(size_t) j].active)
+                {
+                    if (dragPreviewStart <= snap.slices[(size_t) j].startSample)
+                    {
+                        crushedIntoPrevious = true;
+                        DysektProcessor::Command delCmd;
+                        delCmd.type      = DysektProcessor::CmdDeleteSlice;
+                        delCmd.intParam1 = dragSliceIdx;
+                        processor.pushCommand (delCmd);
+                    }
+                    break;  // only check immediate predecessor
+                }
+            }
         }
 
-        optimisticSliceIdx = dragSliceIdx;
-        optimisticStartSample = dragPreviewStart;
+        if (! crushedIntoPrevious)
+        {
+            DysektProcessor::Command cmd;
+            cmd.type = DysektProcessor::CmdSetSliceBounds;
+            cmd.intParam1 = dragSliceIdx;
+            cmd.intParam2 = dragPreviewStart;
+            cmd.positions[0] = dragPreviewEnd;
+            cmd.numPositions = 1;
+            processor.pushCommand(cmd);
+
+            if (linkedSliceIdx >= 0)
+            {
+                DysektProcessor::Command lCmd;
+                lCmd.type = DysektProcessor::CmdSetSliceBounds;
+                lCmd.intParam1 = linkedSliceIdx;
+                lCmd.intParam2 = linkedPreviewStart;
+                lCmd.positions[0] = linkedPreviewEnd;
+                lCmd.numPositions = 1;
+                processor.pushCommand(lCmd);
+            }
+
+            optimisticSliceIdx = dragSliceIdx;
+            optimisticStartSample = dragPreviewStart;
+        }
     }
 
     processor.liveDragSliceIdx.store (-1, std::memory_order_release);
