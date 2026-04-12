@@ -1487,7 +1487,11 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
         cmd.isCommit = true;   // final commit — triggers crush name/note inheritance
         processor.pushCommand(cmd);
 
-        if (linkedSliceIdx >= 0)
+        // Only send the linked-slice command if the drag has NOT crushed past it.
+        // linkedPreviewEnd == dragPreviewStart; if that is at or before the linked
+        // slice's original start, it has been crushed and the main commit's cull
+        // already deleted it — sending a stale index would corrupt the shifted slice.
+        if (linkedSliceIdx >= 0 && dragPreviewStart > linkedPreviewStart)
         {
             DysektProcessor::Command lCmd;
             lCmd.type = DysektProcessor::CmdSetSliceBounds;
