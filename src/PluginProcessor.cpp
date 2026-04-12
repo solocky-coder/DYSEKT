@@ -906,39 +906,12 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 end = juce::jmax (end, start + 1);
                 end = juce::jmin (end, maxLen);
 
-                // Cull any preceding slices the drag has crushed to zero width.
-                // Deferred to commit so indices stay stable across all live-drag ticks.
-                // Slice 0 is the sample anchor and is never deleted.
-                // After culling, rebuildMidiMap() reassigns notes sequentially so the
-                // note sequence stays gapless automatically — no inherit logic needed.
-                int cullCount = 0;
-                if (cmd.isCommit)
-                {
-                    for (int j = idx - 1; j > 0; --j)
-                    {
-                        if (sliceManager.getSlice (j).startSample >= start)
-                        {
-                            sliceManager.deleteSlice (j);
-                            ++cullCount;
-                        }
-                        else
-                            break;
-                    }
-                }
-                // After culls, target slice has shifted left by cullCount.
-                idx -= cullCount;
-                if (idx < 0 || idx >= sliceManager.getNumSlices())
-                    break;
-
                 auto& sNew = sliceManager.getSlice (idx);
                 sNew.startSample = start;
 
-                // Marker model: end boundary = next slice's start.
                 if (idx + 1 < sliceManager.getNumSlices())
                     sliceManager.getSlice (idx + 1).startSample = end;
 
-                // Reassigns MIDI notes sequentially (root+i) so the note sequence
-                // stays gapless after any cull — no manual inherit needed.
                 sliceManager.rebuildMidiMap();
             }
             break;

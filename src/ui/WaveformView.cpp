@@ -1484,22 +1484,33 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
         cmd.intParam2 = dragPreviewStart;
         cmd.positions[0] = dragPreviewEnd;
         cmd.numPositions = 1;
-        cmd.isCommit = true;   // final commit — triggers crush name/note inheritance
+        cmd.isCommit = true;
         processor.pushCommand(cmd);
 
-        // Only send the linked-slice command if the drag has NOT crushed past it.
-        // linkedPreviewEnd == dragPreviewStart; if that is at or before the linked
-        // slice's original start, it has been crushed and the main commit's cull
-        // already deleted it — sending a stale index would corrupt the shifted slice.
-        if (linkedSliceIdx >= 0 && dragPreviewStart > linkedPreviewStart)
+        // If the drag crushed past the linked slice (dragPreviewStart at or before
+        // its original start), delete it exactly as right-click delete would.
+        // CmdDeleteSlice calls deleteSlice() + rebuildMidiMap() internally, keeping
+        // notes and numbering gapless.  Skip the linked bounds update so a stale
+        // index doesn't corrupt whichever slice shifted into that position.
+        if (linkedSliceIdx >= 0)
         {
-            DysektProcessor::Command lCmd;
-            lCmd.type = DysektProcessor::CmdSetSliceBounds;
-            lCmd.intParam1 = linkedSliceIdx;
-            lCmd.intParam2 = linkedPreviewStart;
-            lCmd.positions[0] = linkedPreviewEnd;
-            lCmd.numPositions = 1;
-            processor.pushCommand(lCmd);
+            if (dragPreviewStart <= linkedPreviewStart)
+            {
+                DysektProcessor::Command delCmd;
+                delCmd.type      = DysektProcessor::CmdDeleteSlice;
+                delCmd.intParam1 = linkedSliceIdx;
+                processor.pushCommand (delCmd);
+            }
+            else
+            {
+                DysektProcessor::Command lCmd;
+                lCmd.type         = DysektProcessor::CmdSetSliceBounds;
+                lCmd.intParam1    = linkedSliceIdx;
+                lCmd.intParam2    = linkedPreviewStart;
+                lCmd.positions[0] = linkedPreviewEnd;
+                lCmd.numPositions = 1;
+                processor.pushCommand (lCmd);
+            }
         }
 
         optimisticSliceIdx = dragSliceIdx;
