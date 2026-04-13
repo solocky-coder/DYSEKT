@@ -165,6 +165,9 @@ private:
     int linkedPreviewStart = 0;
     int linkedPreviewEnd   = 0;
 
+    // True while the dragged marker is inside the delete zone (crossed the previous marker)
+    bool dragInDeleteZone = false;
+
 
     // Middle-mouse drag (scroll+zoom like ScrollZoomBar)
     bool midDragging = false;

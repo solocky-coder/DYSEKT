@@ -821,7 +821,10 @@ void WaveformView::drawSlices (juce::Graphics& g)
         const int markerH = getHeight() - kTopPad - kBotPad;
 
         // --- CUBASE-STYLE SLICE OVERLAY (fill stays at committed bounds during live drag) ---
-        g.setColour(s.colour.withAlpha(0.18f));
+        // Flash red when dragging this marker into the delete zone
+        const bool inDeleteZone = (dragSliceIdx == i && dragInDeleteZone);
+        g.setColour (inDeleteZone ? juce::Colour (0xFFFF2D55).withAlpha (0.35f)
+                                  : s.colour.withAlpha (0.18f));
         g.fillRect(x1, kTopPad, sw, markerH);
 
         // Strong colored borders: top & bottom
@@ -1330,6 +1333,9 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
         processor.liveDragBoundsStart.store(dragPreviewStart, std::memory_order_relaxed);
         processor.liveDragBoundsEnd.store  (dragPreviewEnd,   std::memory_order_relaxed);
 
+        // Visual cue: turn the slice red when it enters the delete zone
+        dragInDeleteZone = (linkedSliceIdx >= 0 && dragPreviewStart <= linkedPreviewStart);
+
         repaint();
     }
     // TODO: add MoveSlice/other modes if needed
@@ -1351,28 +1357,44 @@ void WaveformView::mouseUp (const juce::MouseEvent&)
     // ---- SLICE EDGE DRAG: commit marker move ----
     if ((dragMode == DragEdgeLeft || dragMode == MoveSlice) && dragSliceIdx >= 0)
     {
-        DysektProcessor::Command cmd;
-        cmd.type = DysektProcessor::CmdSetSliceBounds;
-        cmd.intParam1 = dragSliceIdx;
-        cmd.intParam2 = dragPreviewStart;
-        cmd.positions[0] = dragPreviewEnd;
-        cmd.numPositions = 1;
-        processor.pushCommand(cmd);
+        // If the dragged marker touched or crossed the previous marker's start,
+        // treat it as a Delete Slice (same result as right-click → Delete Slice).
+        const bool crossedPrev = (linkedSliceIdx >= 0 && dragPreviewStart <= linkedPreviewStart);
 
-        if (linkedSliceIdx >= 0)
+        if (crossedPrev)
         {
-            DysektProcessor::Command lCmd;
-            lCmd.type = DysektProcessor::CmdSetSliceBounds;
-            lCmd.intParam1 = linkedSliceIdx;
-            lCmd.intParam2 = linkedPreviewStart;
-            lCmd.positions[0] = linkedPreviewEnd;
-            lCmd.numPositions = 1;
-            processor.pushCommand(lCmd);
+            DysektProcessor::Command cmd;
+            cmd.type = DysektProcessor::CmdDeleteSlice;
+            cmd.intParam1 = dragSliceIdx;
+            processor.pushCommand (cmd);
+            // No CmdSetSliceBounds needed — the slice is gone.
         }
+        else
+        {
+            DysektProcessor::Command cmd;
+            cmd.type = DysektProcessor::CmdSetSliceBounds;
+            cmd.intParam1 = dragSliceIdx;
+            cmd.intParam2 = dragPreviewStart;
+            cmd.positions[0] = dragPreviewEnd;
+            cmd.numPositions = 1;
+            processor.pushCommand (cmd);
 
-        optimisticSliceIdx = dragSliceIdx;
-        optimisticStartSample = dragPreviewStart;
+            if (linkedSliceIdx >= 0)
+            {
+                DysektProcessor::Command lCmd;
+                lCmd.type = DysektProcessor::CmdSetSliceBounds;
+                lCmd.intParam1 = linkedSliceIdx;
+                lCmd.intParam2 = linkedPreviewStart;
+                lCmd.positions[0] = linkedPreviewEnd;
+                lCmd.numPositions = 1;
+                processor.pushCommand (lCmd);
+            }
+
+            optimisticSliceIdx = dragSliceIdx;
+            optimisticStartSample = dragPreviewStart;
+        }
     }
+    dragInDeleteZone = false;
 
     processor.liveDragSliceIdx.store (-1, std::memory_order_release);
 
