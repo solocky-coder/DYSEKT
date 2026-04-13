@@ -1258,6 +1258,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
             const int prevArmed = midiLearn.getArmedSlot();
             if (midiLearn.processCc (msg.getControllerNumber(),
                                      msg.getControllerValue(),
+                                     msg.getChannel(),
                                      outFieldId, outNorm, outIsRelative))
             {
                 const int sel = sliceManager.selectedSlice.load (std::memory_order_relaxed);

@@ -41,6 +41,7 @@ public:
         for (auto& a : ccForSlot)       a.store (-1,        std::memory_order_relaxed);
         for (auto& a : encodingForSlot) a.store (kAbsolute, std::memory_order_relaxed);
         for (auto& a : directionFlip)   a.store (false,     std::memory_order_relaxed);
+        for (auto& a : channelForSlot)  a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectCount)     a.store (0,         std::memory_order_relaxed);
         for (auto& a : detectLocked)    a.store (false,     std::memory_order_relaxed);
         for (auto& a : detectRelHits)   a.store (0,         std::memory_order_relaxed);
@@ -70,6 +71,7 @@ public:
             ccForSlot      [fieldId].store (-1,        std::memory_order_relaxed);
             encodingForSlot[fieldId].store (kAbsolute, std::memory_order_relaxed);
             directionFlip  [fieldId].store (false,     std::memory_order_relaxed);
+            channelForSlot [fieldId].store (0,         std::memory_order_relaxed);
             resetDetection (fieldId);
         }
     }
@@ -81,6 +83,7 @@ public:
             ccForSlot      [i].store (-1,        std::memory_order_relaxed);
             encodingForSlot[i].store (kAbsolute, std::memory_order_relaxed);
             directionFlip  [i].store (false,     std::memory_order_relaxed);
+            channelForSlot [i].store (0,         std::memory_order_relaxed);
             resetDetection (i);
         }
         armedSlot.store (-1, std::memory_order_relaxed);
@@ -121,6 +124,26 @@ public:
             directionFlip[fieldId].store (flip, std::memory_order_relaxed);
     }
 
+    // Channel filter — 0 = any channel, 1-16 = specific channel
+    int  getChannel (int fieldId) const noexcept
+    {
+        if (fieldId < 0 || fieldId >= kMidiLearnNumSlots) return 0;
+        return channelForSlot[fieldId].load (std::memory_order_relaxed);
+    }
+    void setChannel (int fieldId, int channel) noexcept
+    {
+        if (fieldId >= 0 && fieldId < kMidiLearnNumSlots)
+            channelForSlot[fieldId].store (juce::jlimit (0, 16, channel), std::memory_order_relaxed);
+    }
+
+    // Manual CC assignment (bypasses learn detection — sets cc directly and locks)
+    void setManualCC (int fieldId, int cc) noexcept
+    {
+        if (fieldId < 0 || fieldId >= kMidiLearnNumSlots) return;
+        ccForSlot      [fieldId].store (cc,   std::memory_order_relaxed);
+        detectLocked   [fieldId].store (true, std::memory_order_relaxed);
+    }
+
     bool isMapped  (int fieldId) const noexcept { return getMappedCC (fieldId) >= 0; }
     bool isEndless (int fieldId) const noexcept { return getEncoderMode (fieldId) != kAbsolute; }
     bool isRelative (int fieldId) const noexcept { return isEndless (fieldId); }
@@ -153,7 +176,7 @@ public:
 
     // ── Audio-thread API ──────────────────────────────────────────────────────
 
-    bool processCc (int cc, int value, int& outFieldId,
+    bool processCc (int cc, int value, int midiChannel, int& outFieldId,
                     float& outNorm, bool& outIsRelative) noexcept
     {
         outIsRelative = false;
@@ -210,6 +233,10 @@ public:
         for (int i = 0; i < kMidiLearnNumSlots; ++i)
         {
             if (ccForSlot[i].load (std::memory_order_relaxed) != cc) continue;
+
+            // Channel filter: 0 = accept any channel, 1-16 = specific channel only
+            const int slotCh = channelForSlot[i].load (std::memory_order_relaxed);
+            if (slotCh != 0 && slotCh != midiChannel) continue;
 
             outFieldId = i;
 
@@ -423,6 +450,10 @@ public:
         stream.writeInt (kMidiLearnNumSlots);
         for (int i = 0; i < kMidiLearnNumSlots; ++i)
             stream.writeBool (directionFlip[i].load (std::memory_order_relaxed));
+        // v6: persist channel filter
+        stream.writeInt (kMidiLearnNumSlots);
+        for (int i = 0; i < kMidiLearnNumSlots; ++i)
+            stream.writeInt (channelForSlot[i].load (std::memory_order_relaxed));
     }
 
     void readState (juce::MemoryInputStream& stream)
@@ -463,6 +494,16 @@ public:
                 directionFlip[i].store (flip, std::memory_order_relaxed);
             }
         }
+        // v6: channel filter
+        if (! stream.isExhausted())
+        {
+            int chCount = stream.readInt();
+            for (int i = 0; i < kMidiLearnNumSlots; ++i)
+            {
+                int ch = (i < chCount) ? stream.readInt() : 0;
+                channelForSlot[i].store (juce::jlimit (0, 16, ch), std::memory_order_relaxed);
+            }
+        }
     }
 
 private:
@@ -482,6 +523,7 @@ private:
     std::array<std::atomic<int>,  kMidiLearnNumSlots> ccForSlot;
     std::array<std::atomic<int>,  kMidiLearnNumSlots> encodingForSlot;
     std::array<std::atomic<bool>, kMidiLearnNumSlots> directionFlip;
+    std::array<std::atomic<int>,  kMidiLearnNumSlots> channelForSlot; // 0=any, 1-16
     std::atomic<int> armedSlot { -1 };
 
     // Detection state (audio thread only)

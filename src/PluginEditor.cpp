@@ -583,6 +583,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
 
  midiLearnDialog = std::make_unique<MidiLearnDialog> (
  processor.midiLearn,
+ processor,
  [this] { midiLearnDialog.reset(); midiLearnBackdrop.reset(); resized(); }
  );
  addAndMakeVisible (*midiLearnDialog);
