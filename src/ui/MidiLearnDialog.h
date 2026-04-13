@@ -35,6 +35,8 @@ private:
     void loadFromFile();
     void close();
 
+    std::unique_ptr<juce::FileChooser> fileChooser;
+
     // ── Per-row component ─────────────────────────────────────────────────────
     struct MappingRowComponent : public juce::Component, private juce::Timer
     {

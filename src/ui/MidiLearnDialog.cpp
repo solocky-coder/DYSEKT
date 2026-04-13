@@ -349,12 +349,19 @@ juce::Component* MidiLearnDialog::refreshComponentForRow (int row, bool,
 
 void MidiLearnDialog::saveToFile()
 {
-    juce::FileChooser chooser ("Save MIDI Learn Preset",
-                                juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
-                                "*.dlm");
-    if (! chooser.browseForFileToSave (true)) return;
+    fileChooser = std::make_unique<juce::FileChooser> (
+        "Save MIDI Learn Preset",
+        juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
+        "*.dlm");
 
-    juce::File file = chooser.getResult().withFileExtension ("dlm");
+    fileChooser->launchAsync (juce::FileBrowserComponent::saveMode
+                            | juce::FileBrowserComponent::canSelectFiles,
+        [this] (const juce::FileChooser& fc)
+        {
+            const auto result = fc.getResult();
+            if (result == juce::File{}) return;
+
+            juce::File file = result.withFileExtension ("dlm");
 
     juce::MemoryOutputStream stream;
     // Write a simple text format: one line per slot
@@ -373,18 +380,23 @@ void MidiLearnDialog::saveToFile()
                           juce::String ((int) flip) + "\n",
                           false, false, nullptr);
     }
-    file.replaceWithData (stream.getData(), stream.getDataSize());
+            file.replaceWithData (stream.getData(), stream.getDataSize());
+        });
 }
 
 void MidiLearnDialog::loadFromFile()
 {
-    juce::FileChooser chooser ("Load MIDI Learn Preset",
-                                juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
-                                "*.dlm");
-    if (! chooser.browseForFileToOpen()) return;
+    fileChooser = std::make_unique<juce::FileChooser> (
+        "Load MIDI Learn Preset",
+        juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
+        "*.dlm");
 
-    juce::File file = chooser.getResult();
-    if (! file.existsAsFile()) return;
+    fileChooser->launchAsync (juce::FileBrowserComponent::openMode
+                            | juce::FileBrowserComponent::canSelectFiles,
+        [this] (const juce::FileChooser& fc)
+        {
+            const auto file = fc.getResult();
+            if (file == juce::File{} || ! file.existsAsFile()) return;
 
     for (auto line : juce::StringArray::fromLines (file.loadFileAsString()))
     {
@@ -412,8 +424,9 @@ void MidiLearnDialog::loadFromFile()
         midiLearn.setDirectionFlip (slot, flip);
     }
 
-    mappingList.updateContent();
-    mappingList.repaint();
+            mappingList.updateContent();
+            mappingList.repaint();
+        });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
