@@ -438,8 +438,8 @@ private:
         set ("lockActive",     t.lockActive);
         set ("lockInactive",   t.lockInactive);
 
-        for (int i = 0; i < (int) t.slicePalette.size() && i < 16; ++i)
-            set ("slice" + juce::String (i + 1), t.slicePalette[(size_t)i]);
+        for (int i = 0; i < 16; ++i)
+            set ("slice" + juce::String (i + 1), t.slicePalette[i]);
 
         repaint();
     }
@@ -466,8 +466,8 @@ private:
             // slice1..slice16
             auto numStr = key.fromFirstOccurrenceOf ("slice", false, false);
             int idx = numStr.getIntValue() - 1;
-            if (idx >= 0 && idx < (int) working.slicePalette.size())
-                working.slicePalette[(size_t)idx] = c;
+            if (idx >= 0 && idx < 16)
+                working.slicePalette[idx] = c;
         }
     }
 
@@ -531,13 +531,13 @@ private:
         strip.removeFromLeft (6);
 
         // 16 slice swatches
-        int paletteSize = (int) working.slicePalette.size();
+        int paletteSize = 16;
         const float sw = juce::jmin (20.0f, (float) strip.getWidth() / juce::jmax (1, paletteSize));
         float x = (float) strip.getX();
         for (int i = 0; i < paletteSize && i < 16; ++i)
         {
             juce::Rectangle<float> r (x, (float) strip.getY(), sw - 2.0f, (float) strip.getHeight());
-            g.setColour (working.slicePalette[(size_t)i]);
+            g.setColour (working.slicePalette[i]);
             g.fillRoundedRectangle (r, 2.0f);
             x += sw;
         }
