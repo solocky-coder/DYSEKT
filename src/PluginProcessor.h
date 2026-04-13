@@ -58,7 +58,9 @@ public:
         FieldChromaticChannel, // 26 - per-slice chromatic MIDI channel (0=off, 1-16)
         FieldChromaticLegato,  // 27 - per-slice chromatic legato (bool)
         FieldTrimOut = 28,     // 28 - trim-out marker via MIDI CC
-        FieldHold = 29,        // 29 - per-slice AHDSR hold time (seconds)
+        FieldHold   = 29,      // 29 - per-slice AHDSR hold time (seconds)
+        FieldZoom   = 30,      // 30 - waveform zoom level
+        FieldScroll = 31,      // 31 - waveform scroll position
         FieldGlobalMono = 30,  // 30 - global Poly/Mono switch (bool)
     };
 

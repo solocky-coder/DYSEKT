@@ -1,6 +1,7 @@
 #include "WaveformOverview.h"
 #include "../PluginProcessor.h"
 #include "DysektLookAndFeel.h"   // getTheme()
+#include "../ui/PluginEditor.h"
 
 //==============================================================================
 WaveformOverview::WaveformOverview (DysektProcessor& p)
@@ -449,6 +450,53 @@ void WaveformOverview::paint (juce::Graphics& g)
 //==============================================================================
 void WaveformOverview::mouseDown (const juce::MouseEvent& e)
 {
+    if (e.mods.isRightButtonDown())
+    {
+        using F = DysektProcessor;
+        const auto screenPos = e.getScreenPosition();
+        juce::PopupMenu menu;
+        menu.addSectionHeader ("MIDI Learn");
+
+        // Zoom
+        const bool zoomMapped = processor.midiLearn.isMapped (F::FieldZoom);
+        menu.addItem (1, "Learn Zoom CC");
+        if (zoomMapped)
+            menu.addItem (2, "Clear Zoom (" + processor.midiLearn.getLabelText (F::FieldZoom) + ")");
+
+        menu.addSeparator();
+
+        // Scroll
+        const bool scrollMapped = processor.midiLearn.isMapped (F::FieldScroll);
+        menu.addItem (3, "Learn Scroll CC");
+        if (scrollMapped)
+            menu.addItem (4, "Clear Scroll (" + processor.midiLearn.getLabelText (F::FieldScroll) + ")");
+
+        menu.addSeparator();
+        menu.addItem (1000, "Open MIDI Learn Dialog...");
+
+        auto* topLvl = getTopLevelComponent();
+        float ms = DysektLookAndFeel::getMenuScale();
+        menu.showMenuAsync (
+            juce::PopupMenu::Options()
+                .withTargetScreenArea (juce::Rectangle<int> (screenPos.x, screenPos.y, 1, 1))
+                .withParentComponent (topLvl)
+                .withStandardItemHeight ((int)(24 * ms)),
+            [this] (int result) {
+                using F = DysektProcessor;
+                if      (result == 1) { processor.midiLearn.armLearn (F::FieldZoom);   repaint(); }
+                else if (result == 2) { processor.midiLearn.clearMapping (F::FieldZoom);   repaint(); }
+                else if (result == 3) { processor.midiLearn.armLearn (F::FieldScroll); repaint(); }
+                else if (result == 4) { processor.midiLearn.clearMapping (F::FieldScroll); repaint(); }
+                else if (result == 1000)
+                {
+                    if (auto* editor = findParentComponentOfClass<DysektEditor>())
+                        editor->keyPressed (juce::KeyPress ('M', juce::ModifierKeys::commandModifier, 0));
+                }
+            }
+        );
+        return;
+    }
+
     auto snap = processor.sampleData.getSnapshot();
     if (! snap || snap->buffer.getNumSamples() == 0) return;
 

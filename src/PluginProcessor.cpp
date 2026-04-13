@@ -1322,6 +1322,44 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         continue;
                 }
 
+                // ── Zoom / Scroll CC — runs regardless of slice count ────────
+                if (outFieldId == FieldZoom || outFieldId == FieldScroll)
+                {
+                    if (outIsRelative)
+                    {
+                        if (outFieldId == FieldZoom)
+                        {
+                            // Each relative step zooms by a fixed factor
+                            const float cur = juce::jmax (1.0f, zoom.load());
+                            const float factor = std::pow (1.06f, outNorm);
+                            const float newZ = juce::jlimit (1.0f, 16384.0f, cur * factor);
+                            // Keep view centre stable
+                            const float curFrac  = 1.0f / cur;
+                            const float curSc    = scroll.load();
+                            const float curStart = curSc * (1.0f - curFrac);
+                            const float newFrac  = 1.0f / newZ;
+                            const float maxSc    = 1.0f - newFrac;
+                            const float newStart = curStart + (curFrac - newFrac) * 0.5f;
+                            zoom.store (newZ);
+                            scroll.store (maxSc > 0.0f ? juce::jlimit (0.0f, 1.0f, newStart / maxSc) : 0.0f);
+                        }
+                        else // FieldScroll
+                        {
+                            const float cur = scroll.load();
+                            scroll.store (juce::jlimit (0.0f, 1.0f, cur + outNorm * 0.01f));
+                        }
+                    }
+                    else // absolute
+                    {
+                        if (outFieldId == FieldZoom)
+                            zoom.store (juce::jlimit (1.0f, 16384.0f, 1.0f + outNorm * 16383.0f));
+                        else
+                            scroll.store (juce::jlimit (0.0f, 1.0f, outNorm));
+                    }
+                    uiSnapshotDirty.store (true, std::memory_order_release);
+                    continue;
+                }
+
                 // ── Intra-buffer slice-switch guard ───────────────────────────
                 // A note-on and a CC can land in the same MidiBuffer.  If the
                 // selected slice changed since the last CC in this buffer, the
