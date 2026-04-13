@@ -1,7 +1,7 @@
 #include "WaveformOverview.h"
 #include "../PluginProcessor.h"
 #include "DysektLookAndFeel.h"   // getTheme()
-#include "../ui/PluginEditor.h"
+#include "../PluginEditor.h"
 
 //==============================================================================
 WaveformOverview::WaveformOverview (DysektProcessor& p)
