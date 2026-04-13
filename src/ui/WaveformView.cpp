@@ -40,25 +40,10 @@ void WaveformView::drawPlaybackCursors (juce::Graphics& g)
     }
 }
 
-void WaveformView::exitTrimMode()
-{
-    trimMode = false;
-    dragMode = None;
-    trimDragging = false;
-    repaint();
-}
-
 void WaveformView::getTrimBounds(int& outStart, int& outEnd) const
 {
     outStart = trimInPoint;
     outEnd = trimOutPoint;
-}
-
-void WaveformView::resetTrim()
-{
-    trimInPoint = trimStart;
-    trimOutPoint = trimEnd;
-    repaint();
 }
 
 WaveformView::WaveformView (DysektProcessor& p) : processor (p)

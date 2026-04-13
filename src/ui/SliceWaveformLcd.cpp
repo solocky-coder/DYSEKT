@@ -59,21 +59,6 @@ void SliceWaveformLcd::repaintLcd()
     repaint();
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-juce::String SliceWaveformLcd::midiNoteName (int note)
-{
-    static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-    note = juce::jlimit (0, 127, note);
-    return juce::String (names[note % 12]) + juce::String (note / 12 - 2);
-}
-
-juce::String SliceWaveformLcd::formatMs (float ms)
-{
-    if (ms < 1000.0f) return juce::String (juce::roundToInt (ms)) + "ms";
-    return juce::String (ms / 1000.0f, 2) + "s";
-}
-
 // ── Data building ─────────────────────────────────────────────────────────────
 
 void SliceWaveformLcd::buildDisplayData()

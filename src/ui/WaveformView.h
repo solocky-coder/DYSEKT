@@ -37,13 +37,11 @@ public:
     // Trim mode — entered when the user asks to trim before loading
     void enterTrimMode (int start, int end);
     void setTrimPoints (int inPt, int outPt);  // MIDI feedback path
-    void exitTrimMode();
     void getTrimBounds (int& outStart, int& outEnd) const;
     bool isTrimModeActive() const noexcept { return trimMode; }
 
     // Trim mode API used by TrimDialog and ActionPanel
     void setTrimMode (bool active);
-    void resetTrim();
     int  getTrimIn()  const noexcept { return trimInPoint; }
     int  getTrimOut() const noexcept { return trimOutPoint; }
     bool isTrimDragging() const noexcept { return trimDragging; }

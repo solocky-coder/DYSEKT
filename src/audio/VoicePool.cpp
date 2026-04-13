@@ -814,12 +814,3 @@ void VoicePool::stopShiftPreview()
         voices[i].envelope.forceRelease (kKillReleaseSec, sampleRate);
 }
 
-void VoicePool::processSampleMultiOut (const SampleData& sample, double sr,
-                                        float* outPtrs[], int /*numOuts*/)
-{
-    // This method is not used directly — multi-out routing is handled in processBlock
-    // by calling processVoiceSample per voice and routing to the correct bus.
-    (void) sample;
-    (void) sr;
-    (void) outPtrs;
-}

@@ -38,8 +38,6 @@ public:
 
     static std::unique_ptr<DecodedSample> decodeFromFile (const juce::File& file,
                                                            double projectSampleRate);
-    static std::unique_ptr<DecodedSample> applyTrim (const DecodedSample* original,
-                                                      int trimStart, int trimEnd);
     void applyDecodedSample (std::unique_ptr<DecodedSample> decoded);
     bool loadFromFile (const juce::File& file, double projectSampleRate);
     void clear();
@@ -56,7 +54,6 @@ public:
     bool isLoaded() const { return loaded; }
 
     const juce::AudioBuffer<float>& getBuffer() const { return buffer; }
-    const std::array<PeakMipmap, kNumMipmapLevels>& getMipmaps() const { return peakMipmaps; }
 
     const juce::String& getFileName() const { return loadedFileName; }
     void setFileName (const juce::String& name) { loadedFileName = name; }
@@ -65,8 +62,6 @@ public:
     void setFilePath (const juce::String& path) { loadedFilePath = path; }
 
 private:
-    void buildMipmaps();
-
     juce::AudioBuffer<float> buffer;  // always stereo
     std::array<PeakMipmap, kNumMipmapLevels> peakMipmaps;
 #if INTERSECT_HAS_STD_ATOMIC_SHARED_PTR

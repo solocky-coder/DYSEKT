@@ -88,9 +88,6 @@ private:
 
     NodeRole hitTest (juce::Point<float> pos) const;
 
-    static juce::String midiNoteName (int note);
-    static juce::String formatMs     (float ms);
-
     DysektProcessor& processor;
     DisplayData      data;
 

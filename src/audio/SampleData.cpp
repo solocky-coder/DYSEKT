@@ -113,32 +113,6 @@ std::unique_ptr<SampleData::DecodedSample> SampleData::decodeFromFile (const juc
     return decoded;
 }
 
-std::unique_ptr<SampleData::DecodedSample> SampleData::applyTrim (
-    const DecodedSample* original, int trimStart, int trimEnd)
-{
-    if (original == nullptr)
-        return nullptr;
-
-    const int totalFrames = original->buffer.getNumSamples();
-    trimStart = juce::jlimit (0, totalFrames, trimStart);
-    trimEnd   = juce::jlimit (trimStart, totalFrames, trimEnd);
-    const int trimLen = trimEnd - trimStart;
-    if (trimLen <= 0)
-        return nullptr;
-
-    const int numChannels = original->buffer.getNumChannels();
-    juce::AudioBuffer<float> newBuffer (numChannels, trimLen);
-    for (int ch = 0; ch < numChannels; ++ch)
-        newBuffer.copyFrom (ch, 0, original->buffer, ch, trimStart, trimLen);
-
-    auto decoded = std::make_unique<DecodedSample>();
-    decoded->buffer   = std::move (newBuffer);
-    decoded->fileName = original->fileName;
-    decoded->filePath = original->filePath;
-    buildMipmapsForBuffer (decoded->buffer, decoded->peakMipmaps);
-    return decoded;
-}
-
 void SampleData::applyDecodedSample (std::unique_ptr<DecodedSample> decoded)
 {
     if (decoded == nullptr)
@@ -217,11 +191,6 @@ float SampleData::getInterpolatedSample (double pos, int channel) const
     if (data == nullptr)
         return 0.0f;
     return data[ipos] + (data[ipos + 1] - data[ipos]) * frac;
-}
-
-void SampleData::buildMipmaps()
-{
-    buildMipmapsForBuffer (buffer, peakMipmaps);
 }
 
 std::unique_ptr<SampleData::DecodedSample> SampleData::createTrimmed (

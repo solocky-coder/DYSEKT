@@ -2,7 +2,6 @@
 #include "DysektLookAndFeel.h"
 #include "WaveformView.h"
 #include "../PluginProcessor.h"
-#include "../audio/AudioAnalysis.h"
 
 ActionPanel::ActionPanel (DysektProcessor& p, WaveformView& wv)
     : processor (p), waveformView (wv)
