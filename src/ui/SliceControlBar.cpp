@@ -330,6 +330,48 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
  c.isKnob = true; c.isMidiLearnable = true;
  c.knobNorm = normVal;
  cells.push_back (c);
+
+ // ── Lock icon — drawn top-left of the knob cell, registers as a separate
+ //    hit cell so clicking it toggles the lock without touching MIDI Learn.
+ //    Only registered for knobs that have a real lockBit (lockBit == 0 means
+ //    the field has no per-slice lock, e.g. FieldSliceStart).
+ if (lockBit != 0)
+ {
+     constexpr int kLockW = 10, kLockH = 10;
+     const int lx = x + 1, ly = y + 1;
+
+     // Padlock body
+     if (locked)
+     {
+         g.setColour (getTheme().lockActive.withAlpha (0.90f));
+         g.fillRoundedRectangle ((float) lx + 1, (float) ly + 4,
+                                 (float) kLockW - 2, (float) kLockH - 4, 1.0f);
+         g.setColour (getTheme().lockActive);
+         juce::Path shackle;
+         shackle.addCentredArc ((float) lx + kLockW * 0.5f, (float) ly + 4.5f,
+                                2.5f, 2.5f, 0.f,
+                                juce::MathConstants<float>::pi, 0.f, true);
+         g.strokePath (shackle, juce::PathStrokeType (1.3f));
+     }
+     else
+     {
+         g.setColour (getTheme().lockInactive.withAlpha (0.45f));
+         g.drawRoundedRectangle ((float) lx + 1, (float) ly + 4,
+                                 (float) kLockW - 2, (float) kLockH - 4, 1.0f, 1.0f);
+         juce::Path shackle;
+         shackle.addCentredArc ((float) lx + kLockW * 0.5f, (float) ly + 4.0f,
+                                2.5f, 2.5f, 0.f,
+                                juce::MathConstants<float>::pi, 0.f, true);
+         g.strokePath (shackle, juce::PathStrokeType (1.0f));
+     }
+
+     // Register as a separate hit cell — isLockIcon = true
+     ParamCell lc{};
+     lc.x = lx; lc.y = ly; lc.w = kLockW; lc.h = kLockH;
+     lc.lockBit = lockBit; lc.fieldId = fieldId;
+     lc.isLockIcon = true;
+     cells.push_back (lc);
+ }
 }
 
 // =============================================================================
@@ -1219,6 +1261,23 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  {
  const auto& cell = cells[(size_t) i];
  if (! juce::Rectangle (cell.x, cell.y, cell.w, cell.h).contains (pos)) continue;
+
+ // ── Lock icon click — toggle lock for this field, preserving current value ─
+ if (cell.isLockIcon && cell.lockBit != 0)
+ {
+     const auto& snap = processor.getUiSliceSnapshot();
+     const int sIdx = snap.selectedSlice;
+     if (sIdx >= 0 && sIdx < snap.numSlices)
+     {
+         DysektProcessor::Command cmd;
+         cmd.type      = DysektProcessor::CmdToggleLock;
+         cmd.intParam1 = sIdx;               // explicit slice index
+         cmd.intParam2 = (int) cell.lockBit; // the bit to toggle
+         processor.pushCommand (cmd);
+         repaint();
+     }
+     return;
+ }
 
  // MIDI Learn boundary button
  if (cell.isMidiLearnBtn)

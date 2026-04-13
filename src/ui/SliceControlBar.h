@@ -40,6 +40,7 @@ private:
         bool isMidiLearnBtn = false; // START / END boundary buttons
         bool isKnob = false; // numeric rotary
         bool isMidiLearnable = false; // right-click → Learn menu
+        bool isLockIcon = false; // clicking this cell toggles the lock
         float knobNorm = 0.0f; // 0-1 position for knob arc
     };
 

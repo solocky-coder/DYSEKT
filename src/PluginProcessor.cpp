@@ -739,47 +739,83 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
         case CmdToggleLock:
         {
-            int sel = sliceManager.selectedSlice;
+            // intParam1 = explicit slice index (>= 0), or -1 to use selectedSlice.
+            // intParam2 = lock bit to toggle.
+            // On lock-on: snapshot the current *effective* value (per-slice if already
+            // locked for that field, otherwise the global APVTS default) so the locked
+            // value always matches exactly what was displayed — regardless of which UI
+            // surface triggered the toggle.
+            int sel = (cmd.intParam1 >= 0) ? cmd.intParam1 : (int) sliceManager.selectedSlice;
             if (sel >= 0 && sel < sliceManager.getNumSlices())
             {
                 auto& s = sliceManager.getSlice (sel);
-                uint32_t bit = (uint32_t) cmd.intParam1;
+                uint32_t bit = (uint32_t) cmd.intParam2;
                 bool turningOn = !(s.lockMask & bit);
 
                 if (turningOn)
                 {
-                    // Snapshot the current effective (global) value into the slice field
-                    // so the locked value matches what was displayed before locking.
-                    if      (bit == kLockBpm)         s.bpm               = bpmParam->load();
-                    else if (bit == kLockPitch)        s.pitchSemitones    = pitchParam->load();
-                    else if (bit == kLockAlgorithm)    s.algorithm         = (int) algoParam->load();
-                    else if (bit == kLockAttack)       s.attackSec         = attackParam->load() / 1000.0f;
-                    else if (bit == kLockHold)         s.holdSec           = holdParam->load()  / 1000.0f;
-                    else if (bit == kLockDecay)        s.decaySec          = decayParam->load() / 1000.0f;
-                    else if (bit == kLockSustain)      s.sustainLevel      = sustainParam->load() / 100.0f;
-                    else if (bit == kLockRelease)      s.releaseSec        = releaseParam->load() / 1000.0f;
-                    else if (bit == kLockMuteGroup)    s.muteGroup         = (int) muteGroupParam->load();
-                    else if (bit == kLockLoop)         s.loopMode          = (int) loopParam->load();
-                    else if (bit == kLockStretch)      s.stretchEnabled    = stretchParam->load()     > 0.5f;
-                    else if (bit == kLockReleaseTail)  s.releaseTail       = releaseTailParam->load() > 0.5f;
-                    else if (bit == kLockReverse)      s.reverse           = reverseParam->load()     > 0.5f;
-                    else if (bit == kLockOneShot)      s.oneShot           = false;
-                    else if (bit == kLockCentsDetune)  s.centsDetune       = centsDetuneParam->load();
-                    else if (bit == kLockTonality)     s.tonalityHz        = tonalityParam->load();
-                    else if (bit == kLockFormant)      s.formantSemitones  = formantParam->load();
-                    else if (bit == kLockFormantComp)  s.formantComp       = formantCompParam->load() > 0.5f;
-                    else if (bit == kLockGrainMode)    s.grainMode         = (int) grainModeParam->load();
-                    else if (bit == kLockVolume)       s.volume            = masterVolParam->load();
-                    else if (bit == kLockPan)          s.pan               = panParam->load();
-                    else if (bit == kLockFilter)       { s.filterCutoff    = filterCutoffParam->load();
-                                                         s.filterRes       = filterResParam->load(); }
-                    else if (bit == kLockChromaticChannel) s.chromaticChannel = 0;
-                    else if (bit == kLockChromaticLegato)  s.chromaticLegato  = false;
-                    // kLockOutputBus: no global default param — slice default (0) is correct
+                    // For each field: use the slice's own value if it was already locked
+                    // (meaning it was explicitly set), otherwise fall back to the current
+                    // global APVTS default.  This is the same logic the SCB dragStartValue
+                    // switch uses so all three surfaces (WaveformView, SCB, SliceWaveformLcd)
+                    // lock identically.
+                    if (bit == kLockBpm)
+                        s.bpm = (s.lockMask & kLockBpm) ? s.bpm : bpmParam->load();
+                    else if (bit == kLockPitch)
+                        s.pitchSemitones = (s.lockMask & kLockPitch) ? s.pitchSemitones : pitchParam->load();
+                    else if (bit == kLockAlgorithm)
+                        s.algorithm = (s.lockMask & kLockAlgorithm) ? s.algorithm : (int) algoParam->load();
+                    else if (bit == kLockAttack)
+                        s.attackSec = (s.lockMask & kLockAttack) ? s.attackSec : attackParam->load() / 1000.0f;
+                    else if (bit == kLockHold)
+                        s.holdSec = (s.lockMask & kLockHold) ? s.holdSec : holdParam->load() / 1000.0f;
+                    else if (bit == kLockDecay)
+                        s.decaySec = (s.lockMask & kLockDecay) ? s.decaySec : decayParam->load() / 1000.0f;
+                    else if (bit == kLockSustain)
+                        s.sustainLevel = (s.lockMask & kLockSustain) ? s.sustainLevel : sustainParam->load() / 100.0f;
+                    else if (bit == kLockRelease)
+                        s.releaseSec = (s.lockMask & kLockRelease) ? s.releaseSec : releaseParam->load() / 1000.0f;
+                    else if (bit == kLockMuteGroup)
+                        s.muteGroup = (s.lockMask & kLockMuteGroup) ? s.muteGroup : (int) muteGroupParam->load();
+                    else if (bit == kLockLoop)
+                        s.loopMode = (s.lockMask & kLockLoop) ? s.loopMode : (int) loopParam->load();
+                    else if (bit == kLockStretch)
+                        s.stretchEnabled = (s.lockMask & kLockStretch) ? s.stretchEnabled : stretchParam->load() > 0.5f;
+                    else if (bit == kLockReleaseTail)
+                        s.releaseTail = (s.lockMask & kLockReleaseTail) ? s.releaseTail : releaseTailParam->load() > 0.5f;
+                    else if (bit == kLockReverse)
+                        s.reverse = (s.lockMask & kLockReverse) ? s.reverse : reverseParam->load() > 0.5f;
+                    else if (bit == kLockOneShot)
+                        s.oneShot = (s.lockMask & kLockOneShot) ? s.oneShot : false;
+                    else if (bit == kLockCentsDetune)
+                        s.centsDetune = (s.lockMask & kLockCentsDetune) ? s.centsDetune : centsDetuneParam->load();
+                    else if (bit == kLockTonality)
+                        s.tonalityHz = (s.lockMask & kLockTonality) ? s.tonalityHz : tonalityParam->load();
+                    else if (bit == kLockFormant)
+                        s.formantSemitones = (s.lockMask & kLockFormant) ? s.formantSemitones : formantParam->load();
+                    else if (bit == kLockFormantComp)
+                        s.formantComp = (s.lockMask & kLockFormantComp) ? s.formantComp : formantCompParam->load() > 0.5f;
+                    else if (bit == kLockGrainMode)
+                        s.grainMode = (s.lockMask & kLockGrainMode) ? s.grainMode : (int) grainModeParam->load();
+                    else if (bit == kLockVolume)
+                        s.volume = (s.lockMask & kLockVolume) ? s.volume : masterVolParam->load();
+                    else if (bit == kLockPan)
+                        s.pan = (s.lockMask & kLockPan) ? s.pan : panParam->load();
+                    else if (bit == kLockFilter)
+                    {
+                        s.filterCutoff = (s.lockMask & kLockFilter) ? s.filterCutoff : filterCutoffParam->load();
+                        s.filterRes    = (s.lockMask & kLockFilter) ? s.filterRes    : filterResParam->load();
+                    }
+                    else if (bit == kLockChromaticChannel)
+                        s.chromaticChannel = (s.lockMask & kLockChromaticChannel) ? s.chromaticChannel : 0;
+                    else if (bit == kLockChromaticLegato)
+                        s.chromaticLegato = (s.lockMask & kLockChromaticLegato) ? s.chromaticLegato : false;
+                    // kLockOutputBus: no global default — preserve slice value or 0
                 }
 
                 s.lockMask ^= bit;
             }
+            uiSnapshotDirty.store (true, std::memory_order_release);
             break;
         }
 
