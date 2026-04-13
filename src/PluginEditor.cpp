@@ -563,7 +563,7 @@ void DysektEditor::timerCallback()
  const bool previewActive = waveformView.hasActiveSlicePreview();
  const bool waveformInteracting = waveformView.isInteracting();
 
- const auto snapshotVersion = processor.getUiSliceSnapshotVersion();
+ const auto snapshotVersion = (uint32_t) processor.getUiSliceSnapshotVersion();
  if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
 
  {
@@ -600,10 +600,14 @@ void DysektEditor::timerCallback()
                  const int numFrames  = snap->buffer.getNumSamples();
                  const int visibleLen = (int) ((float) numFrames / z);
                  const int maxStart   = numFrames - visibleLen;
-                 if (maxStart > 0 && followSlice < (int) snap->slices.size())
+                 const auto& uiSnap   = processor.getUiSliceSnapshot();
+                 if (maxStart > 0 && followSlice < uiSnap.numSlices)
                  {
-                     const auto& sl        = snap->slices[(size_t) followSlice];
-                     const int sliceCenter = (sl.startSample + sl.endSample) / 2;
+                     const int sliceStart = uiSnap.slices[(size_t) followSlice].startSample;
+                     const int sliceEnd   = (followSlice + 1 < uiSnap.numSlices)
+                                              ? uiSnap.slices[(size_t)(followSlice + 1)].startSample
+                                              : numFrames;
+                     const int sliceCenter = (sliceStart + sliceEnd) / 2;
                      const int newStart    = juce::jlimit (0, maxStart, sliceCenter - visibleLen / 2);
                      processor.scroll.store ((float) newStart / (float) maxStart,
                                              std::memory_order_relaxed);
