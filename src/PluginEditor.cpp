@@ -748,7 +748,7 @@ void DysektEditor::ensureDefaultThemes()
  auto dir = getThemesDir(); dir.createDirectory();
  auto write = [&] (const juce::String& name, const ThemeData& t)
  {
- auto f = dir.getChildFile (name + ".dysektstyle");
+ auto f = dir.getChildFile (name + ".dsk");
  if (! f.existsAsFile()) f.replaceWithText (t.toThemeFile());
  };
  write ("dark", ThemeData::darkTheme());
@@ -765,7 +765,7 @@ void DysektEditor::ensureDefaultThemes()
 juce::StringArray DysektEditor::getAvailableThemes()
 {
  juce::StringArray names;
- for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
+ for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dsk"))
  {
  auto t = ThemeData::fromThemeFile (f.loadFileAsString());
  if (t.name.isNotEmpty()) names.add (t.name);
@@ -776,7 +776,7 @@ juce::StringArray DysektEditor::getAvailableThemes()
 
 void DysektEditor::applyTheme (const juce::String& themeName)
 {
- for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dysektstyle"))
+ for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dsk"))
  {
  auto t = ThemeData::fromThemeFile (f.loadFileAsString());
  if (t.name == themeName)

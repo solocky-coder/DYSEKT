@@ -18,15 +18,15 @@
  *      auto* t = DYSEKT::findTheme ("midnight");
  *      if (t) applyTheme (*t);
  *
- *  Option B  ── JUCE BinaryData  (add .dysektstyle files via Projucer)
+ *  Option B  ── JUCE BinaryData  (add .dsk files via Projucer)
  *  ─────────────────────────────────────────────────────────────────────
  *  1. In Projucer → File Explorer → right-click your project →
- *     "Add existing files" → select all .dysektstyle files from Resources/themes/
+ *     "Add existing files" → select all .dsk files from Resources/themes/
  *  2. Make sure "Add to Binary Resources" is ticked for each file.
  *  3. Then load at runtime:
  *
  *      int size = 0;
- *      const char* data = BinaryData::getNamedResource ("dark_dysektstyle", size);
+ *      const char* data = BinaryData::getNamedResource ("dark_dsk", size);
  *      juce::String themeStr (data, size);
  *      auto theme = DYSEKT::parseThemeString (themeStr);
  */
@@ -295,7 +295,7 @@ inline const ThemeColors* findTheme (std::string_view name)
     return nullptr;
 }
 
-// ── Option B: parse a .dysektstyle string at runtime (BinaryData path) ────
+// ── Option B: parse a .dsk string at runtime (BinaryData path) ────
 
 inline ThemeColors parseThemeString (const juce::String& content)
 {
