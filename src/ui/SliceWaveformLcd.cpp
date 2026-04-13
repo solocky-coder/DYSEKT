@@ -752,8 +752,13 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
         const float cx = ox + node.xn * W;
         const bool  hov    = (node.role == hovRole || node.role == dragRole);
         const float r      = hov ? kNodeR + 2.5f : kNodeR;
-        const float cy = juce::jmax (oy + r + 4.0f,
-                             juce::jmin (oy + H - r - 4.0f, oy + node.yn * H));
+        // Clamp cy so the circle never escapes the component bounds.
+        // Use component-local coordinates (origin = component top-left) so the
+        // floor/ceiling hold regardless of the nodeArea inset passed in.
+        const float compH  = (float) getHeight();
+        const float cyRaw  = oy + node.yn * H;
+        const float cy     = juce::jmax (r + 2.0f,
+                                 juce::jmin (compH - r - 2.0f, cyRaw));
 
         // Determine if this field is locked
         uint32_t fieldBit = 0;
