@@ -402,6 +402,12 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
                 else
                 {
                     // Preserve the current node value when locking so it doesn't jump.
+                    // Rebuild env.* from current params first — if the timer-driven
+                    // rebuild hasn't fired yet (e.g. postCommitGuard still counting,
+                    // or slice just selected) env.* may hold stale struct-default
+                    // values, causing the node to snap to the init position on lock.
+                    buildEnvelopeNodes();
+
                     static constexpr float kAX   = 0.85f;
                     static constexpr float kRMax = 0.99f;
                     const float sliceDurMs_l = juce::jmax (1.0f, getSliceDurMs());
@@ -442,6 +448,7 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
                 }
             }
             postCommitGuard = 6;
+            lastEnvSnapVer  = -1;   // guarantee rebuild once guard expires (matches commitNodes)
             repaint();
         }
         return;   // don't start a drag on right-click
