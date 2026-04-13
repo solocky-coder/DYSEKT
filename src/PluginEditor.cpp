@@ -457,6 +457,8 @@ void DysektEditor::resized()
  if (shortcutsPanel.isVisible())
  shortcutsPanel.setBounds (getLocalBounds());
 
+ if (midiLearnBackdrop != nullptr)
+ midiLearnBackdrop->setBounds (getLocalBounds());
  if (midiLearnDialog != nullptr)
  midiLearnDialog->setBounds (getLocalBounds().reduced (40));
  if (confirmOverlay != nullptr)
@@ -502,13 +504,23 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  if (midiLearnDialog != nullptr)
  {
  midiLearnDialog.reset();
+ midiLearnBackdrop.reset();
  resized();
  }
  else
  {
+ // Full-bounds dimming backdrop — goes on first so dialog sits above it
+ struct Backdrop : public juce::Component {
+     void paint (juce::Graphics& g) override {
+         g.fillAll (juce::Colours::black.withAlpha (0.55f));
+     }
+ };
+ midiLearnBackdrop = std::make_unique<Backdrop>();
+ addAndMakeVisible (*midiLearnBackdrop);
+
  midiLearnDialog = std::make_unique<MidiLearnDialog> (
  processor.midiLearn,
- [this] { midiLearnDialog.reset(); resized(); }
+ [this] { midiLearnDialog.reset(); midiLearnBackdrop.reset(); resized(); }
  );
  addAndMakeVisible (*midiLearnDialog);
  midiLearnDialog->toFront (true);
