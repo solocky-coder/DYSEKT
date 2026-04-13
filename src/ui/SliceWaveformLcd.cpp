@@ -936,11 +936,16 @@ void SliceWaveformLcd::paint (juce::Graphics& g)
     // Nodes are rebuilt in repaintLcd() (timer-driven), not here.
     // During drag, dragRole != None so mouseDrag maintains envNodes directly.
 
-    const auto area = getLocalBounds().reduced (4).toFloat().reduced (2.0f);
-    screenArea = area;
+    // lcdArea: inset used for waveform/envelope drawing (respects border stroke).
+    // nodeArea: full usable bounds so node circles sit flush with the frame top
+    //           instead of overflowing above it.  screenArea must match nodeArea
+    //           so hit-testing and drag coords stay in sync with draw positions.
+    const auto lcdArea  = getLocalBounds().reduced (4).toFloat().reduced (2.0f);
+    const auto nodeArea = getLocalBounds().reduced (4).toFloat();
+    screenArea = nodeArea;
 
-    drawWaveform (g, area);
-    drawEnvelope (g, area);
-    drawNodes    (g, area);
-    drawPlayhead (g, area);
+    drawWaveform (g, lcdArea);
+    drawEnvelope (g, lcdArea);
+    drawNodes    (g, nodeArea);
+    drawPlayhead (g, lcdArea);
 }
