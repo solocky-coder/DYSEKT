@@ -31,9 +31,6 @@ public:
     bool getLinkedSlicePreview (int& sliceIdx, int& startSample, int& endSample) const;
     bool isInteracting() const noexcept;
 
-    void setSliceDrawMode (bool active);
-    bool isSliceDrawModeActive() const noexcept { return sliceDrawMode; }
-
     // Trim mode — entered when the user asks to trim before loading
     void enterTrimMode (int start, int end);
     void setTrimPoints (int inPt, int outPt);  // MIDI feedback path
@@ -65,7 +62,6 @@ public:
     void setWaveformMode (int mode) { waveformMode = mode; softWaveform = (mode == 1); repaint(); }
     int  getWaveformMode() const noexcept { return waveformMode; }
 
-    bool altModeActive = false;
     bool shiftPreviewActive = false;
     std::vector<int> transientPreviewPositions;
 
@@ -82,7 +78,7 @@ private:
         bool valid = false;
     };
 
-    enum DragMode { None, DragEdgeLeft, DragEdgeRight, DrawSlice, MoveSlice, DuplicateSlice,
+    enum DragMode { None, DragEdgeLeft, DragEdgeRight, DrawSlice, MoveSlice,
                     TrimMarkerLeft, TrimMarkerRight, DragTrimIn, DragTrimOut };
 
     enum class HoveredEdge { None, Left, Right };
@@ -91,12 +87,9 @@ private:
     int pixelToSample (int px) const;
     int sampleToPixel (int sample) const;
     ViewState buildViewState (const SampleData::SnapshotPtr& sampleSnap) const;
-    void syncAltStateFromMods (const juce::ModifierKeys& mods);
-
     void drawWaveform (juce::Graphics& g);
     void drawSlices (juce::Graphics& g);
     void drawPlaybackCursors (juce::Graphics& g);
-    void paintDrawSlicePreview (juce::Graphics& g);
     void paintLazyChopOverlay (juce::Graphics& g);
     void paintTransientMarkers (juce::Graphics& g);
     void paintTrimOverlay (juce::Graphics& g);
@@ -120,7 +113,6 @@ private:
     DysektProcessor& processor;
     WaveformCache cache;
     CacheKey prevCacheKey;
-    bool sliceDrawMode         = false;
     bool midiSliceOverlayActive = false;
     void setMidiSliceActive (bool active);
     bool softWaveform  = false;   // legacy flag (kept for compat – mirrors waveformMode==1)
@@ -147,7 +139,6 @@ private:
     int dragSliceIdx = -1;
     int drawStart = 0;
     int drawEnd = 0;
-    bool drawStartedFromAlt = false;
     int addClickStart = -1; // ADD click mode: -1 = waiting for first click, >= 0 = waiting for second click
     int dragOffset = 0;    // for MoveSlice: offset from mouse to slice start
     int dragSliceLen = 0;  // for MoveSlice: original slice length
@@ -155,9 +146,6 @@ private:
     int dragPreviewEnd = 0;   // for edge/move drags: preview end sample
     int dragOrigStart = 0;    // slice start at the moment drag began (for overlap clamping)
     int dragOrigEnd = 0;      // slice end at the moment drag began (for overlap clamping)
-    int ghostStart = 0;    // for DuplicateSlice: ghost overlay start sample
-    int ghostEnd   = 0;    // for DuplicateSlice: ghost overlay end sample
-
     // Linked (adjacent) slice preview — kept in sync with the dragged edge
     int linkedSliceIdx     = -1;
     int linkedPreviewStart = 0;

@@ -34,7 +34,6 @@ private:
     void updateToggleBtn (juce::TextButton& btn, bool active);
     void updateMidiButtonAppearance (bool active);
 
-    juce::TextButton addSliceBtn    { "ADD"  };
     juce::TextButton lazyChopBtn    { "LAZY" };
     juce::TextButton shortcutsBtn   { "HELP" };
 };

@@ -557,11 +557,14 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  if (code == 'Z' && mods.isCommandDown())
  { DysektProcessor::Command c; c.type = DysektProcessor::CmdUndo; processor.pushCommand (c); return true; }
 
- if ((code == '?' || code == '/') && mods.isCommandDown())
+ if (mods.isCommandDown()) return false;
+
+ if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
  { toggleShortcutsPanel(); return true; }
 
- // ⌘M — toggle MIDI Learn assignments dialog
- if (code == 'M' && mods.isCommandDown())
+ if (code == '?') { toggleShortcutsPanel(); return true; }
+
+ if (code == 'M')
  {
  if (midiLearnDialog != nullptr)
  {
@@ -571,7 +574,6 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  }
  else
  {
- // Full-bounds dimming backdrop — goes on first so dialog sits above it
  struct Backdrop : public juce::Component {
      void paint (juce::Graphics& g) override {
          g.fillAll (juce::Colours::black.withAlpha (0.55f));
@@ -579,7 +581,7 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  };
  midiLearnBackdrop = std::make_unique<Backdrop>();
  addAndMakeVisible (*midiLearnBackdrop);
- midiLearnBackdrop->toFront (false); // raise above all permanent UI children
+ midiLearnBackdrop->toFront (false);
 
  midiLearnDialog = std::make_unique<MidiLearnDialog> (
  processor.midiLearn,
@@ -587,26 +589,19 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  [this] { midiLearnDialog.reset(); midiLearnBackdrop.reset(); resized(); }
  );
  addAndMakeVisible (*midiLearnDialog);
- midiLearnDialog->toFront (true);    // dialog on top of backdrop
+ midiLearnDialog->toFront (true);
  resized();
  }
  return true;
  }
 
- if (mods.isCommandDown() || mods.isAltDown()) return false;
-
- if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
- { toggleShortcutsPanel(); return true; }
-
- if (code == 'A') { waveformView.setSliceDrawMode (! waveformView.isSliceDrawModeActive()); repaint(); return true; }
  if (code == 'L')
  {
  DysektProcessor::Command c;
  c.type = processor.lazyChop.isActive() ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
  processor.pushCommand (c); repaint(); return true;
  }
- if (code == 'D') { DysektProcessor::Command c; c.type = DysektProcessor::CmdDuplicateSlice; processor.pushCommand (c); return true; }
- if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey)
+ if (code == juce::KeyPress::deleteKey)
  {
  const auto& ui = processor.getUiSliceSnapshot();
  if (ui.selectedSlice >= 0)
@@ -615,14 +610,14 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  }
  if (code == 'F') { toggleMidiFollow(); return true; }
 
- if (code == juce::KeyPress::rightKey || (code == juce::KeyPress::tabKey && ! mods.isShiftDown()))
+ if (code == juce::KeyPress::rightKey)
  {
  const auto& ui = processor.getUiSliceSnapshot();
  if (ui.numSlices > 0)
  { DysektProcessor::Command c; c.type = DysektProcessor::CmdSelectSlice; c.intParam1 = juce::jlimit (0, ui.numSlices-1, ui.selectedSlice+1); processor.pushCommand (c); repaint(); }
  return true;
  }
- if (code == juce::KeyPress::leftKey || (code == juce::KeyPress::tabKey && mods.isShiftDown()))
+ if (code == juce::KeyPress::leftKey)
  {
  const auto& ui = processor.getUiSliceSnapshot();
  if (ui.numSlices > 0)

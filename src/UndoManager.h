@@ -17,7 +17,6 @@ public:
         int rootNote = 36;
         juce::ValueTree apvtsState;
         bool midiSelectsSlice = false;
-        bool snapToZeroCrossing = false;
     };
 
     void push (const Snapshot& snap)

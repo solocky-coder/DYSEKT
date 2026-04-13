@@ -77,7 +77,6 @@ public:
         CmdToggleLock,
         CmdSetSliceParam,
         CmdSetSliceBounds,
-        CmdDuplicateSlice,
         CmdSplitSlice,
         CmdTransientChop,
         CmdEqualChop,
@@ -138,7 +137,6 @@ public:
         juce::String sampleFileName;
         bool         isDefaultSample   { false };
         bool         midiSelectsSlice   { false };
-        bool         snapToZeroCrossing { false };
     };
 
     // ── Oscilloscope ring buffer size ─────────────────��───────────────────────
@@ -239,7 +237,6 @@ public:
     std::atomic<float> scroll { 0.0f };
     std::atomic<float> dawBpm { 120.0f };
 
-    std::atomic<bool> snapToZeroCrossing { false };
     std::atomic<bool> midiSelectsSlice   { false };
     std::atomic<int>  midiFollowTriggeredSlice { -1 }; // last MIDI-triggered slice idx for waveform viewport follow
 

@@ -100,7 +100,6 @@ static bool isCriticalCommand (DysektProcessor::CommandType type)
         case DysektProcessor::CmdLoadFile:
         case DysektProcessor::CmdCreateSlice:
         case DysektProcessor::CmdDeleteSlice:
-        case DysektProcessor::CmdDuplicateSlice:
         case DysektProcessor::CmdSplitSlice:
         case DysektProcessor::CmdTransientChop:
         case DysektProcessor::CmdRelinkFile:
@@ -595,7 +594,6 @@ UndoManager::Snapshot DysektProcessor::makeSnapshot()
     snap.rootNote = sliceManager.rootNote.load();
     snap.apvtsState = apvts.copyState();
     snap.midiSelectsSlice = midiSelectsSlice.load();
-    snap.snapToZeroCrossing = snapToZeroCrossing.load();
     return snap;
 }
 
@@ -613,7 +611,6 @@ void DysektProcessor::restoreSnapshot (const UndoManager::Snapshot& snap)
     sliceManager.rootNote.store (snap.rootNote);
     apvts.replaceState (snap.apvtsState);
     midiSelectsSlice.store (snap.midiSelectsSlice);
-    snapToZeroCrossing.store (snap.snapToZeroCrossing);
     sliceManager.rebuildMidiMap();
     uiSnapshotDirty.store (true, std::memory_order_release);
 }
@@ -652,7 +649,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
         case CmdDeleteSlice:
         case CmdStretch:
         case CmdToggleLock:
-        case CmdDuplicateSlice:
         case CmdSplitSlice:
         case CmdTransientChop:
         case CmdEqualChop:
@@ -1013,32 +1009,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 // pinSliceMidiNote patches both the slice field and the lookup map.
                 if (inheritedMidiNote >= 0)
                     sliceManager.pinSliceMidiNote (idx, inheritedMidiNote);
-            }
-            break;
-        }
-
-        case CmdDuplicateSlice:
-        {
-            int sel = sliceManager.selectedSlice;
-            if (sel >= 0 && sel < sliceManager.getNumSlices())
-            {
-                const auto& src = sliceManager.getSlice (sel);
-                const int srcEnd = sliceManager.getEndForSlice (sel, sampleData.getBuffer().getNumSamples());
-                int newIdx = sliceManager.createSlice (src.startSample, srcEnd);
-                if (newIdx >= 0)
-                {
-                    auto& dst = sliceManager.getSlice (newIdx);
-                    int savedNote = dst.midiNote;  // assigned by createSlice
-                    dst = src;                     // copy all params, lockMask, colour
-                    dst.midiNote = savedNote;      // restore unique MIDI note
-                    if (cmd.intParam1 >= 0)        // ctrl-drag: use explicit position
-                    {
-                        dst.startSample = cmd.intParam1;
-                        // Marker model: end is derived; intParam2 (requested end) ignored.
-                    }
-                    // else (intParam1 == -1): inherit src.startSample as-is
-                    sliceManager.selectedSlice = newIdx;
-                }
             }
             break;
         }
@@ -2472,7 +2442,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (20);
+    stream.writeInt (21);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -2542,9 +2512,6 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     stream.writeString (sampleData.getFilePath());
     stream.writeString (sampleData.getFileName());
 
-    // v12: snap-to-zero-crossing toggle
-    stream.writeBool (snapToZeroCrossing.load());
-
     // v17: MIDI Learn CC mappings
     midiLearn.writeState (stream);
 }
@@ -2554,7 +2521,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version < 16 || version > 20)
+    if (version < 16 || version > 21)
         return;
 
     // APVTS state
@@ -2657,7 +2624,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     sliceManager.rebuildMidiMap();
     publishUiSliceSnapshot();
 
-    snapToZeroCrossing.store (stream.readBool());
+    if (version < 21) stream.readBool();  // v20 had snapToZeroCrossing toggle — removed, always on
 
     // v17: MIDI Learn CC mappings (optional — older presets simply leave all unassigned)
     if (! stream.isExhausted())
