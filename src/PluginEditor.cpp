@@ -256,59 +256,77 @@ void DysektEditor::toggleShortcutsPanel()
  }
 }
 
+// ── Helper: compute the waveform outer frame rectangle ──────────────────────
+static juce::Rectangle<float> waveformFrameRect (const DysektEditor& ed,
+                                                   const juce::Rectangle<int>& wvBounds,
+                                                   bool hasTrimDialog)
+{
+    const int kFrameInset = 4;
+    const int kFX         = kMargin;
+    const int kFW         = ed.getWidth() - kMargin * 2;
+    const int trimExtra   = hasTrimDialog ? kTrimBarH : 0;
+    return { (float) kFX,
+             (float) wvBounds.getY() - kFrameInset,
+             (float) kFW,
+             (float) (wvBounds.getHeight() + trimExtra + kFrameInset * 2) };
+}
+
 void DysektEditor::paint (juce::Graphics& g)
 {
  g.fillAll (getTheme().background);
  if (waveformView.isVisible() && waveformView.getHeight() > 0)
  {
- // Use waveformView directly for frame bounds — actionPanel is now collapsed
- const auto& sbnd = waveformView.getBounds();
- const auto ac = getTheme().accent;
+ const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
 
- const int kFrameInset = 4;
- const int kFrameX = kMargin;
- const int kFrameW = getWidth() - kMargin * 2;
- const int trimExtra = (trimDialog != nullptr) ? kTrimBarH : 0;
- const juce::Rectangle outerF (
- (float) kFrameX, (float) sbnd.getY() - kFrameInset,
- (float) kFrameW, (float) (sbnd.getHeight() + trimExtra + kFrameInset * 2));
+ // Outer shell gradient fill
  juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
  juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
  g.setGradientFill (outerGrad);
  g.fillRoundedRectangle (outerF, 4.0f);
 
- // Outer glow halo — one pixel outside the frame
- g.setColour (ac.withAlpha (0.18f));
- g.drawRoundedRectangle (outerF.expanded (1.0f), 5.0f, 1.0f);
- // Main frame border
- g.setColour (ac.withAlpha (0.60f));
- g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.5f);
-
+ // Inner screen fill + scanlines + top glow (drawn here so children paint over them)
  const auto screenF = outerF.reduced (4.0f);
  g.setColour (getTheme().darkBar.darker (0.55f));
  g.fillRoundedRectangle (screenF, 2.0f);
 
  g.setColour (juce::Colours::black.withAlpha (0.18f));
  for (int y = juce::roundToInt (screenF.getY()); y < juce::roundToInt (screenF.getBottom()); y += 2)
- g.drawHorizontalLine (y, screenF.getX(), screenF.getRight());
+     g.drawHorizontalLine (y, screenF.getX(), screenF.getRight());
 
- juce::ColourGradient glow (ac.withAlpha (0.06f), 0.f, screenF.getY(),
+ juce::ColourGradient glow (getTheme().accent.withAlpha (0.06f), 0.f, screenF.getY(),
  juce::Colours::transparentBlack, 0.f, screenF.getY() + 20.f, false);
  g.setGradientFill (glow);
  g.fillRoundedRectangle (screenF, 2.0f);
-
- g.setColour (ac.withAlpha (0.30f));
- g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
-
- // NOTE: sliceLane is now collapsed; no separator line needed here
  }
 
 
-    // ── Logo frame — accent border matching global frame style ──────────────────
+}
+
+void DysektEditor::paintOverChildren (juce::Graphics& g)
+{
+    if (waveformView.isVisible() && waveformView.getHeight() > 0)
+    {
+        const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
+        const auto ac     = getTheme().accent;
+
+        // Outer glow halo — drawn over children so it's never obscured
+        g.setColour (ac.withAlpha (0.18f));
+        g.drawRoundedRectangle (outerF.expanded (1.0f), 5.0f, 1.0f);
+
+        // Main accent border
+        g.setColour (ac.withAlpha (0.60f));
+        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.5f);
+
+        // Inner screen border
+        const auto screenF = outerF.reduced (4.0f);
+        g.setColour (ac.withAlpha (0.30f));
+        g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
+    }
+
+    // ── Logo frame border (over children) ───────────────────────────────────
     if (logoBar.isVisible() && logoBar.getHeight() > 0)
     {
         const auto ac = getTheme().accent;
-        // withTrimmedTop(4) creates a visible gap from the outer window border
         const juce::Rectangle<float> logoF (logoBar.getBounds().toFloat().withTrimmedTop (4.0f));
         g.setColour (ac.withAlpha (0.18f));
         g.drawRoundedRectangle (logoF.expanded (1.0f), 5.0f, 1.0f);
@@ -318,15 +336,15 @@ void DysektEditor::paint (juce::Graphics& g)
         g.drawRoundedRectangle (logoF.reduced (2.0f), 3.5f, 1.0f);
     }
 
- // ── Full-window accent frame ─────────────────────────────────────────
- {
-  const auto ac = getTheme().accent;
-  const juce::Rectangle<float> win (getLocalBounds().toFloat());
-  g.setColour (ac.withAlpha (0.60f));
-  g.drawRoundedRectangle (win.reduced (2.0f), 2.5f, 1.5f);
-  g.setColour (ac.withAlpha (0.14f));
-  g.drawRoundedRectangle (win.reduced (4.0f), 2.0f, 1.0f);
- }
+    // ── Full-window accent frame (always on top) ─────────────────────────────
+    {
+        const auto ac = getTheme().accent;
+        const juce::Rectangle<float> win (getLocalBounds().toFloat());
+        g.setColour (ac.withAlpha (0.60f));
+        g.drawRoundedRectangle (win.reduced (2.0f), 2.5f, 1.5f);
+        g.setColour (ac.withAlpha (0.14f));
+        g.drawRoundedRectangle (win.reduced (4.0f), 2.0f, 1.0f);
+    }
 }
 
 void DysektEditor::resized()
@@ -392,26 +410,27 @@ void DysektEditor::resized()
  browserPanel.setBounds ({});
  }
 
- // Hide SCB and overview in trim mode; show both (overview centred in gap) otherwise.
+ // Hide SCB and overview in trim mode; show both otherwise.
+ // The overview strip sits in its own allocated row between the waveform frame
+ // and the SCB frame, with kMargin of breathing room on each side — matching
+ // the inter-frame spacing used everywhere else in the layout.
  constexpr int kOverviewH = 28;
+ constexpr int kInterGap  = kMargin;   // gap between waveform frame edge and overview frame edge
+                                        // mirrors the standard inter-frame margin
+ constexpr int kOverviewRowH = kInterGap + kOverviewH + kInterGap;
+
  if (trimDialog != nullptr) {
      sliceControlBar.setBounds ({});
      waveformOverview.setBounds ({});
  } else {
-     // SCB at the bottom
+     // SCB at the bottom — no extra margin before it, the overview row provides spacing
      auto scbArea = area.removeFromBottom (kSliceCtrlH);
      sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
 
-     // Gap between waveform frame and SCB frame
-     area.removeFromBottom (kMargin);
-
-     // Overview vertically centred in whatever gap remains
-     const int gapH      = area.getHeight();
-     const int overviewY = area.getY() + juce::jmax (0, (gapH - kOverviewH) / 2);
+     // Overview row — equal kMargin padding above and below the frame
+     auto overviewRow = area.removeFromBottom (kOverviewRowH);
+     const int overviewY = overviewRow.getY() + kInterGap;
      waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
-
-     // Consume the full gap so frameBot is computed at the waveform area bottom
-     area.removeFromBottom (gapH);
  }
 
  const int kFrameInset = 4;
@@ -638,7 +657,19 @@ void DysektEditor::timerCallback()
  if (laneNeedsRepaint) sliceLane.repaint();
  sliceLcd.repaintLcd();
  sliceWaveformLcd.repaintLcd();
- waveformOverview.repaintOverview();
+
+ // Hide the zoom/overview bar when no sample is loaded
+ {
+     const bool hasSample = (processor.sampleData.getSnapshot() != nullptr
+                              && processor.sampleData.getSnapshot()->buffer.getNumSamples() > 0);
+     if (hasSample != waveformOverview.isVisible())
+     {
+         waveformOverview.setVisible (hasSample);
+         resized();
+     }
+ }
+ if (waveformOverview.isVisible())
+     waveformOverview.repaintOverview();
  if (mixerOpen) mixerPanel.repaint();
 
  headerBar.repaint();
