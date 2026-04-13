@@ -54,7 +54,12 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  shortcutsPanel.setVisible (false);
  addChildComponent (shortcutsPanel);
  shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
- shortcutsPanel.onThemeRequest = [this] { headerBar.showThemePopup(); };
+ shortcutsPanel.onThemeRequest = [this]
+ {
+     // Close the shortcuts panel first so the theme editor gets full focus.
+     shortcutsPanel.setVisible (false);
+     toggleThemeEditor();
+ };
 
  sliceLane.setWaveformView (&waveformView);
 
@@ -256,6 +261,43 @@ void DysektEditor::toggleShortcutsPanel()
  }
 }
 
+void DysektEditor::toggleThemeEditor()
+{
+ if (themeEditorPanel != nullptr)
+ {
+     themeEditorPanel.reset();
+     repaint();
+     return;
+ }
+
+ themeEditorPanel = std::make_unique<ThemeEditorPanel> (getThemesDir());
+
+ // Live preview: apply colour changes immediately while editing.
+ themeEditorPanel->onThemeChanged = [this] (const ThemeData& t)
+ {
+     setTheme (t);
+     processor.sliceManager.setSlicePalette (t.slicePalette);
+     repaint();
+ };
+
+ // After a save, persist the theme name to settings and refresh the
+ // header-bar popup list so the new theme appears there too.
+ themeEditorPanel->onThemeSaved = [this] (const juce::String& name)
+ {
+     processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+     saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), name);
+     repaint();
+ };
+
+ themeEditorPanel->onDismiss = [this] { toggleThemeEditor(); };
+
+ addAndMakeVisible (*themeEditorPanel);
+ themeEditorPanel->setBounds (getLocalBounds());
+ themeEditorPanel->toFront (true);
+ themeEditorPanel->grabKeyboardFocus();
+ repaint();
+}
+
 // ── Helper: compute the waveform outer frame rectangle ──────────────────────
 static juce::Rectangle<float> waveformFrameRect (const DysektEditor& ed,
                                                    const juce::Rectangle<int>& wvBounds,
@@ -309,8 +351,9 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
     // full-screen overlay is currently active.
     const bool modalActive = (midiLearnBackdrop != nullptr)
                           || shortcutsPanel.isVisible()
-                          || (confirmOverlay != nullptr)
-                          || (renameOverlay  != nullptr);
+                          || (confirmOverlay    != nullptr)
+                          || (renameOverlay     != nullptr)
+                          || (themeEditorPanel  != nullptr);
     if (modalActive)
         return;
 
@@ -480,6 +523,8 @@ void DysektEditor::resized()
  midiLearnDialog->setBounds (getLocalBounds().reduced (40));
  if (confirmOverlay != nullptr)
  confirmOverlay->setBounds (getLocalBounds());
+ if (themeEditorPanel != nullptr)
+ themeEditorPanel->setBounds (getLocalBounds());
 }
 
 void DysektEditor::toggleMixerPanel()

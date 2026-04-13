@@ -17,6 +17,7 @@
 #include "ui/MidiLearnDialog.h"
 #include "ui/ConfirmOverlay.h"
 #include "ui/RenameOverlay.h"
+#include "ui/ThemeEditorPanel.h"
 #include "TrimSession.h"
 #include "ui/SliceLcdDisplay.h"
 #include "ui/SliceWaveformLcd.h"
@@ -80,12 +81,13 @@ private:
     bool mixerOpen   = false;
     int  waveformMode = 0;   // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
 
-    std::unique_ptr<TrimSession>     trimSession;
-    std::unique_ptr<TrimDialog>      trimDialog;
-    std::unique_ptr<juce::Component> midiLearnBackdrop;
-    std::unique_ptr<MidiLearnDialog> midiLearnDialog;
-    std::unique_ptr<ConfirmOverlay>  confirmOverlay;
-    std::unique_ptr<RenameOverlay>   renameOverlay;
+    std::unique_ptr<TrimSession>       trimSession;
+    std::unique_ptr<TrimDialog>        trimDialog;
+    std::unique_ptr<juce::Component>   midiLearnBackdrop;
+    std::unique_ptr<MidiLearnDialog>   midiLearnDialog;
+    std::unique_ptr<ConfirmOverlay>    confirmOverlay;
+    std::unique_ptr<RenameOverlay>     renameOverlay;
+    std::unique_ptr<ThemeEditorPanel>  themeEditorPanel;
 
     DysektLookAndFeel lnf;
 
@@ -109,6 +111,7 @@ private:
 
     void toggleMixerPanel();
     void toggleShortcutsPanel();
+    void toggleThemeEditor();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektEditor)
 };
