@@ -89,7 +89,7 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
         addAndMakeVisible (armButton);
 
         // Clear button
-        clearButton.setColour (juce::TextButton::buttonColourId,  th.button.withRed  (juce::jmin (255, (int)(th.button.getRed()   + 20))));
+        clearButton.setColour (juce::TextButton::buttonColourId,  th.button.withMultipliedSaturation (1.4f).withMultipliedBrightness (0.85f));
         clearButton.setColour (juce::TextButton::textColourOffId, juce::Colours::tomato.withAlpha (0.85f));
         clearButton.onClick = [this]
         {
