@@ -35,7 +35,8 @@ public:
     explicit DysektEditor (DysektProcessor&);
     ~DysektEditor() override;
 
-    void paint   (juce::Graphics&) override;
+    void paint              (juce::Graphics&) override;
+    void paintOverChildren  (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress& key) override;
 
