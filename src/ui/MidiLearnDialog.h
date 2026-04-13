@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "../MidiLearnManager.h"
+#include "DysektLookAndFeel.h"
 
 class MidiLearnDialog : public juce::Component, private juce::ListBoxModel
 {
@@ -36,14 +37,15 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
 
     MappingRowComponent()
     {
+        const auto& th = getTheme();
+
         paramLabel.setFont (juce::Font (12.f));
-        paramLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+        paramLabel.setColour (juce::Label::textColourId, th.foreground);
         paramLabel.setInterceptsMouseClicks (false, false);
         addAndMakeVisible (paramLabel);
 
         ccLabel.setFont (juce::Font (12.f));
-        ccLabel.setColour (juce::Label::textColourId,
-                           juce::Colours::lightcyan.withAlpha (0.85f));
+        ccLabel.setColour (juce::Label::textColourId, th.accent.withAlpha (0.85f));
         ccLabel.setInterceptsMouseClicks (false, false);
         addAndMakeVisible (ccLabel);
 
@@ -66,10 +68,8 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
         addAndMakeVisible (modeCombo);
 
         // ARM button — blinks while waiting for CC
-        armButton.setColour (juce::TextButton::buttonColourId,
-                             juce::Colour (0xFF1A3040));
-        armButton.setColour (juce::TextButton::textColourOffId,
-                             juce::Colours::lightcyan);
+        armButton.setColour (juce::TextButton::buttonColourId,  th.button);
+        armButton.setColour (juce::TextButton::textColourOffId, th.accent);
         armButton.onClick = [this]
         {
             if (! midiLearn || fieldId < 0) return;
@@ -78,8 +78,7 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
                 midiLearn->armLearn (-1);  // cancel
                 stopTimer();
                 armButton.setButtonText ("LEARN");
-                armButton.setColour (juce::TextButton::buttonColourId,
-                                    juce::Colour (0xFF1A3040));
+                armButton.setColour (juce::TextButton::buttonColourId, getTheme().button);
             }
             else
             {
@@ -90,10 +89,8 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
         addAndMakeVisible (armButton);
 
         // Clear button
-        clearButton.setColour (juce::TextButton::buttonColourId,
-                               juce::Colour (0xFF301A1A));
-        clearButton.setColour (juce::TextButton::textColourOffId,
-                               juce::Colours::tomato.withAlpha (0.8f));
+        clearButton.setColour (juce::TextButton::buttonColourId,  th.button.withRed  (juce::jmin (255, (int)(th.button.getRed()   + 20))));
+        clearButton.setColour (juce::TextButton::textColourOffId, juce::Colours::tomato.withAlpha (0.85f));
         clearButton.onClick = [this]
         {
             if (midiLearn && fieldId >= 0)
@@ -106,14 +103,10 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
 
         // Flip button — inverts relative encoder direction for this slot
         flipButton.setClickingTogglesState (true);
-        flipButton.setColour (juce::TextButton::buttonColourId,
-                              juce::Colour (0xFF1A2830));
-        flipButton.setColour (juce::TextButton::buttonOnColourId,
-                              juce::Colour (0xFF004050));
-        flipButton.setColour (juce::TextButton::textColourOffId,
-                              juce::Colours::white.withAlpha (0.45f));
-        flipButton.setColour (juce::TextButton::textColourOnId,
-                              juce::Colours::lightcyan);
+        flipButton.setColour (juce::TextButton::buttonColourId,   th.button);
+        flipButton.setColour (juce::TextButton::buttonOnColourId, th.buttonHover.brighter (0.1f));
+        flipButton.setColour (juce::TextButton::textColourOffId,  th.foreground.withAlpha (0.45f));
+        flipButton.setColour (juce::TextButton::textColourOnId,   th.accent);
         flipButton.onClick = [this]
         {
             if (midiLearn && fieldId >= 0)
@@ -132,7 +125,7 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
             stopTimer();
             armButton.setButtonText ("LEARN");
             armButton.setColour (juce::TextButton::buttonColourId,
-                                 juce::Colour (0xFF1A3040));
+                                 getTheme().button);
             // Refresh CC label
             if (fieldId >= 0)
                 ccLabel.setText (midiLearn->getLabelText (fieldId),
@@ -144,8 +137,8 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
         const bool lit = ((juce::Time::getMillisecondCounter() / 250) % 2 == 0);
         armButton.setButtonText (lit ? "WAITING..." : "");
         armButton.setColour (juce::TextButton::buttonColourId,
-                             lit ? juce::Colour (0xFF004060)
-                                 : juce::Colour (0xFF1A3040));
+                             lit ? getTheme().buttonHover.brighter (0.2f)
+                                 : getTheme().button);
     }
 
     void update (int field, MidiLearnManager& ml, const juce::String& paramName)
@@ -170,7 +163,7 @@ struct MappingRowComponent : public juce::Component, private juce::Timer
             stopTimer();
             armButton.setButtonText ("LEARN");
             armButton.setColour (juce::TextButton::buttonColourId,
-                                 juce::Colour (0xFF1A3040));
+                                 getTheme().button);
         }
     }
 

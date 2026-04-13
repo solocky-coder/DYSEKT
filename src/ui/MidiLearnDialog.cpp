@@ -1,4 +1,5 @@
 #include "MidiLearnDialog.h"
+#include "DysektLookAndFeel.h"
 
 // ── Parameter name table (must match SliceParamField order) ──────────────────
 static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
@@ -47,6 +48,8 @@ static juce::String getSlotParameterName (int fieldId)
 MidiLearnDialog::MidiLearnDialog (MidiLearnManager& ml, std::function<void()> onClose)
     : midiLearn (ml), onCloseCallback (onClose)
 {
+    setOpaque (true);   // prevents underlying UI components from bleeding through
+
     addAndMakeVisible (mappingList);
     addAndMakeVisible (closeButton);
 
@@ -55,10 +58,10 @@ MidiLearnDialog::MidiLearnDialog (MidiLearnManager& ml, std::function<void()> on
     // Column header row height + item row height
     mappingList.setRowHeight (24);
     mappingList.setModel (this);
-    mappingList.setColour (juce::ListBox::backgroundColourId,
-                           juce::Colour (0xFF111418));
-    mappingList.setColour (juce::ListBox::outlineColourId,
-                           juce::Colours::transparentBlack);
+
+    const auto& th = getTheme();
+    mappingList.setColour (juce::ListBox::backgroundColourId, th.background.brighter (0.06f));
+    mappingList.setColour (juce::ListBox::outlineColourId,    juce::Colours::transparentBlack);
 
     setSize (520, 420);
 }
@@ -67,31 +70,38 @@ MidiLearnDialog::MidiLearnDialog (MidiLearnManager& ml, std::function<void()> on
 
 void MidiLearnDialog::paint (juce::Graphics& g)
 {
-    // Background
-    g.fillAll (juce::Colour (0xFF1A2024));
+    const auto& th  = getTheme();
+    const int   w   = getWidth();
+    const int   h   = getHeight();
+
+    // Solid background — fills the whole component so nothing bleeds through
+    g.fillAll (th.background.brighter (0.04f));
+
+    // Accent border — 1 px, uses theme accent at low alpha
+    g.setColour (th.accent.withAlpha (0.35f));
+    g.drawRect (0, 0, w, h, 1);
 
     // Title bar
-    g.setColour (juce::Colour (0xFF263036));
-    g.fillRect (0, 0, getWidth(), 36);
-    g.setColour (juce::Colours::white);
+    g.setColour (th.darkBar.brighter (0.08f));
+    g.fillRect (1, 1, w - 2, 36);
+    g.setColour (th.accent.withAlpha (0.25f));
+    g.drawHorizontalLine (36, 1.f, (float)(w - 1));
+    g.setColour (th.foreground);
     g.setFont (juce::Font (15.f, juce::Font::bold));
-    g.drawText ("MIDI Learn Assignments", 0, 0, getWidth(), 36,
+    g.drawText ("MIDI Learn Assignments", 0, 0, w, 36,
                 juce::Justification::centred);
 
     // Column headers
     const int hdrY  = 38;
     const int hdrH  = 20;
-    const int w     = getWidth() - 20;   // list inset
-    const int col1  = (int)(w * 0.32f);
-    const int col2  = (int)(w * 0.22f);
-    g.setColour (juce::Colour (0xFF263036));
-    g.fillRect (10, hdrY, w, hdrH);
-    g.setColour (juce::Colours::white.withAlpha (0.55f));
+    const int lw    = w - 20;   // list inset
+    g.setColour (th.darkBar);
+    g.fillRect (10, hdrY, lw, hdrH);
+    g.setColour (th.foreground.withAlpha (0.55f));
     g.setFont (juce::Font (10.f, juce::Font::bold));
-    g.drawText ("PARAMETER",   18,         hdrY, (int)(w * 0.32f),       hdrH, juce::Justification::centredLeft);
-    g.drawText ("CC",          10 + (int)(w * 0.32f), hdrY, (int)(w * 0.18f), hdrH, juce::Justification::centredLeft);
-    g.drawText ("ENCODER MODE", 10 + (int)(w * 0.32f) + (int)(w * 0.18f) + 88, hdrY,
-                w - (int)(w * 0.32f) - (int)(w * 0.18f) - 92, hdrH, juce::Justification::centredLeft);
+    g.drawText ("PARAMETER",   18,                                               hdrY, (int)(lw * 0.32f),        hdrH, juce::Justification::centredLeft);
+    g.drawText ("CC",          10 + (int)(lw * 0.32f),                           hdrY, (int)(lw * 0.18f),        hdrH, juce::Justification::centredLeft);
+    g.drawText ("ENCODER MODE", 10 + (int)(lw * 0.32f) + (int)(lw * 0.18f) + 88, hdrY, lw - (int)(lw * 0.32f) - (int)(lw * 0.18f) - 92, hdrH, juce::Justification::centredLeft);
 }
 
 void MidiLearnDialog::resized()
@@ -132,7 +142,7 @@ void MidiLearnDialog::paintListBoxItem (int /*row*/, juce::Graphics& g,
     // Row background only — text/controls drawn by refreshComponentForRow
     if (selected)
     {
-        g.setColour (juce::Colours::deepskyblue.withAlpha (0.18f));
+        g.setColour (getTheme().accent.withAlpha (0.18f));
         g.fillAll();
     }
     // Bottom divider
