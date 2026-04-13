@@ -35,7 +35,7 @@ public:
         titleLabel.setFont (DysektLookAndFeel::makeFont (14.0f, true));
         addAndMakeVisible (titleLabel);
 
-        closeBtn.setButtonText ("✕");
+        closeBtn.setButtonText ("X");
         closeBtn.onClick = [this] { if (onDismiss) onDismiss(); };
         addAndMakeVisible (closeBtn);
 
@@ -133,11 +133,11 @@ public:
 
         // Action buttons (bottom strip)
         auto btnRow = db.removeFromBottom (44).reduced (12, 8);
-        const int bw = 90, gap = 8;
+        const int bw = 90, btnGap = 8;
         applyBtn.setBounds (btnRow.removeFromRight (bw));
-        btnRow.removeFromRight (gap);
+        btnRow.removeFromRight (btnGap);
         saveBtn .setBounds (btnRow.removeFromRight (bw));
-        btnRow.removeFromRight (gap);
+        btnRow.removeFromRight (btnGap);
         resetBtn.setBounds (btnRow.removeFromRight (bw));
 
         // Preview strip
@@ -531,7 +531,7 @@ private:
         strip.removeFromLeft (6);
 
         // 16 slice swatches
-        const int paletteSize = (int) working.slicePalette.size();
+        int paletteSize = (int) working.slicePalette.size();
         const float sw = juce::jmin (20.0f, (float) strip.getWidth() / juce::jmax (1, paletteSize));
         float x = (float) strip.getX();
         for (int i = 0; i < paletteSize && i < 16; ++i)
