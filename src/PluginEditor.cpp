@@ -584,6 +584,36 @@ void DysektEditor::timerCallback()
  const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
  if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
 
+ // ── Waveform MIDI follow: scroll viewport to keep triggered slice visible when zoomed ──
+ if (processor.midiSelectsSlice.load (std::memory_order_relaxed))
+ {
+     const int followSlice = processor.midiFollowTriggeredSlice.load (std::memory_order_relaxed);
+     if (followSlice >= 0 && followSlice != lastMidiFollowSlice)
+     {
+         lastMidiFollowSlice = followSlice;
+         const float z = processor.zoom.load();
+         if (z > 1.0f)
+         {
+             auto snap = processor.sampleData.getSnapshot();
+             if (snap != nullptr && snap->buffer.getNumSamples() > 0)
+             {
+                 const int numFrames  = snap->buffer.getNumSamples();
+                 const int visibleLen = (int) ((float) numFrames / z);
+                 const int maxStart   = numFrames - visibleLen;
+                 if (maxStart > 0 && followSlice < (int) snap->slices.size())
+                 {
+                     const auto& sl        = snap->slices[(size_t) followSlice];
+                     const int sliceCenter = (sl.startSample + sl.endSample) / 2;
+                     const int newStart    = juce::jlimit (0, maxStart, sliceCenter - visibleLen / 2);
+                     processor.scroll.store ((float) newStart / (float) maxStart,
+                                             std::memory_order_relaxed);
+                     viewportChanged = true;
+                 }
+             }
+         }
+     }
+ }
+
  // Sync trim mode state to ActionPanel — disables/re-enables slice buttons
  {
  const bool trimNow = processor.trimModeActive.load (std::memory_order_relaxed);

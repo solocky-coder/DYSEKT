@@ -239,6 +239,7 @@ public:
 
     std::atomic<bool> snapToZeroCrossing { false };
     std::atomic<bool> midiSelectsSlice   { false };
+    std::atomic<int>  midiFollowTriggeredSlice { -1 }; // last MIDI-triggered slice idx for waveform viewport follow
 
     // Per-slice peak meters (0..1, decaying, written from audio thread)
     static constexpr int kMaxMeterSlices = 128;

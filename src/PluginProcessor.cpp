@@ -1733,7 +1733,10 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 {
                     uiSnapshotDirty.store (true, std::memory_order_release);
                     if (midiSelectsSlice.load (std::memory_order_relaxed))
+                    {
                         sliceManager.selectedSlice.store (newSliceIdx, std::memory_order_relaxed);
+                        midiFollowTriggeredSlice.store (newSliceIdx, std::memory_order_relaxed);
+                    }
                 }
             }
             else
@@ -1845,6 +1848,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         if (midiSelectsSlice.load (std::memory_order_relaxed))
                         {
                             sliceManager.selectedSlice.store (ci, std::memory_order_relaxed);
+                            midiFollowTriggeredSlice.store (ci, std::memory_order_relaxed);
                             uiSnapshotDirty.store (true, std::memory_order_release);
                         }
                         handled = true;
@@ -1860,6 +1864,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         if (midiSelectsSlice.load (std::memory_order_relaxed))
                         {
                             sliceManager.selectedSlice.store (sliceIdx, std::memory_order_relaxed);
+                            midiFollowTriggeredSlice.store (sliceIdx, std::memory_order_relaxed);
                             uiSnapshotDirty.store (true, std::memory_order_release);
                         }
 
