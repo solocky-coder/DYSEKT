@@ -304,6 +304,16 @@ void DysektEditor::paint (juce::Graphics& g)
 
 void DysektEditor::paintOverChildren (juce::Graphics& g)
 {
+    // Modal overlays (MIDI Learn, Settings, Confirm, Rename) must not have
+    // decorative chrome painted over them.  Skip all frame decoration when any
+    // full-screen overlay is currently active.
+    const bool modalActive = (midiLearnBackdrop != nullptr)
+                          || shortcutsPanel.isVisible()
+                          || (confirmOverlay != nullptr)
+                          || (renameOverlay  != nullptr);
+    if (modalActive)
+        return;
+
     if (waveformView.isVisible() && waveformView.getHeight() > 0)
     {
         const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
@@ -411,13 +421,17 @@ void DysektEditor::resized()
  }
 
  // Hide SCB and overview in trim mode; show both otherwise.
- // The overview strip sits in its own allocated row between the waveform frame
- // and the SCB frame, with kMargin of breathing room on each side — matching
- // the inter-frame spacing used everywhere else in the layout.
- constexpr int kOverviewH = 28;
- constexpr int kInterGap  = kMargin;   // gap between waveform frame edge and overview frame edge
-                                        // mirrors the standard inter-frame margin
- constexpr int kOverviewRowH = kInterGap + kOverviewH + kInterGap;
+ // kInterGap is intentionally kMargin + kFrameInset: the decorative frame
+ // border extends kFrameInset px below waveformView.getBottom(), so the gap
+ // between that border and the overview strip must be at least kFrameInset
+ // larger than kMargin to guarantee clear visual separation.
+ constexpr int kFrameInset   = 4;
+ constexpr int kOverviewH    = 28;
+ constexpr int kInterGap     = kMargin + kFrameInset; // clearance above overview
+ constexpr int kOverviewRowH = kInterGap + kOverviewH + kMargin;
+
+ // Records the Y of the overview row so we can clamp frameBot below it.
+ int overviewTopGuard = area.getBottom();
 
  if (trimDialog != nullptr) {
      sliceControlBar.setBounds ({});
@@ -427,17 +441,20 @@ void DysektEditor::resized()
      auto scbArea = area.removeFromBottom (kSliceCtrlH);
      sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
 
-     // Overview row — equal kMargin padding above and below the frame
+     // Overview row — kInterGap above, kMargin below
      auto overviewRow = area.removeFromBottom (kOverviewRowH);
      const int overviewY = overviewRow.getY() + kInterGap;
      waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
+
+     // Waveform frame border must not visually reach this Y coordinate.
+     overviewTopGuard = overviewRow.getY();
  }
 
- const int kFrameInset = 4;
  const int kFrameX = kFX;
  const int kFrameW = kFW;
  const int frameTop = actionArea.getY();
- const int frameBot = area.getBottom();
+ // Clamp so the painted frame bottom (= frameBot) never enters the overview row.
+ const int frameBot = juce::jmin (area.getBottom(), overviewTopGuard);
  const int screenX = kFrameX + kFrameInset;
  const int screenW = kFrameW - kFrameInset * 2;
  const int screenTop = frameTop + kFrameInset;
@@ -517,13 +534,14 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  };
  midiLearnBackdrop = std::make_unique<Backdrop>();
  addAndMakeVisible (*midiLearnBackdrop);
+ midiLearnBackdrop->toFront (false); // raise above all permanent UI children
 
  midiLearnDialog = std::make_unique<MidiLearnDialog> (
  processor.midiLearn,
  [this] { midiLearnDialog.reset(); midiLearnBackdrop.reset(); resized(); }
  );
  addAndMakeVisible (*midiLearnDialog);
- midiLearnDialog->toFront (true);
+ midiLearnDialog->toFront (true);    // dialog on top of backdrop
  resized();
  }
  return true;
