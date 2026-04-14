@@ -381,7 +381,8 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
  {
  DysektProcessor::Command cmd;
  cmd.type = DysektProcessor::CmdToggleLock;
- cmd.intParam1 = (int) bit;
+ cmd.intParam1 = sel;         // explicit slice index
+ cmd.intParam2 = (int) bit;   // the lock bit to toggle
  processor.pushCommand (cmd);
  }
  else
