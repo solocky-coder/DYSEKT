@@ -264,7 +264,8 @@ void SliceWaveformLcd::commitNodes()
  {
  DysektProcessor::Command cmd;
  cmd.type = DysektProcessor::CmdSetSliceParam;
- cmd.intParam1 = (int) field; // CmdSetSliceParam: intParam1=field, floatParam1=val
+ cmd.intParam1 = (int) field;
+ cmd.intParam2 = 1;   // drag update — write value but do NOT set lock bit
  cmd.floatParam1 = val;
  processor.pushCommand (cmd);
  };

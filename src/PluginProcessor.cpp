@@ -869,38 +869,43 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 auto& s = sliceManager.getSlice (sel);
                 int field = cmd.intParam1;
                 float val = cmd.floatParam1;
+                // intParam2 == 1: update value only, do NOT set lock bit.
+                // Used by SliceWaveformLcd drag (commitNodes) so node dragging
+                // updates the parameter live without locking the field.
+                // All other callers leave intParam2 == 0 for normal lock behaviour.
+                const bool skipLock = (cmd.intParam2 == 1);
 
                 switch (field)
                 {
-                    case FieldBpm:       s.bpm = val;            s.lockMask |= kLockBpm;       break;
-                    case FieldPitch:     s.pitchSemitones = val; s.lockMask |= kLockPitch;     break;
-                    case FieldAlgorithm: s.algorithm = (int) val; s.lockMask |= kLockAlgorithm; break;
-                    case FieldAttack:    s.attackSec = val;      s.lockMask |= kLockAttack;    break;
-                    case FieldHold:      s.holdSec = val;        s.lockMask |= kLockHold;      break;
-                    case FieldDecay:     s.decaySec = val;       s.lockMask |= kLockDecay;     break;
-                    case FieldSustain:   s.sustainLevel = val;   s.lockMask |= kLockSustain;   break;
-                    case FieldRelease:   s.releaseSec = val;     s.lockMask |= kLockRelease;   break;
-                    case FieldMuteGroup: s.muteGroup = (int) val; s.lockMask |= kLockMuteGroup; break;
+                    case FieldBpm:       s.bpm = val;             if (!skipLock) s.lockMask |= kLockBpm;       break;
+                    case FieldPitch:     s.pitchSemitones = val;  if (!skipLock) s.lockMask |= kLockPitch;     break;
+                    case FieldAlgorithm: s.algorithm = (int) val; if (!skipLock) s.lockMask |= kLockAlgorithm; break;
+                    case FieldAttack:    s.attackSec = val;       if (!skipLock) s.lockMask |= kLockAttack;    break;
+                    case FieldHold:      s.holdSec = val;         if (!skipLock) s.lockMask |= kLockHold;      break;
+                    case FieldDecay:     s.decaySec = val;        if (!skipLock) s.lockMask |= kLockDecay;     break;
+                    case FieldSustain:   s.sustainLevel = val;    if (!skipLock) s.lockMask |= kLockSustain;   break;
+                    case FieldRelease:   s.releaseSec = val;      if (!skipLock) s.lockMask |= kLockRelease;   break;
+                    case FieldMuteGroup: s.muteGroup = (int) val; if (!skipLock) s.lockMask |= kLockMuteGroup; break;
                     case FieldGlobalMono:
                         // Global param — write directly to APVTS, not per-slice
                         if (auto* p2 = apvts.getParameter (ParamIds::globalMono))
                             p2->setValueNotifyingHost (val > 0.5f ? 1.0f : 0.0f);
                         break;
-                    case FieldStretchEnabled: s.stretchEnabled = val > 0.5f; s.lockMask |= kLockStretch; break;
-                    case FieldTonality:  s.tonalityHz = val;        s.lockMask |= kLockTonality;    break;
-                    case FieldFormant:   s.formantSemitones = val;   s.lockMask |= kLockFormant;     break;
-                    case FieldFormantComp: s.formantComp = val > 0.5f; s.lockMask |= kLockFormantComp; break;
-                    case FieldGrainMode:  s.grainMode = (int) val;   s.lockMask |= kLockGrainMode;  break;
-                    case FieldVolume:     s.volume = val;            s.lockMask |= kLockVolume;    break;
-                    case FieldReleaseTail: s.releaseTail = val > 0.5f; s.lockMask |= kLockReleaseTail; break;
-                    case FieldReverse:    s.reverse = val > 0.5f;    s.lockMask |= kLockReverse;    break;
-                    case FieldOutputBus:  s.outputBus = juce::jlimit (0, 15, (int) val); s.lockMask |= kLockOutputBus; break;
-                    case FieldLoop:       s.loopMode = (int) val;    s.lockMask |= kLockLoop;      break;
-                    case FieldOneShot:    s.oneShot = val > 0.5f;    s.lockMask |= kLockOneShot;   break;
-                    case FieldCentsDetune:   s.centsDetune    = val;       s.lockMask |= kLockCentsDetune; break;
-                    case FieldPan:           s.pan            = val;       s.lockMask |= kLockPan;         break;
-                    case FieldFilterCutoff:  s.filterCutoff   = val;       s.lockMask |= kLockFilter;      break;
-                    case FieldFilterRes:       s.filterRes       = val;       s.lockMask |= kLockFilter;      break;
+                    case FieldStretchEnabled: s.stretchEnabled = val > 0.5f; if (!skipLock) s.lockMask |= kLockStretch; break;
+                    case FieldTonality:  s.tonalityHz = val;        if (!skipLock) s.lockMask |= kLockTonality;    break;
+                    case FieldFormant:   s.formantSemitones = val;   if (!skipLock) s.lockMask |= kLockFormant;     break;
+                    case FieldFormantComp: s.formantComp = val > 0.5f; if (!skipLock) s.lockMask |= kLockFormantComp; break;
+                    case FieldGrainMode:  s.grainMode = (int) val;   if (!skipLock) s.lockMask |= kLockGrainMode;  break;
+                    case FieldVolume:     s.volume = val;            if (!skipLock) s.lockMask |= kLockVolume;    break;
+                    case FieldReleaseTail: s.releaseTail = val > 0.5f; if (!skipLock) s.lockMask |= kLockReleaseTail; break;
+                    case FieldReverse:    s.reverse = val > 0.5f;    if (!skipLock) s.lockMask |= kLockReverse;    break;
+                    case FieldOutputBus:  s.outputBus = juce::jlimit (0, 15, (int) val); if (!skipLock) s.lockMask |= kLockOutputBus; break;
+                    case FieldLoop:       s.loopMode = (int) val;    if (!skipLock) s.lockMask |= kLockLoop;      break;
+                    case FieldOneShot:    s.oneShot = val > 0.5f;    if (!skipLock) s.lockMask |= kLockOneShot;   break;
+                    case FieldCentsDetune:   s.centsDetune    = val;       if (!skipLock) s.lockMask |= kLockCentsDetune; break;
+                    case FieldPan:           s.pan            = val;       if (!skipLock) s.lockMask |= kLockPan;         break;
+                    case FieldFilterCutoff:  s.filterCutoff   = val;       if (!skipLock) s.lockMask |= kLockFilter;      break;
+                    case FieldFilterRes:       s.filterRes       = val;       if (!skipLock) s.lockMask |= kLockFilter;      break;
                     case FieldChromaticChannel: s.chromaticChannel = juce::jlimit (0, 16, (int) val); break;
                     case FieldChromaticLegato:  s.chromaticLegato  = (val > 0.5f); break;
                     case FieldMidiNote:
