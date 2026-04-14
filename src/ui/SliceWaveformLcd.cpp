@@ -868,7 +868,7 @@ void SliceWaveformLcd::drawNoData (juce::Graphics& g)
 
 // ── Paint ─────────────────────────────────────────────────────────────────────
 
-void SliceWaveformLcd::drawPlayhead (juce::Graphics& g, const juce::Rectangle& area)
+void SliceWaveformLcd::drawPlayhead (juce::Graphics& g, const juce::Rectangle<float>& area)
 {
  if (data.sliceIndex < 0) return;
 
