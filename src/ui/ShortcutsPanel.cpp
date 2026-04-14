@@ -53,9 +53,10 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory slicing;
         slicing.title = "Slicing";
         slicing.entries = {
-            { "L",   "Lazy Chop (auto-follow mode)" },
-            { "C",   "Auto Chop panel" },
-            { "Del", "Delete selected slice" },
+            { "Double-click", "Add slice at position"        },
+            { "L",            "Lazy Chop (auto-follow mode)" },
+            { "C",            "Auto Chop panel"              },
+            { "Del",          "Delete selected slice"        },
         };
         categories.push_back (std::move (slicing));
     }
@@ -75,8 +76,8 @@ void ShortcutsPanel::buildShortcutData()
         editing.entries = {
             { "Ctrl+Z",       "Undo" },
             { "Ctrl+Shift+Z", "Redo" },
-            { "F",            "Toggle MIDI-selects-slice mode" },
-            { "M",            "Toggle MIDI Learn dialog" },
+            { "F",       "Toggle MIDI-selects-slice mode" },
+            { "M",       "Toggle MIDI Learn dialog"       },
         };
         categories.push_back (std::move (editing));
     }
@@ -85,8 +86,8 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory misc;
         misc.title = "General";
         misc.entries = {
-            { "?",   "Toggle this panel" },
-            { "Esc", "Close panel / cancel operation" },
+            { "?  (QWERTZ: Shift+\xc3\x9f)", "Toggle this panel"        },
+            { "Esc",                           "Close panel / cancel"    },
         };
         categories.push_back (std::move (misc));
     }
