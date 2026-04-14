@@ -269,14 +269,18 @@ void SliceWaveformLcd::commitNodes()
  processor.pushCommand (cmd);
  };
 
- sendField (DysektProcessor::FieldAttack, attackMs / 1000.0f); // seconds
- sendField (DysektProcessor::FieldHold, holdMs / 1000.0f);
- sendField (DysektProcessor::FieldDecay, decayMs / 1000.0f);
- sendField (DysektProcessor::FieldSustain, sustainPc / 100.0f); // 0-1
- sendField (DysektProcessor::FieldRelease, releaseMs / 1000.0f);
- // NOTE: do NOT touch the global APVTS params here — CmdSetSliceParam locks the
- // per-slice value and sets the lock bit, so the SCB knob reads s.xxxSec directly.
- // Writing to the global default would silently override every unlocked slice.
+ // Only write the field that is currently being dragged.
+ // CmdSetSliceParam always sets lockMask |= bit, so sending all fields
+ // would lock every ADSR param on the first drag of any single node.
+ switch (dragRole)
+ {
+     case NodeRole::Attack:  sendField (DysektProcessor::FieldAttack,  attackMs  / 1000.0f); break;
+     case NodeRole::Hold:    sendField (DysektProcessor::FieldHold,    holdMs    / 1000.0f); break;
+     case NodeRole::Decay:   sendField (DysektProcessor::FieldDecay,   decayMs   / 1000.0f); break;
+     case NodeRole::Sustain: sendField (DysektProcessor::FieldSustain, sustainPc / 100.0f);  break;
+     case NodeRole::Release: sendField (DysektProcessor::FieldRelease, releaseMs / 1000.0f); break;
+     default: break;
+ }
 
  // Give the processor time to echo the new values before rebuilding
  postCommitGuard = 6;
@@ -379,6 +383,21 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
 
  if (currentlyLocked)
  {
+                // Write the slice's locked value back to the global APVTS param
+                // BEFORE clearing the lock bit.  buildEnvelopeNodes() reads
+                // unlocked fields from APVTS, so without this the node jumps
+                // to whatever the global knob happened to be set to.
+                auto writeApvts = [&] (const juce::String& paramId, float nativeVal)
+                {
+                    if (auto* p = processor.apvts.getParameter (paramId))
+                        p->setValueNotifyingHost (p->convertTo0to1 (nativeVal));
+                };
+                if      (bit == kLockAttack)  writeApvts (ParamIds::defaultAttack,  s.attackSec    * 1000.0f);
+                else if (bit == kLockHold)    writeApvts (ParamIds::defaultHold,    s.holdSec      * 1000.0f);
+                else if (bit == kLockDecay)   writeApvts (ParamIds::defaultDecay,   s.decaySec     * 1000.0f);
+                else if (bit == kLockSustain) writeApvts (ParamIds::defaultSustain, s.sustainLevel * 100.0f);
+                else if (bit == kLockRelease) writeApvts (ParamIds::defaultRelease, s.releaseSec   * 1000.0f);
+
  DysektProcessor::Command cmd;
  cmd.type = DysektProcessor::CmdToggleLock;
  cmd.intParam1 = sel;         // explicit slice index
