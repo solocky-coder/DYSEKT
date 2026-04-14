@@ -562,7 +562,7 @@ void SliceWaveformLcd::drawBackground (juce::Graphics& g)
  g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
 }
 
-void SliceWaveformLcd::drawWaveform (juce::Graphics& g, const juce::Rectangle& area)
+void SliceWaveformLcd::drawWaveform (juce::Graphics& g, const juce::Rectangle<float>& area)
 {
  if (data.peaks.isEmpty()) return;
 
@@ -645,18 +645,18 @@ void SliceWaveformLcd::drawSegmentLabel (juce::Graphics& g,
  float x1, float y1,
  const char* text,
  juce::Colour col,
- const juce::Rectangle& area)
+ const juce::Rectangle<float>& area)
 {
  const float mx = area.getX() + ((x0 + x1) * 0.5f) * area.getWidth();
  const float my = area.getY() + ((y0 + y1) * 0.5f) * area.getHeight() - 9.0f;
  g.setFont (DysektLookAndFeel::makeFont (8.0f));
  g.setColour (col.withAlpha (0.40f));
  g.drawText (juce::String (text),
- juce::Rectangle (mx - 30.0f, my - 6.0f, 60.0f, 12.0f),
+ juce::Rectangle<float> (mx - 30.0f, my - 6.0f, 60.0f, 12.0f),
  juce::Justification::centred, false);
 }
 
-void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle& area)
+void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<float>& area)
 {
  const float W = area.getWidth();
  const float H = area.getHeight();
@@ -719,7 +719,7 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle& a
  drawSegmentLabel (g, env.rx, env.sy, 1.0f, 1.0f, "FADE OUT", kColRelease, area);
 }
 
-void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle& area)
+void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float>& area)
 {
  const float W = area.getWidth();
  const float H = area.getHeight();
@@ -799,7 +799,7 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle& area
  g.setFont (DysektLookAndFeel::makeFont (hov ? 11.0f : 9.5f, true));
  g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.85f));
  g.drawText (juce::String (node.label),
- juce::Rectangle (cx - 14.0f, cy + r + 2.0f, 28.0f, 12.0f),
+ juce::Rectangle<float> (cx - 14.0f, cy + r + 2.0f, 28.0f, 12.0f),
  juce::Justification::centred, false);
 
  // Hover tooltip below label
@@ -808,7 +808,7 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle& area
  g.setFont (DysektLookAndFeel::makeFont (8.5f));
  g.setColour (node.colour.withAlpha (0.75f));
  g.drawText ("right-click to unlock",
- juce::Rectangle (cx - 48.0f, cy + r + 15.0f, 96.0f, 12.0f),
+ juce::Rectangle<float> (cx - 48.0f, cy + r + 15.0f, 96.0f, 12.0f),
  juce::Justification::centred, false);
  }
  }
@@ -827,7 +827,7 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle& area
  g.setFont (DysektLookAndFeel::makeFont (hov ? 11.0f : 9.5f, true));
  g.setColour (node.colour.withAlpha (hov ? 1.0f : 0.70f));
  g.drawText (juce::String (node.label),
- juce::Rectangle (cx - 14.0f, cy + r + 2.0f, 28.0f, 12.0f),
+ juce::Rectangle<float> (cx - 14.0f, cy + r + 2.0f, 28.0f, 12.0f),
  juce::Justification::centred, false);
 
  if (hov)
@@ -835,7 +835,7 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle& area
  g.setFont (DysektLookAndFeel::makeFont (8.5f));
  g.setColour (node.colour.withAlpha (0.60f));
  g.drawText ("right-click to lock",
- juce::Rectangle (cx - 48.0f, cy + r + 15.0f, 96.0f, 12.0f),
+ juce::Rectangle<float> (cx - 48.0f, cy + r + 15.0f, 96.0f, 12.0f),
  juce::Justification::centred, false);
  }
  }
