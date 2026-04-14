@@ -182,15 +182,16 @@ void SliceLane::paint (juce::Graphics& g)
     // ── ADSR lock dot strip — separate 6px zone BELOW the slice body ─────────
     // Each slice gets its own dot-zone column directly beneath it.
     // Filled dot = field locked.  Hollow outline = free.  Padlock = all locked.
-    // Dot colours: A=#00FF87  D=#FFE800  S=#00C8FF  R=#FF6B00
+    // Dot colours: A=#00FF87  H=#FF00FF  D=#FFE800  S=#00C8FF  R=#FF6B00
 
     static const juce::Colour kDotA { 0xFF00FF87 };
+    static const juce::Colour kDotH { 0xFFFF00FF };  // Hold - Hot Magenta
     static const juce::Colour kDotD { 0xFFFFE800 };
     static const juce::Colour kDotS { 0xFF00C8FF };
     static const juce::Colour kDotR { 0xFFFF6B00 };
-    static const uint32_t     kAdsrBits[4] = { kLockAttack, kLockDecay,
+    static const uint32_t     kAdsrBits[5] = { kLockAttack, kLockHold, kLockDecay,
                                                 kLockSustain, kLockRelease };
-    static const juce::Colour kAdsrCols[4] = { kDotA, kDotD, kDotS, kDotR };
+    static const juce::Colour kAdsrCols[5] = { kDotA, kDotH, kDotD, kDotS, kDotR };
 
     // Dot strip background (slightly darker than body)
     g.setColour (getTheme().darkBar.darker (0.20f));
@@ -200,7 +201,7 @@ void SliceLane::paint (juce::Graphics& g)
     g.setColour (getTheme().separator.withAlpha (0.60f));
     g.drawHorizontalLine (dotZoneY, 0.0f, (float) w);
 
-    // Dot geometry: 4 dots spaced 5px centre-to-centre, each 2×2px square
+    // Dot geometry: 5 dots spaced 5px centre-to-centre, each 2×2px square
     static constexpr int kDotSz  = 2;   // square side
     static constexpr int kDotGap = 5;   // centre-to-centre
     const int dotRowY = dotZoneY + kDotZoneH / 2 - kDotSz / 2;  // vertically centred
@@ -211,16 +212,16 @@ void SliceLane::paint (juce::Graphics& g)
         const auto& sl = ui.slices[(size_t) si.idx];
         const int sw = si.x2 - si.x1;
 
-        const uint32_t anyMask = kLockAttack | kLockDecay | kLockSustain | kLockRelease;
+        const uint32_t anyMask = kLockAttack | kLockHold | kLockDecay | kLockSustain | kLockRelease;
         const bool anyLocked = (sl.lockMask & anyMask) != 0;
         if (! anyLocked) continue;
 
         const bool allLocked = (sl.lockMask == 0xFFFFFFFFu);
         const float alpha    = si.selected ? 0.95f : 0.70f;
 
-        if (allLocked || sw < 26)
+        if (allLocked || sw < 30)  // Increased threshold for 5 dots
         {
-            // All-locked or too narrow for 4 dots: single padlock pip centred
+            // All-locked or too narrow for 5 dots: single padlock pip centred
             if (sw < 7) continue;
             const int px = si.x1 + sw / 2;
             const int py = dotZoneY + 1;
@@ -230,12 +231,12 @@ void SliceLane::paint (juce::Graphics& g)
         }
         else
         {
-            // Partial: 4 ADSR dots, centred under slice
-            const int totalW = kDotGap * 3 + kDotSz;
+            // Partial: 5 AHDSR dots, centred under slice
+            const int totalW = kDotGap * 4 + kDotSz;  // 4 gaps for 5 dots
             if (totalW > sw - 2) continue;
             const int startX = si.x1 + (sw - totalW) / 2;
 
-            for (int d = 0; d < 4; ++d)
+            for (int d = 0; d < 5; ++d)
             {
                 const bool locked = (sl.lockMask & kAdsrBits[d]) != 0;
                 const int  dx     = startX + d * kDotGap;
@@ -310,6 +311,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
             const juce::String lockLabel = allLocked ? "Unlock Slice" : "Lock Slice";
 
             const bool lockA = (s.lockMask & kLockAttack)  != 0;
+            const bool lockH = (s.lockMask & kLockHold)    != 0;
             const bool lockD = (s.lockMask & kLockDecay)   != 0;
             const bool lockS = (s.lockMask & kLockSustain) != 0;
             const bool lockR = (s.lockMask & kLockRelease) != 0;
@@ -337,6 +339,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
 
             juce::PopupMenu adsrSub;
             adsrSub.addItem (10, "Lock Attack",  true, lockA);
+            adsrSub.addItem (14, "Lock Hold",    true, lockH);  // NEW: Hold lock option
             adsrSub.addItem (11, "Lock Decay",   true, lockD);
             adsrSub.addItem (12, "Lock Sustain", true, lockS);
             adsrSub.addItem (13, "Lock Release", true, lockR);
@@ -347,7 +350,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
             menu.addSubMenu ("Slice Colour", colourSub);
             menu.addSeparator();
             menu.addItem (2, lockLabel, true, allLocked);
-            menu.addSubMenu ("ADSR Lock", adsrSub);
+            menu.addSubMenu ("AHDSR Lock", adsrSub);  // Changed label to AHDSR
 
             auto* topLvl = getTopLevelComponent();
             float ms = DysektLookAndFeel::getMenuScale();
@@ -384,6 +387,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
                         processor.pushCommand (cmd);
                     }
                     else if (result == 10) toggleLock (kLockAttack);
+                    else if (result == 14) toggleLock (kLockHold);    // NEW: Handle Hold lock
                     else if (result == 11) toggleLock (kLockDecay);
                     else if (result == 12) toggleLock (kLockSustain);
                     else if (result == 13) toggleLock (kLockRelease);

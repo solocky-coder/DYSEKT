@@ -387,35 +387,16 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
  }
  else
  {
- // Preserve the current node value when locking so it doesn't jump.
- // Rebuild env.* from current params first — if the timer-driven
- // rebuild hasn't fired yet (e.g. postCommitGuard still counting,
- // or slice just selected) env.* may hold stale struct-default
- // values, causing the node to snap to the init position on lock.
- buildEnvelopeNodes();
-
- static constexpr float kAX = 0.85f;
- static constexpr float kRMax = 0.99f;
- const float sliceDurMs_l = juce::jmax (1.0f, getSliceDurMs());
- const float kAttackViewMs = sliceDurMs_l;
- const float kHoldViewMs = sliceDurMs_l;
- const float kDecayViewMs = sliceDurMs_l;
- const float releaseViewMs = sliceDurMs_l;
-
- const float remain_c = kRMax - env.ax;
- const float kHX_eff = env.ax + remain_c * 0.20f;
- const float kDX_eff = env.ax + remain_c * 0.47f;
- const float kSEnd_eff = env.ax + remain_c * 0.65f;
-
- const float aRatio = env.ax / kAX;
- const float hRatio = (kHX_eff > env.ax) ? (env.hx - env.ax) / (kHX_eff - env.ax) : 0.0f;
- const float dRatio = (kDX_eff > env.hx) ? (env.dx - env.hx) / (kDX_eff - env.hx) : 0.0f;
-
- const float attackSec = juce::jlimit (0.0f, kAttackViewMs, aRatio * aRatio * kAttackViewMs) / 1000.0f;
- const float holdSec = juce::jlimit (0.0f, kHoldViewMs, hRatio * hRatio * kHoldViewMs) / 1000.0f;
- const float decaySec = juce::jlimit (0.0f, kDecayViewMs, dRatio * dRatio * kDecayViewMs) / 1000.0f;
- const float sustainVal = juce::jlimit (0.0f, 1.0f, 1.0f - env.sy);
- const float releaseSec = juce::jlimit (0.0f, releaseViewMs, (1.0f - env.rx) * releaseViewMs) / 1000.0f;
+ // ═══════════════════════════════════════════════════════════════
+ // BUG FIX: Read the effective value directly from the slice (if
+ // locked) or from APVTS (if not), WITHOUT the visual roundtrip.
+ // This prevents the node from snapping to the init/global value.
+ // ═══════════════════════════════════════════════════════════════
+ const float attackSec  = (s.lockMask & kLockAttack)  ? s.attackSec      : (processor.attackParam  ? processor.attackParam->load()  / 1000.0f : 0.005f);
+ const float holdSec    = (s.lockMask & kLockHold)    ? s.holdSec        : (processor.holdParam    ? processor.holdParam->load()    / 1000.0f : 0.0f);
+ const float decaySec   = (s.lockMask & kLockDecay)   ? s.decaySec       : (processor.decayParam   ? processor.decayParam->load()   / 1000.0f : 0.1f);
+ const float sustainVal = (s.lockMask & kLockSustain) ? s.sustainLevel   : (processor.sustainParam ? processor.sustainParam->load() / 100.0f  : 1.0f);
+ const float releaseSec = (s.lockMask & kLockRelease) ? s.releaseSec     : (processor.releaseParam ? processor.releaseParam->load() / 1000.0f : 0.02f);
 
  auto lockFieldWithValue = [&] (DysektProcessor::SliceParamField field, float value)
  {

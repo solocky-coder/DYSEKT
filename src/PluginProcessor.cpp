@@ -108,6 +108,8 @@ static bool isCriticalCommand (DysektProcessor::CommandType type)
         case DysektProcessor::CmdPanic:
         case DysektProcessor::CmdSelectSlice:
         case DysektProcessor::CmdSetRootNote:
+        case DysektProcessor::CmdToggleLock:      // BUG FIX: Ensure lock toggle is never dropped
+        case DysektProcessor::CmdSetSliceLockAll: // Also add SetSliceLockAll for consistency
             return true;
         default:
             return false;

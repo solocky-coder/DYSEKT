@@ -956,7 +956,11 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             const bool allLocked = (s.lockMask == 0xFFFFFFFFu);
             const juce::String lockLabel = allLocked ? "Unlock Slice" : "Lock Slice";
 
+            // ═══════════════════════════════════════════════════════════════════
+            // BUG FIX: Added Hold (kLockHold) to the lock status checks
+            // ═══════════════════════════════════════════════════════════════════
             const bool lockA = (s.lockMask & kLockAttack)   != 0;
+            const bool lockH = (s.lockMask & kLockHold)     != 0;  // ← NEW
             const bool lockD = (s.lockMask & kLockDecay)    != 0;
             const bool lockS = (s.lockMask & kLockSustain)  != 0;
             const bool lockR = (s.lockMask & kLockRelease)  != 0;
@@ -981,8 +985,12 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     true, c.toDisplayString (false) == curCol.toDisplayString (false));
             }
 
+            // ═══════════════════════════════════════════════════════════════════
+            // BUG FIX: Added Hold lock option to the AHDSR submenu
+            // ═══════════════════════════════════════════════════════════════════
             juce::PopupMenu adsrSub;
             adsrSub.addItem (10, "Lock Attack",  true, lockA);
+            adsrSub.addItem (14, "Lock Hold",    true, lockH);  // ← NEW (using ID 14)
             adsrSub.addItem (11, "Lock Decay",   true, lockD);
             adsrSub.addItem (12, "Lock Sustain", true, lockS);
             adsrSub.addItem (13, "Lock Release", true, lockR);
@@ -993,7 +1001,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             menu.addSubMenu ("Slice Colour", colourSub);
             menu.addSeparator();
             menu.addItem (2, lockLabel, true, allLocked);
-            menu.addSubMenu ("ADSR Lock", adsrSub);
+            menu.addSubMenu ("AHDSR Lock", adsrSub);  // ← Changed label from "ADSR Lock" to "AHDSR Lock"
             menu.addSeparator();
             menu.addItem (3, "Rename Slice...");
         }
@@ -1079,7 +1087,11 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
                     cmd.floatParam1 = allLocked ? 0.f : 1.f;
                     processor.pushCommand (cmd);
                 }
+                // ═══════════════════════════════════════════════════════════════
+                // BUG FIX: Added handler for Hold lock toggle (result == 14)
+                // ═══════════════════════════════════════════════════════════════
                 else if (result == 10) toggleLock (kLockAttack);
+                else if (result == 14) toggleLock (kLockHold);     // ← NEW
                 else if (result == 11) toggleLock (kLockDecay);
                 else if (result == 12) toggleLock (kLockSustain);
                 else if (result == 13) toggleLock (kLockRelease);
