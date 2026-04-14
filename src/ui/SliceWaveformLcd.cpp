@@ -428,6 +428,26 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
 {
  if (dragRole == NodeRole::None || screenArea.isEmpty()) return;
 
+ // ═══════════════════════════════════════════════════════════════════════════
+ // BUG FIX: Block dragging locked ADSR nodes — check slice's lockMask
+ // ═══════════════════════════════════════════════════════════════════════════
+ {
+     const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+     if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
+     {
+         const auto& s = processor.sliceManager.getSlice (sel);
+         uint32_t bit = 0;
+         if (dragRole == NodeRole::Attack)       bit = kLockAttack;
+         else if (dragRole == NodeRole::Hold)    bit = kLockHold;
+         else if (dragRole == NodeRole::Decay)   bit = kLockDecay;
+         else if (dragRole == NodeRole::Sustain) bit = kLockSustain;
+         else if (dragRole == NodeRole::Release) bit = kLockRelease;
+
+         if (bit != 0 && (s.lockMask & bit))
+             return;  // node is locked — ignore drag
+     }
+ }
+
  const float W = screenArea.getWidth();
  const float H = screenArea.getHeight();
  const float ox = screenArea.getX();
