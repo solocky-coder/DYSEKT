@@ -316,7 +316,7 @@ float SliceWaveformLcd::envAt (float xn) const
 
 // ── Hit testing ───────────────────────────────────────────────────────────────
 
-SliceWaveformLcd::NodeRole SliceWaveformLcd::hitTest (juce::Point pos) const
+SliceWaveformLcd::NodeRole SliceWaveformLcd::hitTest (juce::Point<float> pos) const
 {
  if (screenArea.isEmpty()) return NodeRole::None;
 
