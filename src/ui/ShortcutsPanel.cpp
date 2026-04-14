@@ -102,10 +102,10 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory slicing;
         slicing.title = "Slicing";
         slicing.entries = {
-            { "Double-click", "Add slice at position"        },
-            { "L",            "Lazy Chop (auto-follow mode)" },
-            { "C",            "Auto Chop panel"              },
-            { "Del",          "Delete selected slice"        },
+            { "Double-click", "Add slice at position"  },
+            { "L",            "MIDI Slice"              },
+            { "C",            "Auto Chop panel"         },
+            { "Del",          "Delete selected slice"   },
         };
         categories.push_back (std::move (slicing));
     }
@@ -123,10 +123,9 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory editing;
         editing.title = "Editing";
         editing.entries = {
-            { "Ctrl+Z",       "Undo" },
-            { "Ctrl+Shift+Z", "Redo" },
-            { "F",       "Toggle MIDI-selects-slice mode" },
-            { "M",       "Toggle MIDI Learn dialog"       },
+            { "Ctrl+Z", "Undo"                          },
+            { "F",      "Toggle MIDI-selects-slice mode" },
+            { "M",      "Toggle MIDI Learn dialog"       },
         };
         categories.push_back (std::move (editing));
     }
@@ -261,9 +260,11 @@ void ShortcutsPanel::paint (juce::Graphics& g)
     leftCol.removeFromTop (10);
 
     // ── Shortcut rows ────────────────────────────────────────────────────
-    const int rowH   = 18;
-    const int catGap = 10;
-    const int keysW  = 72;
+    const int rowH    = 18;
+    const int catGap  = 10;
+    const int keysMin = 52;   // minimum badge width for short keys
+    const int keysMax = 120;  // maximum badge width (QWERTZ strings etc.)
+    juce::Font keyFont = DysektLookAndFeel::makeFont (9.5f, true);
 
     bool useLeft = true;
     for (const auto& cat : categories)
@@ -290,11 +291,15 @@ void ShortcutsPanel::paint (juce::Graphics& g)
                 && ! entry.description.toLowerCase().contains (currentFilter))
                 continue;
 
-            auto row    = col.removeFromTop (rowH);
+            // Size badge to content, clamped between min and max
+            const int textW  = (int) std::ceil (keyFont.getStringWidthFloat (entry.keys));
+            const int keysW  = juce::jlimit (keysMin, keysMax, textW + 10);
+
+            auto row     = col.removeFromTop (rowH);
             auto keyRect = row.removeFromLeft (keysW);
             g.setColour (getTheme().button.withAlpha (0.9f));
             g.fillRoundedRectangle (keyRect.reduced (0, 2).toFloat(), 3.0f);
-            g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
+            g.setFont (keyFont);
             g.setColour (getTheme().accent);
             g.drawText (entry.keys, keyRect, juce::Justification::centred);
 
