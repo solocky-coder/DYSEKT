@@ -22,7 +22,7 @@ public:
     /// Called when the panel should be dismissed.
     std::function<void()> onDismiss;
 
-    /// Called when the user clicks "Theme & Scale" — fires HeaderBar::showThemePopup().
+    /// Called when the user clicks "Theme Editor" — opens ThemeEditorPanel.
     std::function<void()> onThemeRequest;
 
 // ... inside class ShortcutsPanel : public juce::Component
@@ -32,8 +32,11 @@ private:
     struct ShortcutEntry    { juce::String keys, description; };
     struct ShortcutCategory { juce::String title; std::vector<ShortcutEntry> entries; };
 
-    juce::TextButton closeBtn { juce::String (juce::CharPointer_UTF8 ("\xc3\x97")) };
-    juce::TextButton themeBtn { "Theme & Scale..." };
+    juce::TextButton closeBtn     { juce::String (juce::CharPointer_UTF8 ("\xc3\x97")) };
+    juce::TextButton themeBtn     { "Theme Editor..." };
+    juce::TextButton scaleDownBtn { juce::String (juce::CharPointer_UTF8 ("\xe2\x88\x92")) };  // −
+    juce::TextButton scaleUpBtn   { "+" };
+    juce::Label      scaleLcd;
     juce::TextEditor searchBox;
     juce::Label      titleLabel;
 
@@ -45,6 +48,8 @@ private:
 
     void buildShortcutData();
     void drawTrimPrefsSection (juce::Graphics& g, juce::Rectangle<int>& area);
+    void drawScaleSection     (juce::Graphics& g, juce::Rectangle<int>& area);
+    void updateScaleLcd();
 
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShortcutsPanel)

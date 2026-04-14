@@ -21,11 +21,48 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
 
         themeBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
     themeBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
-    themeBtn.setTooltip ("Change theme or UI scale");
+    themeBtn.setTooltip ("Open the theme colour editor");
     themeBtn.onClick = [this] { if (onThemeRequest) onThemeRequest(); };
     addAndMakeVisible (themeBtn);
 
-    // ------- INSERT MIDI LEARN BTN BLOCK HERE -------
+    auto styleScaleBtn = [this] (juce::TextButton& btn)
+    {
+        btn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
+        btn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
+    };
+
+    styleScaleBtn (scaleDownBtn);
+    scaleDownBtn.onClick = [this]
+    {
+        if (auto* p = processor.apvts.getParameter (ParamIds::uiScale))
+        {
+            float cur = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+            float nxt = juce::jlimit (0.5f, 3.0f, cur - 0.25f);
+            p->setValueNotifyingHost (p->convertTo0to1 (nxt));
+            updateScaleLcd();
+        }
+    };
+    addAndMakeVisible (scaleDownBtn);
+
+    styleScaleBtn (scaleUpBtn);
+    scaleUpBtn.onClick = [this]
+    {
+        if (auto* p = processor.apvts.getParameter (ParamIds::uiScale))
+        {
+            float cur = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+            float nxt = juce::jlimit (0.5f, 3.0f, cur + 0.25f);
+            p->setValueNotifyingHost (p->convertTo0to1 (nxt));
+            updateScaleLcd();
+        }
+    };
+    addAndMakeVisible (scaleUpBtn);
+
+    scaleLcd.setFont (DysektLookAndFeel::makeMonoFont (11.0f));
+    scaleLcd.setColour (juce::Label::textColourId,       getTheme().foreground);
+    scaleLcd.setColour (juce::Label::backgroundColourId, getTheme().background.withAlpha (0.6f));
+    scaleLcd.setJustificationType (juce::Justification::centred);
+    updateScaleLcd();
+    addAndMakeVisible (scaleLcd);
 
 
     searchBox.setTextToShowWhenEmpty ("Search shortcuts...", getTheme().foreground.withAlpha (0.4f));
@@ -44,6 +81,18 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
 }
 
 ShortcutsPanel::~ShortcutsPanel() = default;
+
+void ShortcutsPanel::updateScaleLcd()
+{
+    float cur = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+    scaleLcd.setText (juce::String (cur, 2) + "x", juce::dontSendNotification);
+}
+
+void ShortcutsPanel::drawScaleSection (juce::Graphics& /*g*/, juce::Rectangle<int>& area)
+{
+    area.removeFromTop (24);   // scale button row
+    area.removeFromTop (4);    // gap before trim prefs
+}
 
 void ShortcutsPanel::buildShortcutData()
 {
@@ -198,6 +247,12 @@ void ShortcutsPanel::paint (juce::Graphics& g)
     auto rightCol    = content;
 
     // Trim prefs at the top of the left column
+    // ── UI Scale ─────────────────────────────────────────────────────────
+    g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
+    g.setColour (getTheme().accent);
+    g.drawText ("UI SCALE", leftCol.removeFromTop (18), juce::Justification::centredLeft);
+    drawScaleSection (g, leftCol);
+
     drawTrimPrefsSection (g, leftCol);
 
     // Divider
@@ -259,10 +314,26 @@ void ShortcutsPanel::resized()
 
     auto titleRow = header.removeFromTop (30);
     closeBtn.setBounds  (titleRow.removeFromRight (30));
-    themeBtn.setBounds  (titleRow.removeFromRight (110));
-    titleRow.removeFromRight (6);   // gap between label and theme button
+    themeBtn.setBounds  (titleRow.removeFromRight (120));
+    titleRow.removeFromRight (6);
     titleLabel.setBounds (titleRow);
 
     header.removeFromTop (8);
     searchBox.setBounds (header.removeFromTop (26));
+
+    // ── Scale controls — positioned in left column, below the search box ──
+    // Mirror the paint layout: panel content starts after title+gap+search+gap
+    auto content  = panel.reduced (14, 6);
+    content.removeFromTop (30 + 8 + 26 + 10);
+    auto leftCol  = content.removeFromLeft (content.getWidth() / 2);
+
+    leftCol.removeFromTop (18);  // "UI SCALE" heading
+
+    auto scaleRow = leftCol.removeFromTop (24);
+    const int btnW = 26;
+    scaleDownBtn.setBounds (scaleRow.removeFromLeft (btnW));
+    scaleRow.removeFromLeft (4);
+    scaleLcd.setBounds (scaleRow.removeFromLeft (52));
+    scaleRow.removeFromLeft (4);
+    scaleUpBtn.setBounds (scaleRow.removeFromLeft (btnW));
 }
