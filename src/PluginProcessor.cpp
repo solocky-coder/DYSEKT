@@ -752,6 +752,16 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 uint32_t bit = (uint32_t) cmd.intParam2;
                 bool turningOn = !(s.lockMask & bit);
 
+                if (!turningOn)
+                {
+                    // UNLOCK PATH: discard any in-flight coalesced CmdSetSliceParam.
+                    // Without this, a stale drag value sitting in the coalescer fires
+                    // *after* the lock bit clears and overwrites s.attackSec etc. with
+                    // whatever the last drag position happened to be — causing the node
+                    // to jump to an init/arbitrary value on unlock.
+                    pendingSetSliceParam.store (false, std::memory_order_release);
+                }
+
                 if (turningOn)
                 {
                     // For each field: use the slice's own value if it was already locked
