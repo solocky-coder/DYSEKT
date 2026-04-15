@@ -256,32 +256,26 @@ void SliceWaveformLcd::commitNodes()
  const float sustainPc = juce::jlimit (0.0f, 100.0f, (1.0f - env.sy) * 100.0f);
  const float releaseMs = juce::jlimit (0.0f, releaseViewMs, (1.0f - env.rx) * releaseViewMs);
 
- // Write to selected slice via CmdSetSliceParam (per-slice, not global)
- const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
- if (sel < 0 || sel >= processor.sliceManager.getNumSlices()) return;
+    // Write dragged value directly to APVTS — same path as SCB knob drag.
+    // SCB knobs and buildEnvelopeNodes() both read from APVTS for unlocked
+    // fields, so this keeps nodes, knobs, and audio all in sync without
+    // accidentally locking anything.  Drag is blocked for locked nodes in
+    // mouseDrag(), so we are always handling an unlocked field here.
+    auto writeApvts = [&] (const juce::String& paramId, float nativeVal)
+    {
+        if (auto* p = processor.apvts.getParameter (paramId))
+            p->setValueNotifyingHost (p->convertTo0to1 (nativeVal));
+    };
 
- auto sendField = [&] (DysektProcessor::SliceParamField field, float val)
- {
- DysektProcessor::Command cmd;
- cmd.type = DysektProcessor::CmdSetSliceParam;
- cmd.intParam1 = (int) field;
- cmd.intParam2 = 0;   // drag update — set lock bit so value is stored per-slice
- cmd.floatParam1 = val;
- processor.pushCommand (cmd);
- };
-
- // Only write the field that is currently being dragged.
- // CmdSetSliceParam always sets lockMask |= bit, so sending all fields
- // would lock every ADSR param on the first drag of any single node.
- switch (dragRole)
- {
-     case NodeRole::Attack:  sendField (DysektProcessor::FieldAttack,  attackMs  / 1000.0f); break;
-     case NodeRole::Hold:    sendField (DysektProcessor::FieldHold,    holdMs    / 1000.0f); break;
-     case NodeRole::Decay:   sendField (DysektProcessor::FieldDecay,   decayMs   / 1000.0f); break;
-     case NodeRole::Sustain: sendField (DysektProcessor::FieldSustain, sustainPc / 100.0f);  break;
-     case NodeRole::Release: sendField (DysektProcessor::FieldRelease, releaseMs / 1000.0f); break;
-     default: break;
- }
+    switch (dragRole)
+    {
+        case NodeRole::Attack:  writeApvts (ParamIds::defaultAttack,  attackMs);  break;
+        case NodeRole::Hold:    writeApvts (ParamIds::defaultHold,    holdMs);    break;
+        case NodeRole::Decay:   writeApvts (ParamIds::defaultDecay,   decayMs);   break;
+        case NodeRole::Sustain: writeApvts (ParamIds::defaultSustain, sustainPc); break;
+        case NodeRole::Release: writeApvts (ParamIds::defaultRelease, releaseMs); break;
+        default: break;
+    }
 
  // Give the processor time to echo the new values before rebuilding
  postCommitGuard = 6;
