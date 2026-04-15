@@ -220,24 +220,14 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     float sustain = sm.resolveParam (sliceIdx, kLockSustain,  s.sustainLevel, p.globalSustain);
     float release = sm.resolveParam (sliceIdx, kLockRelease,  s.releaseSec,   p.globalReleaseSec);
 
-    // Clamp attack to slice duration so max-range values don't leave
-    // the envelope in the attack phase for the whole slice (near-silent output).
-    // Decay is NOT clamped: in one-shot mode the envelope decays freely to
-    // silence past the slice boundary (TAL-Drum / Speedrum behaviour).
-    const float sliceDurSec = (float)(sliceEnd - s.startSample) / (float)sampleRate;
-    attack = juce::jmin (attack, sliceDurSec);
+    // Attack and Decay are NOT clamped — both knobs have full range in all modes.
+    // Safety net: if the envelope is still active when sample data runs out, the
+    // end-of-sample path calls forceRelease(kShortReleaseSec) to terminate cleanly.
 
     // Resolve one-shot flag: slice value takes priority over global when set,
     // regardless of lock bit — one-shot is a per-slice property, not a global default.
     // (globalOneShot is intentionally always false; see PluginProcessor.)
     const bool isOneShot = s.oneShot || (p.globalOneShot > 0.5f);
-
-    // In one-shot mode the envelope decays to silence autonomously.
-    // Use the slice duration as the minimum decay so the envelope always covers
-    // the full slice. The knob can push decay longer (tail past slice end),
-    // but can never cut it shorter than the slice itself.
-    if (isOneShot)
-        decay = std::max (decay, sliceDurSec);
 
     // Resolve hold time for this slice.
     const float holdSec = sm.resolveParam (sliceIdx, kLockHold,
