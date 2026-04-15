@@ -193,7 +193,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
  env.hx = juce::jlimit (env.ax, kHX_eff,
  env.ax + holdNorm * (kHX_eff - env.ax));
 
- env.dx = juce::jlimit (env.hx + 0.01f, kDX_eff,
+ env.dx = juce::jlimit (env.hx, kDX_eff,
  env.hx + decayNorm * (kDX_eff - env.hx));
  env.sy = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
  env.ay = 0.04f; // attack peak near top (standard ADSR visual)
@@ -489,19 +489,19 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  env.sxEnd = kSEnd_eff;
 
  // Clamp D into its zone; R is free to span the full display width
- env.dx = juce::jlimit (env.ax + 0.01f, kDX_eff, env.dx);
+ env.dx = juce::jlimit (env.ax, kDX_eff, env.dx);
  env.rx = juce::jlimit (0.0f, 1.0f, env.rx);
 
  if (dragRole == NodeRole::Hold)
  {
  // H: X-only drag — hold end must stay between ax and dx
  const float kHX_eff = env.ax + (kRMax - env.ax) * 0.20f;
- env.hx = juce::jlimit (env.ax, juce::jmin (kHX_eff, env.dx - 0.01f), xn);
+ env.hx = juce::jlimit (env.ax, juce::jmin (kHX_eff, env.dx), xn);
  }
  if (dragRole == NodeRole::Decay)
  {
  // D: X only — controls how far decay extends before sustain
- env.dx = juce::jlimit (env.ax + 0.01f, kDX_eff, xn);
+ env.dx = juce::jlimit (env.ax, kDX_eff, xn);
  }
  else if (dragRole == NodeRole::Sustain)
  {
