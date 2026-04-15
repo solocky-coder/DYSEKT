@@ -6,7 +6,7 @@
 namespace
 {
 void buildMipmapsForBuffer (const juce::AudioBuffer<float>& src,
-                             std::array<SampleData::MipmapLevel, SampleData::kNumMipmapLevels>& outMipmaps)
+                             std::array<SampleData::PeakMipmap, SampleData::kNumMipmapLevels>& outMipmaps)
 {
     int numFrames = src.getNumSamples();
     if (numFrames <= 0 || src.getNumChannels() < 1)
@@ -159,18 +159,18 @@ void SampleData::applyDecodedSample (std::unique_ptr<DecodedSample> decoded)
     loadedFileName = decoded->fileName;
     loadedFilePath = decoded->filePath;
 
-    auto view          = std::make_shared<Snapshot>();
+    auto view          = std::make_shared<DecodedSample>();
     view->buffer       = buffer;
     view->peakMipmaps  = peakMipmaps;
     view->fileName     = loadedFileName;
     view->filePath     = loadedFilePath;
 
 #if INTERSECT_HAS_STD_ATOMIC_SHARED_PTR
-    snapshot.store (std::static_pointer_cast<const Snapshot> (view),
+    snapshot.store (std::static_pointer_cast<const DecodedSample> (view),
                     std::memory_order_release);
 #else
     std::atomic_store_explicit (&snapshot,
-                                std::static_pointer_cast<const Snapshot> (view),
+                                std::static_pointer_cast<const DecodedSample> (view),
                                 std::memory_order_release);
 #endif
     loaded = true;
@@ -195,9 +195,9 @@ void SampleData::clear()
         m.minPeaks.clear();
     }
 #if INTERSECT_HAS_STD_ATOMIC_SHARED_PTR
-    snapshot.store (std::shared_ptr<const Snapshot>{}, std::memory_order_release);
+    snapshot.store (std::shared_ptr<const DecodedSample>{}, std::memory_order_release);
 #else
-    std::atomic_store_explicit (&snapshot, std::shared_ptr<const Snapshot>{},
+    std::atomic_store_explicit (&snapshot, std::shared_ptr<const DecodedSample>{},
                                 std::memory_order_release);
 #endif
     loadedFileName.clear();
