@@ -1024,7 +1024,7 @@ float relMaxSec = 5.0f;
  {
  adsrGroupX1 = x;
  bool locked = (s.lockMask & kLockAttack) != 0;
- float atk = locked ? s.attackSec : gAttack / 1000.f;
+ float atk = s.attackSec;
  drawKnobCell (g, x, row2y, "ATK",
  juce::String ((int) (atk * 1000.f)) + "ms",
  toNorm (F::FieldAttack, atk),
@@ -1037,7 +1037,7 @@ float relMaxSec = 5.0f;
  {
   float gHold = processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load();
   bool locked = (s.lockMask & kLockHold) != 0;
-  float hld = locked ? s.holdSec : gHold / 1000.f;
+  float hld = s.holdSec;
   drawKnobCell (g, x, row2y, "HLD",
   juce::String ((int) (hld * 1000.f)) + "ms",
   toNorm (F::FieldHold, hld),
@@ -1048,7 +1048,7 @@ float relMaxSec = 5.0f;
  // DEC — knob
  {
  bool locked = (s.lockMask & kLockDecay) != 0;
- float dec = locked ? s.decaySec : gDecay / 1000.f;
+ float dec = s.decaySec;
  drawKnobCell (g, x, row2y, "DEC",
  juce::String ((int) (dec * 1000.f)) + "ms",
  toNorm (F::FieldDecay, dec),
@@ -1059,7 +1059,7 @@ float relMaxSec = 5.0f;
  // SUS — knob (stored 0-1, display %)
  {
  bool locked = (s.lockMask & kLockSustain) != 0;
- float sus = locked ? s.sustainLevel : gSustain / 100.f;
+ float sus = s.sustainLevel;
  drawKnobCell (g, x, row2y, "SUS",
  juce::String ((int) (sus * 100.f)) + "%",
  toNorm (F::FieldSustain, sus),
@@ -1070,7 +1070,7 @@ float relMaxSec = 5.0f;
  // REL — knob
  {
  bool locked = (s.lockMask & kLockRelease) != 0;
- float rel = locked ? s.releaseSec : gRelease / 1000.f;
+ float rel = s.releaseSec;
 // REL spans the full selected-slice duration; matches SliceWaveformLcd mapping.
 const float relNorm = juce::jlimit (0.f, 1.f, rel / relMaxSec);
  drawKnobCell (g, x, row2y, "REL",
@@ -1347,11 +1347,11 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  case F::FieldCentsDetune: dragStartValue = (sl.lockMask & kLockCentsDetune) ? sl.centsDetune : processor.apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load(); break;
  case F::FieldTonality: dragStartValue = (sl.lockMask & kLockTonality) ? sl.tonalityHz : processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load(); break;
  case F::FieldFormant: dragStartValue = (sl.lockMask & kLockFormant) ? sl.formantSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load(); break;
- case F::FieldAttack: dragStartValue = (sl.lockMask & kLockAttack) ? sl.attackSec : processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.f; break;
- case F::FieldHold:   dragStartValue = (sl.lockMask & kLockHold)   ? sl.holdSec   : processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load()   / 1000.f; break;
- case F::FieldDecay: dragStartValue = (sl.lockMask & kLockDecay) ? sl.decaySec : processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load() / 1000.f; break;
- case F::FieldSustain: dragStartValue = (sl.lockMask & kLockSustain) ? sl.sustainLevel : processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.f; break;
- case F::FieldRelease: dragStartValue = (sl.lockMask & kLockRelease) ? sl.releaseSec : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f; break;
+ case F::FieldAttack:  dragStartValue = sl.attackSec;    break;
+ case F::FieldHold:    dragStartValue = sl.holdSec;      break;
+ case F::FieldDecay:   dragStartValue = sl.decaySec;     break;
+ case F::FieldSustain: dragStartValue = sl.sustainLevel; break;
+ case F::FieldRelease: dragStartValue = sl.releaseSec;   break;
  case F::FieldMuteGroup: dragStartValue = (float)((sl.lockMask & kLockMuteGroup) ? sl.muteGroup : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load()); break;
  case F::FieldSliceStart: dragStartValue = (float) sl.startSample; break;
  case F::FieldMidiNote: dragStartValue = (float) sl.midiNote; break;
@@ -1651,6 +1651,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  DysektProcessor::Command cmd;
  cmd.type = F::CmdSetSliceParam;
  cmd.intParam1 = cell.fieldId; cmd.floatParam1 = newNative;
+ if (isAdsr) cmd.intParam2 = 1; // skipLock — store in per-slice field without modifying lockMask
  processor.pushCommand (cmd); repaint();
 }
 
@@ -1746,11 +1747,11 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  case F::FieldCentsDetune: currentVal = (sl.lockMask & kLockCentsDetune) ? sl.centsDetune : processor.apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load(); break;
  case F::FieldTonality: currentVal = (sl.lockMask & kLockTonality) ? sl.tonalityHz : processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load(); break;
  case F::FieldFormant: currentVal = (sl.lockMask & kLockFormant) ? sl.formantSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load(); break;
- case F::FieldAttack: currentVal = ((sl.lockMask & kLockAttack) ? sl.attackSec : processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load() / 1000.f) * 1000.f; break;
- case F::FieldHold:   currentVal = ((sl.lockMask & kLockHold)   ? sl.holdSec   : processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load()   / 1000.f) * 1000.f; break;
- case F::FieldDecay: currentVal = ((sl.lockMask & kLockDecay) ? sl.decaySec : processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load() / 1000.f) * 1000.f; break;
- case F::FieldSustain: currentVal = ((sl.lockMask & kLockSustain) ? sl.sustainLevel : processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load() / 100.f) * 100.f; break;
- case F::FieldRelease: currentVal = ((sl.lockMask & kLockRelease) ? sl.releaseSec : processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load() / 1000.f) * 1000.f; break;
+ case F::FieldAttack:  currentVal = sl.attackSec   * 1000.f; break;
+ case F::FieldHold:    currentVal = sl.holdSec     * 1000.f; break;
+ case F::FieldDecay:   currentVal = sl.decaySec    * 1000.f; break;
+ case F::FieldSustain: currentVal = sl.sustainLevel * 100.f; break;
+ case F::FieldRelease: currentVal = sl.releaseSec  * 1000.f; break;
  case F::FieldMuteGroup: currentVal = (float)((sl.lockMask & kLockMuteGroup) ? sl.muteGroup : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load()); break;
  case F::FieldMidiNote: currentVal = (float) sl.midiNote; break;
  case F::FieldVolume: currentVal = (sl.lockMask & kLockVolume) ? sl.volume : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load(); break;
@@ -1929,6 +1930,10 @@ void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
  DysektProcessor::Command cmd;
  cmd.type = DysektProcessor::CmdSetSliceParam;
  cmd.intParam1 = fieldId; cmd.floatParam1 = val;
+ const bool isAdsrField = (fieldId == F2::FieldAttack || fieldId == F2::FieldHold
+                        || fieldId == F2::FieldDecay  || fieldId == F2::FieldSustain
+                        || fieldId == F2::FieldRelease);
+ if (isAdsrField) cmd.intParam2 = 1; // skipLock
  processor.pushCommand (cmd); textEditor.reset(); repaint();
  };
  textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };

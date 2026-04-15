@@ -133,25 +133,24 @@ float SliceWaveformLcd::getSliceDurMs() const
 
 void SliceWaveformLcd::buildEnvelopeNodes()
 {
- // Mirror SCB logic exactly: unlocked fields read from global APVTS (same units),
- // locked fields read from per-slice values.
- // APVTS params: Attack 0-120000ms, Decay 0-120000ms, Sustain 0-100%, Release 0-120000ms
- float attackMs = processor.attackParam ? processor.attackParam ->load() : 5.0f;
- float holdMs = processor.holdParam ? processor.holdParam ->load() : 0.0f;
- float decayMs = processor.decayParam ? processor.decayParam ->load() : 100.0f;
- float sustainPc = processor.sustainParam ? processor.sustainParam->load() : 100.0f;
- float releaseMs = processor.releaseParam ? processor.releaseParam->load() : 20.0f;
+ // Always read per-slice ADSR values — nodes must reflect the slice's
+ // own stored values regardless of lock state, so the envelope display
+ // is always authoritative for the selected slice.
+ float attackMs  = 5.0f;
+ float holdMs    = 0.0f;
+ float decayMs   = 100.0f;
+ float sustainPc = 100.0f;
+ float releaseMs = 20.0f;
 
  const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
  if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
  {
- const auto& s = processor.sliceManager.getSlice (sel);
- // Per-field: if locked use slice value, otherwise use global APVTS value above
- if (s.lockMask & kLockAttack) attackMs = s.attackSec * 1000.0f;
- if (s.lockMask & kLockHold) holdMs = s.holdSec * 1000.0f;
- if (s.lockMask & kLockDecay) decayMs = s.decaySec * 1000.0f;
- if (s.lockMask & kLockSustain) sustainPc = s.sustainLevel * 100.0f;
- if (s.lockMask & kLockRelease) releaseMs = s.releaseSec * 1000.0f;
+     const auto& s = processor.sliceManager.getSlice (sel);
+     attackMs  = s.attackSec  * 1000.0f;
+     holdMs    = s.holdSec    * 1000.0f;
+     decayMs   = s.decaySec   * 1000.0f;
+     sustainPc = s.sustainLevel * 100.0f;
+     releaseMs = s.releaseSec * 1000.0f;
  }
 
  // Layout (display-only proportions — must match commitNodes exactly):
@@ -256,24 +255,26 @@ void SliceWaveformLcd::commitNodes()
  const float sustainPc = juce::jlimit (0.0f, 100.0f, (1.0f - env.sy) * 100.0f);
  const float releaseMs = juce::jlimit (0.0f, releaseViewMs, (1.0f - env.rx) * releaseViewMs);
 
-    // Write dragged value directly to APVTS — same path as SCB knob drag.
-    // SCB knobs and buildEnvelopeNodes() both read from APVTS for unlocked
-    // fields, so this keeps nodes, knobs, and audio all in sync without
-    // accidentally locking anything.  Drag is blocked for locked nodes in
-    // mouseDrag(), so we are always handling an unlocked field here.
-    auto writeApvts = [&] (const juce::String& paramId, float nativeVal)
+    // Write dragged value to per-slice storage without locking.
+    // intParam2 = 1 means skipLock — value stored in s.attackSec etc.,
+    // lockMask is NOT modified.
+    auto writePerSlice = [&] (int fieldId, float nativeVal)
     {
-        if (auto* p = processor.apvts.getParameter (paramId))
-            p->setValueNotifyingHost (p->convertTo0to1 (nativeVal));
+        DysektProcessor::Command cmd;
+        cmd.type        = DysektProcessor::CmdSetSliceParam;
+        cmd.intParam1   = fieldId;
+        cmd.floatParam1 = nativeVal;
+        cmd.intParam2   = 1; // skipLock
+        processor.pushCommand (cmd);
     };
 
     switch (dragRole)
     {
-        case NodeRole::Attack:  writeApvts (ParamIds::defaultAttack,  attackMs);  break;
-        case NodeRole::Hold:    writeApvts (ParamIds::defaultHold,    holdMs);    break;
-        case NodeRole::Decay:   writeApvts (ParamIds::defaultDecay,   decayMs);   break;
-        case NodeRole::Sustain: writeApvts (ParamIds::defaultSustain, sustainPc); break;
-        case NodeRole::Release: writeApvts (ParamIds::defaultRelease, releaseMs); break;
+        case NodeRole::Attack:  writePerSlice (DysektProcessor::FieldAttack,   attackMs  / 1000.f); break;
+        case NodeRole::Hold:    writePerSlice (DysektProcessor::FieldHold,     holdMs    / 1000.f); break;
+        case NodeRole::Decay:   writePerSlice (DysektProcessor::FieldDecay,    decayMs   / 1000.f); break;
+        case NodeRole::Sustain: writePerSlice (DysektProcessor::FieldSustain,  sustainPc / 100.f);  break;
+        case NodeRole::Release: writePerSlice (DysektProcessor::FieldRelease,  releaseMs / 1000.f); break;
         default: break;
     }
 
