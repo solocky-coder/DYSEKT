@@ -304,7 +304,9 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
  }
 
  const int textX = knobCX + kKnobR + 4;
- const int textW = cellW - (textX - x) - 1;
+ // Reserve 12px on the right for the lock icon (10px icon + 2px gap) when a lock exists
+ const int lockReserve = (lockBit != 0) ? 12 : 0;
+ const int textW = cellW - (textX - x) - 1 - lockReserve;
  const juce::Colour adsr = adsrTintForField (fieldId);
  const bool hasAdsr = ! adsr.isTransparent();
 
@@ -331,14 +333,16 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
  c.knobNorm = normVal;
  cells.push_back (c);
 
- // ── Lock icon — drawn top-left of the knob cell, registers as a separate
+ // ── Lock icon — drawn to the right of the label, registers as a separate
  //    hit cell so clicking it toggles the lock without touching MIDI Learn.
  //    Only registered for knobs that have a real lockBit (lockBit == 0 means
  //    the field has no per-slice lock, e.g. FieldSliceStart).
  if (lockBit != 0)
  {
      constexpr int kLockW = 10, kLockH = 10;
-     const int lx = x + 1, ly = y + 1;
+     // Position: right-aligned inside the text area, top of the label row
+     const int lx = x + cellW - kLockW - 1;
+     const int ly = y + 2;
 
      // Padlock body
      if (locked)
@@ -366,8 +370,9 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
      }
 
      // Register as a separate hit cell — isLockIcon = true
+     // Use a slightly taller hit area (full label row height) so it's easy to click
      ParamCell lc{};
-     lc.x = lx; lc.y = ly; lc.w = kLockW; lc.h = kLockH;
+     lc.x = lx; lc.y = ly; lc.w = kLockW; lc.h = kLockH + 2;
      lc.lockBit = lockBit; lc.fieldId = fieldId;
      lc.isLockIcon = true;
      cells.push_back (lc);
@@ -1561,6 +1566,20 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
         float newMs = juce::jlimit (0.0f, 200.0f, dragStartValue - deltaY * sensitivity);
         processor.voicePool.legatoGlideMs.store (newMs, std::memory_order_relaxed);
         repaint(); return;
+    }
+
+    // ── Guard: do not modify a field that has its individual lock bit set ──
+    {
+        const auto& snap = processor.getUiSliceSnapshot();
+        const int sIdx = snap.selectedSlice;
+        if (sIdx >= 0 && sIdx < snap.numSlices && cell.lockBit != 0)
+        {
+            if (snap.slices[(size_t) sIdx].lockMask & cell.lockBit)
+            {
+                repaint();
+                return;
+            }
+        }
     }
 
  // ── All other knobs: CmdSetSliceParam ─────────────────────────────────
