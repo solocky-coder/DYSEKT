@@ -495,6 +495,7 @@ bool DysektProcessor::enqueueCoalescedCommand (const Command& cmd)
     {
         pendingSetSliceParamField.store (cmd.intParam1, std::memory_order_relaxed);
         pendingSetSliceParamValue.store (cmd.floatParam1, std::memory_order_relaxed);
+        pendingSetSliceParamSkipLock.store (cmd.intParam2, std::memory_order_relaxed);
         pendingSetSliceParam.store (true, std::memory_order_release);
         return true;
     }
@@ -532,6 +533,7 @@ void DysektProcessor::drainCoalescedCommands (bool& handledAny)
         cmd.type = CmdSetSliceParam;
         cmd.intParam1 = pendingSetSliceParamField.load (std::memory_order_relaxed);
         cmd.floatParam1 = pendingSetSliceParamValue.load (std::memory_order_relaxed);
+        cmd.intParam2 = pendingSetSliceParamSkipLock.load (std::memory_order_relaxed);
         handleCommand (cmd);
         handledAny = true;
     }

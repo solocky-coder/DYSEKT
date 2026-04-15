@@ -381,9 +381,10 @@ private:
     std::atomic<int> overflowReadIndex  { 0 };
 
     // Coalescing slots for high-frequency drag commands
-    std::atomic<bool>  pendingSetSliceParam      { false };
-    std::atomic<int>   pendingSetSliceParamField { 0 };
-    std::atomic<float> pendingSetSliceParamValue { 0.0f };
+    std::atomic<bool>  pendingSetSliceParam         { false };
+    std::atomic<int>   pendingSetSliceParamField    { 0 };
+    std::atomic<float> pendingSetSliceParamValue    { 0.0f };
+    std::atomic<int>   pendingSetSliceParamSkipLock { 0 };   // preserves intParam2 through coalesce
 
     std::atomic<bool> pendingSetSliceBounds      { false };
     std::atomic<int>  pendingSetSliceBoundsIdx   { -1 };
