@@ -218,6 +218,7 @@ void SliceWaveformLcd::commitNodes()
 
  const float remain_c  = kRMax - env.ax;
  const float kDX_eff   = env.ax + remain_c * 0.45f;
+ const float kSEnd_eff = env.ax + remain_c * 0.65f;
 
  const float aRatio = env.ax / kAX;
  const float dRatio = (kDX_eff > env.ax) ? (env.dx - env.ax) / (kDX_eff - env.ax) : 0.0f;

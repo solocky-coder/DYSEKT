@@ -1033,17 +1033,7 @@ float relMaxSec = 5.0f;
  }
 
 
- // HLD — hold knob (keeps peak level before decay)
- {
-  float gHold = processor.apvts.getRawParameterValue (ParamIds::defaultHold)->load();
-  bool locked = (s.lockMask & kLockHold) != 0;
-  float hld = s.holdSec;
-  drawKnobCell (g, x, row2y, "HLD",
-  juce::String ((int) (hld * 1000.f)) + "ms",
-  toNorm (F::FieldHold, hld),
-  locked, kLockHold, F::FieldHold, 0.f, 5.f, 0.001f, cw);
-  x += cw + 4;
- }
+ // HLD removed
 
  // DEC — knob
  {

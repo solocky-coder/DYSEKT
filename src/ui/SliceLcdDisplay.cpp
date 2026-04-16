@@ -658,38 +658,37 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 4, panStr, pitStr);
     }
 
-    // ── Row 5:  DET:+xct  |  HLD:xxxms ───────────────────────────────────────
+    // ── Row 5:  DET:+xct  |  ATK:xxxms ───────────────────────────────────────
     {
         const float det = data.centsDetune;
         juce::String detStr = juce::String ("DET:") + (det >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (det)) + "ct";
-        juce::String hldStr = "HLD:" + formatMs (data.holdSec).trimEnd();
-        drawRowPair (g, 5, detStr, hldStr);
+        juce::String atkStr = "ATK:" + formatMs (data.attackSec).trimEnd();
+        drawRowPair (g, 5, detStr, atkStr);
     }
 
-    // ── Row 6:  ATK/DEC  |  SUS/REL  +  badge flags ─────────────────────────
+    // ── Row 6:  DEC:xxxms  |  SUS:xx% ────────────────────────────────────────
     {
-        juce::String adsrLeft  = "A:" + formatMs (data.attackSec).trimEnd()
-            + " D:" + formatMs (data.decaySec).trimEnd();
-        juce::String adsrRight = "S:" + juce::String (juce::roundToInt (data.sustainLevel * 100.0f)) + "%"
-            + " R:" + formatMs (data.releaseSec).trimEnd();
-        drawRowPair (g, 6, adsrLeft, adsrRight);
+        juce::String decStr = "DEC:" + formatMs (data.decaySec).trimEnd();
+        juce::String susStr = "SUS:" + juce::String (juce::roundToInt (data.sustainLevel * 100.0f)) + "%";
+        drawRowPair (g, 6, decStr, susStr);
     }
 
-    // ── Row 7:  FMNT:+x.xst  |  TONAL:xxxxHz ────────────────────────────────
+    // ── Row 7:  REL:xxxms  |  FMNT:+x.xst ───────────────────────────────────
     {
+        juce::String relStr  = "REL:" + formatMs (data.releaseSec).trimEnd();
         const float fmnt = data.formantSemitones;
-        juce::String fmntStr  = juce::String ("FMNT:") + (fmnt >= 0.0f ? "+" : "")
-                              + juce::String (fmnt, 1) + "st";
+        juce::String fmntStr = juce::String ("FMNT:") + (fmnt >= 0.0f ? "+" : "")
+                             + juce::String (fmnt, 1) + "st";
+        drawRowPair (g, 7, relStr, fmntStr);
+    }
+
+    // ── Row 8:  TONAL:xxx  |  FRES:x.xx ─────────────────────────────────────
+    {
         juce::String tonalStr = "TONAL:" + (data.tonalityHz < 1.0f
                               ? juce::String ("OFF")
                               : juce::String (juce::roundToInt (data.tonalityHz)) + "Hz");
-        drawRowPair (g, 7, fmntStr, tonalStr);
-    }
-
-    // ── Row 8:  FRES:x.xx ────────────────────────────────────────────────────
-    {
-        juce::String fresStr = "FRES:" + juce::String (data.filterRes, 2);
-        drawRow (g, 8, "FRES", juce::String (data.filterRes, 2));
+        juce::String fresStr  = "FRES:" + juce::String (data.filterRes, 2);
+        drawRowPair (g, 8, tonalStr, fresStr);
     }
 
     // ── Row 9:  OUT:xx  |  BPM:xxx.xx  +  toggle flags ───────────────────────
