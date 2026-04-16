@@ -749,7 +749,7 @@ void SliceControlBar::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos
  else if (result == 1000)
  {
  if (auto* editor = findParentComponentOfClass<DysektEditor>())
- editor->keyPressed(juce::KeyPress('M', juce::ModifierKeys::commandModifier, 0));
+ editor->keyPressed(juce::KeyPress('M', juce::ModifierKeys(), 0));
  }
  }
  );
