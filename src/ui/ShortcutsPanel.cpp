@@ -170,21 +170,7 @@ void ShortcutsPanel::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // ── Interface mode ────────────────────────────────────────────────────────
-    int newMode = currentUiMode;
 
-    if (uiModeWaveRect.contains (e.getPosition()))
-        newMode = 0;
-    else if (uiModeGridRect.contains (e.getPosition()))
-        newMode = 1;
-
-    if (newMode != currentUiMode)
-    {
-        currentUiMode = newMode;
-        repaint();
-        if (onUiModeChanged)
-            onUiModeChanged (currentUiMode);
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,56 +226,6 @@ void ShortcutsPanel::drawTrimPrefsSection (juce::Graphics& g, juce::Rectangle<in
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-void ShortcutsPanel::drawInterfaceSection (juce::Graphics& g, juce::Rectangle<int>& area)
-{
-    const int rowH = 22;
-    const int btnH = 18;
-    const int gap  = 6;
-
-    g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
-    g.setColour (getTheme().accent);
-    g.drawText ("INTERFACE", area.removeFromTop (rowH), juce::Justification::centredLeft);
-    area.removeFromTop (2);
-
-    struct Option { juce::String label; int value; juce::Rectangle<int>* rect; };
-    Option opts[] = {
-        { "Waveform View", 0, &uiModeWaveRect },
-        { "Pad Grid",      1, &uiModeGridRect },
-    };
-
-    for (auto& opt : opts)
-    {
-        auto row = area.removeFromTop (btnH);
-        area.removeFromTop (gap);
-
-        const bool active = (currentUiMode == opt.value);
-        *opt.rect = row;
-
-        const int dotR = 5;
-        auto dotArea = row.removeFromLeft (dotR * 2 + 6);
-        juce::Rectangle<float> dot (dotArea.getX() + 2.0f,
-                                    dotArea.getCentreY() - (float) dotR,
-                                    (float) dotR * 2.0f, (float) dotR * 2.0f);
-
-        g.setColour (active ? getTheme().accent : getTheme().button);
-        g.fillEllipse (dot);
-        g.setColour (getTheme().accent.withAlpha (active ? 1.0f : 0.35f));
-        g.drawEllipse (dot.reduced (0.5f), 1.0f);
-        if (active)
-        {
-            g.setColour (getTheme().header);
-            g.fillEllipse (dot.reduced (3.0f));
-        }
-
-        g.setFont (DysektLookAndFeel::makeFont (10.5f));
-        g.setColour (active ? getTheme().foreground : getTheme().foreground.withAlpha (0.6f));
-        g.drawText (opt.label, row.removeFromLeft (200), juce::Justification::centredLeft);
-    }
-
-    area.removeFromTop (4);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 void ShortcutsPanel::paint (juce::Graphics& g)
 {
     // Dim overlay
@@ -317,9 +253,6 @@ void ShortcutsPanel::paint (juce::Graphics& g)
 
     // Trim prefs
     drawTrimPrefsSection (g, leftCol);
-
-    // Interface mode  ← NEW SECTION
-    drawInterfaceSection (g, leftCol);
 
     // Divider
     g.setColour (getTheme().separator.withAlpha (0.4f));

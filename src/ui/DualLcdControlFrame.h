@@ -24,10 +24,11 @@ public:
     void mouseMove    (const juce::MouseEvent& e) override;
     void mouseExit    (const juce::MouseEvent& e) override;
 
-    std::function<void()> onBrowserToggle;
-    std::function<void()> onWaveToggle;
-    std::function<void()> onMidiFollowToggle;
-    std::function<void()> onBodeToggle;
+    std::function<void()>    onBrowserToggle;
+    std::function<void()>    onWaveToggle;
+    std::function<void()>    onMidiFollowToggle;
+    std::function<void()>    onBodeToggle;
+    std::function<void(int)> onUiModeChanged;   // 0 = Edit, 1 = Pad Grid
 
     void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
 
@@ -39,6 +40,7 @@ public:
 
     void setMidiFollowActive (bool v) { midiFollowActive = v; repaint(); }
     void setBodeActive       (bool v) { bodeActive       = v; repaint(); }
+    void setPadGridActive    (bool v) { padGridActive    = v; repaint(); }
 
 private:
     void drawIcon (juce::Graphics& g, juce::Rectangle<float> b, int type, bool active);
@@ -50,17 +52,20 @@ private:
     int  waveMode         = 0;   // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
     bool midiFollowActive = false;
     bool bodeActive       = false;
+    bool padGridActive    = false;
 
     // Hit areas (set during paint, used in mouseDown)
     juce::Rectangle<int> filIconArea;
     juce::Rectangle<int> waIconArea;
     juce::Rectangle<int> midiFollowIconArea;
     juce::Rectangle<int> bodeIconArea;
+    juce::Rectangle<int> editTabArea;
+    juce::Rectangle<int> padTabArea;
     juce::Rectangle<int> rootKnobArea;
     juce::Rectangle<int> pitchKnobArea;
     juce::Rectangle<int> volKnobArea;
 
-    int        hoveredIcon   = -1;   // 0=FIL 1=WA 2=MIDI 3=BODE, -1=none
+    int        hoveredIcon   = -1;   // 0=FIL 1=WA 2=MIDI 3=MIXER, -1=none
     enum class DragTarget { None, Root, Pitch, Volume };
     DragTarget dragTarget    = DragTarget::None;
     float  dragStartValue    = 0.0f;

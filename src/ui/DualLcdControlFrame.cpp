@@ -139,6 +139,55 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
     g.setColour (accent.withAlpha (0.25f));
     g.drawHorizontalLine (half, 6.0f, (float) w - 6.0f);
 
+    // ── EDIT | PAD mode tab strip (centred on divider) ────────────────────────
+    {
+        const int tabH    = 15;
+        const int tabW    = 42;
+        const int tabGap  = 4;
+        const int totalTW = tabW * 2 + tabGap;
+        const int tabX    = (w - totalTW) / 2;
+        const int tabY    = half - tabH / 2;
+
+        editTabArea = { tabX,                tabY, tabW, tabH };
+        padTabArea  = { tabX + tabW + tabGap, tabY, tabW, tabH };
+
+        // Erase the divider line behind the tabs so they float cleanly
+        {
+            auto bgTop = getTheme().darkBar.darker (0.45f);
+            auto bgBot = getTheme().darkBar.darker (0.65f);
+            // Sample approx mid-gradient colour at divider
+            auto bgMid = bgTop.interpolatedWith (bgBot, 0.5f);
+            g.setColour (bgMid);
+            g.fillRect (tabX - 2, tabY, totalTW + 4, tabH);
+        }
+
+        auto drawTab = [&] (juce::Rectangle<int> r, const char* label, bool active)
+        {
+            juce::Rectangle<float> rf = r.toFloat();
+            if (active)
+            {
+                g.setColour (accent.withAlpha (0.28f));
+                g.fillRoundedRectangle (rf, 3.0f);
+                g.setColour (accent.withAlpha (0.85f));
+                g.drawRoundedRectangle (rf.reduced (0.5f), 3.0f, 1.1f);
+                g.setColour (accent);
+            }
+            else
+            {
+                g.setColour (fg.withAlpha (0.10f));
+                g.fillRoundedRectangle (rf, 3.0f);
+                g.setColour (fg.withAlpha (0.28f));
+                g.drawRoundedRectangle (rf.reduced (0.5f), 3.0f, 0.7f);
+                g.setColour (fg.withAlpha (0.50f));
+            }
+            g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
+            g.drawText (label, r, juce::Justification::centred);
+        };
+
+        drawTab (editTabArea, "EDIT", ! padGridActive);
+        drawTab (padTabArea,  "PAD",  padGridActive);
+    }
+
     // ── Top row: four icons evenly spread across full width ──────────────────
     {
         const int btnSz  = 36;
@@ -158,7 +207,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         // ── Hover tooltip label ──────────────────────────────────────
         if (hoveredIcon >= 0)
         {
-            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "BODE" };
+            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER" };
             const juce::Rectangle<int>* areas[] = { &filIconArea, &waIconArea,
                                                      &midiFollowIconArea, &bodeIconArea };
             const auto& area = *areas[hoveredIcon];
@@ -272,6 +321,28 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
         bodeActive = ! bodeActive;
         repaint();
         if (onBodeToggle) onBodeToggle();
+        return;
+    }
+
+    // ── EDIT | PAD tabs ──────────────────────────────────────────────────────
+    if (editTabArea.contains (pos))
+    {
+        if (padGridActive)
+        {
+            padGridActive = false;
+            repaint();
+            if (onUiModeChanged) onUiModeChanged (0);
+        }
+        return;
+    }
+    if (padTabArea.contains (pos))
+    {
+        if (! padGridActive)
+        {
+            padGridActive = true;
+            repaint();
+            if (onUiModeChanged) onUiModeChanged (1);
+        }
         return;
     }
 
