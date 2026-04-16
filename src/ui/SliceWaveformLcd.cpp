@@ -179,9 +179,9 @@ void SliceWaveformLcd::buildEnvelopeNodes()
  env.ay    = 0.04f; // attack peak near top (standard ADSR visual)
  env.sxEnd = kSEnd_eff;
 
- // R node: fade-out START — drag left = earlier fade = more release tail
- env.rx = juce::jlimit (0.0f, 1.0f,
-                         1.0f - (releaseMs / releaseViewMs));
+ // R node: fade-out END — moves right as release grows (matches knob direction)
+ env.rx = juce::jlimit (kSEnd_eff, 1.0f,
+                         kSEnd_eff + (releaseMs / releaseViewMs) * (1.0f - kSEnd_eff));
 
  // Rebuild node list
  envNodes.clear();
@@ -225,7 +225,7 @@ void SliceWaveformLcd::commitNodes()
  const float attackMs  = juce::jlimit (0.0f, kAttackViewMs, aRatio * aRatio * kAttackViewMs);
  const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,  dRatio * dRatio * kDecayViewMs);
  const float sustainPc = juce::jlimit (0.0f, 100.0f, (1.0f - env.sy) * 100.0f);
- const float releaseMs = juce::jlimit (0.0f, releaseViewMs, (1.0f - env.rx) * releaseViewMs);
+ const float releaseMs = juce::jlimit (0.0f, releaseViewMs, (env.rx - kSEnd_eff) / juce::jmax (0.001f, 1.0f - kSEnd_eff) * releaseViewMs);
 
     // Write dragged value to per-slice storage without locking.
     // intParam2 = 1 means skipLock — value stored in s.attackSec etc.,
@@ -493,8 +493,8 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  }
  else if (dragRole == NodeRole::Release)
  {
- // R: X only — drag left = longer release tail (earlier fade start)
- env.rx = rxn;
+ // R: X only — drag right = longer release tail (later fade end)
+ env.rx = juce::jlimit (kSEnd_eff, 1.0f, rxn);
  }
 
  // Rebuild envNodes[] from updated env.* (no param read during drag)
