@@ -334,8 +334,8 @@ void DysektEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getTheme().background);
 
-    // Only draw the waveform CRT frame decoration in waveform mode
-    const bool wvVisible = (uiMode == 0) && waveformView.isVisible() && waveformView.getHeight() > 0;
+    // Draw the CRT frame in waveform mode, or whenever trim mode forces the waveform visible
+    const bool wvVisible = waveformView.isVisible() && waveformView.getHeight() > 0;
 
     if (wvVisible)
     {
@@ -370,7 +370,7 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
                           || (themeEditorPanel != nullptr);
     if (modalActive) return;
 
-    const bool wvVisible = (uiMode == 0) && waveformView.isVisible() && waveformView.getHeight() > 0;
+    const bool wvVisible = waveformView.isVisible() && waveformView.getHeight() > 0;
 
     if (wvVisible)
     {
@@ -502,7 +502,10 @@ void DysektEditor::resized()
     int h     = juce::jmax (80, screenBot - trimH - y);
 
     // ── Route the main content area to the active view ────────────────────────
-    if (uiMode == 0)
+    // Trim mode always requires the waveform view, regardless of uiMode.
+    const bool trimActive = (trimDialog != nullptr || (trimSession != nullptr && trimSession->active));
+
+    if (uiMode == 0 || trimActive)
     {
         // Original waveform layout — unchanged
         waveformView.setVisible (true);
@@ -727,8 +730,9 @@ void DysektEditor::timerCallback()
     const bool waveformAnimating = waveformInteracting || previewActive
                                 || playbackActive || processor.lazyChop.isActive()
                                 || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
-    const bool waveformNeedsRepaint = (uiMode == 0) && (uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating);
-    const bool laneNeedsRepaint     = (uiMode == 0) && (uiChanged || viewportChanged || previewActive || lastPreviewActive);
+    const bool waveformShowing      = (uiMode == 0) || processor.trimModeActive.load (std::memory_order_relaxed);
+    const bool waveformNeedsRepaint = waveformShowing && (uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating);
+    const bool laneNeedsRepaint     = waveformShowing && (uiChanged || viewportChanged || previewActive || lastPreviewActive);
 
     lastWaveformAnimating = waveformAnimating;
     lastPreviewActive     = previewActive;
@@ -738,6 +742,10 @@ void DysektEditor::timerCallback()
         auto snap = processor.sampleData.getSnapshot();
         if (snap != nullptr && snap->filePath == trimSession->file.getFullPathName())
         {
+            // Trim mode requires the waveform view — auto-switch if in Pad Grid mode.
+            if (uiMode != 0)
+                setUiMode (0);
+
             trimSession->active = true;
             const int totalFrames = snap->buffer.getNumSamples();
             waveformView.enterTrimMode (0, totalFrames);
