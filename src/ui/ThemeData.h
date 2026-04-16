@@ -75,6 +75,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF66C205); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFFA25CC2); // Soft Violet
         return t;
+    }
     static ThemeData shellTheme()
     {
         ThemeData t;
@@ -128,6 +129,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF63C705); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFFA45CC7); // Soft Violet
         return t;
+    }
     static ThemeData lazyTheme()
     {
         ThemeData t;
@@ -181,6 +183,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF71E206); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFFB66AE2); // Soft Violet
         return t;
+    }
     static ThemeData snowTheme()
     {
         ThemeData t;
@@ -234,6 +237,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF5BB505); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFF9155B5); // Soft Violet
         return t;
+    }
     static ThemeData ghostTheme()
     {
         ThemeData t;
@@ -287,6 +291,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF6CD206); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFFAC63D2); // Soft Violet
         return t;
+    }
     static ThemeData hackTheme()
     {
         ThemeData t;
@@ -340,6 +345,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF59B105); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFF8B4EB1); // Soft Violet
         return t;
+    }
     static ThemeData midnightTheme()
     {
         ThemeData t;
@@ -393,6 +399,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF6FF407); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFFF486A4); // Soft Violet
         return t;
+    }
     static ThemeData cr8Theme()
     {
         ThemeData t;
@@ -446,6 +453,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF5DD314); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFFB85CD3); // Soft Violet
         return t;
+    }
     static ThemeData pigmentsTheme()
     {
         ThemeData t;
@@ -499,6 +507,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF6CF407); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFFD66AF4); // Soft Violet
         return t;
+    }
     static ThemeData dysektTheme()
     {
         ThemeData t;
@@ -553,6 +562,7 @@ struct ThemeData
         t.slicePalette[30] = juce::Colour (0xFF68F407); // Acid Lime
         t.slicePalette[31] = juce::Colour (0xFFB45CF4); // Soft Violet
         return t;
+    }
     static ThemeData fromThemeFile (const juce::String& text)
     {
         ThemeData t = darkTheme(); // defaults
