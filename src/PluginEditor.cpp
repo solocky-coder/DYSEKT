@@ -153,6 +153,9 @@ void DysektEditor::setUiMode (int mode)
     // Keep the EDIT|PAD tab in sync
     headerBar.dualFrame().setPadGridActive (uiMode == 1);
 
+    // Hide waveform overview immediately when switching to PAD mode
+    waveformOverview.setVisible (uiMode == 0);
+
     // Persist the new mode
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
     saveUserSettings (scale, getTheme().name);
@@ -394,6 +397,23 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
         const auto screenF = outerF.reduced (4.0f * sf);
         g.setColour (ac.withAlpha (0.30f));
         g.drawRoundedRectangle (screenF.expanded (0.5f * sf), 2.0f * sf, 1.0f * sf);
+    }
+
+    // Pad grid frame border — same double-border recipe as waveform view
+    const bool padVisible = padGridView.isVisible() && padGridView.getHeight() > 0;
+    if (padVisible)
+    {
+        const auto outerF = padGridView.getBounds().toFloat().expanded (2.0f * sf);
+        const auto ac     = getTheme().accent;
+
+        g.setColour (ac.withAlpha (0.18f));
+        g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+
+        g.setColour (ac.withAlpha (0.60f));
+        g.drawRoundedRectangle (outerF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
+
+        g.setColour (ac.withAlpha (0.30f));
+        g.drawRoundedRectangle (outerF.reduced (4.0f * sf), 2.0f * sf, 1.0f * sf);
     }
 
     // Logo frame border
