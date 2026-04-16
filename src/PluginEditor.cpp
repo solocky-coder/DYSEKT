@@ -1,182 +1,202 @@
 #include "PluginEditor.h"
 #include <filesystem>
 #include "ui/PluginEditorConstants.h"
-// ========================== STATIC CONSTANTS ==========================
 
 // ========================== FILEPATH HELPERS ==========================
 static juce::File getSettingsDir()
 {
- return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
- .getChildFile ("DYSEKT");
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+           .getChildFile ("DYSEKT");
 }
 static juce::File getUserSettingsFile() { return getSettingsDir().getChildFile ("settings.yaml"); }
 static juce::File getThemesDir() { return getSettingsDir().getChildFile ("themes"); }
 
 // ========================= CLASS CONSTRUCTOR ==========================
 DysektEditor::DysektEditor (DysektProcessor& p)
- : AudioProcessorEditor (p),
- processor (p),
- logoBar (p),
- headerBar (p),
- sliceLcd (p),
- sliceWaveformLcd (p),
- sliceLane (p),
- waveformView (p),
- waveformOverview (p),
- sliceControlBar(p),
- actionPanel (p, waveformView),
-
- browserPanel (p),
- mixerPanel (p),
- shortcutsPanel (p)
+    : AudioProcessorEditor (p),
+      processor (p),
+      logoBar (p),
+      headerBar (p),
+      sliceLcd (p),
+      sliceWaveformLcd (p),
+      sliceLane (p),
+      waveformView (p),
+      waveformOverview (p),
+      sliceControlBar (p),
+      actionPanel (p, waveformView),
+      padGridView (p),
+      browserPanel (p),
+      mixerPanel (p),
+      shortcutsPanel (p)
 {
- juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
- setLookAndFeel (&lnf);
+    juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
+    setLookAndFeel (&lnf);
 
- addAndMakeVisible (logoBar);
- addAndMakeVisible (headerBar);
+    addAndMakeVisible (logoBar);
+    addAndMakeVisible (headerBar);
 
- addAndMakeVisible (sliceLcd);
- addAndMakeVisible (sliceWaveformLcd);
- if (auto* cf = headerBar.getControlFrame())
- addAndMakeVisible (*cf);
+    addAndMakeVisible (sliceLcd);
+    addAndMakeVisible (sliceWaveformLcd);
+    if (auto* cf = headerBar.getControlFrame())
+        addAndMakeVisible (*cf);
 
- addAndMakeVisible (sliceLane);
- addAndMakeVisible (waveformView);
- addAndMakeVisible (waveformOverview);
- addAndMakeVisible (sliceControlBar);
- addAndMakeVisible (actionPanel);
+    addAndMakeVisible (sliceLane);
+    addAndMakeVisible (waveformView);
+    addAndMakeVisible (waveformOverview);
+    addAndMakeVisible (sliceControlBar);
+    addAndMakeVisible (actionPanel);
 
- browserPanel.setVisible (false);
- addChildComponent (browserPanel);
- mixerPanel.setVisible (false);
- addChildComponent (mixerPanel);
- shortcutsPanel.setVisible (false);
- addChildComponent (shortcutsPanel);
- shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
- shortcutsPanel.onThemeRequest = [this]
- {
-     // Close the shortcuts panel first so the theme editor gets full focus.
-     shortcutsPanel.setVisible (false);
-     toggleThemeEditor();
- };
+    // Pad grid — starts hidden; shown when uiMode == 1
+    padGridView.setVisible (false);
+    addChildComponent (padGridView);
 
- sliceLane.setWaveformView (&waveformView);
+    browserPanel.setVisible (false);
+    addChildComponent (browserPanel);
+    mixerPanel.setVisible (false);
+    addChildComponent (mixerPanel);
+    shortcutsPanel.setVisible (false);
+    addChildComponent (shortcutsPanel);
+    shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
+    shortcutsPanel.onThemeRequest = [this]
+    {
+        shortcutsPanel.setVisible (false);
+        toggleThemeEditor();
+    };
+    // Interface mode toggle — switching routes through setUiMode() so the
+    // original waveform UI is never destroyed, just hidden.
+    shortcutsPanel.onUiModeChanged = [this] (int mode) { setUiMode (mode); };
 
- browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
- browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
- waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
- waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
- waveformView.onRenameRequest   = [this] (int sliceIdx, const juce::String& currentName)
- {
-     renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
-     addAndMakeVisible (*renameOverlay);
-     renameOverlay->setBounds (getLocalBounds());
-     renameOverlay->toFront (true);
-     renameOverlay->onResult = [this, sliceIdx] (const juce::String& newName, bool cancelled)
-     {
-         renameOverlay.reset();
-         if (! cancelled)
-         {
-             DysektProcessor::Command cmd;
-             cmd.type        = DysektProcessor::CmdSetSliceName;
-             cmd.intParam1   = sliceIdx;
-             cmd.stringParam = newName;
-             processor.pushCommand (cmd);
-         }
-     };
- };
- waveformView.onTrimApplied = [this] (int s, int e)
- {
- processor.applyTrimToCurrentSample (s, e);
- processor.trimModeActive.store (false, std::memory_order_relaxed);
- waveformView.setTrimMode (false);
- trimSession.reset();
- trimDialog.reset();
- resized();
- };
- waveformView.onTrimCancelled = [this]
- {
- processor.trimModeActive.store (false, std::memory_order_relaxed);
- waveformView.setTrimMode (false);
- trimSession.reset();
- trimDialog.reset();
- resized();
- };
+    sliceLane.setWaveformView (&waveformView);
 
- headerBar.onBodeToggle = [this] { toggleMixerPanel(); };
- headerBar.onBrowserToggle = [this] { toggleBrowserPanel(); };
- headerBar.onWaveToggle = [this] { toggleSoftWave(); };
- headerBar.onMidiFollowToggle = [this] { toggleMidiFollow(); };
- headerBar.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
+    browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
+    browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
+    waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
+    waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
+    waveformView.onRenameRequest   = [this] (int sliceIdx, const juce::String& currentName)
+    {
+        renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
+        addAndMakeVisible (*renameOverlay);
+        renameOverlay->setBounds (getLocalBounds());
+        renameOverlay->toFront (true);
+        renameOverlay->onResult = [this, sliceIdx] (const juce::String& newName, bool cancelled)
+        {
+            renameOverlay.reset();
+            if (! cancelled)
+            {
+                DysektProcessor::Command cmd;
+                cmd.type        = DysektProcessor::CmdSetSliceName;
+                cmd.intParam1   = sliceIdx;
+                cmd.stringParam = newName;
+                processor.pushCommand (cmd);
+            }
+        };
+    };
+    waveformView.onTrimApplied = [this] (int s, int e)
+    {
+        processor.applyTrimToCurrentSample (s, e);
+        processor.trimModeActive.store (false, std::memory_order_relaxed);
+        waveformView.setTrimMode (false);
+        trimSession.reset();
+        trimDialog.reset();
+        resized();
+    };
+    waveformView.onTrimCancelled = [this]
+    {
+        processor.trimModeActive.store (false, std::memory_order_relaxed);
+        waveformView.setTrimMode (false);
+        trimSession.reset();
+        trimDialog.reset();
+        resized();
+    };
 
- ensureDefaultThemes();
- loadUserSettings();
+    headerBar.onBodeToggle = [this] { toggleMixerPanel(); };
+    headerBar.onBrowserToggle = [this] { toggleBrowserPanel(); };
+    headerBar.onWaveToggle = [this] { toggleSoftWave(); };
+    headerBar.onMidiFollowToggle = [this] { toggleMidiFollow(); };
+    headerBar.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
 
- if (processor.sampleData.getSnapshot() == nullptr)
- processor.loadDefaultSampleIfNeeded();
+    ensureDefaultThemes();
+    loadUserSettings();
 
- float apvtsScale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
- if (apvtsScale == 1.0f && savedScale > 0.0f && savedScale != apvtsScale)
- {
- if (auto* param = processor.apvts.getParameter (ParamIds::uiScale))
- param->setValueNotifyingHost (param->convertTo0to1 (savedScale));
- }
+    if (processor.sampleData.getSnapshot() == nullptr)
+        processor.loadDefaultSampleIfNeeded();
 
- setWantsKeyboardFocus (true);
- setResizable (true, false);
- setResizeLimits (kBaseW, 650, 3840, 2160);
- setSize (kBaseW, kTotalH);
- lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
- startTimerHz (30);
+    float apvtsScale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+    if (apvtsScale == 1.0f && savedScale > 0.0f && savedScale != apvtsScale)
+    {
+        if (auto* param = processor.apvts.getParameter (ParamIds::uiScale))
+            param->setValueNotifyingHost (param->convertTo0to1 (savedScale));
+    }
+
+    setWantsKeyboardFocus (true);
+    setResizable (true, false);
+    setResizeLimits (kBaseW, 650, 3840, 2160);
+    setSize (kBaseW, kTotalH);
+    lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
+    startTimerHz (30);
 }
 
 DysektEditor::~DysektEditor()
 {
- juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
- setLookAndFeel (nullptr);
+    juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+    setLookAndFeel (nullptr);
 }
 
 int DysektEditor::computeTotalHeight() const { return kTotalH; }
 
+// ── Interface mode switch ─────────────────────────────────────────────────────
+void DysektEditor::setUiMode (int mode)
+{
+    if (uiMode == mode) return;
+    uiMode = mode;
+
+    // Persist the new mode
+    float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+    saveUserSettings (scale, getTheme().name);
+
+    resized();
+    repaint();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 void DysektEditor::toggleBrowserPanel()
 {
- if (browserOpen) {
- browserOpen = false;
- browserPanel.setVisible (false);
- headerBar.setBrowserActive (false);
- } else {
- if (mixerOpen) {
- mixerOpen = false;
- mixerPanel.setVisible (false);
- headerBar.setBodeActive (false);
- }
- browserOpen = true;
- browserPanel.setVisible (true);
- headerBar.setBrowserActive (true);
- }
- resized(); repaint(); resized(); repaint();
+    if (browserOpen) {
+        browserOpen = false;
+        browserPanel.setVisible (false);
+        headerBar.setBrowserActive (false);
+    } else {
+        if (mixerOpen) {
+            mixerOpen = false;
+            mixerPanel.setVisible (false);
+            headerBar.setBodeActive (false);
+        }
+        browserOpen = true;
+        browserPanel.setVisible (true);
+        headerBar.setBrowserActive (true);
+    }
+    resized(); repaint(); resized(); repaint();
 }
 
 void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
 {
- if (isRelink) {
- processor.loadFileAsync (file);
- return;
- }
- auto ext = file.getFileExtension().toLowerCase();
- if (ext == ".sf2" || ext == ".sfz") {
- processor.loadSoundFontAsync (file);
- return;
- }
- const int pref = processor.trimPreference.load (std::memory_order_relaxed);
- if (pref == DysektProcessor::TrimPrefNever) {
- processor.loadFileAsync (file);
- processor.zoom.store (1.0f);
- processor.scroll.store (0.0f);
- return;
- }
- if (pref == DysektProcessor::TrimPrefAsk) {
+    if (isRelink) {
+        processor.loadFileAsync (file);
+        return;
+    }
+    auto ext = file.getFileExtension().toLowerCase();
+    if (ext == ".sf2" || ext == ".sfz") {
+        processor.loadSoundFontAsync (file);
+        return;
+    }
+    const int pref = processor.trimPreference.load (std::memory_order_relaxed);
+    if (pref == DysektProcessor::TrimPrefNever) {
+        processor.loadFileAsync (file);
+        processor.zoom.store (1.0f);
+        processor.scroll.store (0.0f);
+        return;
+    }
+    if (pref == DysektProcessor::TrimPrefAsk) {
         juce::AudioFormatManager fm;
         fm.registerBasicFormats();
         std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
@@ -186,14 +206,12 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
 
         if (duration < 5.0)
         {
-            // Short sample — load directly, no trim prompt
             processor.loadFileAsync (file);
             processor.zoom.store (1.0f);
             processor.scroll.store (0.0f);
             return;
         }
 
-        // Long sample (≥5s) — ask inside the plugin (themed, no native OS dialog)
         confirmOverlay = std::make_unique<ConfirmOverlay> (
             "Trim Sample?",
             "This sample is long.  Would you like to trim it before slicing?",
@@ -221,84 +239,83 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
 
 void DysektEditor::showTrimMode (const juce::File& file)
 {
- trimSession = std::make_unique<TrimSession>();
- trimSession->file = file;
- trimSession->active = false;
+    trimSession = std::make_unique<TrimSession>();
+    trimSession->file = file;
+    trimSession->active = false;
 
- processor.loadFileAsync (file);
- processor.zoom.store (1.0f);
- processor.scroll.store (0.0f);
+    processor.loadFileAsync (file);
+    processor.zoom.store (1.0f);
+    processor.scroll.store (0.0f);
 }
 
 void DysektEditor::toggleSoftWave()
 {
- waveformMode = (waveformMode + 1) % 8;
- waveformView.setWaveformMode (waveformMode);
- waveformOverview.setWaveformMode (waveformMode);
- actionPanel.setWaveActive (waveformMode != 0);
- headerBar.setBrowserActive (browserOpen);
- headerBar.setWaveMode (waveformMode);
- float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
- saveUserSettings (scale, getTheme().name);
+    waveformMode = (waveformMode + 1) % 8;
+    waveformView.setWaveformMode (waveformMode);
+    waveformOverview.setWaveformMode (waveformMode);
+    actionPanel.setWaveActive (waveformMode != 0);
+    headerBar.setBrowserActive (browserOpen);
+    headerBar.setWaveMode (waveformMode);
+    float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+    saveUserSettings (scale, getTheme().name);
 }
 
 void DysektEditor::toggleMidiFollow()
 {
- const bool newVal = ! processor.midiSelectsSlice.load();
- processor.midiSelectsSlice.store (newVal);
- headerBar.setMidiFollowActive (newVal);
+    const bool newVal = ! processor.midiSelectsSlice.load();
+    processor.midiSelectsSlice.store (newVal);
+    headerBar.setMidiFollowActive (newVal);
 }
 
 void DysektEditor::toggleShortcutsPanel()
 {
- const bool show = ! shortcutsPanel.isVisible();
- shortcutsPanel.setVisible (show);
- if (show)
- {
- shortcutsPanel.setBounds (getLocalBounds());
- shortcutsPanel.toFront (true);
- shortcutsPanel.grabKeyboardFocus();
- }
+    const bool show = ! shortcutsPanel.isVisible();
+    // Sync the current mode into the panel before showing it
+    shortcutsPanel.currentUiMode = uiMode;
+    shortcutsPanel.setVisible (show);
+    if (show)
+    {
+        shortcutsPanel.setBounds (getLocalBounds());
+        shortcutsPanel.toFront (true);
+        shortcutsPanel.grabKeyboardFocus();
+    }
 }
 
 void DysektEditor::toggleThemeEditor()
 {
- if (themeEditorPanel != nullptr)
- {
-     themeEditorPanel.reset();
-     repaint();
-     return;
- }
+    if (themeEditorPanel != nullptr)
+    {
+        themeEditorPanel.reset();
+        repaint();
+        return;
+    }
 
- themeEditorPanel = std::make_unique<ThemeEditorPanel> (getThemesDir());
+    themeEditorPanel = std::make_unique<ThemeEditorPanel> (getThemesDir());
 
- // Live preview: apply colour changes immediately while editing.
- themeEditorPanel->onThemeChanged = [this] (const ThemeData& t)
- {
-     setTheme (t);
-     processor.sliceManager.setSlicePalette (t.slicePalette);
-     repaint();
- };
+    themeEditorPanel->onThemeChanged = [this] (const ThemeData& t)
+    {
+        setTheme (t);
+        processor.sliceManager.setSlicePalette (t.slicePalette);
+        repaint();
+    };
 
- // After a save, persist the theme name to settings and refresh the
- // header-bar popup list so the new theme appears there too.
- themeEditorPanel->onThemeSaved = [this] (const juce::String& name)
- {
-     processor.sliceManager.setSlicePalette (getTheme().slicePalette);
-     saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), name);
-     repaint();
- };
+    themeEditorPanel->onThemeSaved = [this] (const juce::String& name)
+    {
+        processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+        saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), name);
+        repaint();
+    };
 
- themeEditorPanel->onDismiss = [this] { toggleThemeEditor(); };
+    themeEditorPanel->onDismiss = [this] { toggleThemeEditor(); };
 
- addAndMakeVisible (*themeEditorPanel);
- themeEditorPanel->setBounds (getLocalBounds());
- themeEditorPanel->toFront (true);
- themeEditorPanel->grabKeyboardFocus();
- repaint();
+    addAndMakeVisible (*themeEditorPanel);
+    themeEditorPanel->setBounds (getLocalBounds());
+    themeEditorPanel->toFront (true);
+    themeEditorPanel->grabKeyboardFocus();
+    repaint();
 }
 
-// ── Helper: compute the waveform outer frame rectangle ──────────────────────
+// ── Waveform frame rect helper ────────────────────────────────────────────────
 static juce::Rectangle<float> waveformFrameRect (const DysektEditor& ed,
                                                    const juce::Rectangle<int>& wvBounds,
                                                    bool hasTrimDialog)
@@ -315,68 +332,63 @@ static juce::Rectangle<float> waveformFrameRect (const DysektEditor& ed,
 
 void DysektEditor::paint (juce::Graphics& g)
 {
- g.fillAll (getTheme().background);
- if (waveformView.isVisible() && waveformView.getHeight() > 0)
- {
- const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
+    g.fillAll (getTheme().background);
 
- // Outer shell gradient fill
- juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
- juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
- g.setGradientFill (outerGrad);
- g.fillRoundedRectangle (outerF, 4.0f);
+    // Only draw the waveform CRT frame decoration in waveform mode
+    const bool wvVisible = (uiMode == 0) && waveformView.isVisible() && waveformView.getHeight() > 0;
 
- // Inner screen fill + scanlines + top glow (drawn here so children paint over them)
- const auto screenF = outerF.reduced (4.0f);
- g.setColour (getTheme().darkBar.darker (0.55f));
- g.fillRoundedRectangle (screenF, 2.0f);
+    if (wvVisible)
+    {
+        const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
 
- g.setColour (juce::Colours::black.withAlpha (0.18f));
- for (int y = juce::roundToInt (screenF.getY()); y < juce::roundToInt (screenF.getBottom()); y += 2)
-     g.drawHorizontalLine (y, screenF.getX(), screenF.getRight());
+        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
+                                        juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
+        g.setGradientFill (outerGrad);
+        g.fillRoundedRectangle (outerF, 4.0f);
 
- juce::ColourGradient glow (getTheme().accent.withAlpha (0.06f), 0.f, screenF.getY(),
- juce::Colours::transparentBlack, 0.f, screenF.getY() + 20.f, false);
- g.setGradientFill (glow);
- g.fillRoundedRectangle (screenF, 2.0f);
- }
+        const auto screenF = outerF.reduced (4.0f);
+        g.setColour (getTheme().darkBar.darker (0.55f));
+        g.fillRoundedRectangle (screenF, 2.0f);
 
+        g.setColour (juce::Colours::black.withAlpha (0.18f));
+        for (int y = juce::roundToInt (screenF.getY()); y < juce::roundToInt (screenF.getBottom()); y += 2)
+            g.drawHorizontalLine (y, screenF.getX(), screenF.getRight());
 
+        juce::ColourGradient glow (getTheme().accent.withAlpha (0.06f), 0.f, screenF.getY(),
+                                   juce::Colours::transparentBlack, 0.f, screenF.getY() + 20.f, false);
+        g.setGradientFill (glow);
+        g.fillRoundedRectangle (screenF, 2.0f);
+    }
 }
 
 void DysektEditor::paintOverChildren (juce::Graphics& g)
 {
-    // Modal overlays (MIDI Learn, Settings, Confirm, Rename) must not have
-    // decorative chrome painted over them.  Skip all frame decoration when any
-    // full-screen overlay is currently active.
     const bool modalActive = (midiLearnBackdrop != nullptr)
                           || shortcutsPanel.isVisible()
-                          || (confirmOverlay    != nullptr)
-                          || (renameOverlay     != nullptr)
-                          || (themeEditorPanel  != nullptr);
-    if (modalActive)
-        return;
+                          || (confirmOverlay   != nullptr)
+                          || (renameOverlay    != nullptr)
+                          || (themeEditorPanel != nullptr);
+    if (modalActive) return;
 
-    if (waveformView.isVisible() && waveformView.getHeight() > 0)
+    const bool wvVisible = (uiMode == 0) && waveformView.isVisible() && waveformView.getHeight() > 0;
+
+    if (wvVisible)
     {
         const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
         const auto ac     = getTheme().accent;
 
-        // Outer glow halo — drawn over children so it's never obscured
         g.setColour (ac.withAlpha (0.18f));
         g.drawRoundedRectangle (outerF.expanded (1.0f), 5.0f, 1.0f);
 
-        // Main accent border
         g.setColour (ac.withAlpha (0.60f));
         g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.5f);
 
-        // Inner screen border
         const auto screenF = outerF.reduced (4.0f);
         g.setColour (ac.withAlpha (0.30f));
         g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
     }
 
-    // ── Logo frame border (over children) ───────────────────────────────────
+    // Logo frame border
     if (logoBar.isVisible() && logoBar.getHeight() > 0)
     {
         const auto ac = getTheme().accent;
@@ -389,7 +401,7 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
         g.drawRoundedRectangle (logoF.reduced (2.0f), 3.5f, 1.0f);
     }
 
-    // ── Full-window accent frame (always on top) ─────────────────────────────
+    // Full-window accent frame
     {
         const auto ac = getTheme().accent;
         const juce::Rectangle<float> win (getLocalBounds().toFloat());
@@ -402,30 +414,23 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
 
 void DysektEditor::resized()
 {
- auto area = juce::Rectangle (0, 0, getWidth(), getHeight());
+    auto area = juce::Rectangle (0, 0, getWidth(), getHeight());
 
- // ── New combined top strip ─────────────────────────────────────────────
- // The old 52px logoBar row and the LCD row are merged into one strip.
- // SliceLcdDisplay (left) and SliceWaveformLcd (right) are taller; the
- // centre column stacks: LogoBar → button row (HeaderBar) → Global Frame.
- const int kTopStripH = kLogoH + kLcdRowH;
- auto topArea = area.removeFromTop (kTopStripH);
- auto topRow = topArea.reduced (kMargin, 4);
+    // ── Top strip ─────────────────────────────────────────────────────────────
+    const int kTopStripH = kLogoH + kLcdRowH;
+    auto topArea = area.removeFromTop (kTopStripH);
+    auto topRow  = topArea.reduced (kMargin, 4);
 
- // Left: SliceLcdDisplay — full strip height
- const int sideW = (topRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
- sliceLcd.setBounds (topRow.removeFromLeft (sideW));
- topRow.removeFromLeft (kMargin);
+    const int sideW = (topRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
+    sliceLcd.setBounds (topRow.removeFromLeft (sideW));
+    topRow.removeFromLeft (kMargin);
 
- // Centre: LogoBar + HeaderBar (same bounds, buttons flank logo) → DualLcdControlFrame (below)
- auto centreCol = topRow.removeFromLeft (kCtrlFrameW);
- auto logoRow = centreCol.removeFromTop (kLogoH);
- logoBar.setBounds (logoRow);
-    // Pin buttons to bottom of centreCol (4 px padding)
+    auto centreCol = topRow.removeFromLeft (kCtrlFrameW);
+    auto logoRow   = centreCol.removeFromTop (kLogoH);
+    logoBar.setBounds (logoRow);
     {
         const int btnBarY = centreCol.getBottom() - kBtnBarH - 4;
         headerBar.setBounds (centreCol.getX(), btnBarY, centreCol.getWidth(), kBtnBarH);
-        // Centre cf between logo bottom and button bar top
         if (auto* cf = headerBar.getControlFrame())
         {
             const int cfY = centreCol.getY() + (btnBarY - centreCol.getY() - kCtrlFrameH) / 2;
@@ -433,414 +438,422 @@ void DysektEditor::resized()
         }
     }
 
- topRow.removeFromLeft (kMargin);
+    topRow.removeFromLeft (kMargin);
+    sliceWaveformLcd.setBounds (topRow);
 
- // Right: SliceWaveformLcd — full kWaveformLcdRowH height for detailed ADSR editing
- sliceWaveformLcd.setBounds (topRow);
+    auto actionArea = area.removeFromTop (kActionH);
+    const int kFX = kMargin;
+    const int kFW = getWidth() - kMargin * 2;
 
- auto actionArea = area.removeFromTop (kActionH);
- const int kFX = kMargin;
- const int kFW = getWidth() - kMargin * 2;
+    area.removeFromBottom (kMargin);
+    const int slotH = (mixerOpen || browserOpen) ? kPanelSlotH : 0;
+    auto slot = area.removeFromBottom (slotH);
+    area.removeFromBottom (kMargin);
 
- // Only reserve panel slot space when a panel is actually open — avoids
- // eating into the waveform area when panels are closed and the user resizes.
- area.removeFromBottom (kMargin);
- const int slotH = (mixerOpen || browserOpen) ? kPanelSlotH : 0;
- auto slot = area.removeFromBottom (slotH);
- area.removeFromBottom (kMargin);
+    if (mixerOpen) {
+        const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
+        auto mb = juce::Rectangle (kFX, slot.getY(), kFW, mh);
+        mixerPanel.setBounds (mb);
+        browserPanel.setBounds ({});
+    }
+    else if (browserOpen) {
+        browserPanel.setBounds (kFX, slot.getY(), kFW, slot.getHeight());
+        mixerPanel.setBounds ({});
+    } else {
+        mixerPanel.setBounds ({});
+        browserPanel.setBounds ({});
+    }
 
- if (mixerOpen) {
- const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
- auto mb = juce::Rectangle (kFX, slot.getY(), kFW, mh);
- mixerPanel.setBounds (mb);
- browserPanel.setBounds ({});
- }
- else if (browserOpen) {
- browserPanel.setBounds (kFX, slot.getY(), kFW, slot.getHeight());
- mixerPanel.setBounds ({});
- } else {
- mixerPanel.setBounds ({});
- browserPanel.setBounds ({});
- }
+    constexpr int kFrameInset   = 4;
+    constexpr int kOverviewH    = 28;
+    constexpr int kInterGap     = kMargin + kFrameInset;
+    constexpr int kOverviewRowH = kInterGap + kOverviewH + kMargin;
 
- // Hide SCB and overview in trim mode; show both otherwise.
- // kInterGap is intentionally kMargin + kFrameInset: the decorative frame
- // border extends kFrameInset px below waveformView.getBottom(), so the gap
- // between that border and the overview strip must be at least kFrameInset
- // larger than kMargin to guarantee clear visual separation.
- constexpr int kFrameInset   = 4;
- constexpr int kOverviewH    = 28;
- constexpr int kInterGap     = kMargin + kFrameInset; // clearance above overview
- constexpr int kOverviewRowH = kInterGap + kOverviewH + kMargin;
+    int overviewTopGuard = area.getBottom();
 
- // Records the Y of the overview row so we can clamp frameBot below it.
- int overviewTopGuard = area.getBottom();
+    if (trimDialog != nullptr) {
+        sliceControlBar.setBounds ({});
+        waveformOverview.setBounds ({});
+    } else {
+        auto scbArea = area.removeFromBottom (kSliceCtrlH);
+        sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
 
- if (trimDialog != nullptr) {
-     sliceControlBar.setBounds ({});
-     waveformOverview.setBounds ({});
- } else {
-     // SCB at the bottom — no extra margin before it, the overview row provides spacing
-     auto scbArea = area.removeFromBottom (kSliceCtrlH);
-     sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
+        auto overviewRow = area.removeFromBottom (kOverviewRowH);
+        const int overviewY = overviewRow.getY() + kInterGap;
+        waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
 
-     // Overview row — kInterGap above, kMargin below
-     auto overviewRow = area.removeFromBottom (kOverviewRowH);
-     const int overviewY = overviewRow.getY() + kInterGap;
-     waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
+        overviewTopGuard = overviewRow.getY();
+    }
 
-     // Waveform frame border must not visually reach this Y coordinate.
-     overviewTopGuard = overviewRow.getY();
- }
+    const int kFrameX  = kFX;
+    const int kFrameW  = kFW;
+    const int frameTop = actionArea.getY();
+    const int frameBot = juce::jmin (area.getBottom(), overviewTopGuard);
+    const int screenX  = kFrameX + kFrameInset;
+    const int screenW  = kFrameW - kFrameInset * 2;
+    const int screenTop = frameTop + kFrameInset;
+    const int screenBot = frameBot - kFrameInset;
 
- const int kFrameX = kFX;
- const int kFrameW = kFW;
- const int frameTop = actionArea.getY();
- // Clamp so the painted frame bottom (= frameBot) never enters the overview row.
- const int frameBot = juce::jmin (area.getBottom(), overviewTopGuard);
- const int screenX = kFrameX + kFrameInset;
- const int screenW = kFrameW - kFrameInset * 2;
- const int screenTop = frameTop + kFrameInset;
- const int screenBot = frameBot - kFrameInset;
+    actionPanel.setBounds ({});
+    int y = screenTop;
+    sliceLane.setBounds ({});
 
- actionPanel.setBounds ({}); // collapsed — buttons moved to waveform right-click menu
- int y = screenTop; // waveform fills full height — no button strip above
+    int trimH = (trimDialog != nullptr) ? kTrimBarH : 0;
+    int h     = juce::jmax (80, screenBot - trimH - y);
 
- // SliceLane is collapsed — waveform absorbs its space (no kSliceLaneH offset)
- sliceLane.setBounds ({});
+    // ── Route the main content area to the active view ────────────────────────
+    if (uiMode == 0)
+    {
+        // Original waveform layout — unchanged
+        waveformView.setVisible (true);
+        waveformView.setBounds (juce::Rectangle (screenX, y, screenW, h));
 
- int trimH = (trimDialog != nullptr) ? kTrimBarH : 0;
- int h = juce::jmax (80, screenBot - trimH - y);
- waveformView.setBounds (juce::Rectangle (screenX, y, screenW, h));
- if (trimDialog != nullptr)
- trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
- if (shortcutsPanel.isVisible())
- shortcutsPanel.setBounds (getLocalBounds());
+        padGridView.setVisible (false);
+        padGridView.setBounds ({});
+    }
+    else
+    {
+        // Pad grid layout
+        padGridView.setVisible (true);
+        padGridView.setBounds (juce::Rectangle (screenX, y, screenW, h));
 
- if (midiLearnBackdrop != nullptr)
- midiLearnBackdrop->setBounds (getLocalBounds());
- if (midiLearnDialog != nullptr)
- midiLearnDialog->setBounds (getLocalBounds().reduced (40));
- if (confirmOverlay != nullptr)
- confirmOverlay->setBounds (getLocalBounds());
- if (themeEditorPanel != nullptr)
- themeEditorPanel->setBounds (getLocalBounds());
+        waveformView.setVisible (false);
+        waveformView.setBounds ({});
+    }
+
+    if (trimDialog != nullptr)
+        trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
+
+    if (shortcutsPanel.isVisible())
+        shortcutsPanel.setBounds (getLocalBounds());
+
+    if (midiLearnBackdrop != nullptr)
+        midiLearnBackdrop->setBounds (getLocalBounds());
+    if (midiLearnDialog != nullptr)
+        midiLearnDialog->setBounds (getLocalBounds().reduced (40));
+    if (confirmOverlay != nullptr)
+        confirmOverlay->setBounds (getLocalBounds());
+    if (themeEditorPanel != nullptr)
+        themeEditorPanel->setBounds (getLocalBounds());
 }
 
 void DysektEditor::toggleMixerPanel()
 {
- if (mixerOpen) {
- mixerOpen = false;
- mixerPanel.setVisible (false);
- headerBar.setBodeActive (false);
- } else {
- if (browserOpen) {
- browserOpen = false;
- browserPanel.setVisible (false);
- headerBar.setBrowserActive (false);
- }
- mixerOpen = true;
- mixerPanel.setVisible (true);
- headerBar.setBodeActive (true);
- }
- resized(); repaint(); resized(); repaint();
+    if (mixerOpen) {
+        mixerOpen = false;
+        mixerPanel.setVisible (false);
+        headerBar.setBodeActive (false);
+    } else {
+        if (browserOpen) {
+            browserOpen = false;
+            browserPanel.setVisible (false);
+            headerBar.setBrowserActive (false);
+        }
+        mixerOpen = true;
+        mixerPanel.setVisible (true);
+        headerBar.setBodeActive (true);
+    }
+    resized(); repaint(); resized(); repaint();
 }
 
-// \-\- KEYBOARD SHORTCUTS --
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
 bool DysektEditor::keyPressed (const juce::KeyPress& key)
 {
- auto mods = key.getModifiers();
- int code = key.getKeyCode();
+    auto mods = key.getModifiers();
+    int code  = key.getKeyCode();
 
- if (code == 'Z' && mods.isCommandDown() && mods.isShiftDown())
- { DysektProcessor::Command c; c.type = DysektProcessor::CmdRedo; processor.pushCommand (c); return true; }
- if (code == 'Z' && mods.isCommandDown())
- { DysektProcessor::Command c; c.type = DysektProcessor::CmdUndo; processor.pushCommand (c); return true; }
+    if (code == 'Z' && mods.isCommandDown() && mods.isShiftDown())
+    { DysektProcessor::Command c; c.type = DysektProcessor::CmdRedo; processor.pushCommand (c); return true; }
+    if (code == 'Z' && mods.isCommandDown())
+    { DysektProcessor::Command c; c.type = DysektProcessor::CmdUndo; processor.pushCommand (c); return true; }
 
- if (mods.isCommandDown()) return false;
+    if (mods.isCommandDown()) return false;
 
- if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
- { toggleShortcutsPanel(); return true; }
+    if (code == juce::KeyPress::escapeKey && shortcutsPanel.isVisible())
+    { toggleShortcutsPanel(); return true; }
 
- if (code == '?') { toggleShortcutsPanel(); return true; }
+    if (code == '?') { toggleShortcutsPanel(); return true; }
 
- if (code == 'M')
- {
- if (midiLearnDialog != nullptr)
- {
- midiLearnDialog.reset();
- midiLearnBackdrop.reset();
- resized();
- }
- else
- {
- struct Backdrop : public juce::Component {
-     void paint (juce::Graphics& g) override {
-         g.fillAll (juce::Colours::black.withAlpha (0.55f));
-     }
- };
- midiLearnBackdrop = std::make_unique<Backdrop>();
- addAndMakeVisible (*midiLearnBackdrop);
- midiLearnBackdrop->toFront (false);
+    if (code == 'M')
+    {
+        if (midiLearnDialog != nullptr)
+        {
+            midiLearnDialog.reset();
+            midiLearnBackdrop.reset();
+            resized();
+        }
+        else
+        {
+            struct Backdrop : public juce::Component {
+                void paint (juce::Graphics& g) override {
+                    g.fillAll (juce::Colours::black.withAlpha (0.55f));
+                }
+            };
+            midiLearnBackdrop = std::make_unique<Backdrop>();
+            addAndMakeVisible (*midiLearnBackdrop);
+            midiLearnBackdrop->toFront (false);
 
- midiLearnDialog = std::make_unique<MidiLearnDialog> (
- processor.midiLearn,
- processor,
- [this] { midiLearnDialog.reset(); midiLearnBackdrop.reset(); resized(); }
- );
- addAndMakeVisible (*midiLearnDialog);
- midiLearnDialog->toFront (true);
- resized();
- }
- return true;
- }
+            midiLearnDialog = std::make_unique<MidiLearnDialog> (
+                processor.midiLearn,
+                processor,
+                [this] { midiLearnDialog.reset(); midiLearnBackdrop.reset(); resized(); }
+            );
+            addAndMakeVisible (*midiLearnDialog);
+            midiLearnDialog->toFront (true);
+            resized();
+        }
+        return true;
+    }
 
- if (code == 'L')
- {
- DysektProcessor::Command c;
- c.type = processor.lazyChop.isActive() ? DysektProcessor::CmdLazyChopStop : DysektProcessor::CmdLazyChopStart;
- processor.pushCommand (c); repaint(); return true;
- }
- if (code == juce::KeyPress::deleteKey)
- {
- const auto& ui = processor.getUiSliceSnapshot();
- if (ui.selectedSlice >= 0)
- { DysektProcessor::Command c; c.type = DysektProcessor::CmdDeleteSlice; c.intParam1 = ui.selectedSlice; processor.pushCommand (c); }
- return true;
- }
- if (code == 'F') { toggleMidiFollow(); return true; }
+    if (code == 'L')
+    {
+        DysektProcessor::Command c;
+        c.type = processor.lazyChop.isActive() ? DysektProcessor::CmdLazyChopStop
+                                                : DysektProcessor::CmdLazyChopStart;
+        processor.pushCommand (c); repaint(); return true;
+    }
+    if (code == juce::KeyPress::deleteKey)
+    {
+        const auto& ui = processor.getUiSliceSnapshot();
+        if (ui.selectedSlice >= 0)
+        { DysektProcessor::Command c; c.type = DysektProcessor::CmdDeleteSlice; c.intParam1 = ui.selectedSlice; processor.pushCommand (c); }
+        return true;
+    }
+    if (code == 'F') { toggleMidiFollow(); return true; }
 
- if (code == juce::KeyPress::rightKey)
- {
- const auto& ui = processor.getUiSliceSnapshot();
- if (ui.numSlices > 0)
- { DysektProcessor::Command c; c.type = DysektProcessor::CmdSelectSlice; c.intParam1 = juce::jlimit (0, ui.numSlices-1, ui.selectedSlice+1); processor.pushCommand (c); repaint(); }
- return true;
- }
- if (code == juce::KeyPress::leftKey)
- {
- const auto& ui = processor.getUiSliceSnapshot();
- if (ui.numSlices > 0)
- { DysektProcessor::Command c; c.type = DysektProcessor::CmdSelectSlice; c.intParam1 = juce::jlimit (0, ui.numSlices-1, ui.selectedSlice-1); processor.pushCommand (c); repaint(); }
- return true;
- }
+    if (code == juce::KeyPress::rightKey)
+    {
+        const auto& ui = processor.getUiSliceSnapshot();
+        if (ui.numSlices > 0)
+        { DysektProcessor::Command c; c.type = DysektProcessor::CmdSelectSlice; c.intParam1 = juce::jlimit (0, ui.numSlices-1, ui.selectedSlice+1); processor.pushCommand (c); repaint(); }
+        return true;
+    }
+    if (code == juce::KeyPress::leftKey)
+    {
+        const auto& ui = processor.getUiSliceSnapshot();
+        if (ui.numSlices > 0)
+        { DysektProcessor::Command c; c.type = DysektProcessor::CmdSelectSlice; c.intParam1 = juce::jlimit (0, ui.numSlices-1, ui.selectedSlice-1); processor.pushCommand (c); repaint(); }
+        return true;
+    }
 
- return false;
+    return false;
 }
 
 void DysektEditor::timerCallback()
 {
- bool uiChanged = false, viewportChanged = false;
- const bool previewActive = waveformView.hasActiveSlicePreview();
- const bool waveformInteracting = waveformView.isInteracting();
+    bool uiChanged = false, viewportChanged = false;
+    const bool previewActive     = waveformView.hasActiveSlicePreview();
+    const bool waveformInteracting = waveformView.isInteracting();
 
- const auto snapshotVersion = (uint32_t) processor.getUiSliceSnapshotVersion();
- if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
+    const auto snapshotVersion = (uint32_t) processor.getUiSliceSnapshotVersion();
+    if (snapshotVersion != lastUiSnapshotVersion) { lastUiSnapshotVersion = snapshotVersion; uiChanged = true; }
 
- {
- const bool procState = processor.midiSelectsSlice.load (std::memory_order_relaxed);
- headerBar.setMidiFollowActive (procState);
- }
+    {
+        const bool procState = processor.midiSelectsSlice.load (std::memory_order_relaxed);
+        headerBar.setMidiFollowActive (procState);
+    }
 
- {
- const int curSlices = processor.sliceManager.getNumSlices();
- if (lastNumSlices == 0 && curSlices > 0)
- {
- processor.midiSelectsSlice.store (true, std::memory_order_relaxed);
- headerBar.setMidiFollowActive (true);
- }
- lastNumSlices = curSlices;
- }
+    {
+        const int curSlices = processor.sliceManager.getNumSlices();
+        if (lastNumSlices == 0 && curSlices > 0)
+        {
+            processor.midiSelectsSlice.store (true, std::memory_order_relaxed);
+            headerBar.setMidiFollowActive (true);
+        }
+        lastNumSlices = curSlices;
+    }
 
- const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
- if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
+    const float zoom = processor.zoom.load(), scroll = processor.scroll.load();
+    if (zoom != lastZoom || scroll != lastScroll) { lastZoom = zoom; lastScroll = scroll; viewportChanged = true; }
 
- // ── Waveform MIDI follow: scroll viewport to keep triggered slice visible when zoomed ──
- if (processor.midiSelectsSlice.load (std::memory_order_relaxed))
- {
-     const int followSlice = processor.midiFollowTriggeredSlice.load (std::memory_order_relaxed);
-     if (followSlice >= 0 && followSlice != lastMidiFollowSlice)
-     {
-         lastMidiFollowSlice = followSlice;
-         const float z = processor.zoom.load();
-         if (z > 1.0f)
-         {
-             auto snap = processor.sampleData.getSnapshot();
-             if (snap != nullptr && snap->buffer.getNumSamples() > 0)
-             {
-                 const int numFrames  = snap->buffer.getNumSamples();
-                 const int visibleLen = (int) ((float) numFrames / z);
-                 const int maxStart   = numFrames - visibleLen;
-                 const auto& uiSnap   = processor.getUiSliceSnapshot();
-                 if (maxStart > 0 && followSlice < uiSnap.numSlices)
-                 {
-                     const int sliceStart = uiSnap.slices[(size_t) followSlice].startSample;
-                     const int sliceEnd   = (followSlice + 1 < uiSnap.numSlices)
-                                              ? uiSnap.slices[(size_t)(followSlice + 1)].startSample
-                                              : numFrames;
-                     const int sliceCenter = (sliceStart + sliceEnd) / 2;
-                     const int newStart    = juce::jlimit (0, maxStart, sliceCenter - visibleLen / 2);
-                     processor.scroll.store ((float) newStart / (float) maxStart,
-                                             std::memory_order_relaxed);
-                     viewportChanged = true;
-                 }
-             }
-         }
-     }
- }
+    // MIDI follow: scroll waveform viewport
+    if (processor.midiSelectsSlice.load (std::memory_order_relaxed))
+    {
+        const int followSlice = processor.midiFollowTriggeredSlice.load (std::memory_order_relaxed);
+        if (followSlice >= 0 && followSlice != lastMidiFollowSlice)
+        {
+            lastMidiFollowSlice = followSlice;
+            const float z = processor.zoom.load();
+            if (z > 1.0f)
+            {
+                auto snap = processor.sampleData.getSnapshot();
+                if (snap != nullptr && snap->buffer.getNumSamples() > 0)
+                {
+                    const int numFrames  = snap->buffer.getNumSamples();
+                    const int visibleLen = (int) ((float) numFrames / z);
+                    const int maxStart   = numFrames - visibleLen;
+                    const auto& uiSnap   = processor.getUiSliceSnapshot();
+                    if (maxStart > 0 && followSlice < uiSnap.numSlices)
+                    {
+                        const int sliceStart  = uiSnap.slices[(size_t) followSlice].startSample;
+                        const int sliceEnd    = (followSlice + 1 < uiSnap.numSlices)
+                                                  ? uiSnap.slices[(size_t)(followSlice + 1)].startSample
+                                                  : numFrames;
+                        const int sliceCenter = (sliceStart + sliceEnd) / 2;
+                        const int newStart    = juce::jlimit (0, maxStart, sliceCenter - visibleLen / 2);
+                        processor.scroll.store ((float) newStart / (float) maxStart,
+                                                std::memory_order_relaxed);
+                        viewportChanged = true;
+                    }
+                }
+            }
+        }
+    }
 
- // Sync trim mode state to ActionPanel — disables/re-enables slice buttons
- {
- const bool trimNow = processor.trimModeActive.load (std::memory_order_relaxed);
- if (trimNow != lastTrimActive)
- {
- lastTrimActive = trimNow;
- actionPanel.setTrimActive (trimNow);
- }
- }
+    {
+        const bool trimNow = processor.trimModeActive.load (std::memory_order_relaxed);
+        if (trimNow != lastTrimActive)
+        {
+            lastTrimActive = trimNow;
+            actionPanel.setTrimActive (trimNow);
+        }
+    }
 
     float userScale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
-    float scale = userScale * hostScale;
- if (scaleDirty || scale != lastScale)
- {
- scaleDirty = false; lastScale = scale;
- setTransform (juce::AffineTransform::scale (scale));
- DysektLookAndFeel::setMenuScale (scale);
- saveUserSettings (scale, getTheme().name);
- uiChanged = true;
- }
+    float scale     = userScale * hostScale;
+    if (scaleDirty || scale != lastScale)
+    {
+        scaleDirty = false; lastScale = scale;
+        setTransform (juce::AffineTransform::scale (scale));
+        DysektLookAndFeel::setMenuScale (scale);
+        saveUserSettings (scale, getTheme().name);
+        uiChanged = true;
+    }
 
- const bool playbackActive = std::any_of (processor.voicePool.voicePositions.begin(),
- processor.voicePool.voicePositions.end(),
- [] (const std::atomic<float>& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
+    const bool playbackActive = std::any_of (processor.voicePool.voicePositions.begin(),
+                                              processor.voicePool.voicePositions.end(),
+                                              [] (const std::atomic<float>& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
 
- const bool waveformAnimating = waveformInteracting || previewActive
- || playbackActive || processor.lazyChop.isActive()
- || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
- const bool waveformNeedsRepaint = uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating;
- const bool laneNeedsRepaint = uiChanged || viewportChanged || previewActive || lastPreviewActive;
+    const bool waveformAnimating = waveformInteracting || previewActive
+                                || playbackActive || processor.lazyChop.isActive()
+                                || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
+    const bool waveformNeedsRepaint = (uiMode == 0) && (uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating);
+    const bool laneNeedsRepaint     = (uiMode == 0) && (uiChanged || viewportChanged || previewActive || lastPreviewActive);
 
- lastWaveformAnimating = waveformAnimating;
- lastPreviewActive = previewActive;
+    lastWaveformAnimating = waveformAnimating;
+    lastPreviewActive     = previewActive;
 
- if (trimSession != nullptr && ! trimSession->active)
- {
- auto snap = processor.sampleData.getSnapshot();
- if (snap != nullptr && snap->filePath == trimSession->file.getFullPathName())
- {
- trimSession->active = true;
- const int totalFrames = snap->buffer.getNumSamples();
- waveformView.enterTrimMode (0, totalFrames);
+    if (trimSession != nullptr && ! trimSession->active)
+    {
+        auto snap = processor.sampleData.getSnapshot();
+        if (snap != nullptr && snap->filePath == trimSession->file.getFullPathName())
+        {
+            trimSession->active = true;
+            const int totalFrames = snap->buffer.getNumSamples();
+            waveformView.enterTrimMode (0, totalFrames);
 
- processor.trimModeActive.store (true, std::memory_order_relaxed);
- processor.trimRegionStart.store (0, std::memory_order_relaxed);
- processor.trimRegionEnd .store (totalFrames, std::memory_order_relaxed);
+            processor.trimModeActive.store (true, std::memory_order_relaxed);
+            processor.trimRegionStart.store (0, std::memory_order_relaxed);
+            processor.trimRegionEnd  .store (totalFrames, std::memory_order_relaxed);
 
- if (trimDialog == nullptr)
- {
- trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
- addAndMakeVisible (*trimDialog);
- trimDialog->toFront (false);
- resized();
- }
- }
- }
+            if (trimDialog == nullptr)
+            {
+                trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
+                addAndMakeVisible (*trimDialog);
+                trimDialog->toFront (false);
+                resized();
+            }
+        }
+    }
 
- if (processor.trimModeActive.load (std::memory_order_relaxed)
- && ! waveformView.isTrimDragging())
- {
- const int procStart = processor.trimRegionStart.load (std::memory_order_relaxed);
- const int procEnd = processor.trimRegionEnd .load (std::memory_order_relaxed);
- if (procStart != waveformView.getTrimIn() || procEnd != waveformView.getTrimOut())
- waveformView.setTrimPoints (procStart, procEnd);
- }
+    if (processor.trimModeActive.load (std::memory_order_relaxed)
+        && ! waveformView.isTrimDragging())
+    {
+        const int procStart = processor.trimRegionStart.load (std::memory_order_relaxed);
+        const int procEnd   = processor.trimRegionEnd  .load (std::memory_order_relaxed);
+        if (procStart != waveformView.getTrimIn() || procEnd != waveformView.getTrimOut())
+            waveformView.setTrimPoints (procStart, procEnd);
+    }
 
- const int targetHz = waveformAnimating ? 60 : 30;
- if (targetHz != timerHz) { startTimerHz (targetHz); timerHz = targetHz; }
+    const int targetHz = waveformAnimating ? 60 : 30;
+    if (targetHz != timerHz) { startTimerHz (targetHz); timerHz = targetHz; }
 
- if (waveformNeedsRepaint) waveformView.repaint();
- if (laneNeedsRepaint) sliceLane.repaint();
- sliceLcd.repaintLcd();
- sliceWaveformLcd.repaintLcd();
+    if (waveformNeedsRepaint) waveformView.repaint();
+    if (laneNeedsRepaint)     sliceLane.repaint();
 
- // Hide the zoom/overview bar when no sample is loaded
- {
-     const bool hasSample = (processor.sampleData.getSnapshot() != nullptr
-                              && processor.sampleData.getSnapshot()->buffer.getNumSamples() > 0);
-     if (hasSample != waveformOverview.isVisible())
-     {
-         waveformOverview.setVisible (hasSample);
-         resized();
-     }
- }
- if (waveformOverview.isVisible())
-     waveformOverview.repaintOverview();
- if (mixerOpen) mixerPanel.repaint();
+    // Pad grid refresh
+    if (uiMode == 1 && (uiChanged || playbackActive))
+        padGridView.repaintGrid();
 
- headerBar.repaint();
- sliceControlBar.updateMidiLearnPulse();
- sliceControlBar.repaint();
- if (uiChanged) actionPanel.repaint();
- if (mixerOpen) mixerPanel.updateFromSnapshot();
+    sliceLcd.repaintLcd();
+    sliceWaveformLcd.repaintLcd();
+
+    {
+        const bool hasSample = (processor.sampleData.getSnapshot() != nullptr
+                                 && processor.sampleData.getSnapshot()->buffer.getNumSamples() > 0);
+        if (hasSample != waveformOverview.isVisible())
+        {
+            waveformOverview.setVisible (hasSample);
+            resized();
+        }
+    }
+    if (waveformOverview.isVisible())
+        waveformOverview.repaintOverview();
+    if (mixerOpen) mixerPanel.repaint();
+
+    headerBar.repaint();
+    sliceControlBar.updateMidiLearnPulse();
+    sliceControlBar.repaint();
+    if (uiChanged) actionPanel.repaint();
+    if (mixerOpen) mixerPanel.updateFromSnapshot();
 }
 
 void DysektEditor::ensureDefaultThemes()
 {
- auto dir = getThemesDir(); dir.createDirectory();
- auto write = [&] (const juce::String& name, const ThemeData& t)
- {
- auto f = dir.getChildFile (name + ".dsk");
- if (! f.existsAsFile()) f.replaceWithText (t.toThemeFile());
- };
- write ("dark", ThemeData::darkTheme());
- write ("shell", ThemeData::shellTheme());
- write ("lazy", ThemeData::lazyTheme());
- write ("snow", ThemeData::snowTheme());
- write ("ghost", ThemeData::ghostTheme());
- write ("hack", ThemeData::hackTheme());
- write ("midnight", ThemeData::midnightTheme());
- write ("pigments", ThemeData::pigmentsTheme());
- write ("dysekt",   ThemeData::dysektTheme());
- // User-created themes in this directory are intentionally preserved.
+    auto dir = getThemesDir(); dir.createDirectory();
+    auto write = [&] (const juce::String& name, const ThemeData& t)
+    {
+        auto f = dir.getChildFile (name + ".dsk");
+        if (! f.existsAsFile()) f.replaceWithText (t.toThemeFile());
+    };
+    write ("dark",      ThemeData::darkTheme());
+    write ("shell",     ThemeData::shellTheme());
+    write ("lazy",      ThemeData::lazyTheme());
+    write ("snow",      ThemeData::snowTheme());
+    write ("ghost",     ThemeData::ghostTheme());
+    write ("hack",      ThemeData::hackTheme());
+    write ("midnight",  ThemeData::midnightTheme());
+    write ("pigments",  ThemeData::pigmentsTheme());
+    write ("dysekt",    ThemeData::dysektTheme());
 }
 
 juce::StringArray DysektEditor::getAvailableThemes()
 {
- juce::StringArray names;
- for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dsk"))
- {
- auto t = ThemeData::fromThemeFile (f.loadFileAsString());
- if (t.name.isNotEmpty()) names.add (t.name);
- }
- if (names.isEmpty()) { names.add ("dark"); names.add ("shell"); }
- return names;
+    juce::StringArray names;
+    for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dsk"))
+    {
+        auto t = ThemeData::fromThemeFile (f.loadFileAsString());
+        if (t.name.isNotEmpty()) names.add (t.name);
+    }
+    if (names.isEmpty()) { names.add ("dark"); names.add ("shell"); }
+    return names;
 }
 
 void DysektEditor::applyTheme (const juce::String& themeName)
 {
- for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dsk"))
- {
- auto t = ThemeData::fromThemeFile (f.loadFileAsString());
- if (t.name == themeName)
- {
- setTheme (t);
- processor.sliceManager.setSlicePalette (getTheme().slicePalette);
- saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
- repaint(); return;
- }
- }
- if (themeName == "shell") setTheme (ThemeData::shellTheme());
- else if (themeName == "lazy") setTheme (ThemeData::lazyTheme());
- else if (themeName == "snow") setTheme (ThemeData::snowTheme());
- else if (themeName == "ghost") setTheme (ThemeData::ghostTheme());
- else if (themeName == "hack") setTheme (ThemeData::hackTheme());
- else if (themeName == "midnight") setTheme (ThemeData::midnightTheme());
- else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
- else if (themeName == "dysekt")   setTheme (ThemeData::dysektTheme());
- else setTheme (ThemeData::darkTheme());
- processor.sliceManager.setSlicePalette (getTheme().slicePalette);
- saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
- repaint();
+    for (auto& f : getThemesDir().findChildFiles (juce::File::findFiles, false, "*.dsk"))
+    {
+        auto t = ThemeData::fromThemeFile (f.loadFileAsString());
+        if (t.name == themeName)
+        {
+            setTheme (t);
+            processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+            saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
+            repaint(); return;
+        }
+    }
+    if      (themeName == "shell")    setTheme (ThemeData::shellTheme());
+    else if (themeName == "lazy")     setTheme (ThemeData::lazyTheme());
+    else if (themeName == "snow")     setTheme (ThemeData::snowTheme());
+    else if (themeName == "ghost")    setTheme (ThemeData::ghostTheme());
+    else if (themeName == "hack")     setTheme (ThemeData::hackTheme());
+    else if (themeName == "midnight") setTheme (ThemeData::midnightTheme());
+    else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
+    else if (themeName == "dysekt")   setTheme (ThemeData::dysektTheme());
+    else                              setTheme (ThemeData::darkTheme());
+    processor.sliceManager.setSlicePalette (getTheme().slicePalette);
+    saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
+    repaint();
 }
 
 void DysektEditor::setScaleFactor (float newScale)
@@ -851,66 +864,76 @@ void DysektEditor::setScaleFactor (float newScale)
 
 void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)
 {
- auto file = getUserSettingsFile();
- file.getParentDirectory().createDirectory();
+    auto file = getUserSettingsFile();
+    file.getParentDirectory().createDirectory();
 
- file.replaceWithText ("uiScale: " + juce::String (scale, 2)
- + "\\ntheme: " + themeName
- + "\\nwaveStyle: " + juce::String (waveformMode) + "\\n");
+    file.replaceWithText ("uiScale: "   + juce::String (scale, 2)
+                        + "\ntheme: "   + themeName
+                        + "\nwaveStyle: " + juce::String (waveformMode)
+                        + "\nuiMode: "  + juce::String (uiMode) + "\n");
 }
 
 void DysektEditor::loadUserSettings()
 {
- savedScale = -1.0f;
- juce::String themeName = "dark";
- auto file = getUserSettingsFile();
- if (file.existsAsFile())
- {
- for (auto line : juce::StringArray::fromLines (file.loadFileAsString()))
- {
- line = line.trim();
- if (line.startsWith ("uiScale:"))
- { float v = line.fromFirstOccurrenceOf (":", false, false).trim().getFloatValue(); if (v >= 0.5f && v <= 3.0f) savedScale = v; }
- else if (line.startsWith ("theme:"))
- { themeName = line.fromFirstOccurrenceOf (":", false, false).trim(); }
- else if (line.startsWith ("waveStyle:"))
- {
- auto val = line.fromFirstOccurrenceOf (":", false, false).trim();
- if (val == "soft") waveformMode = 1;
- else if (val == "hard") waveformMode = 0;
- else waveformMode = juce::jlimit (0, 7, val.getIntValue());
- }
- }
- }
- applyTheme (themeName);
+    savedScale = -1.0f;
+    juce::String themeName = "dark";
+    auto file = getUserSettingsFile();
+    if (file.existsAsFile())
+    {
+        for (auto line : juce::StringArray::fromLines (file.loadFileAsString()))
+        {
+            line = line.trim();
+            if (line.startsWith ("uiScale:"))
+            {
+                float v = line.fromFirstOccurrenceOf (":", false, false).trim().getFloatValue();
+                if (v >= 0.5f && v <= 3.0f) savedScale = v;
+            }
+            else if (line.startsWith ("theme:"))
+            {
+                themeName = line.fromFirstOccurrenceOf (":", false, false).trim();
+            }
+            else if (line.startsWith ("waveStyle:"))
+            {
+                auto val = line.fromFirstOccurrenceOf (":", false, false).trim();
+                if      (val == "soft") waveformMode = 1;
+                else if (val == "hard") waveformMode = 0;
+                else                   waveformMode = juce::jlimit (0, 7, val.getIntValue());
+            }
+            else if (line.startsWith ("uiMode:"))
+            {
+                auto val = line.fromFirstOccurrenceOf (":", false, false).trim().getIntValue();
+                uiMode = juce::jlimit (0, 1, val);
+            }
+        }
+    }
+    applyTheme (themeName);
 
- waveformView.setWaveformMode (waveformMode);
- waveformOverview.setWaveformMode (waveformMode);
- headerBar.setWaveMode (waveformMode);
- actionPanel.setWaveActive (waveformMode != 0);
+    waveformView.setWaveformMode (waveformMode);
+    waveformOverview.setWaveformMode (waveformMode);
+    headerBar.setWaveMode (waveformMode);
+    actionPanel.setWaveActive (waveformMode != 0);
 
- headerBar.setMidiFollowActive (processor.midiSelectsSlice.load());
+    headerBar.setMidiFollowActive (processor.midiSelectsSlice.load());
 }
 
 bool DysektEditor::isInterestedInFileDrag (const juce::StringArray& files)
 {
- for (auto& f : files)
- {
- auto ext = juce::File (f).getFileExtension().toLowerCase();
- if (ext == ".wav" || ext == ".aif" || ext == ".aiff" ||
- ext == ".ogg" || ext == ".flac" || ext == ".mp3" ||
- ext == ".sf2" || ext == ".sfz")
- return true;
- }
- return false;
+    for (auto& f : files)
+    {
+        auto ext = juce::File (f).getFileExtension().toLowerCase();
+        if (ext == ".wav" || ext == ".aif" || ext == ".aiff" ||
+            ext == ".ogg" || ext == ".flac" || ext == ".mp3" ||
+            ext == ".sf2" || ext == ".sfz")
+            return true;
+    }
+    return false;
 }
 
 void DysektEditor::filesDropped (const juce::StringArray& files, int, int)
 {
- if (files.isEmpty()) return;
-
- juce::File f (files[0]);
- processor.zoom.store (1.0f);
- processor.scroll.store (0.0f);
- showTrimDialog (f);
+    if (files.isEmpty()) return;
+    juce::File f (files[0]);
+    processor.zoom.store (1.0f);
+    processor.scroll.store (0.0f);
+    showTrimDialog (f);
 }

@@ -23,15 +23,16 @@
 #include "ui/SliceWaveformLcd.h"
 #include "ui/WaveformOverview.h"
 
-// -------- Include constants header here:
+// ── Alternate interface (Pad Grid) ────────────────────────────────────────────
+#include "ui/PadGridView.h"
+
+// ── Layout constants ──────────────────────────────────────────────────────────
 #include "ui/PluginEditorConstants.h"
-// ---------------------------------------
 
 class DysektEditor : public juce::AudioProcessorEditor,
                      public juce::FileDragAndDropTarget,
                      private juce::Timer
 {
-// ... rest of your class unchanged ...
 public:
     explicit DysektEditor (DysektProcessor&);
     ~DysektEditor() override;
@@ -54,6 +55,10 @@ public:
 
     void showTrimDialog (const juce::File& file, bool isRelink = false);
     void showTrimMode   (const juce::File& file);
+
+    /// Switch between interface modes.
+    /// 0 = Waveform View (original), 1 = Pad Grid.
+    void setUiMode (int mode);
 
 private:
     void timerCallback() override;
@@ -79,7 +84,12 @@ private:
 
     bool browserOpen = false;
     bool mixerOpen   = false;
-    int  waveformMode = 0;   // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
+    int  waveformMode = 0;  // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
+
+    /// Current interface layout mode.
+    /// 0 = Waveform View (original UI — never overwritten).
+    /// 1 = Pad Grid.
+    int uiMode = 0;
 
     std::unique_ptr<TrimSession>       trimSession;
     std::unique_ptr<TrimDialog>        trimDialog;
@@ -97,11 +107,14 @@ private:
     SliceLcdDisplay  sliceLcd;
     SliceWaveformLcd sliceWaveformLcd;
 
-    SliceLane       sliceLane;
-    WaveformView      waveformView;
-    WaveformOverview  waveformOverview;
-    SliceControlBar   sliceControlBar;
-    ActionPanel     actionPanel;
+    SliceLane        sliceLane;
+    WaveformView     waveformView;
+    WaveformOverview waveformOverview;
+    SliceControlBar  sliceControlBar;
+    ActionPanel      actionPanel;
+
+    // ── Alternate view (Pad Grid) ─────────────────────────────────────────────
+    PadGridView      padGridView;
 
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;

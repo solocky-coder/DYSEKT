@@ -25,7 +25,14 @@ public:
     /// Called when the user clicks "Theme Editor" — opens ThemeEditorPanel.
     std::function<void()> onThemeRequest;
 
-// ... inside class ShortcutsPanel : public juce::Component
+    /// Called when the user selects an interface mode.
+    /// Argument: 0 = Waveform View, 1 = Pad Grid.
+    std::function<void(int)> onUiModeChanged;
+
+    /// Set this to the current UI mode before making the panel visible,
+    /// so the correct radio button appears selected.
+    int currentUiMode = 0;
+
 private:
     DysektProcessor& processor;
 
@@ -46,11 +53,14 @@ private:
     // Trim-preference button hit rects (updated each paint)
     juce::Rectangle<int> trimAlwaysRect, trimNeverRect, trimLongRect;
 
-    void buildShortcutData();
-    void drawTrimPrefsSection (juce::Graphics& g, juce::Rectangle<int>& area);
-    void drawScaleSection     (juce::Graphics& g, juce::Rectangle<int>& area);
-    void updateScaleLcd();
+    // Interface mode hit rects (updated each paint)
+    juce::Rectangle<int> uiModeWaveRect, uiModeGridRect;
 
+    void buildShortcutData();
+    void drawTrimPrefsSection    (juce::Graphics& g, juce::Rectangle<int>& area);
+    void drawScaleSection        (juce::Graphics& g, juce::Rectangle<int>& area);
+    void drawInterfaceSection    (juce::Graphics& g, juce::Rectangle<int>& area);
+    void updateScaleLcd();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShortcutsPanel)
 };

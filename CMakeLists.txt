@@ -75,6 +75,7 @@ target_sources(Dysekt PRIVATE
     src/ui/MidiLearnDialog.cpp
     src/ui/MixerPanel.cpp
     src/ui/ShortcutsPanel.cpp
+    src/ui/PadGridView.cpp
     src/ui/SliceWaveformLcd.cpp
     src/ui/DualLcdControlFrame.cpp
     src/ui/WaveformOverview.cpp
