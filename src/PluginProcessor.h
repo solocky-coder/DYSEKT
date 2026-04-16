@@ -312,6 +312,12 @@ public:
     // Shift-preview request (-2 = idle, -1 = stop, >= 0 = start at position)
     std::atomic<int> shiftPreviewRequest { -2 };
 
+    // ── UI pad-click MIDI injection ───────────────────────────────────────────
+    // Written by the UI thread (PadGridView::mouseDown/Up), consumed in processBlock.
+    // -1 = nothing pending.
+    std::atomic<int> uiNoteOnRequest  { -1 };
+    std::atomic<int> uiNoteOffRequest { -1 };
+
     // Trim region markers (stored in samples)
     std::atomic<int>  trimRegionStart  { 0 };
     std::atomic<int>  trimRegionEnd    { 0 };

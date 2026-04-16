@@ -52,8 +52,8 @@ void PadGridView::drawBankBar (juce::Graphics& g) const
         g.drawText (label, r, juce::Justification::centred);
     };
 
-    drawBtn (bankAButtonBounds, 0, "Bank A  (1–16)");
-    drawBtn (bankBButtonBounds, 1, "Bank B  (17–32)");
+    drawBtn (bankAButtonBounds, 0, "Bank A");
+    drawBtn (bankBButtonBounds, 1, "Bank B");
 }
 
 //==============================================================================
@@ -123,12 +123,21 @@ void PadGridView::drawPad (juce::Graphics& g,
     // ── Background: full pad filled with the slice colour ─────────────────────
     if (isEmpty)
     {
-        g.setColour (th.button.withAlpha (0.30f));
-        g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
-
-        // Faint border
-        g.setColour (th.separator.withAlpha (0.18f));
-        g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, 0.75f);
+        // Background gradient — same recipe as DualLcdControlFrame
+        {
+            auto bgTop = th.darkBar.darker (0.45f);
+            auto bgBot = th.darkBar.darker (0.65f);
+            juce::ColourGradient grad (bgTop, 0, (float) bounds.getY(),
+                                       bgBot, 0, (float) bounds.getBottom(), false);
+            g.setGradientFill (grad);
+            g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
+        }
+        // Outer glow
+        g.setColour (th.accent.withAlpha (0.08f));
+        g.drawRoundedRectangle (bounds.toFloat().expanded (1.0f), 5.0f, 1.0f);
+        // Inner border
+        g.setColour (th.accent.withAlpha (0.20f));
+        g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, 1.0f);
         return;
     }
 
@@ -140,16 +149,21 @@ void PadGridView::drawPad (juce::Graphics& g,
     juce::Colour padBg = sliceCol.darker (sel ? 0.38f : 0.58f);
     if (hov) padBg = padBg.brighter (0.12f);
 
-    g.setColour (padBg);
-    g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
-
-    // Slice-colour border — bolder when selected
+    // Background fill — darkened slice colour with subtle gradient
     {
-        const float alpha = sel ? 1.0f : (hov ? 0.70f : 0.50f);
-        const float thick = sel ? 1.5f : 0.75f;
-        g.setColour (sliceCol.withAlpha (alpha));
-        g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, thick);
+        juce::ColourGradient grad (padBg.brighter (0.08f), 0, (float) bounds.getY(),
+                                   padBg.darker (0.12f),  0, (float) bounds.getBottom(), false);
+        g.setGradientFill (grad);
+        g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
     }
+
+    // Outer glow — always accent colour (matches every other frame in the UI)
+    g.setColour (th.accent.withAlpha (sel ? 0.28f : 0.14f));
+    g.drawRoundedRectangle (bounds.toFloat().expanded (1.0f), 5.0f, 1.0f);
+
+    // Inner border — accent at full strength when selected, dimmed otherwise
+    g.setColour (th.accent.withAlpha (sel ? 0.90f : (hov ? 0.55f : 0.35f)));
+    g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, sel ? 1.5f : 1.0f);
 
     // ── Inner layout ──────────────────────────────────────────────────────────
     auto inner     = bounds.reduced (5, 4);
@@ -500,14 +514,6 @@ void PadGridView::paint (juce::Graphics& g)
         drawPad (g, r, absIdx, isEmpty);
     }
 
-    if (ui.numSlices == 0)
-    {
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (th.foreground.withAlpha (0.35f));
-        g.drawText ("No slices — load a sample and add markers",
-                    getLocalBounds().withTrimmedTop (kBankBarH),
-                    juce::Justification::centred);
-    }
 }
 
 void PadGridView::resized()
@@ -550,7 +556,28 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
     cmd.type      = DysektProcessor::CmdSelectSlice;
     cmd.intParam1 = idx;
     processor.pushCommand (cmd);
+
+    // Fire noteOn so the pad plays its slice
+    const int midiNote = processor.sliceManager.getSlice (idx).midiNote;
+    processor.uiNoteOnRequest.store (midiNote, std::memory_order_relaxed);
+
     repaint();
+}
+
+void PadGridView::mouseUp (const juce::MouseEvent& e)
+{
+    const juce::Point<int> pt = e.getPosition();
+    if (pt.y < kBankBarH) return;
+
+    const int idx = padIndexAt (pt);
+    if (idx < 0) return;
+
+    const auto& ui = processor.getUiSliceSnapshot();
+    if (idx >= ui.numSlices) return;
+
+    // Send noteOff so voice can stop if the sampler is in gated mode
+    const int midiNote = processor.sliceManager.getSlice (idx).midiNote;
+    processor.uiNoteOffRequest.store (midiNote, std::memory_order_relaxed);
 }
 
 void PadGridView::mouseMove (const juce::MouseEvent& e)

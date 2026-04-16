@@ -2192,6 +2192,16 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
+    // ── UI pad-click MIDI injection ───────────────────────────────────────────
+    {
+        const int noteOn  = uiNoteOnRequest .exchange (-1, std::memory_order_relaxed);
+        const int noteOff = uiNoteOffRequest.exchange (-1, std::memory_order_relaxed);
+        if (noteOn  >= 0 && noteOn  <= 127)
+            midi.addEvent (juce::MidiMessage::noteOn  (1, noteOn,  (juce::uint8) 100), 0);
+        if (noteOff >= 0 && noteOff <= 127)
+            midi.addEvent (juce::MidiMessage::noteOff (1, noteOff, (juce::uint8) 0),   0);
+    }
+
     processMidi (midi);
 
     // ── Step CC smoothers ─────────────────────────────────────────────────────

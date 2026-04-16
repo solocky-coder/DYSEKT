@@ -320,10 +320,11 @@ static juce::Rectangle<float> waveformFrameRect (const DysektEditor& ed,
                                                    const juce::Rectangle<int>& wvBounds,
                                                    bool hasTrimDialog)
 {
-    const int kFrameInset = 4;
-    const int kFX         = kMargin;
-    const int kFW         = ed.getWidth() - kMargin * 2;
-    const int trimExtra   = hasTrimDialog ? kTrimBarH : 0;
+    const float sf        = (float) ed.getWidth() / (float) kBaseW;
+    const int kFrameInset = juce::roundToInt (4.0f * sf);
+    const int kFX         = juce::roundToInt (kMargin * sf);
+    const int kFW         = ed.getWidth() - kFX * 2;
+    const int trimExtra   = hasTrimDialog ? juce::roundToInt (kTrimBarH * sf) : 0;
     return { (float) kFX,
              (float) wvBounds.getY() - kFrameInset,
              (float) kFW,
@@ -346,7 +347,8 @@ void DysektEditor::paint (juce::Graphics& g)
         g.setGradientFill (outerGrad);
         g.fillRoundedRectangle (outerF, 4.0f);
 
-        const auto screenF = outerF.reduced (4.0f);
+        const float sf = (float) getWidth() / (float) kBaseW;
+        const auto screenF = outerF.reduced (4.0f * sf);
         g.setColour (getTheme().darkBar.darker (0.55f));
         g.fillRoundedRectangle (screenF, 2.0f);
 
@@ -372,33 +374,38 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
 
     const bool wvVisible = waveformView.isVisible() && waveformView.getHeight() > 0;
 
+    // Scale all border pixel amounts proportionally to avoid sub-pixel overlap
+    // at non-integer UI scales (1.5×, 1.75× etc.)
+    const float sf = (float) getWidth() / (float) kBaseW;
+
     if (wvVisible)
     {
         const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
         const auto ac     = getTheme().accent;
 
         g.setColour (ac.withAlpha (0.18f));
-        g.drawRoundedRectangle (outerF.expanded (1.0f), 5.0f, 1.0f);
+        g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
 
         g.setColour (ac.withAlpha (0.60f));
-        g.drawRoundedRectangle (outerF.reduced (0.5f), 4.0f, 1.5f);
+        g.drawRoundedRectangle (outerF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
 
-        const auto screenF = outerF.reduced (4.0f);
+        const auto screenF = outerF.reduced (4.0f * sf);
         g.setColour (ac.withAlpha (0.30f));
-        g.drawRoundedRectangle (screenF.expanded (0.5f), 2.0f, 1.0f);
+        g.drawRoundedRectangle (screenF.expanded (0.5f * sf), 2.0f * sf, 1.0f * sf);
     }
 
     // Logo frame border
     if (logoBar.isVisible() && logoBar.getHeight() > 0)
     {
         const auto ac = getTheme().accent;
-        const juce::Rectangle<float> logoF (logoBar.getBounds().toFloat().withTrimmedTop (4.0f));
+        const juce::Rectangle<float> logoF (logoBar.getBounds().toFloat()
+                                                .withTrimmedTop (4.0f * sf));
         g.setColour (ac.withAlpha (0.18f));
-        g.drawRoundedRectangle (logoF.expanded (1.0f), 5.0f, 1.0f);
+        g.drawRoundedRectangle (logoF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
         g.setColour (ac.withAlpha (0.72f));
-        g.drawRoundedRectangle (logoF.reduced (0.5f), 4.0f, 1.5f);
+        g.drawRoundedRectangle (logoF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
         g.setColour (ac.withAlpha (0.18f));
-        g.drawRoundedRectangle (logoF.reduced (2.0f), 3.5f, 1.0f);
+        g.drawRoundedRectangle (logoF.reduced (2.0f * sf), 3.5f * sf, 1.0f * sf);
     }
 
     // Full-window accent frame
@@ -406,52 +413,58 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
         const auto ac = getTheme().accent;
         const juce::Rectangle<float> win (getLocalBounds().toFloat());
         g.setColour (ac.withAlpha (0.60f));
-        g.drawRoundedRectangle (win.reduced (2.0f), 2.5f, 1.5f);
+        g.drawRoundedRectangle (win.reduced (2.0f * sf), 2.5f * sf, 1.5f * sf);
         g.setColour (ac.withAlpha (0.14f));
-        g.drawRoundedRectangle (win.reduced (4.0f), 2.0f, 1.0f);
+        g.drawRoundedRectangle (win.reduced (4.0f * sf), 2.0f * sf, 1.0f * sf);
     }
 }
 
 void DysektEditor::resized()
 {
+    // ── Scale factor: all fixed-pixel constants scale with component width ────
+    // This prevents layout overlap when the host scales component bounds in
+    // response to setTransform (e.g. at 1.5× and above on high-DPI displays).
+    const float sf = (float) getWidth() / (float) kBaseW;
+    auto si = [sf](int v) -> int { return juce::roundToInt ((float) v * sf); };
+
     auto area = juce::Rectangle (0, 0, getWidth(), getHeight());
 
     // ── Top strip ─────────────────────────────────────────────────────────────
-    const int kTopStripH = kLogoH + kLcdRowH;
+    const int kTopStripH = si (kLogoH) + si (kLcdRowH);
     auto topArea = area.removeFromTop (kTopStripH);
-    auto topRow  = topArea.reduced (kMargin, 4);
+    auto topRow  = topArea.reduced (si (kMargin), si (4));
 
-    const int sideW = (topRow.getWidth() - kCtrlFrameW - kMargin * 2) / 2;
+    const int sideW = (topRow.getWidth() - si (kCtrlFrameW) - si (kMargin) * 2) / 2;
     sliceLcd.setBounds (topRow.removeFromLeft (sideW));
-    topRow.removeFromLeft (kMargin);
+    topRow.removeFromLeft (si (kMargin));
 
-    auto centreCol = topRow.removeFromLeft (kCtrlFrameW);
-    auto logoRow   = centreCol.removeFromTop (kLogoH);
+    auto centreCol = topRow.removeFromLeft (si (kCtrlFrameW));
+    auto logoRow   = centreCol.removeFromTop (si (kLogoH));
     logoBar.setBounds (logoRow);
     {
-        const int btnBarY = centreCol.getBottom() - kBtnBarH - 4;
-        headerBar.setBounds (centreCol.getX(), btnBarY, centreCol.getWidth(), kBtnBarH);
+        const int btnBarY = centreCol.getBottom() - si (kBtnBarH) - si (4);
+        headerBar.setBounds (centreCol.getX(), btnBarY, centreCol.getWidth(), si (kBtnBarH));
         if (auto* cf = headerBar.getControlFrame())
         {
-            const int cfY = centreCol.getY() + (btnBarY - centreCol.getY() - kCtrlFrameH) / 2;
-            cf->setBounds (centreCol.getX(), cfY, centreCol.getWidth(), kCtrlFrameH);
+            const int cfY = centreCol.getY() + (btnBarY - centreCol.getY() - si (kCtrlFrameH)) / 2;
+            cf->setBounds (centreCol.getX(), cfY, centreCol.getWidth(), si (kCtrlFrameH));
         }
     }
 
-    topRow.removeFromLeft (kMargin);
+    topRow.removeFromLeft (si (kMargin));
     sliceWaveformLcd.setBounds (topRow);
 
-    auto actionArea = area.removeFromTop (kActionH);
-    const int kFX = kMargin;
-    const int kFW = getWidth() - kMargin * 2;
+    auto actionArea = area.removeFromTop (si (kActionH));
+    const int kFX = si (kMargin);
+    const int kFW = getWidth() - si (kMargin) * 2;
 
-    area.removeFromBottom (kMargin);
-    const int slotH = (mixerOpen || browserOpen) ? kPanelSlotH : 0;
+    area.removeFromBottom (si (kMargin));
+    const int slotH = (mixerOpen || browserOpen) ? si (kPanelSlotH) : 0;
     auto slot = area.removeFromBottom (slotH);
-    area.removeFromBottom (kMargin);
+    area.removeFromBottom (si (kMargin));
 
     if (mixerOpen) {
-        const int mh = juce::jmin (MixerPanel::kPanelH, kPanelSlotH);
+        const int mh = juce::jmin (si (MixerPanel::kPanelH), si (kPanelSlotH));
         auto mb = juce::Rectangle (kFX, slot.getY(), kFW, mh);
         mixerPanel.setBounds (mb);
         browserPanel.setBounds ({});
@@ -464,10 +477,10 @@ void DysektEditor::resized()
         browserPanel.setBounds ({});
     }
 
-    constexpr int kFrameInset   = 4;
-    constexpr int kOverviewH    = 28;
-    constexpr int kInterGap     = kMargin + kFrameInset;
-    constexpr int kOverviewRowH = kInterGap + kOverviewH + kMargin;
+    const int kFrameInset   = si (4);
+    const int kOverviewH    = si (28);
+    const int kInterGap     = si (kMargin) + kFrameInset;
+    const int kOverviewRowH = kInterGap + kOverviewH + si (kMargin);
 
     int overviewTopGuard = area.getBottom();
 
@@ -475,14 +488,20 @@ void DysektEditor::resized()
         sliceControlBar.setBounds ({});
         waveformOverview.setBounds ({});
     } else {
-        auto scbArea = area.removeFromBottom (kSliceCtrlH);
-        sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, kSliceCtrlH));
+        auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
+        sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
 
-        auto overviewRow = area.removeFromBottom (kOverviewRowH);
-        const int overviewY = overviewRow.getY() + kInterGap;
-        waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
-
-        overviewTopGuard = overviewRow.getY();
+        if (uiMode == 0)
+        {
+            auto overviewRow = area.removeFromBottom (kOverviewRowH);
+            const int overviewY = overviewRow.getY() + kInterGap;
+            waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
+            overviewTopGuard = overviewRow.getY();
+        }
+        else
+        {
+            waveformOverview.setBounds ({});
+        }
     }
 
     const int kFrameX  = kFX;
@@ -498,8 +517,8 @@ void DysektEditor::resized()
     int y = screenTop;
     sliceLane.setBounds ({});
 
-    int trimH = (trimDialog != nullptr) ? kTrimBarH : 0;
-    int h     = juce::jmax (80, screenBot - trimH - y);
+    int trimH = (trimDialog != nullptr) ? si (kTrimBarH) : 0;
+    int h     = juce::jmax (si (80), screenBot - trimH - y);
 
     // ── Route the main content area to the active view ────────────────────────
     // Trim mode always requires the waveform view, regardless of uiMode.
@@ -717,6 +736,10 @@ void DysektEditor::timerCallback()
     if (scaleDirty || scale != lastScale)
     {
         scaleDirty = false; lastScale = scale;
+        // Reset to base size first so the host doesn't compound the scale on
+        // top of a previously-enlarged component (avoids double-scaling at 1.5×+)
+        setTransform (juce::AffineTransform::identity);
+        setSize (kBaseW, kTotalH);
         setTransform (juce::AffineTransform::scale (scale));
         DysektLookAndFeel::setMenuScale (scale);
         saveUserSettings (scale, getTheme().name);
@@ -789,9 +812,10 @@ void DysektEditor::timerCallback()
     {
         const bool hasSample = (processor.sampleData.getSnapshot() != nullptr
                                  && processor.sampleData.getSnapshot()->buffer.getNumSamples() > 0);
-        if (hasSample != waveformOverview.isVisible())
+        const bool overviewShouldShow = hasSample && (uiMode == 0);
+        if (overviewShouldShow != waveformOverview.isVisible())
         {
-            waveformOverview.setVisible (hasSample);
+            waveformOverview.setVisible (overviewShouldShow);
             resized();
         }
     }
