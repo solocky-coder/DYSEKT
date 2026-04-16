@@ -20,7 +20,7 @@ struct ThemeData
     juce::Colour buttonHover;
     juce::Colour separator;
 
-    juce::Colour slicePalette[16];
+    juce::Colour slicePalette[32];
 
     static ThemeData darkTheme()
     {
@@ -56,11 +56,25 @@ struct ThemeData
         t.slicePalette[13]= juce::Colour (0xFF30A0C6); // Steel Teal
         t.slicePalette[14]= juce::Colour (0xFFB0C600); // Chartreuse
         t.slicePalette[15]= juce::Colour (0xFF8060C6); // Lavender
-        return t;
-    }
 
-    // ── SHELL ─────────────────────────────────────────────────────────────────
-    // Deep green tint · Phosphor terminal · Organic warmth
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFC20544); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF05C2B0); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFC29B05); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF0553C2); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFF8DC205); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFB305C2); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF059BC2); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFC22B05); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF13C239); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFC20529); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF053BC2); // Azure
+        t.slicePalette[27] = juce::Colour (0xFFA7C205); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFC23931); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF3167C2); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF66C205); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFFA25CC2); // Soft Violet
+        return t;
     static ThemeData shellTheme()
     {
         ThemeData t;
@@ -95,12 +109,25 @@ struct ThemeData
         t.slicePalette[13] = juce::Colour (0xFF30A0CC); // Steel Teal
         t.slicePalette[14] = juce::Colour (0xFFAFCC00); // Chartreuse
         t.slicePalette[15] = juce::Colour (0xFF8060CC); // Lavender
+
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFC70546); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF05C7B5); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFC79F05); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF0555C7); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFF91C705); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFB805C7); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF05A0C7); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFC72C05); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF14C73C); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFC7052A); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF053CC7); // Azure
+        t.slicePalette[27] = juce::Colour (0xFFACC705); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFC73B31); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF3164C7); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF63C705); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFFA45CC7); // Soft Violet
         return t;
-    }
-
-
-    // ── LAZY ─────────────────────────────────────────────────────────────────
-    // Electric blue accent · Deep charcoal panels · High contrast
     static ThemeData lazyTheme()
     {
         ThemeData t;
@@ -135,11 +162,25 @@ struct ThemeData
         t.slicePalette[13]= juce::Colour (0xFF38B8EA); // Steel Teal
         t.slicePalette[14]= juce::Colour (0xFFCAEA00); // Chartreuse
         t.slicePalette[15]= juce::Colour (0xFF9070EA); // Lavender
-        return t;
-    }
 
-    // ── SNOW ─────────────────────────────────────────────────────────────────
-    // Warm orange accent · Dark slate panels · Professional warmth
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFE2064F); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF06E2CD); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFE2B506); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF0661E2); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFFA3E206); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFD006E2); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF06B4E2); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFE23106); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF16E243); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFE20630); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF0644E2); // Azure
+        t.slicePalette[27] = juce::Colour (0xFFC2E206); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFE24238); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF3873E2); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF71E206); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFFB66AE2); // Soft Violet
+        return t;
     static ThemeData snowTheme()
     {
         ThemeData t;
@@ -174,11 +215,25 @@ struct ThemeData
         t.slicePalette[13]= juce::Colour (0xFF2C90B7); // Steel Teal
         t.slicePalette[14]= juce::Colour (0xFF9EB700); // Chartreuse
         t.slicePalette[15]= juce::Colour (0xFF7058B7); // Lavender
-        return t;
-    }
 
-    // ── GHOST ────────────────────────────────────────────────────────────────
-    // Bright teal/mint accent · Near-black · Ultra-minimal
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFB5053F); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF05B5A4); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFB59105); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF054DB5); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFF82B505); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFA705B5); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF0591B5); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFB52705); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF12B535); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFB50526); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF0536B5); // Azure
+        t.slicePalette[27] = juce::Colour (0xFF9BB505); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFB5352D); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF2D5CB5); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF5BB505); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFF9155B5); // Soft Violet
+        return t;
     static ThemeData ghostTheme()
     {
         ThemeData t;
@@ -213,11 +268,25 @@ struct ThemeData
         t.slicePalette[13]= juce::Colour (0xFF34AAD8); // Steel Teal
         t.slicePalette[14]= juce::Colour (0xFFBDD800); // Chartreuse
         t.slicePalette[15]= juce::Colour (0xFF8868D8); // Lavender
-        return t;
-    }
 
-    // ── HACK ─────────────────────────────────────────────────────────────────
-    // Red accent · Pure black · Industrial — classic Akai MPC
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFD2064A); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF06D2BE); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFD2A706); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF065AD2); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFF97D206); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFC206D2); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF06A7D2); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFD22E06); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF15D23E); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFD2062D); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF063FD2); // Azure
+        t.slicePalette[27] = juce::Colour (0xFFB5D206); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFD23E34); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF346BD2); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF6CD206); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFFAC63D2); // Soft Violet
+        return t;
     static ThemeData hackTheme()
     {
         ThemeData t;
@@ -252,13 +321,25 @@ struct ThemeData
         t.slicePalette[13]= juce::Colour (0xFF288CB2); // Steel Teal
         t.slicePalette[14]= juce::Colour (0xFF9AB200); // Chartreuse
         t.slicePalette[15]= juce::Colour (0xFF6850B2); // Lavender
+
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFB1053D); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF05B1A0); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFB18D05); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF054BB1); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFF80B105); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFA305B1); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF058DB1); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFB12605); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF12B135); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFB10525); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF0535B1); // Azure
+        t.slicePalette[27] = juce::Colour (0xFF98B105); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFB13129); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF2959B1); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF59B105); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFF8B4EB1); // Soft Violet
         return t;
-    }
-
-
-    // ── MIDNIGHT ─────────────────────────────────────────────────────────────
-    // Deep purple-black · Violet accent · Serum / Vital premium synth feel
-    // Sharp 2px radius · Zero glow · Crisp 1px borders — Direction D
     static ThemeData midnightTheme()
     {
         ThemeData t;
@@ -293,11 +374,25 @@ struct ThemeData
         t.slicePalette[13] = juce::Colour (0xFF50C8FF); // Steel Teal
         t.slicePalette[14] = juce::Colour (0xFFD0FF00); // Chartreuse
         t.slicePalette[15] = juce::Colour (0xFFFF90D8); // Rose Quartz
-        return t;
-    }
 
-    // ── CR8 ──────────────────────────────────────────────────────────────────
-    // Burnt orange accent · Deep charcoal · Steel panels — Waves CR8 inspired
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFF42F51); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF07EAF4); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFF4C407); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF5889F4); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFFB8F407); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFC869F4); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF07C3F4); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFF45423); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF31F46B); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFF43F56); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF074AF4); // Azure
+        t.slicePalette[27] = juce::Colour (0xFFDDF407); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFF44F4D); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF4D81F4); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF6FF407); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFFF486A4); // Soft Violet
+        return t;
     static ThemeData cr8Theme()
     {
         ThemeData t;
@@ -332,11 +427,25 @@ struct ThemeData
         t.slicePalette[13] = juce::Colour (0xFF40A8D9); // Ice Blue
         t.slicePalette[14] = juce::Colour (0xFFA8D910); // Chartreuse
         t.slicePalette[15] = juce::Colour (0xFF9060D9); // Lavender
-        return t;
-    }
 
-    // ── PIGMENTS ──────────────────────────────────────────────────────────────
-    // Deep navy-black · Electric cyan accent · Arturia Pigments-inspired
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFD3A814); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF145DD3); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFA3D314); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF14D3BE); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFFD31419); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFCE14D3); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF14A3D3); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFD37A14); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF14D31F); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFD31455); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF1437D3); // Azure
+        t.slicePalette[27] = juce::Colour (0xFFD3C614); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFD3483F); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF3F6CD3); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF5DD314); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFFB85CD3); // Soft Violet
+        return t;
     static ThemeData pigmentsTheme()
     {
         ThemeData t;
@@ -371,13 +480,25 @@ struct ThemeData
         t.slicePalette[13] = juce::Colour (0xFF5CFFCC); // Seafoam
         t.slicePalette[14] = juce::Colour (0xFFCCFF00); // Chartreuse
         t.slicePalette[15] = juce::Colour (0xFFAA70FF); // Lavender
-        return t;
-    }
 
-    // ── DYSEKT ────────────────────────────────────────────────────────────────
-    // The signature industrial skin: near-void black chassis, neon teal accent,
-    // charcoal panel bars.  Only active / selected elements glow — everything
-    // else stays dim.  Matches the dark-mode UI mockup shown in the design docs.
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFF42F51); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF07EAF4); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFF4C407); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF5889F4); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFFB8F407); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFD055F4); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF07C3F4); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFF45423); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF31F46B); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFF43F56); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF074AF4); // Azure
+        t.slicePalette[27] = juce::Colour (0xFFDDF407); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFF46E4D); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF58EBF4); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF6CF407); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFFD66AF4); // Soft Violet
+        return t;
     static ThemeData dysektTheme()
     {
         ThemeData t;
@@ -413,14 +534,25 @@ struct ThemeData
         t.slicePalette[13] = juce::Colour (0xFF30B8FF); // Steel Teal
         t.slicePalette[14] = juce::Colour (0xFFC8FF00); // Chartreuse
         t.slicePalette[15] = juce::Colour (0xFF8060FF); // Lavender
+
+        // Bank B — slices 17–32 (hue-rotated from Bank A)
+        t.slicePalette[16] = juce::Colour (0xFFF40734); // Deep Rose
+        t.slicePalette[17] = juce::Colour (0xFF07F4C4); // Sea Green
+        t.slicePalette[18] = juce::Colour (0xFFF4B607); // Gold
+        t.slicePalette[19] = juce::Colour (0xFF0773F4); // Periwinkle
+        t.slicePalette[20] = juce::Colour (0xFFB8F407); // Lime Pulse
+        t.slicePalette[21] = juce::Colour (0xFFC807F4); // Indigo
+        t.slicePalette[22] = juce::Colour (0xFF07B8F4); // Mint Fizz
+        t.slicePalette[23] = juce::Colour (0xFFF45A1E); // Crimson Pop
+        t.slicePalette[24] = juce::Colour (0xFF15F44B); // Spring
+        t.slicePalette[25] = juce::Colour (0xFFF40716); // Fuchsia
+        t.slicePalette[26] = juce::Colour (0xFF0734F4); // Azure
+        t.slicePalette[27] = juce::Colour (0xFFEAF407); // Honey
+        t.slicePalette[28] = juce::Colour (0xFFF44D31); // Dusty Rose
+        t.slicePalette[29] = juce::Colour (0xFF3168F4); // Powder Blue
+        t.slicePalette[30] = juce::Colour (0xFF68F407); // Acid Lime
+        t.slicePalette[31] = juce::Colour (0xFFB45CF4); // Soft Violet
         return t;
-    }
-
-    static juce::Colour parseHex (const juce::String& hex)
-    {
-        return juce::Colour ((juce::uint32) (0xFF000000 | hex.getHexValue32()));
-    }
-
     static ThemeData fromThemeFile (const juce::String& text)
     {
         ThemeData t = darkTheme(); // defaults
@@ -465,7 +597,7 @@ struct ThemeData
             else if (key.startsWith ("slice"))
             {
                 int idx = key.substring (5).getIntValue() - 1;
-                if (idx >= 0 && idx < 16)
+                if (idx >= 0 && idx < 32)
                     t.slicePalette[idx] = parseHex (val);
             }
         }
@@ -495,7 +627,7 @@ struct ThemeData
         s << "button: " << colourToHex (button) << "\n";
         s << "buttonHover: " << colourToHex (buttonHover) << "\n";
         s << "separator: " << colourToHex (separator) << "\n";
-        for (int i = 0; i < 16; ++i)
+        for (int i = 0; i < 32; ++i)
             s << "slice" << (i + 1) << ": " << colourToHex (slicePalette[i]) << "\n";
         return s;
     }
