@@ -157,11 +157,8 @@ void PadGridView::drawPad (juce::Graphics& g,
     // Top row: note name left + slice name centred  (fixed height = 14 px)
     auto topRow    = inner.removeFromTop (14);
 
-    // Bottom strip: L/R meters  (fixed height = 10 px)
-    auto meterArea = inner.removeFromBottom (10);
-
-    // Remaining space = waveform canvas
-    auto waveArea  = inner;   // whatever is left between topRow and meterArea
+    // Remaining space = waveform canvas (no meter strip any more)
+    auto waveArea  = inner;
 
     // ── MIDI note name — top-left (replaces old pad number) ──────────────────
     {
@@ -431,29 +428,51 @@ void PadGridView::drawPad (juce::Graphics& g,
         }
     }
 
-    // ── L / R peak meters — bottom strip ─────────────────────────────────────
-    if (absIndex < (int) processor.slicePeakL.size())
+    // ── Playhead — one per active voice playing this slice ───────────────────
+    if (ui.sampleLoaded && waveArea.getWidth() > 4)
     {
-        const float peakL = processor.slicePeakL[(size_t) absIndex].load (std::memory_order_relaxed);
-        const float peakR = processor.slicePeakR[(size_t) absIndex].load (std::memory_order_relaxed);
+        const int startSamp = slice.startSample;
+        const int endSamp   = processor.sliceManager.getEndForSlice (absIndex, ui.sampleNumFrames);
+        const int sliceLen  = endSamp - startSamp;
 
-        const int totalW  = meterArea.getWidth();
-        const int meterW  = totalW / 2 - 4;
-        const int meterH  = 3;
-        const int meterY  = meterArea.getCentreY() - meterH - 1;
-        const int meterX  = meterArea.getX();
+        if (sliceLen > 0)
+        {
+            auto& vp = processor.voicePool;
 
-        // L track
-        g.setColour (juce::Colours::black.withAlpha (0.30f));
-        g.fillRect (meterX, meterY, meterW, meterH);
-        g.setColour (sliceCol.brighter (0.30f).withAlpha (0.90f));
-        g.fillRect (meterX, meterY, juce::roundToInt (peakL * meterW), meterH);
+            for (int i = 0; i < VoicePool::kMaxVoices; ++i)
+            {
+                const auto& v = vp.getVoice (i);
+                if (! v.active || v.sliceIdx != absIndex)
+                    continue;
 
-        // R track
-        g.setColour (juce::Colours::black.withAlpha (0.30f));
-        g.fillRect (meterX, meterY + meterH + 2, meterW, meterH);
-        g.setColour (sliceCol.withAlpha (0.70f));
-        g.fillRect (meterX, meterY + meterH + 2, juce::roundToInt (peakR * meterW), meterH);
+                const float rawPos = vp.voicePositions[i].load (std::memory_order_relaxed);
+                float xn = (rawPos - (float) startSamp) / (float) sliceLen;
+                xn = juce::jlimit (0.0f, 1.0f, xn);
+
+                const float x  = (float) waveArea.getX() + xn * (float) waveArea.getWidth();
+                const float y1 = (float) waveArea.getY();
+                const float y2 = (float) waveArea.getBottom();
+
+                // Phosphor glow halo (matches SliceWaveformLcd style)
+                g.setColour (sliceCol.brighter (0.6f).withAlpha (0.15f));
+                g.drawLine (x - 1.5f, y1, x - 1.5f, y2, 1.0f);
+                g.drawLine (x + 1.5f, y1, x + 1.5f, y2, 1.0f);
+
+                // Main playhead line
+                g.setColour (sliceCol.brighter (0.8f).withAlpha (0.90f));
+                g.drawLine (x, y1, x, y2, 1.5f);
+
+                // Small downward triangle cap at top
+                const float capH = 4.5f;
+                juce::Path cap;
+                cap.addTriangle (x - 3.0f, y1,
+                                 x + 3.0f, y1,
+                                 x,        y1 + capH);
+                g.fillPath (cap);
+
+                break;  // show only the most recently triggered voice (same as LCD)
+            }
+        }
     }
 }
 
