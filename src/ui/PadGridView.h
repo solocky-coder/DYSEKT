@@ -29,6 +29,9 @@ public:
     /// Call from the editor's timerCallback to refresh meters / selection.
     void repaintGrid();
 
+    /// Mirror the editor's current waveformMode (0-7).
+    void setWaveformMode (int mode) noexcept { waveformMode = mode; repaint(); }
+
     //==========================================================================
     // Layout constants
     static constexpr int kNumCols    = 4;   ///< Columns per bank.
@@ -47,8 +50,9 @@ private:
     //==========================================================================
     DysektProcessor& processor;
 
-    int currentBank = 0;   ///< 0 = Bank A, 1 = Bank B.
-    int hoveredPad  = -1;  ///< Absolute pad index under mouse (-1 = none).
+    int currentBank  = 0;   ///< 0 = Bank A, 1 = Bank B.
+    int hoveredPad   = -1;  ///< Absolute pad index under mouse (-1 = none).
+    int waveformMode = 0;   ///< Mirrors PluginEditor::waveformMode (0=Hard…7=Stepped).
 
     //-- bank-switcher ----------------------------------------------------------
     juce::Rectangle<int> bankAButtonBounds;

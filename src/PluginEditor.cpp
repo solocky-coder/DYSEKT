@@ -918,6 +918,7 @@ void DysektEditor::loadUserSettings()
 
     waveformView.setWaveformMode (waveformMode);
     waveformOverview.setWaveformMode (waveformMode);
+    padGridView.setWaveformMode (waveformMode);
     headerBar.setWaveMode (waveformMode);
     actionPanel.setWaveActive (waveformMode != 0);
 

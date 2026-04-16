@@ -18,35 +18,30 @@ PadGridView::~PadGridView() = default;
 
 void PadGridView::layoutBankButtons()
 {
-    // Divide the bank-bar into two equal buttons with a small gap between them.
-    const int barW    = getWidth();
-    const int btnW    = (barW - kPadPadX * 2 - 6) / 2;  // 6px centre gap
-    const int btnY    = (kBankBarH - 20) / 2;
+    const int barW = getWidth();
+    const int btnW = (barW - kPadPadX * 2 - 6) / 2;
+    const int btnY = (kBankBarH - 20) / 2;
 
-    bankAButtonBounds = { kPadPadX,          btnY, btnW, 20 };
-    bankBButtonBounds = { kPadPadX + btnW + 6, btnY, btnW, 20 };
+    bankAButtonBounds = { kPadPadX,               btnY, btnW, 20 };
+    bankBButtonBounds = { kPadPadX + btnW + 6,    btnY, btnW, 20 };
 }
 
 void PadGridView::drawBankBar (juce::Graphics& g) const
 {
     const auto& th = getTheme();
 
-    // Bar background
     auto barRect = juce::Rectangle<int> (0, 0, getWidth(), kBankBarH).toFloat();
     g.setColour (th.background.darker (0.08f));
     g.fillRect (barRect);
 
-    // Separator line
     g.setColour (th.separator.withAlpha (0.40f));
     g.drawHorizontalLine (kBankBarH - 1, 0.0f, (float) getWidth());
 
-    // Draw Bank A button
     auto drawBtn = [&] (juce::Rectangle<int> r, int bankIndex, const char* label)
     {
         const bool active = (currentBank == bankIndex);
 
-        juce::Colour bg = active ? th.accent : th.button;
-        g.setColour (bg);
+        g.setColour (active ? th.accent : th.button);
         g.fillRoundedRectangle (r.toFloat(), 4.0f);
 
         g.setColour (active ? th.background : th.separator);
@@ -67,7 +62,6 @@ void PadGridView::drawBankBar (juce::Graphics& g) const
 
 juce::Rectangle<int> PadGridView::cellBounds (int absIndex) const noexcept
 {
-    // Only show pads belonging to the current bank.
     const int bankStart = currentBank * kPadsPerBank;
     const int bankEnd   = bankStart + kPadsPerBank;
     if (absIndex < bankStart || absIndex >= bankEnd) return {};
@@ -76,9 +70,9 @@ juce::Rectangle<int> PadGridView::cellBounds (int absIndex) const noexcept
     const int row = localIdx / kNumCols;
     const int col = localIdx % kNumCols;
 
-    const int gridTop  = kBankBarH + kPadPadY;
-    const int gridH    = getHeight() - gridTop - kPadPadY;
-    const int gridW    = getWidth()  - kPadPadX * 2;
+    const int gridTop = kBankBarH + kPadPadY;
+    const int gridH   = getHeight() - gridTop - kPadPadY;
+    const int gridW   = getWidth()  - kPadPadX * 2;
     if (gridW <= 0 || gridH <= 0) return {};
 
     const int cellW = (gridW - (kNumCols - 1) * kPadGap) / kNumCols;
@@ -92,7 +86,7 @@ juce::Rectangle<int> PadGridView::cellBounds (int absIndex) const noexcept
 
 int PadGridView::padIndexAt (juce::Point<int> p) const noexcept
 {
-    if (p.y < kBankBarH) return -1;  // hit-test is inside the bank bar
+    if (p.y < kBankBarH) return -1;
 
     const int bankStart = currentBank * kPadsPerBank;
     for (int i = 0; i < kPadsPerBank; ++i)
@@ -126,94 +120,339 @@ void PadGridView::drawPad (juce::Graphics& g,
     const bool  sel = (ui.selectedSlice == absIndex);
     const bool  hov = (hoveredPad == absIndex);
 
-    // ── Background ────────────────────────────────────────────────────────────
-    juce::Colour bgCol = isEmpty ? th.button.withAlpha (0.35f)
-                                 : (hov ? th.buttonHover : th.button);
-    if (sel && ! isEmpty)
-        bgCol = th.button.brighter (0.22f);
+    // ── Background: full pad filled with the slice colour ─────────────────────
+    if (isEmpty)
+    {
+        g.setColour (th.button.withAlpha (0.30f));
+        g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
 
-    g.setColour (bgCol);
+        // Faint border
+        g.setColour (th.separator.withAlpha (0.18f));
+        g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, 0.75f);
+        return;
+    }
+
+    const auto& slice    = ui.slices[(size_t) absIndex];
+    const juce::Colour sliceCol = slice.colour;
+
+    // Darkened version of the slice colour for the pad body
+    // Selected pads are a bit brighter so they stand out clearly.
+    juce::Colour padBg = sliceCol.darker (sel ? 0.38f : 0.58f);
+    if (hov) padBg = padBg.brighter (0.12f);
+
+    g.setColour (padBg);
     g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
 
-    // ── Border ────────────────────────────────────────────────────────────────
-    if (sel && ! isEmpty)
+    // Slice-colour border — bolder when selected
     {
-        g.setColour (th.accent.withAlpha (0.92f));
-        g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, 1.5f);
-    }
-    else if (hov && ! isEmpty)
-    {
-        g.setColour (th.accent.withAlpha (0.40f));
-        g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, 1.0f);
-    }
-    else
-    {
-        g.setColour (th.separator.withAlpha (isEmpty ? 0.18f : 0.45f));
-        g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, 0.75f);
+        const float alpha = sel ? 1.0f : (hov ? 0.70f : 0.50f);
+        const float thick = sel ? 1.5f : 0.75f;
+        g.setColour (sliceCol.withAlpha (alpha));
+        g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, thick);
     }
 
-    // ── Pad number (always shown, top-left, faint) ────────────────────────────
+    // ── Inner layout ──────────────────────────────────────────────────────────
+    auto inner     = bounds.reduced (5, 4);
+
+    // Top row: note name left + slice name centred  (fixed height = 14 px)
+    auto topRow    = inner.removeFromTop (14);
+
+    // Bottom strip: L/R meters  (fixed height = 10 px)
+    auto meterArea = inner.removeFromBottom (10);
+
+    // Remaining space = waveform canvas
+    auto waveArea  = inner;   // whatever is left between topRow and meterArea
+
+    // ── MIDI note name — top-left (replaces old pad number) ──────────────────
     {
-        g.setFont (DysektLookAndFeel::makeMonoFont (8.5f));
-        g.setColour (th.foreground.withAlpha (isEmpty ? 0.12f : 0.28f));
-        g.drawText (juce::String (absIndex + 1),
-                    bounds.reduced (5, 4),
-                    juce::Justification::topLeft);
+        g.setFont (DysektLookAndFeel::makeMonoFont (8.0f));
+        g.setColour (sliceCol.brighter (0.55f).withAlpha (0.90f));
+        g.drawText (midiNoteName (slice.midiNote),
+                    topRow.withWidth (30),
+                    juce::Justification::centredLeft);
     }
 
-    if (isEmpty) return;
-
-    const auto& slice     = ui.slices[(size_t) absIndex];
-    const juce::Colour padColour = slice.colour;
-
-    // ── Colour accent bar (left edge) ─────────────────────────────────────────
-    auto barRect = bounds.removeFromLeft (kBarW).reduced (0, 3).toFloat();
-    g.setColour (padColour.withAlpha (sel ? 1.0f : 0.82f));
-    g.fillRoundedRectangle (barRect, 2.0f);
-
-    // Content area (remaining width after accent bar + small padding)
-    auto content = bounds.reduced (5, 4);
-
-    // ── Slice name ────────────────────────────────────────────────────────────
+    // ── Slice name — top-centre ───────────────────────────────────────────────
     {
         const juce::String displayName = slice.name.isNotEmpty()
                                        ? slice.name
                                        : ("Slice " + juce::String (absIndex + 1));
-        auto nameR = content.removeFromTop (content.getHeight() / 2);
-        g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
-        g.setColour (sel ? th.foreground : th.foreground.withAlpha (0.88f));
-        g.drawText (displayName, nameR, juce::Justification::centredLeft, true);
+        g.setFont (DysektLookAndFeel::makeFont (9.5f, true));
+        g.setColour (juce::Colours::white.withAlpha (sel ? 1.0f : 0.88f));
+        g.drawText (displayName, topRow, juce::Justification::centred, true);
     }
 
-    // ── MIDI note (bottom-left) ───────────────────────────────────────────────
+    // ── Slice waveform — fills the middle canvas (8-mode, SliceWaveformLcd style) ──
+    if (waveArea.getWidth() > 4 && waveArea.getHeight() > 4 && ui.sampleLoaded)
     {
-        auto noteR = content.removeFromBottom (content.getHeight() / 2);
-        g.setFont (DysektLookAndFeel::makeMonoFont (8.5f));
-        g.setColour (th.foreground.withAlpha (0.48f));
-        g.drawText (midiNoteName (slice.midiNote), noteR, juce::Justification::bottomLeft);
+        const int startSamp = slice.startSample;
+        const int endSamp   = processor.sliceManager.getEndForSlice (absIndex, ui.sampleNumFrames);
+        const int sliceLen  = endSamp - startSamp;
+
+        if (sliceLen > 0)
+        {
+            // Build per-pixel peak array for this slice
+            const int W = waveArea.getWidth();
+            const int H = waveArea.getHeight();
+            std::vector<float> peaks ((size_t) W, 0.0f);
+            for (int x = 0; x < W; ++x)
+            {
+                const int samp = startSamp + juce::roundToInt ((float) x / (float) W * (float) sliceLen);
+                peaks[(size_t) x] = processor.getWaveformPeakAt (samp);
+            }
+
+            // Clip drawing to waveArea
+            g.saveState();
+            g.reduceClipRegion (waveArea);
+
+            const float ox    = (float) waveArea.getX();
+            const float oy    = (float) waveArea.getY();
+            const float cy    = oy + (float) H * 0.5f;
+            const float scale = (float) H * 0.44f;
+
+            // Use slice colour (brightened slightly) to mirror SliceWaveformLcd
+            const juce::Colour waveCol = sliceCol.brighter (0.25f);
+
+            auto px2x = [&] (int px) -> float { return ox + (float) px; };
+
+            switch (waveformMode)
+            {
+                // ── Mode 0 : Hard (SliceWaveformLcd default — fill + glow lines) ──
+                default:
+                case 0:
+                {
+                    juce::Path fill, lineTop, lineBot;
+                    bool first = true;
+                    for (int px = 0; px < W; ++px)
+                    {
+                        const float amp = peaks[(size_t) px] * scale;
+                        const float yT  = cy - amp;
+                        const float yB  = cy + amp;
+                        if (first) { lineTop.startNewSubPath (px2x (px), yT);
+                                     lineBot.startNewSubPath (px2x (px), yB); first = false; }
+                        else       { lineTop.lineTo (px2x (px), yT);
+                                     lineBot.lineTo (px2x (px), yB); }
+                    }
+                    fill = lineTop;
+                    for (int px = W - 1; px >= 0; --px)
+                        fill.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+                    fill.closeSubPath();
+
+                    // Phosphor-style fill + glow — matches SliceWaveformLcd
+                    g.setColour (waveCol.withAlpha (0.12f));
+                    g.fillPath (fill);
+                    g.setColour (waveCol.withAlpha (0.22f));
+                    g.strokePath (lineTop, juce::PathStrokeType (2.5f));
+                    g.strokePath (lineBot, juce::PathStrokeType (2.5f));
+                    g.setColour (waveCol.withAlpha (0.85f));
+                    g.strokePath (lineTop, juce::PathStrokeType (1.1f));
+                    g.strokePath (lineBot, juce::PathStrokeType (1.1f));
+                    break;
+                }
+
+                // ── Mode 1 : Soft ─────────────────────────────────────────────
+                case 1:
+                {
+                    juce::Path fillPath;
+                    fillPath.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+                    for (int px = 1; px < W; ++px)
+                        fillPath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                    for (int px = W - 1; px >= 0; --px)
+                        fillPath.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+                    fillPath.closeSubPath();
+                    g.setColour (waveCol.withAlpha (0.60f));
+                    g.fillPath (fillPath);
+                    juce::Path topLine;
+                    topLine.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+                    for (int px = 1; px < W; ++px)
+                        topLine.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                    g.setColour (waveCol.withAlpha (0.95f));
+                    g.strokePath (topLine, juce::PathStrokeType (1.2f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    break;
+                }
+
+                // ── Mode 2 : Outline ──────────────────────────────────────────
+                case 2:
+                {
+                    juce::Path topPath, botPath;
+                    topPath.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+                    botPath.startNewSubPath (px2x (0), cy + peaks[0] * scale);
+                    for (int px = 1; px < W; ++px)
+                    {
+                        topPath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                        botPath.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+                    }
+                    g.setColour (waveCol.withAlpha (0.25f));
+                    g.strokePath (topPath, juce::PathStrokeType (2.5f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    g.strokePath (botPath, juce::PathStrokeType (2.5f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    g.setColour (waveCol.withAlpha (0.90f));
+                    g.strokePath (topPath, juce::PathStrokeType (1.0f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    g.strokePath (botPath, juce::PathStrokeType (1.0f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    break;
+                }
+
+                // ── Mode 3 : Rectified ────────────────────────────────────────
+                case 3:
+                {
+                    const float baseline  = oy + (float) H * 0.85f;
+                    const float rectScale = scale * 1.6f;
+                    juce::Path rectPath;
+                    rectPath.startNewSubPath (px2x (0), baseline - peaks[0] * rectScale);
+                    for (int px = 1; px < W; ++px)
+                        rectPath.lineTo (px2x (px), baseline - peaks[(size_t) px] * rectScale);
+                    rectPath.lineTo (px2x (W - 1), baseline);
+                    rectPath.lineTo (px2x (0), baseline);
+                    rectPath.closeSubPath();
+                    juce::ColourGradient grad (waveCol.withAlpha (0.60f), 0.0f, oy,
+                                               waveCol.withAlpha (0.05f), 0.0f, oy + (float) H, false);
+                    g.setGradientFill (grad);
+                    g.fillPath (rectPath);
+                    juce::Path topLine;
+                    topLine.startNewSubPath (px2x (0), baseline - peaks[0] * rectScale);
+                    for (int px = 1; px < W; ++px)
+                        topLine.lineTo (px2x (px), baseline - peaks[(size_t) px] * rectScale);
+                    g.setColour (waveCol.withAlpha (0.90f));
+                    g.strokePath (topLine, juce::PathStrokeType (1.1f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    break;
+                }
+
+                // ── Mode 4 : Mirrored ─────────────────────────────────────────
+                case 4:
+                {
+                    juce::Path upper, lower;
+                    upper.startNewSubPath (px2x (0), cy);
+                    lower.startNewSubPath (px2x (0), cy);
+                    for (int px = 0; px < W; ++px)
+                    {
+                        upper.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                        lower.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+                    }
+                    upper.lineTo (px2x (W - 1), cy); upper.closeSubPath();
+                    lower.lineTo (px2x (W - 1), cy); lower.closeSubPath();
+                    g.setColour (waveCol.withAlpha (0.75f)); g.fillPath (upper);
+                    g.setColour (waveCol.withAlpha (0.35f)); g.fillPath (lower);
+                    juce::Path edge;
+                    edge.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+                    for (int px = 1; px < W; ++px)
+                        edge.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                    g.setColour (waveCol.withAlpha (0.90f));
+                    g.strokePath (edge, juce::PathStrokeType (1.0f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    break;
+                }
+
+                // ── Mode 5 : Bars ─────────────────────────────────────────────
+                case 5:
+                {
+                    for (int px = 0; px < W; ++px)
+                    {
+                        const float amp   = peaks[(size_t) px] * scale;
+                        const float alpha = 0.4f + peaks[(size_t) px] * 0.55f;
+                        g.setColour (waveCol.withAlpha (alpha));
+                        g.fillRect (px2x (px), cy - amp, 1.0f, juce::jmax (1.0f, amp * 2.0f));
+                    }
+                    break;
+                }
+
+                // ── Mode 6 : RMS ──────────────────────────────────────────────
+                case 6:
+                {
+                    juce::Path rmsPath;
+                    rmsPath.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+                    for (int px = 1; px < W; ++px)
+                        rmsPath.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                    for (int px = W - 1; px >= 0; --px)
+                        rmsPath.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
+                    rmsPath.closeSubPath();
+                    juce::ColourGradient grad (waveCol.withAlpha (0.0f), 0.0f, 0.0f,
+                                               waveCol.withAlpha (0.0f), 0.0f, oy + (float) H, false);
+                    grad.addColour (0.35, waveCol.withAlpha (0.22f));
+                    grad.addColour (0.50, waveCol.withAlpha (0.36f));
+                    grad.addColour (0.65, waveCol.withAlpha (0.22f));
+                    g.setGradientFill (grad);
+                    g.fillPath (rmsPath);
+                    juce::Path rmsLine;
+                    rmsLine.startNewSubPath (px2x (0), cy - peaks[0] * scale);
+                    for (int px = 1; px < W; ++px)
+                        rmsLine.lineTo (px2x (px), cy - peaks[(size_t) px] * scale);
+                    g.setColour (waveCol.withAlpha (0.28f));
+                    g.strokePath (rmsLine, juce::PathStrokeType (3.0f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    g.setColour (waveCol.withAlpha (0.95f));
+                    g.strokePath (rmsLine, juce::PathStrokeType (1.1f,
+                        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                    break;
+                }
+
+                // ── Mode 7 : Stepped ──────────────────────────────────────────
+                case 7:
+                {
+                    const int stepW = juce::jmax (2, W / juce::jmax (1, W / 4));
+                    juce::Path upper;
+                    bool started = false;
+                    float lastY = cy;
+                    for (int px = 0; px < W; px += stepW)
+                    {
+                        float y = cy - peaks[(size_t) px] * scale;
+                        if (! started) { upper.startNewSubPath (px2x (px), y); started = true; }
+                        else { upper.lineTo (px2x (px), lastY); upper.lineTo (px2x (px), y); }
+                        upper.lineTo (px2x (juce::jmin (px + stepW, W - 1)), y);
+                        lastY = y;
+                    }
+                    juce::Path lower;
+                    bool startedL = false; float lastYL = cy;
+                    for (int px = 0; px < W; px += stepW)
+                    {
+                        float y = cy + peaks[(size_t) px] * scale;
+                        if (! startedL) { lower.startNewSubPath (px2x (px), y); startedL = true; }
+                        else { lower.lineTo (px2x (px), lastYL); lower.lineTo (px2x (px), y); }
+                        lower.lineTo (px2x (juce::jmin (px + stepW, W - 1)), y);
+                        lastYL = y;
+                    }
+                    juce::Path uFill = upper;
+                    uFill.lineTo (px2x (W - 1), cy); uFill.lineTo (px2x (0), cy); uFill.closeSubPath();
+                    juce::Path lFill = lower;
+                    lFill.lineTo (px2x (W - 1), cy); lFill.lineTo (px2x (0), cy); lFill.closeSubPath();
+                    g.setColour (waveCol.withAlpha (0.70f)); g.fillPath (uFill);
+                    g.setColour (waveCol.withAlpha (0.30f)); g.fillPath (lFill);
+                    g.setColour (waveCol.withAlpha (0.95f));
+                    g.strokePath (upper, juce::PathStrokeType (1.0f));
+                    break;
+                }
+            }
+
+            g.restoreState();
+        }
     }
 
-    // ── Peak meters (bottom-right corner) ────────────────────────────────────
+    // ── L / R peak meters — bottom strip ─────────────────────────────────────
     if (absIndex < (int) processor.slicePeakL.size())
     {
         const float peakL = processor.slicePeakL[(size_t) absIndex].load (std::memory_order_relaxed);
         const float peakR = processor.slicePeakR[(size_t) absIndex].load (std::memory_order_relaxed);
 
-        const int meterW = juce::jmin (50, bounds.getWidth() / 3);
-        const int meterH = 3;
-        const int meterX = bounds.getRight() - meterW - 3;
-        const int meterY = bounds.getBottom() - 4 - meterH * 2 - 2;
+        const int totalW  = meterArea.getWidth();
+        const int meterW  = totalW / 2 - 4;
+        const int meterH  = 3;
+        const int meterY  = meterArea.getCentreY() - meterH - 1;
+        const int meterX  = meterArea.getX();
 
-        // L
-        g.setColour (th.separator.withAlpha (0.35f));
+        // L track
+        g.setColour (juce::Colours::black.withAlpha (0.30f));
         g.fillRect (meterX, meterY, meterW, meterH);
-        g.setColour (padColour.withAlpha (0.82f));
+        g.setColour (sliceCol.brighter (0.30f).withAlpha (0.90f));
         g.fillRect (meterX, meterY, juce::roundToInt (peakL * meterW), meterH);
 
-        // R
-        g.setColour (th.separator.withAlpha (0.35f));
+        // R track
+        g.setColour (juce::Colours::black.withAlpha (0.30f));
         g.fillRect (meterX, meterY + meterH + 2, meterW, meterH);
-        g.setColour (padColour.withAlpha (0.62f));
+        g.setColour (sliceCol.withAlpha (0.70f));
         g.fillRect (meterX, meterY + meterH + 2, juce::roundToInt (peakR * meterW), meterH);
     }
 }
@@ -229,10 +468,8 @@ void PadGridView::paint (juce::Graphics& g)
 
     g.fillAll (th.background);
 
-    // Bank switcher bar
     drawBankBar (g);
 
-    // Pads for the current bank
     const int bankStart = currentBank * kPadsPerBank;
     const int bankEnd   = bankStart + kPadsPerBank;
 
@@ -244,7 +481,6 @@ void PadGridView::paint (juce::Graphics& g)
         drawPad (g, r, absIdx, isEmpty);
     }
 
-    // "No slices" hint
     if (ui.numSlices == 0)
     {
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
@@ -268,7 +504,6 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
 {
     const juce::Point<int> pt = e.getPosition();
 
-    // Bank-switcher hit-test (inside the bank bar)
     if (pt.y < kBankBarH)
     {
         if (bankAButtonBounds.contains (pt) && currentBank != 0)
@@ -286,7 +521,6 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // Pad hit-test
     const int idx = padIndexAt (pt);
     if (idx < 0) return;
 
@@ -323,11 +557,6 @@ void PadGridView::mouseExit (const juce::MouseEvent&)
 //==============================================================================
 void PadGridView::repaintGrid()
 {
-    // Auto-switch bank if the currently active (triggered/selected) slice
-    // lives on a different bank than the one presently displayed.
-    // processor.sliceManager.selectedSlice is updated atomically by the audio
-    // thread whenever a MIDI note triggers a slice, so reading it here on the
-    // timer tick (~30 ms) gives near-instant bank switching.
     const int activePad = processor.sliceManager.selectedSlice
                               .load (std::memory_order_relaxed);
 
@@ -337,8 +566,7 @@ void PadGridView::repaintGrid()
         if (sliceBank != currentBank)
         {
             currentBank = sliceBank;
-            // hoveredPad may now refer to a pad on the wrong bank — clear it.
-            hoveredPad = -1;
+            hoveredPad  = -1;
         }
     }
 
