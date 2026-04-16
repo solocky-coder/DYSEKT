@@ -11,9 +11,9 @@ class DysektProcessor;
  *     P0  (fixed)  — silence at slice start
  *     P1  Attack   — drag X (time) + Y (peak level)   colour: Toxic Lime
  *     P2  Decay    — drag X (time) + Y (sustain level) colour: Radioactive Yellow
- *     P3  Release  — drag X (release-start time)       colour: Molten Orange
- *     P4  (fixed)  — silence at slice end
- *     SH  Sustain  — mid-plateau Y handle              colour: Ice Blue
+ *     P3  Sustain  — mid-plateau Y handle              colour: Ice Blue
+ *     P4  Release  — drag X (release-start time)       colour: Molten Orange
+ *     P5  (fixed)  — silence at slice end
  *
  *   Dimensions match SliceLcdDisplay::kPreferredHeight.
  *   Call repaintLcd() from the editor's timerCallback() at ~30 Hz.
@@ -59,7 +59,7 @@ private:
     };
 
     // ── ADSR envelope node ────────────────────────────────────────────────────
-    enum class NodeRole { None, Attack, Hold, Decay, Sustain, Release };
+    enum class NodeRole { None, Attack, Decay, Sustain, Release };
 
     struct EnvNode
     {
@@ -96,7 +96,6 @@ private:
     // P0 = (0,1) fixed  P1=attack  P2=decay  SH=sustain  P3=release  P4=(1,1) fixed
     struct {
         float ax  { 0.07f };   // attack peak X
-        float hx  { 0.12f };   // hold end X    (plateau at peak)
         float ay  { 0.10f };   // attack peak Y  (near 0 = loud peak)
         float dx  { 0.25f };   // decay end X
         float sy  { 0.30f };   // sustain Y level

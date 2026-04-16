@@ -22,7 +22,6 @@ static const juce::Colour kColAttack { 0xFF00FF87 }; // Toxic Lime
 static const juce::Colour kColDecay { 0xFFFFE800 }; // Radioactive Yellow
 static const juce::Colour kColSustain { 0xFF00C8FF }; // Ice Blue
 static const juce::Colour kColRelease { 0xFFFF6B00 }; // Molten Orange
-static const juce::Colour kColHold { 0xFFFF00FF }; // Hot Magenta
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -136,18 +135,16 @@ void SliceWaveformLcd::buildEnvelopeNodes()
  // Always read per-slice ADSR values — nodes must reflect the slice's
  // own stored values regardless of lock state, so the envelope display
  // is always authoritative for the selected slice.
- float attackMs  = 5.0f;
- float holdMs    = 0.0f;
+ float attackMs  = 10.0f;
  float decayMs   = 100.0f;
  float sustainPc = 100.0f;
- float releaseMs = 20.0f;
+ float releaseMs = 100.0f;
 
  const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
  if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
  {
      const auto& s = processor.sliceManager.getSlice (sel);
      attackMs  = s.attackSec  * 1000.0f;
-     holdMs    = s.holdSec    * 1000.0f;
      decayMs   = s.decaySec   * 1000.0f;
      sustainPc = s.sustainLevel * 100.0f;
      releaseMs = s.releaseSec * 1000.0f;
@@ -156,51 +153,35 @@ void SliceWaveformLcd::buildEnvelopeNodes()
  // Layout (display-only proportions — must match commitNodes exactly):
  // Attack : [0 .. ax ] attack peak always at top
  // Decay : [ax .. dx ] falls from peak to sustain
- // Sustain : [dx .. kSEnd ] flat plateau (kSEnd is fixed)
- // Release : [kSEnd .. rEnd ] falls from sustain to silence
- //
- // A node: (ax, TOP ) drag right = more attack
- // D node: (dx, sy ) drag right = more decay
- // S node: (mid, sy ) drag up/down = sustain level
- // R node: (rEnd, BOT ) drag right = more release tail
- // Attack spans up to 85% of display; D/S/R share remaining space proportionally
- static constexpr float kAX = 0.85f; // attack can span entire slice
+ // Sustain : [dx .. kSEnd ] flat plateau
+ // Release : [rx .. 1.0 ] falls from sustain to silence (drag left = more tail)
+ static constexpr float kAX   = 0.85f; // attack can span up to 85% of display
  static constexpr float kRMax = 0.99f;
 
- // Fixed view windows matching the SCB knob ranges:
- // Attack → 0-1000 ms (knob max = 1.0s)
- // Decay → 0-5000 ms (knob max = 5.0s)
- // Release → 0-5000 ms (knob max = 5.0s)
- // Using sliceDurMs as the window caused the node to pin at the right edge
- // once the value exceeded the slice length (e.g. 464ms slice + 5000ms decay).
- const float sliceDurMs_ = juce::jmax (1.0f, getSliceDurMs());
+ const float sliceDurMs_  = juce::jmax (1.0f, getSliceDurMs());
  const float kAttackViewMs = sliceDurMs_;
- const float kHoldViewMs = sliceDurMs_;
- const float kDecayViewMs = sliceDurMs_;
+ const float kDecayViewMs  = sliceDurMs_;
  const float releaseViewMs = sliceDurMs_;
+
  const float attackNorm = std::sqrt (juce::jmin (attackMs / kAttackViewMs, 1.0f));
- const float holdNorm = std::sqrt (juce::jmin (holdMs / kHoldViewMs, 1.0f));
- const float decayNorm = std::sqrt (juce::jmin (decayMs / kDecayViewMs, 1.0f));
+ const float decayNorm  = std::sqrt (juce::jmin (decayMs  / kDecayViewMs,  1.0f));
 
  env.ax = juce::jlimit (0.0f, kAX, attackNorm * kAX);
 
- // Remaining space after attack — same proportions as original at low attack
- const float remain = kRMax - env.ax;
- const float kHX_eff = env.ax + remain * 0.20f; // hold end (up to 20% of space)
- const float kDX_eff = env.ax + remain * 0.47f; // decay zone end
+ // D and S share the remaining space proportionally (Hold removed)
+ const float remain    = kRMax - env.ax;
+ const float kDX_eff   = env.ax + remain * 0.45f; // decay zone end
  const float kSEnd_eff = env.ax + remain * 0.65f; // sustain plateau end
 
- env.hx = juce::jlimit (env.ax, kHX_eff,
- env.ax + holdNorm * (kHX_eff - env.ax));
-
- env.dx = juce::jlimit (env.hx, kDX_eff,
- env.hx + decayNorm * (kDX_eff - env.hx));
- env.sy = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
- env.ay = 0.04f; // attack peak near top (standard ADSR visual)
+ env.dx = juce::jlimit (env.ax, kDX_eff,
+                         env.ax + decayNorm * (kDX_eff - env.ax));
+ env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
+ env.ay    = 0.04f; // attack peak near top (standard ADSR visual)
  env.sxEnd = kSEnd_eff;
- // Release node represents fade-out START (standard ADSR), not fade-out end.
+
+ // R node: fade-out START — drag left = earlier fade = more release tail
  env.rx = juce::jlimit (0.0f, 1.0f,
- 1.0f - (releaseMs / releaseViewMs));
+                         1.0f - (releaseMs / releaseViewMs));
 
  // Rebuild node list
  envNodes.clear();
@@ -208,15 +189,11 @@ void SliceWaveformLcd::buildEnvelopeNodes()
  EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
  a.colour = kColAttack; a.label = "A"; envNodes.add (a);
 
- // Hold node: X-only drag — stays at peak level (ay)
- EnvNode h; h.xn = env.hx; h.yn = env.ay; h.role = NodeRole::Hold;
- h.colour = kColHold; h.label = "H"; envNodes.add (h);
-
  // Decay node sits on the sustain line at decay end (standard ADSR visual).
  EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
  d.colour = kColDecay; d.label = "D"; envNodes.add (d);
 
- // Sustain handle: mid of plateau [dx .. kSEnd]
+ // Sustain handle: mid of plateau [dx .. sxEnd]
  EnvNode s;
  s.xn = (env.dx + env.sxEnd) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
  s.colour = kColSustain; s.label = "S"; envNodes.add (s);
@@ -231,27 +208,22 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 void SliceWaveformLcd::commitNodes()
 {
  // Inverse-map (must match buildEnvelopeNodes constants exactly)
- // Inverse-map: must match buildEnvNodes dynamic layout
- static constexpr float kAX = 0.85f;
+ static constexpr float kAX   = 0.85f;
  static constexpr float kRMax = 0.99f;
 
- // Inverse of slice-relative sqrt mapping in buildEnvelopeNodes:
- // ms = ratio^2 * kXxxViewMs (inverse of norm = sqrt(ms/kXxxViewMs))
- const float sliceDurMs_c = juce::jmax (1.0f, getSliceDurMs());
+ const float sliceDurMs_c  = juce::jmax (1.0f, getSliceDurMs());
  const float kAttackViewMs = sliceDurMs_c;
- const float kHoldViewMs = sliceDurMs_c;
- const float kDecayViewMs = sliceDurMs_c;
+ const float kDecayViewMs  = sliceDurMs_c;
  const float releaseViewMs = sliceDurMs_c;
- const float remain_c = kRMax - env.ax;
- const float kHX_eff = env.ax + remain_c * 0.20f;
- const float kDX_eff = env.ax + remain_c * 0.47f;
- const float kSEnd_eff = env.ax + remain_c * 0.65f;
+
+ const float remain_c  = kRMax - env.ax;
+ const float kDX_eff   = env.ax + remain_c * 0.45f;
+
  const float aRatio = env.ax / kAX;
- const float hRatio = (kHX_eff > env.ax) ? (env.hx - env.ax) / (kHX_eff - env.ax) : 0.0f;
- const float dRatio = (kDX_eff > env.hx) ? (env.dx - env.hx) / (kDX_eff - env.hx) : 0.0f;
- const float attackMs = juce::jlimit (0.0f, kAttackViewMs, aRatio * aRatio * kAttackViewMs);
- const float holdMs = juce::jlimit (0.0f, kHoldViewMs, hRatio * hRatio * kHoldViewMs);
- const float decayMs = juce::jlimit (0.0f, kDecayViewMs, dRatio * dRatio * kDecayViewMs);
+ const float dRatio = (kDX_eff > env.ax) ? (env.dx - env.ax) / (kDX_eff - env.ax) : 0.0f;
+
+ const float attackMs  = juce::jlimit (0.0f, kAttackViewMs, aRatio * aRatio * kAttackViewMs);
+ const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,  dRatio * dRatio * kDecayViewMs);
  const float sustainPc = juce::jlimit (0.0f, 100.0f, (1.0f - env.sy) * 100.0f);
  const float releaseMs = juce::jlimit (0.0f, releaseViewMs, (1.0f - env.rx) * releaseViewMs);
 
@@ -268,13 +240,32 @@ void SliceWaveformLcd::commitNodes()
         processor.pushCommand (cmd);
     };
 
+    // Also write to the global APVTS param so the SCB knob reflects the drag.
+    // This keeps the node and knob in sync (both show the same value).
+    auto writeApvts = [&] (const juce::String& paramId, float nativeVal)
+    {
+        if (auto* p = processor.apvts.getParameter (paramId))
+            p->setValueNotifyingHost (p->convertTo0to1 (nativeVal));
+    };
+
     switch (dragRole)
     {
-        case NodeRole::Attack:  writePerSlice (DysektProcessor::FieldAttack,   attackMs  / 1000.f); break;
-        case NodeRole::Hold:    writePerSlice (DysektProcessor::FieldHold,     holdMs    / 1000.f); break;
-        case NodeRole::Decay:   writePerSlice (DysektProcessor::FieldDecay,    decayMs   / 1000.f); break;
-        case NodeRole::Sustain: writePerSlice (DysektProcessor::FieldSustain,  sustainPc / 100.f);  break;
-        case NodeRole::Release: writePerSlice (DysektProcessor::FieldRelease,  releaseMs / 1000.f); break;
+        case NodeRole::Attack:
+            writePerSlice (DysektProcessor::FieldAttack,   attackMs  / 1000.f);
+            writeApvts    (ParamIds::defaultAttack,        attackMs);
+            break;
+        case NodeRole::Decay:
+            writePerSlice (DysektProcessor::FieldDecay,    decayMs   / 1000.f);
+            writeApvts    (ParamIds::defaultDecay,         decayMs);
+            break;
+        case NodeRole::Sustain:
+            writePerSlice (DysektProcessor::FieldSustain,  sustainPc / 100.f);
+            writeApvts    (ParamIds::defaultSustain,       sustainPc);
+            break;
+        case NodeRole::Release:
+            writePerSlice (DysektProcessor::FieldRelease,  releaseMs / 1000.f);
+            writeApvts    (ParamIds::defaultRelease,       releaseMs);
+            break;
         default: break;
     }
 
@@ -292,15 +283,14 @@ float SliceWaveformLcd::envAt (float xn) const
  const float kSEnd = env.sxEnd;
  struct Pt { float x, y; };
  const Pt pts[] = {
- { 0.0f, 1.0f },
- { env.ax, env.ay }, // attack peak (env.ay = 0.04, near top)
- { env.hx, env.ay }, // hold plateau end (same peak height)
- { env.dx, env.sy }, // end of decay / sustain level
- { kSEnd, env.sy }, // dynamic end of sustain plateau
- { env.rx, env.sy }, // release start
- { 1.0f, 1.0f } // end of release (silence)
+ { 0.0f,    1.0f    },
+ { env.ax,  env.ay  }, // attack peak (env.ay = 0.04, near top)
+ { env.dx,  env.sy  }, // end of decay / sustain level
+ { kSEnd,   env.sy  }, // dynamic end of sustain plateau
+ { env.rx,  env.sy  }, // release start
+ { 1.0f,    1.0f    }  // end of release (silence)
  };
- constexpr int N = 7;
+ constexpr int N = 6;
 
  for (int i = 0; i < N - 1; ++i)
  {
@@ -363,9 +353,8 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
  {
  // Right-click on a node: toggle that ADSR field's lock for the selected slice
  uint32_t bit = 0;
- if (hit == NodeRole::Attack) bit = kLockAttack;
- else if (hit == NodeRole::Hold) bit = kLockHold;
- else if (hit == NodeRole::Decay) bit = kLockDecay;
+ if      (hit == NodeRole::Attack)  bit = kLockAttack;
+ else if (hit == NodeRole::Decay)   bit = kLockDecay;
  else if (hit == NodeRole::Sustain) bit = kLockSustain;
  else if (hit == NodeRole::Release) bit = kLockRelease;
 
@@ -379,58 +368,59 @@ void SliceWaveformLcd::mouseDown (const juce::MouseEvent& e)
 
  if (currentlyLocked)
  {
-                // Write the slice's locked value back to the global APVTS param
-                // BEFORE clearing the lock bit.  buildEnvelopeNodes() reads
-                // unlocked fields from APVTS, so without this the node jumps
-                // to whatever the global knob happened to be set to.
-                auto writeApvts = [&] (const juce::String& paramId, float nativeVal)
-                {
-                    if (auto* p = processor.apvts.getParameter (paramId))
-                        p->setValueNotifyingHost (p->convertTo0to1 (nativeVal));
-                };
-                if      (bit == kLockAttack)  writeApvts (ParamIds::defaultAttack,  s.attackSec    * 1000.0f);
-                else if (bit == kLockHold)    writeApvts (ParamIds::defaultHold,    s.holdSec      * 1000.0f);
-                else if (bit == kLockDecay)   writeApvts (ParamIds::defaultDecay,   s.decaySec     * 1000.0f);
-                else if (bit == kLockSustain) writeApvts (ParamIds::defaultSustain, s.sustainLevel * 100.0f);
-                else if (bit == kLockRelease) writeApvts (ParamIds::defaultRelease, s.releaseSec   * 1000.0f);
+     // ── UNLOCK: write slice's locked value back to APVTS first ───────────
+     // buildEnvelopeNodes() reads from the slice directly, so the node
+     // won't jump — but sync APVTS knob so SCB shows the right value.
+     auto writeApvts = [&] (const juce::String& paramId, float nativeVal)
+     {
+         if (auto* p = processor.apvts.getParameter (paramId))
+             p->setValueNotifyingHost (p->convertTo0to1 (nativeVal));
+     };
+     if      (bit == kLockAttack)  writeApvts (ParamIds::defaultAttack,  s.attackSec    * 1000.0f);
+     else if (bit == kLockDecay)   writeApvts (ParamIds::defaultDecay,   s.decaySec     * 1000.0f);
+     else if (bit == kLockSustain) writeApvts (ParamIds::defaultSustain, s.sustainLevel * 100.0f);
+     else if (bit == kLockRelease) writeApvts (ParamIds::defaultRelease, s.releaseSec   * 1000.0f);
 
- DysektProcessor::Command cmd;
- cmd.type = DysektProcessor::CmdToggleLock;
- cmd.intParam1 = sel;         // explicit slice index
- cmd.intParam2 = (int) bit;   // the lock bit to toggle
- processor.pushCommand (cmd);
+     DysektProcessor::Command cmd;
+     cmd.type      = DysektProcessor::CmdToggleLock;
+     cmd.intParam1 = sel;
+     cmd.intParam2 = (int) bit;
+     processor.pushCommand (cmd);
  }
  else
  {
- // ═══════════════════════════════════════════════════════════════
- // BUG FIX: Read the effective value directly from the slice (if
- // locked) or from APVTS (if not), WITHOUT the visual roundtrip.
- // This prevents the node from snapping to the init/global value.
- // ═══════════════════════════════════════════════════════════════
- const float attackSec  = (s.lockMask & kLockAttack)  ? s.attackSec      : (processor.attackParam  ? processor.attackParam->load()  / 1000.0f : 0.005f);
- const float holdSec    = (s.lockMask & kLockHold)    ? s.holdSec        : (processor.holdParam    ? processor.holdParam->load()    / 1000.0f : 0.0f);
- const float decaySec   = (s.lockMask & kLockDecay)   ? s.decaySec       : (processor.decayParam   ? processor.decayParam->load()   / 1000.0f : 0.1f);
- const float sustainVal = (s.lockMask & kLockSustain) ? s.sustainLevel   : (processor.sustainParam ? processor.sustainParam->load() / 100.0f  : 1.0f);
- const float releaseSec = (s.lockMask & kLockRelease) ? s.releaseSec     : (processor.releaseParam ? processor.releaseParam->load() / 1000.0f : 0.02f);
+     // ── LOCK: snapshot the slice's CURRENT value into per-slice storage,
+     // then set the lock bit.  Read from the slice struct (which holds
+     // whatever was last written by drag or the knob) — NOT from APVTS,
+     // which could be at a different position and would cause a jump.
+     float snapVal = 0.0f;
+     DysektProcessor::SliceParamField field = DysektProcessor::FieldAttack;
+     if      (bit == kLockAttack)  { snapVal = s.attackSec;    field = DysektProcessor::FieldAttack;  }
+     else if (bit == kLockDecay)   { snapVal = s.decaySec;     field = DysektProcessor::FieldDecay;   }
+     else if (bit == kLockSustain) { snapVal = s.sustainLevel; field = DysektProcessor::FieldSustain; }
+     else if (bit == kLockRelease) { snapVal = s.releaseSec;   field = DysektProcessor::FieldRelease; }
 
- auto lockFieldWithValue = [&] (DysektProcessor::SliceParamField field, float value)
- {
- DysektProcessor::Command c;
- c.type = DysektProcessor::CmdSetSliceParam;
- c.intParam1 = (int) field;
- c.floatParam1 = value;
- processor.pushCommand (c);
- };
-
- if (hit == NodeRole::Attack) lockFieldWithValue (DysektProcessor::FieldAttack, attackSec);
- else if (hit == NodeRole::Hold) lockFieldWithValue (DysektProcessor::FieldHold, holdSec);
- else if (hit == NodeRole::Decay) lockFieldWithValue (DysektProcessor::FieldDecay, decaySec);
- else if (hit == NodeRole::Sustain) lockFieldWithValue (DysektProcessor::FieldSustain, sustainVal);
- else if (hit == NodeRole::Release) lockFieldWithValue (DysektProcessor::FieldRelease, releaseSec);
+     // Write the value (skipLock=1) so the slice record is current
+     {
+         DysektProcessor::Command c;
+         c.type        = DysektProcessor::CmdSetSliceParam;
+         c.intParam1   = (int) field;
+         c.floatParam1 = snapVal;
+         c.intParam2   = 1; // skipLock
+         processor.pushCommand (c);
+     }
+     // Now toggle the lock bit on
+     {
+         DysektProcessor::Command cmd;
+         cmd.type      = DysektProcessor::CmdToggleLock;
+         cmd.intParam1 = sel;
+         cmd.intParam2 = (int) bit;
+         processor.pushCommand (cmd);
+     }
  }
  }
  postCommitGuard = 6;
- lastEnvSnapVer = -1; // guarantee rebuild once guard expires (matches commitNodes)
+ lastEnvSnapVer = -1;
  repaint();
  }
  return; // don't start a drag on right-click
@@ -452,8 +442,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
      {
          const auto& s = processor.sliceManager.getSlice (sel);
          uint32_t bit = 0;
-         if (dragRole == NodeRole::Attack)       bit = kLockAttack;
-         else if (dragRole == NodeRole::Hold)    bit = kLockHold;
+         if      (dragRole == NodeRole::Attack)  bit = kLockAttack;
          else if (dragRole == NodeRole::Decay)   bit = kLockDecay;
          else if (dragRole == NodeRole::Sustain) bit = kLockSustain;
          else if (dragRole == NodeRole::Release) bit = kLockRelease;
@@ -468,36 +457,30 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  const float ox = screenArea.getX();
  const float oy = screenArea.getY();
 
- const float xn = juce::jlimit (0.01f, 0.99f, (e.position.x - ox) / W);
- const float rxn = juce::jlimit (0.0f, 1.0f, (e.position.x - ox) / W); // full-range for R
- const float yn = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
+ const float xn  = juce::jlimit (0.01f, 0.99f, (e.position.x - ox) / W);
+ const float rxn = juce::jlimit (0.0f,  1.0f,  (e.position.x - ox) / W); // full-range for R
+ const float yn  = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
 
  // Dynamic layout — must match buildEnvelopeNodes exactly
- static constexpr float kAX = 0.85f; // attack spans up to 85% of display
+ static constexpr float kAX   = 0.85f;
  static constexpr float kRMax = 0.99f;
 
  if (dragRole == NodeRole::Attack)
  {
- // A: X only — peak height is always maximum, no Y drag
+ // A: X only — peak height is always maximum
  env.ax = juce::jlimit (0.0f, kAX, xn);
  }
 
  // Recalculate dynamic zones every drag tick (attack movement shifts D/S/R zones)
- const float remain = kRMax - env.ax;
- const float kDX_eff = env.ax + remain * 0.47f;
+ const float remain    = kRMax - env.ax;
+ const float kDX_eff   = env.ax + remain * 0.45f;  // matches buildEnvelopeNodes
  const float kSEnd_eff = env.ax + remain * 0.65f;
  env.sxEnd = kSEnd_eff;
 
- // Clamp D into its zone; R is free to span the full display width
+ // Clamp D into its zone; R is free to span full display width
  env.dx = juce::jlimit (env.ax, kDX_eff, env.dx);
  env.rx = juce::jlimit (0.0f, 1.0f, env.rx);
 
- if (dragRole == NodeRole::Hold)
- {
- // H: X-only drag — hold end must stay between ax and dx
- const float kHX_eff = env.ax + (kRMax - env.ax) * 0.20f;
- env.hx = juce::jlimit (env.ax, juce::jmin (kHX_eff, env.dx), xn);
- }
  if (dragRole == NodeRole::Decay)
  {
  // D: X only — controls how far decay extends before sustain
@@ -511,8 +494,6 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  else if (dragRole == NodeRole::Release)
  {
  // R: X only — drag left = longer release tail (earlier fade start)
- // Full range [0,1]: R at 1.0 = no fade (clean cut at slice end)
- // R at 0.0 = fade starts at slice beginning
  env.rx = rxn;
  }
 
@@ -520,10 +501,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  envNodes.clear();
  EnvNode a; a.xn = env.ax; a.yn = env.ay; a.role = NodeRole::Attack;
  a.colour = kColAttack; a.label = "A"; envNodes.add (a);
-
- EnvNode h; h.xn = env.hx; h.yn = env.ay; h.role = NodeRole::Hold;
- h.colour = kColHold; h.label = "H"; envNodes.add (h);
- EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay; // X-only drag, on sustain line
+ EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
  d.colour = kColDecay; d.label = "D"; envNodes.add (d);
  EnvNode s; s.xn = (env.dx + kSEnd_eff) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
  s.colour = kColSustain; s.label = "S"; envNodes.add (s);
@@ -686,12 +664,11 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<fl
  // ── Filled envelope region ────────────────────────────────────────────────
  juce::Path envFill;
  envFill.startNewSubPath (px (0.0f), py (1.0f));
- envFill.lineTo (px (0.0f), py (1.0f));
- envFill.lineTo (px (env.ax), py (env.ay));
- envFill.lineTo (px (env.dx), py (env.sy));
+ envFill.lineTo (px (env.ax),    py (env.ay));
+ envFill.lineTo (px (env.dx),    py (env.sy));
  envFill.lineTo (px (env.sxEnd), py (env.sy));
- envFill.lineTo (px (env.rx), py (env.sy));
- envFill.lineTo (px (1.0f), py (1.0f));
+ envFill.lineTo (px (env.rx),    py (env.sy));
+ envFill.lineTo (px (1.0f),      py (1.0f));
  envFill.closeSubPath();
 
  juce::ColourGradient fillGrad (kColDecay.withAlpha (0.08f), 0, oy,
@@ -702,11 +679,11 @@ void SliceWaveformLcd::drawEnvelope (juce::Graphics& g, const juce::Rectangle<fl
  // ── Envelope polyline ─────────────────────────────────────────────────────
  juce::Path envLine;
  envLine.startNewSubPath (px (0.0f), py (1.0f));
- envLine.lineTo (px (env.ax), py (env.ay));
- envLine.lineTo (px (env.dx), py (env.sy));
+ envLine.lineTo (px (env.ax),    py (env.ay));
+ envLine.lineTo (px (env.dx),    py (env.sy));
  envLine.lineTo (px (env.sxEnd), py (env.sy));
- envLine.lineTo (px (env.rx), py (env.sy));
- envLine.lineTo (px (1.0f), py (1.0f));
+ envLine.lineTo (px (env.rx),    py (env.sy));
+ envLine.lineTo (px (1.0f),      py (1.0f));
 
  // Glow pass
  juce::PathStrokeType glowStroke (2.5f);
@@ -764,15 +741,14 @@ void SliceWaveformLcd::drawNodes (juce::Graphics& g, const juce::Rectangle<float
 
  // Determine if this field is locked
  uint32_t fieldBit = 0;
- if (node.role == NodeRole::Attack) fieldBit = kLockAttack;
- else if (node.role == NodeRole::Hold) fieldBit = kLockHold;
- else if (node.role == NodeRole::Decay) fieldBit = kLockDecay;
+ if      (node.role == NodeRole::Attack)  fieldBit = kLockAttack;
+ else if (node.role == NodeRole::Decay)   fieldBit = kLockDecay;
  else if (node.role == NodeRole::Sustain) fieldBit = kLockSustain;
  else if (node.role == NodeRole::Release) fieldBit = kLockRelease;
  const bool locked = (fieldBit != 0) && ((lockMask & fieldBit) != 0);
 
- // Tick line down to envelope
- if (node.role != NodeRole::Sustain && node.role != NodeRole::Hold)
+ // Tick line down to envelope (not for the Sustain mid-handle)
+ if (node.role != NodeRole::Sustain)
  {
  g.setColour (node.colour.withAlpha (locked ? 0.30f : 0.18f));
  g.drawVerticalLine (juce::roundToInt (cx), cy + r, oy + H);
