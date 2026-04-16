@@ -800,6 +800,7 @@ void DysektEditor::ensureDefaultThemes()
  write ("hack", ThemeData::hackTheme());
  write ("midnight", ThemeData::midnightTheme());
  write ("pigments", ThemeData::pigmentsTheme());
+ write ("dysekt",   ThemeData::dysektTheme());
  // User-created themes in this directory are intentionally preserved.
 }
 
@@ -835,6 +836,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
  else if (themeName == "hack") setTheme (ThemeData::hackTheme());
  else if (themeName == "midnight") setTheme (ThemeData::midnightTheme());
  else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
+ else if (themeName == "dysekt")   setTheme (ThemeData::dysektTheme());
  else setTheme (ThemeData::darkTheme());
  processor.sliceManager.setSlicePalette (getTheme().slicePalette);
  saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
