@@ -64,7 +64,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     };
     // Interface mode toggle — switching routes through setUiMode() so the
     // original waveform UI is never destroyed, just hidden.
-    controlFrame.onUiModeChanged = [this] (int mode) { setUiMode (mode); };
+    headerBar.dualFrame().onUiModeChanged = [this] (int mode) { setUiMode (mode); };
 
     sliceLane.setWaveformView (&waveformView);
 
@@ -151,7 +151,7 @@ void DysektEditor::setUiMode (int mode)
     uiMode = mode;
 
     // Keep the EDIT|PAD tab in sync
-    controlFrame.setPadGridActive (uiMode == 1);
+    headerBar.dualFrame().setPadGridActive (uiMode == 1);
 
     // Persist the new mode
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
@@ -945,7 +945,7 @@ void DysektEditor::loadUserSettings()
     waveformView.setWaveformMode (waveformMode);
     waveformOverview.setWaveformMode (waveformMode);
     padGridView.setWaveformMode (waveformMode);
-    controlFrame.setPadGridActive (uiMode == 1);
+    headerBar.dualFrame().setPadGridActive (uiMode == 1);
     headerBar.setWaveMode (waveformMode);
     actionPanel.setWaveActive (waveformMode != 0);
 

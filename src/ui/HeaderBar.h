@@ -34,6 +34,9 @@ public:
      *  PluginEditor adds this as a visible child and positions it between the LCDs. */
     juce::Component* getControlFrame() { return &controlFrame; }
 
+    /** Typed getter — gives PluginEditor direct access to DualLcdControlFrame API. */
+    DualLcdControlFrame& dualFrame() { return controlFrame; }
+
     // Header buttons
     juce::TextButton undoBtn      { "UNDO"  };
     juce::TextButton redoBtn      { "REDO"  };
