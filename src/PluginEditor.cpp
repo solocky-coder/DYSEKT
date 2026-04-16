@@ -452,7 +452,10 @@ void DysektEditor::resized()
     auto area = juce::Rectangle (0, 0, getWidth(), getHeight());
 
     // ── Top strip ─────────────────────────────────────────────────────────────
-    const int kTopStripH = si (kLogoH) + si (kLcdRowH);
+    // In PAD mode shrink LCD rows to 65% — frees ~116px for the pad grid
+    const int lcdRowH  = (uiMode == 1) ? juce::roundToInt (kLcdRowH   * sf * 0.65f) : si (kLcdRowH);
+    const int ctrlFrmH = (uiMode == 1) ? juce::roundToInt (kCtrlFrameH * sf * 0.65f) : si (kCtrlFrameH);
+    const int kTopStripH = si (kLogoH) + lcdRowH;
     auto topArea = area.removeFromTop (kTopStripH);
     auto topRow  = topArea.reduced (si (kMargin), si (4));
 
@@ -468,8 +471,8 @@ void DysektEditor::resized()
         headerBar.setBounds (centreCol.getX(), btnBarY, centreCol.getWidth(), si (kBtnBarH));
         if (auto* cf = headerBar.getControlFrame())
         {
-            const int cfY = centreCol.getY() + (btnBarY - centreCol.getY() - si (kCtrlFrameH)) / 2;
-            cf->setBounds (centreCol.getX(), cfY, centreCol.getWidth(), si (kCtrlFrameH));
+            const int cfY = centreCol.getY() + (btnBarY - centreCol.getY() - ctrlFrmH) / 2;
+            cf->setBounds (centreCol.getX(), cfY, centreCol.getWidth(), ctrlFrmH);
         }
     }
 
@@ -510,11 +513,16 @@ void DysektEditor::resized()
         sliceControlBar.setBounds ({});
         waveformOverview.setBounds ({});
     } else {
-        auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
         if (uiMode == 0 || trimDialog != nullptr)
+        {
+            auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
             sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+        }
         else
+        {
             sliceControlBar.setBounds ({});
+            // SCB space NOT removed from area — pad grid uses it
+        }
 
         if (uiMode == 0)
         {
