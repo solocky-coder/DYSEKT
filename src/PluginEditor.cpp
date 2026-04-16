@@ -399,11 +399,11 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
         g.drawRoundedRectangle (screenF.expanded (0.5f * sf), 2.0f * sf, 1.0f * sf);
     }
 
-    // Pad grid frame border — same double-border recipe as waveform view
+    // Pad grid frame border — identical recipe and width as the waveform frame
     const bool padVisible = padGridView.isVisible() && padGridView.getHeight() > 0;
     if (padVisible)
     {
-        const auto outerF = padGridView.getBounds().toFloat().expanded (2.0f * sf);
+        const auto outerF = waveformFrameRect (*this, padGridView.getBounds(), false);
         const auto ac     = getTheme().accent;
 
         g.setColour (ac.withAlpha (0.18f));
@@ -511,7 +511,10 @@ void DysektEditor::resized()
         waveformOverview.setBounds ({});
     } else {
         auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
-        sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+        if (uiMode == 0 || trimDialog != nullptr)
+            sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+        else
+            sliceControlBar.setBounds ({});
 
         if (uiMode == 0)
         {
