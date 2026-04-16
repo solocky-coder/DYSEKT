@@ -563,6 +563,11 @@ struct ThemeData
         t.slicePalette[31] = juce::Colour (0xFFB45CF4); // Soft Violet
         return t;
     }
+    static juce::Colour parseHex (const juce::String& hex)
+    {
+        return juce::Colour ((juce::uint32) (0xFF000000 | hex.getHexValue32()));
+    }
+
     static ThemeData fromThemeFile (const juce::String& text)
     {
         ThemeData t = darkTheme(); // defaults
