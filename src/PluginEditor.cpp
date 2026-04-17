@@ -465,7 +465,7 @@ void DysektEditor::resized()
 
     auto centreCol = topRow.removeFromLeft (si (kCtrlFrameW));
     auto logoRow   = centreCol.removeFromTop (si (kLogoH));
-    logoBar.setBounds (logoRow);
+    // logoBar placed after cfY is known — centred vertically between plugin top and CF top
     {
         const int btnBarY = centreCol.getBottom() - si (kBtnBarH) - si (4);
         headerBar.setBounds (centreCol.getX(), btnBarY, centreCol.getWidth(), si (kBtnBarH));
@@ -473,6 +473,13 @@ void DysektEditor::resized()
         {
             const int cfY = centreCol.getY() + (btnBarY - centreCol.getY() - ctrlFrmH) / 2;
             cf->setBounds (centreCol.getX(), cfY, centreCol.getWidth(), ctrlFrmH);
+            // Centre logo: equal margin above and below between plugin top (y=0) and CF top
+            const int logoY = (cfY - si (kLogoH)) / 2;
+            logoBar.setBounds (logoRow.getX(), logoY, logoRow.getWidth(), si (kLogoH));
+        }
+        else
+        {
+            logoBar.setBounds (logoRow);   // fallback: top-aligned
         }
     }
 
@@ -514,7 +521,7 @@ void DysektEditor::resized()
         sliceControlBar.setBounds ({});
         waveformOverview.setBounds ({});
     } else {
-        if ((uiMode == 0 || trimDialog != nullptr) && !mixerOpen)
+        if ((trimDialog != nullptr || (uiMode == 0 && hasSampleLoaded)) && !mixerOpen)
         {
             auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
             sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
@@ -525,7 +532,7 @@ void DysektEditor::resized()
             // SCB space NOT removed from area — pad grid uses it
         }
 
-        if (uiMode == 0 && !mixerOpen)
+        if (uiMode == 0 && !mixerOpen && hasSampleLoaded)
         {
             auto overviewRow = area.removeFromBottom (kOverviewRowH);
             const int overviewY = overviewRow.getY() + kInterGap;
@@ -854,6 +861,11 @@ void DysektEditor::timerCallback()
     {
         const bool hasSample = (processor.sampleData.getSnapshot() != nullptr
                                  && processor.sampleData.getSnapshot()->buffer.getNumSamples() > 0);
+        if (hasSample != hasSampleLoaded)
+        {
+            hasSampleLoaded = hasSample;
+            resized();   // expand/collapse SCB + zoom bar
+        }
         const bool overviewShouldShow = hasSample && (uiMode == 0);
         if (overviewShouldShow != waveformOverview.isVisible())
         {

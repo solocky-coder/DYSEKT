@@ -90,6 +90,7 @@ private:
     /// 0 = Waveform View (original UI — never overwritten).
     /// 1 = Pad Grid.
     int uiMode = 0;
+    bool hasSampleLoaded = false;   // true once a sample with audio is loaded
 
     std::unique_ptr<TrimSession>       trimSession;
     std::unique_ptr<TrimDialog>        trimDialog;
