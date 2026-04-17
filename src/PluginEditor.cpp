@@ -489,9 +489,10 @@ void DysektEditor::resized()
     area.removeFromBottom (si (kMargin));
 
     if (mixerOpen) {
-        const int mh = juce::jmin (si (MixerPanel::kPanelH), si (kPanelSlotH));
-        auto mb = juce::Rectangle (kFX, slot.getY(), kFW, mh);
-        mixerPanel.setBounds (mb);
+        // Expand mixer to fill ALL available area (waveformView space + slot)
+        const int mixTop = area.getY();
+        const int mixBot = slot.getBottom();
+        mixerPanel.setBounds (kFX, mixTop, kFW, mixBot - mixTop);
         browserPanel.setBounds ({});
     }
     else if (browserOpen) {
