@@ -22,6 +22,9 @@ private:
  // ── Layout constants ──────────────────────────────────────────────────────
  static constexpr int kTotalRows = 11; // rows 0-9 data + row 10 flags
  static constexpr int kRowH = 28;
+
+ // Returns the row height that exactly fits all kTotalRows data rows above the flags strip.
+ int effectiveRowH() const noexcept;
  static constexpr int kLeftPad = 6;
  static constexpr int kLabelW = 46;
  static constexpr int kScanlineAlpha = 28;

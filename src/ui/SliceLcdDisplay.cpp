@@ -204,7 +204,7 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
     const float sf    = (float) getHeight() / (float) kPreferredHeight;
-    const int rowH  = juce::roundToInt (kRowH    * sf);
+    const int rowH  = effectiveRowH();
     const int lPad  = juce::roundToInt (kLeftPad * sf);
     int y = b.getY() + 4 + row * rowH;
 
@@ -245,7 +245,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
     const float sf    = (float) getHeight() / (float) kPreferredHeight;
-    const int rowH  = juce::roundToInt (kRowH    * sf);
+    const int rowH  = effectiveRowH();
     const int lPad  = juce::roundToInt (kLeftPad * sf);
     const int y       = b.getY() + 4 + row * rowH;
     const juce::Font  f = DysektLookAndFeel::makeFont (23.0f * sf);
@@ -411,6 +411,18 @@ void SliceLcdDisplay::drawNoSampleScreen (juce::Graphics& g)
 }
 
 
+
+// -- effectiveRowH -------------------------------------------------------
+int SliceLcdDisplay::effectiveRowH() const noexcept
+{
+    const float sf      = (float) getHeight() / (float) kPreferredHeight;
+    const int   flagH   = juce::roundToInt (22 * sf);
+    const int   flagGap = juce::roundToInt (3  * sf);
+    auto        b       = getLocalBounds().reduced (4);
+    const int   availH  = b.getHeight() - 4 - flagH - flagGap - 2;
+    return std::max (8, availH / kTotalRows);
+}
+
 void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
 {
     if (! data.hasSlice) return;
@@ -571,7 +583,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         auto   screen    = getLocalBounds().reduced (4);
         auto   pal       = LcdColours::fromTheme();
         const float sf   = (float) getHeight() / (float) kPreferredHeight;
-        const int rowH = juce::roundToInt (kRowH * sf);
+        const int rowH  = effectiveRowH();
         const int y      = screen.getY() + 4;
 
         // Highlight background — tinted with the slice's vibrant colour
@@ -633,7 +645,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
             auto scr = getLocalBounds().reduced (4);
             const int rightX = scr.getX() + (scr.getWidth() * 52 / 100);
             const float sfHit = (float) getHeight() / (float) kPreferredHeight;
-            const int sRowH = juce::roundToInt (kRowH * sfHit);
+            const int sRowH = effectiveRowH();
             nameRowHitRect = { rightX, scr.getY() + 4 + sRowH,
                                scr.getRight() - rightX, sRowH };
         }
