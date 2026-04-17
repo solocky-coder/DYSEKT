@@ -203,14 +203,16 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const int rowH = kRowH;
+    const float sf    = (float) getHeight() / (float) kPreferredHeight;
+    const int rowH  = juce::roundToInt (kRowH    * sf);
+    const int lPad  = juce::roundToInt (kLeftPad * sf);
     int y = b.getY() + 4 + row * rowH;
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
 
-    const juce::Font labelFont = DysektLookAndFeel::makeFont (24.0f, true);
-    const juce::Font valueFont = DysektLookAndFeel::makeFont (26.0f);
+    const juce::Font labelFont = DysektLookAndFeel::makeFont (24.0f * sf, true);
+    const juce::Font valueFont = DysektLookAndFeel::makeFont (26.0f * sf);
 
     if (highlight)
     {
@@ -219,7 +221,7 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     }
 
     // Header row: label left-aligned, value follows directly after a gap
-    const int lx = b.getX() + kLeftPad;
+    const int lx = b.getX() + lPad;
     g.setFont (labelFont);
     g.setColour (highlight ? pal.highlight : pal.labelCol);
     g.drawText (label, lx, y, b.getWidth() / 3, rowH,
@@ -228,7 +230,7 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
     const int vx = lx + labelFont.getStringWidth (label) + 6;
     g.setFont (valueFont);
     g.setColour (highlight ? pal.highlight : pal.phosphor);
-    g.drawText (value, vx, y, b.getRight() - vx - kLeftPad, rowH,
+    g.drawText (value, vx, y, b.getRight() - vx - lPad, rowH,
                 juce::Justification::centredLeft, false);
 }
 
@@ -242,9 +244,11 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const int rowH    = kRowH;
+    const float sf    = (float) getHeight() / (float) kPreferredHeight;
+    const int rowH  = juce::roundToInt (kRowH    * sf);
+    const int lPad  = juce::roundToInt (kLeftPad * sf);
     const int y       = b.getY() + 4 + row * rowH;
-    const juce::Font  f = DysektLookAndFeel::makeFont (23.0f);
+    const juce::Font  f = DysektLookAndFeel::makeFont (23.0f * sf);
 
     // Skip rows fully outside the visible screen area
     if (y + rowH <= b.getY() + 4 || y >= b.getBottom() - 4) return;
@@ -259,8 +263,8 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
 
     // ── Left item — left-aligned from the left edge ───────────────────────────
     const int halfW   = b.getWidth() / 2;
-    const int leftX   = b.getX() + kLeftPad;
-    const int leftW   = halfW - kLeftPad - 4;
+    const int leftX   = b.getX() + lPad;
+    const int leftW   = halfW - lPad - 4;
 
     // Split leftStr into label (up to first space or ':') and rest for colouring
     const int colonPos = leftStr.indexOfChar (':');
@@ -286,7 +290,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
     // ── Right item — left-aligned from the right-column start ────────────────
     // Use 52% split so right column has enough room and never overflows.
     const int rightX  = b.getX() + (b.getWidth() * 52 / 100);
-    const int rightW  = b.getRight() - rightX - kLeftPad;
+    const int rightW  = b.getRight() - rightX - lPad;
 
     const int rColonPos = rightStr.indexOfChar (':');
     if (rColonPos > 0)
@@ -317,11 +321,12 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     const auto pal = LcdColours::fromTheme();
     auto screen = getLocalBounds().reduced (4);
 
-    const juce::Font flagFont = DysektLookAndFeel::makeFont (16.0f, true);
-    const int flagH   = 22;
-    const int flagGap = 4;
-    const int pad     = 3;
-    const int stripY  = screen.getBottom() - flagH - 3;
+    const float sf      = (float) getHeight() / (float) kPreferredHeight;
+    const juce::Font flagFont = DysektLookAndFeel::makeFont (16.0f * sf, true);
+    const int flagH   = juce::roundToInt (22 * sf);
+    const int flagGap = juce::roundToInt (4  * sf);
+    const int pad     = juce::roundToInt (3  * sf);
+    const int stripY  = screen.getBottom() - flagH - juce::roundToInt (3 * sf);
 
     struct Flag { juce::String text; bool on; int fieldId; bool isCycle; };
     juce::String loopStr = data.loopMode == 1 ? "LOOP" : (data.loopMode == 2 ? "PING" : "LOOP");
@@ -337,13 +342,14 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     };
 
     const int numFlags  = (int) std::size (flags);
-    const int availW    = screen.getWidth() - 2 * kLeftPad - flagGap * (numFlags - 1);
+    const int lPad      = juce::roundToInt (kLeftPad * sf);
+    const int availW    = screen.getWidth() - 2 * lPad - flagGap * (numFlags - 1);
     const int flagW     = availW / numFlags;
 
     flagHitRects.clear();
 
     g.setFont (flagFont);
-    int fx = screen.getX() + kLeftPad;
+    int fx = screen.getX() + lPad;
     for (auto& f : flags)
     {
         juce::Rectangle<int> box (fx, stripY, flagW, flagH);
@@ -365,23 +371,24 @@ void SliceLcdDisplay::drawNoSliceScreen (juce::Graphics& g)
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    g.setFont (DysektLookAndFeel::makeFont (20.0f));
+    const float sf = (float) getHeight() / (float) kPreferredHeight;
+    g.setFont (DysektLookAndFeel::makeFont (20.0f * sf));
     g.setColour (pal.noDataCol);
 
     if (data.hasSample && data.sampleName.isNotEmpty())
     {
         g.setColour (pal.phosphor.withAlpha (0.6f));
         g.drawText (data.sampleName.toUpperCase(),
-                    b.reduced (kLeftPad, 0), juce::Justification::centredTop);
+                    b.reduced (juce::roundToInt (kLeftPad * sf), 0), juce::Justification::centredTop);
         g.setColour (pal.noDataCol);
     }
 
-    g.setFont (DysektLookAndFeel::makeFont (22.0f));
+    g.setFont (DysektLookAndFeel::makeFont (22.0f * sf));
     g.drawText ("-- NO SLICE SELECTED --", b, juce::Justification::centred);
 
     if (data.numSlices > 0)
     {
-        g.setFont (DysektLookAndFeel::makeFont (18.0f));
+        g.setFont (DysektLookAndFeel::makeFont (18.0f * sf));
         g.setColour (pal.dim);
         g.drawText (juce::String (data.numSlices) + " SLICES  |  SELECT A PAD",
                     b, juce::Justification::centredBottom);
@@ -392,11 +399,12 @@ void SliceLcdDisplay::drawNoSampleScreen (juce::Graphics& g)
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    g.setFont (DysektLookAndFeel::makeFont (22.0f));
+    const float sf = (float) getHeight() / (float) kPreferredHeight;
+    g.setFont (DysektLookAndFeel::makeFont (22.0f * sf));
     g.setColour (pal.noDataCol);
     g.drawText ("-- NO SAMPLE LOADED --", b, juce::Justification::centred);
 
-    g.setFont (DysektLookAndFeel::makeFont (18.0f));
+    g.setFont (DysektLookAndFeel::makeFont (18.0f * sf));
     g.setColour (pal.dim);
     g.drawText ("DROP A FILE OR USE THE BROWSER",
                 b, juce::Justification::centredBottom);
@@ -562,7 +570,8 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         // Draw centred header: measure label+value as one unit, centre in screen
         auto   screen    = getLocalBounds().reduced (4);
         auto   pal       = LcdColours::fromTheme();
-        const int rowH   = kRowH;
+        const float sf   = (float) getHeight() / (float) kPreferredHeight;
+        const int rowH = juce::roundToInt (kRowH * sf);
         const int y      = screen.getY() + 4;
 
         // Highlight background — tinted with the slice's vibrant colour
@@ -571,8 +580,8 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
                          : data.sliceColour.withAlpha (0.28f));
         g.fillRect (screen.getX(), y, screen.getWidth(), rowH - 1);
 
-        const juce::Font lblF = DysektLookAndFeel::makeFont (24.0f, true);
-        const juce::Font valF = DysektLookAndFeel::makeFont (26.0f);
+        const juce::Font lblF = DysektLookAndFeel::makeFont (24.0f * sf, true);
+        const juce::Font valF = DysektLookAndFeel::makeFont (26.0f * sf);
         const int lblW = lblF.getStringWidth (sliceStr);
         const int gap  = 8;
         const int valW = valF.getStringWidth (nameStr);
@@ -592,7 +601,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         // Lock badge: small pill on the far right when slice is locked
         if (data.sliceLocked)
         {
-            const juce::Font lkF = DysektLookAndFeel::makeFont (16.0f, true);
+            const juce::Font lkF = DysektLookAndFeel::makeFont (16.0f * sf, true);
             const juce::String lkStr = "LOCK";
             const int lkW = lkF.getStringWidth (lkStr) + 6;
             const int lkX = screen.getRight() - lkW - 6;
@@ -623,8 +632,10 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         {
             auto scr = getLocalBounds().reduced (4);
             const int rightX = scr.getX() + (scr.getWidth() * 52 / 100);
-            nameRowHitRect = { rightX, scr.getY() + 4 + 1 * kRowH,
-                               scr.getRight() - rightX, kRowH };
+            const float sfHit = (float) getHeight() / (float) kPreferredHeight;
+            const int sRowH = juce::roundToInt (kRowH * sfHit);
+            nameRowHitRect = { rightX, scr.getY() + 4 + sRowH,
+                               scr.getRight() - rightX, sRowH };
         }
 
         drawRowPair (g, 1, noteStr, nameStr);

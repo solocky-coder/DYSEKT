@@ -87,15 +87,16 @@ void SliceControlBar::resized() {}
 // =============================================================================
 void SliceControlBar::drawLockIcon (juce::Graphics& g, int x, int y, bool locked)
 {
+ const int iconSz = juce::roundToInt (10 * paintSf);
  if (locked)
  {
  g.setColour (getTheme().lockActive);
- g.fillRect (x, y, 10, 10);
+ g.fillRect (x, y, iconSz, iconSz);
  }
  else
  {
  g.setColour (getTheme().lockInactive.withAlpha (0.6f));
- g.drawRect (x, y, 10, 10, 1);
+ g.drawRect (x, y, iconSz, iconSz, 1);
  }
 }
 
@@ -296,14 +297,14 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
 
  if (armed || mapped)
  {
- g.setFont (DysektLookAndFeel::makeFont (8.0f));
+ g.setFont (DysektLookAndFeel::makeFont (8.0f * sf));
  g.setColour (getTheme().accent.withAlpha (armed ? 1.0f : 0.65f));
  g.drawText (armed ? "ARM" : processor.midiLearn.getLabelText (fieldId),
  x, y + cellH - 10, kKnobR * 2 + 6, 10,
  juce::Justification::centred);
  }
 
- const int textX = knobCX + kKnobR + 4;
+ const int textX = knobCX + knobR + juce::roundToInt (4 * sf);
  // Reserve 12px on the right for the lock icon (10px icon + 2px gap) when a lock exists
  const int lockReserve = (lockBit != 0) ? 12 : 0;
  const int textW = cellW - (textX - x) - 1 - lockReserve;
@@ -414,7 +415,7 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
  // MIDI-learn label
  if (armed || mapped)
  {
- g.setFont (DysektLookAndFeel::makeFont (8.0f));
+ g.setFont (DysektLookAndFeel::makeFont (8.0f * sf));
  g.setColour (ac.withAlpha (armed ? 1.0f : 0.65f));
  g.drawText (armed ? "ARM" : processor.midiLearn.getLabelText (DysektProcessor::FieldPan),
  x, y + cellH - 10, cellW, 10, juce::Justification::centredLeft);
@@ -631,7 +632,7 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
 
     // Label — top half
     const int midY = cell.getY() + cell.getHeight() / 2;
-    g.setFont (DysektLookAndFeel::makeFont (8.0f));
+    g.setFont (DysektLookAndFeel::makeFont (8.0f * sf));
     g.setColour (T.accent.withAlpha (0.65f));
     // Shrink label area if fine badge is shown
     const int labelW = showFineBadge ? (cell.getWidth() - 26) : cell.getWidth();
@@ -792,18 +793,22 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  cells.clear();
 
+ // Scale all fixed pixel constants proportionally with component height
+ paintSf = (float) getHeight() / 72.0f;
+ auto si  = [this](int v) { return juce::roundToInt ((float) v * paintSf); };
+
  const auto& ui = processor.getUiSliceSnapshot();
  int idx = ui.selectedSlice;
  int numSlices = ui.numSlices;
- int rightEdge = getWidth() - 8;
- int row1y = 2, row2y = 36;
+ int rightEdge = getWidth() - si (8);
+ int row1y = si (2), row2y = si (36);
  rootNoteArea = {}; // no longer drawn — LCD shows ROOT and SLICES
 
  if (idx < 0 || idx >= numSlices)
  {
- g.setFont (DysektLookAndFeel::makeFont (15.0f));
+ g.setFont (DysektLookAndFeel::makeFont (15.0f * paintSf));
  g.setColour (getTheme().foreground.withAlpha (0.35f));
- g.drawText ("No slice selected", 8, 24, 220, 18, juce::Justification::centredLeft);
+ g.drawText ("No slice selected", si (8), si (24), si (220), si (18), juce::Justification::centredLeft);
  return;
  }
 
@@ -835,16 +840,16 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  // ── Row 1 right: slice index label ───────────────────────────────────────
  {
- g.setFont (DysektLookAndFeel::makeFont (12.0f));
+ g.setFont (DysektLookAndFeel::makeFont (12.0f * paintSf));
  g.setColour (getTheme().accent.withAlpha (0.7f));
  g.drawText ("SLICE " + juce::String (idx + 1),
- 8, row1y + 2, rightEdge - 8, 13, juce::Justification::right);
+ si (8), row1y + si (2), rightEdge - si (8), si (13), juce::Justification::right);
  // Sample range + length is shown in full on the LCD (ST / END / LEN rows)
  // so the duplicate read-only text here has been removed.
  }
 
  // ── Row 1 params ──────────────────────────────────────────────────
- int x = 8;
+ int x = si (8);
 
  // BPM — knob
  {
@@ -859,7 +864,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  drawKnobCell (g, x, row1y, "BPM", bpmStr,
  toNorm (F::FieldBpm, bpmVal),
  locked, kLockBpm, F::FieldBpm, 20.f, 999.f, 0.01f, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // PITCH — knob
@@ -871,7 +876,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  (pvi >= 0 ? "+" : "") + juce::String (pvi) + "st",
  toNorm (F::FieldPitch, pv),
  locked, kLockPitch, F::FieldPitch, -48.f, 48.f, 0.1f, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // TUNE — knob
@@ -884,7 +889,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  (cvi >= 0 ? "+" : "") + juce::String (cvi) + "ct",
  toNorm (F::FieldCentsDetune, cv),
  locked, kLockCentsDetune, F::FieldCentsDetune, -100.f, 100.f, 0.1f, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // ALGO selector removed — Repitch vs Stretch is now derived from the STCH toggle
@@ -897,7 +902,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  juce::String ((int) tv) + "Hz",
  toNorm (F::FieldTonality, tv),
  locked, kLockTonality, F::FieldTonality, 0.f, 8000.f, 100.f, cw);
- x += cw + 4;
+ x += cw + si (4);
 
  float gFmnt = processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load();
  locked = (s.lockMask & kLockFormant) != 0;
@@ -906,7 +911,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  (fv >= 0.f ? "+" : "") + juce::String (fv, 1),
  toNorm (F::FieldFormant, fv),
  locked, kLockFormant, F::FieldFormant, -24.f, 24.f, 0.1f, cw);
- x += cw + 4;
+ x += cw + si (4);
 
  bool gFmntC = processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load() > 0.5f;
  locked = (s.lockMask & kLockFormantComp) != 0;
@@ -914,7 +919,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  drawParamCell (g, x, row1y, "FMNT C", fmntCVal ? "ON" : "OFF",
  locked, kLockFormantComp, F::FieldFormantComp,
  0.f, 1.f, 1.f, true, false, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
  // STRETCH — boolean
  {
@@ -923,7 +928,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  drawParamCell (g, x, row1y, "STRETCH", sv ? "ON" : "OFF",
  locked, kLockStretch, F::FieldStretchEnabled,
  0.f, 1.f, 1.f, true, false, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // MARKER — slice boundary knob in row 1
@@ -939,7 +944,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  ? processor.liveDragBoundsStart.load (std::memory_order_relaxed)
  : s.startSample;
  drawMarkerSliderCell (g, x, row1y, markerSample, ui.sampleNumFrames, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // GAIN, PAN, OUT — mix group in row 1
@@ -957,7 +962,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  (gv >= 0.f ? "+" : "") + juce::String (gv, 1) + "dB",
  toNorm (F::FieldVolume, gv),
  locked, kLockVolume, F::FieldVolume, -100.f, 24.f, 0.1f, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // PAN
@@ -966,7 +971,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  bool locked = (s.lockMask & kLockPan) != 0;
  float pv = locked ? s.pan : gPanVal;
  drawPanSliderCell (g, x, row1y, pv, locked, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // OUT
@@ -977,7 +982,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  drawParamCell (g, x, row1y, "OUT", outLabel,
  locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f,
  false, true, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // ── Separator before chromatic group ────────────────────────────────
@@ -990,7 +995,7 @@ void SliceControlBar::paint (juce::Graphics& g)
      const bool chromaLocked = (s.lockMask & kLockChromaticChannel) != 0;
      const int  chVal        = chromaLocked ? s.chromaticChannel : 0;
      drawChroBadgeCell (g, x, row1y, chVal, chromaLocked, cw);
-     x += cw + 4;
+     x += cw + si (4);
  }
 
  // LEGATO — chromatic legato toggle (per-slice)
@@ -998,14 +1003,14 @@ void SliceControlBar::paint (juce::Graphics& g)
      const bool legatoLocked = (s.lockMask & kLockChromaticLegato) != 0;
      const bool legatoOn     = legatoLocked ? s.chromaticLegato : false;
      drawLegatoToggleCell (g, x, row1y, legatoOn, legatoLocked, cw);
-     x += cw + 4;
+     x += cw + si (4);
  }
  }
  g.setColour (getTheme().separator);
  g.drawHorizontalLine (34, 8.0f, (float) getWidth() - 8.0f);
 
  // ── Row 2 ─────────────────────────────────────────────────────────
- x = 8;
+ x = si (8);
  int adsrGroupX1 = x, adsrGroupX2 = x;
 float relMaxSec = 5.0f;
 {
@@ -1029,7 +1034,7 @@ float relMaxSec = 5.0f;
  juce::String ((int) (atk * 1000.f)) + "ms",
  toNorm (F::FieldAttack, atk),
  locked, kLockAttack, F::FieldAttack, 0.f, 1.f, 0.001f, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
 
@@ -1043,7 +1048,7 @@ float relMaxSec = 5.0f;
  juce::String ((int) (dec * 1000.f)) + "ms",
  toNorm (F::FieldDecay, dec),
  locked, kLockDecay, F::FieldDecay, 0.f, 5.f, 0.001f, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // SUS — knob (stored 0-1, display %)
@@ -1054,7 +1059,7 @@ float relMaxSec = 5.0f;
  juce::String ((int) (sus * 100.f)) + "%",
  toNorm (F::FieldSustain, sus),
  locked, kLockSustain, F::FieldSustain, 0.f, 1.f, 0.01f, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // REL — knob
@@ -1067,7 +1072,7 @@ const float relNorm = juce::jlimit (0.f, 1.f, rel / relMaxSec);
  juce::String ((int) (rel * 1000.f)) + "ms",
  relNorm,
 locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
- x += cw + 4;
+ x += cw + si (4);
  adsrGroupX2 = x - 4;
  }
 
@@ -1084,7 +1089,7 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  toNorm (F::FieldFilterCutoff, fv),
  locked, kLockFilter, F::FieldFilterCutoff,
  20.f, 20000.f, 1.f, cw);
- x += cw + 4;
+ x += cw + si (4);
  }
 
  // FRES — filter resonance knob (0–1, display as 0–100%)
@@ -1097,7 +1102,7 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  toNorm (F::FieldFilterRes, rv),
  locked, kLockFilter, F::FieldFilterRes,
  0.f, 1.f, 0.01f, cw);
- x += cw + 4;
+ x += cw + si (4);
  filterGroupX2 = x - 4;
  }
 
@@ -1110,7 +1115,7 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
                       juce::jlimit (0.f, 1.f, glideMs / 200.f),
                       false, 0, kFieldGlide,
                       0.f, 200.f, 1.f, cw);
-        x += cw + 4;
+        x += cw + si (4);
     }
 
  // METER — waveform activity pulse after FRES
