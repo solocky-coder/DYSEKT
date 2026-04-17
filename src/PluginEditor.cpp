@@ -490,7 +490,7 @@ void DysektEditor::resized()
 
     if (mixerOpen) {
         // Expand mixer to fill ALL available area (waveformView space + slot)
-        const int mixTop = area.getY();
+        const int mixTop = actionArea.getY();  // close gap: start at LCD bottom, not content area top
         const int mixBot = slot.getBottom();
         mixerPanel.setBounds (kFX, mixTop, kFW, mixBot - mixTop);
         browserPanel.setBounds ({});
