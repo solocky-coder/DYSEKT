@@ -780,7 +780,7 @@ void DysektEditor::timerCallback()
         scaleDirty = false; lastScale = scale;
         // Reset to base size first so the host doesn't compound the scale on
         // top of a previously-enlarged component (avoids double-scaling at 1.5×+)
-        setTransform (juce::AffineTransform::identity);
+        setTransform (juce::AffineTransform{});
         setSize (kBaseW, kTotalH);
         setTransform (juce::AffineTransform::scale (scale));
         DysektLookAndFeel::setMenuScale (scale);

@@ -297,14 +297,14 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
 
  if (armed || mapped)
  {
- g.setFont (DysektLookAndFeel::makeFont (8.0f * sf));
+ g.setFont (DysektLookAndFeel::makeFont (8.0f * paintSf));
  g.setColour (getTheme().accent.withAlpha (armed ? 1.0f : 0.65f));
  g.drawText (armed ? "ARM" : processor.midiLearn.getLabelText (fieldId),
  x, y + cellH - 10, kKnobR * 2 + 6, 10,
  juce::Justification::centred);
  }
 
- const int textX = knobCX + knobR + juce::roundToInt (4 * sf);
+ const int textX = knobCX + kKnobR + juce::roundToInt (4.0f * paintSf);
  // Reserve 12px on the right for the lock icon (10px icon + 2px gap) when a lock exists
  const int lockReserve = (lockBit != 0) ? 12 : 0;
  const int textW = cellW - (textX - x) - 1 - lockReserve;
@@ -415,7 +415,7 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
  // MIDI-learn label
  if (armed || mapped)
  {
- g.setFont (DysektLookAndFeel::makeFont (8.0f * sf));
+ g.setFont (DysektLookAndFeel::makeFont (8.0f * paintSf));
  g.setColour (ac.withAlpha (armed ? 1.0f : 0.65f));
  g.drawText (armed ? "ARM" : processor.midiLearn.getLabelText (DysektProcessor::FieldPan),
  x, y + cellH - 10, cellW, 10, juce::Justification::centredLeft);
@@ -632,7 +632,7 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
 
     // Label — top half
     const int midY = cell.getY() + cell.getHeight() / 2;
-    g.setFont (DysektLookAndFeel::makeFont (8.0f * sf));
+    g.setFont (DysektLookAndFeel::makeFont (8.0f * paintSf));
     g.setColour (T.accent.withAlpha (0.65f));
     // Shrink label area if fine badge is shown
     const int labelW = showFineBadge ? (cell.getWidth() - 26) : cell.getWidth();
