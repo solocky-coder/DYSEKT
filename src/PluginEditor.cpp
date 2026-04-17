@@ -789,10 +789,6 @@ void DysektEditor::timerCallback()
     if (scaleDirty || scale != lastScale)
     {
         scaleDirty = false; lastScale = scale;
-        // Reset to base size first so the host doesn't compound the scale on
-        // top of a previously-enlarged component (avoids double-scaling at 1.5×+)
-        setTransform (juce::AffineTransform::identity);
-        setSize (kBaseW, kTotalH);
         setTransform (juce::AffineTransform::scale (scale));
         DysektLookAndFeel::setMenuScale (scale);
         saveUserSettings (scale, getTheme().name);
@@ -806,7 +802,7 @@ void DysektEditor::timerCallback()
     const bool waveformAnimating = waveformInteracting || previewActive
                                 || playbackActive || processor.lazyChop.isActive()
                                 || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
-    const bool waveformShowing      = (uiMode == 0) || processor.trimModeActive.load (std::memory_order_relaxed);
+    const bool waveformShowing      = ((uiMode == 0) || processor.trimModeActive.load (std::memory_order_relaxed)) && !mixerOpen;
     const bool waveformNeedsRepaint = waveformShowing && (uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating);
     const bool laneNeedsRepaint     = waveformShowing && (uiChanged || viewportChanged || previewActive || lastPreviewActive);
 
