@@ -524,7 +524,7 @@ void DysektEditor::resized()
             // SCB space NOT removed from area — pad grid uses it
         }
 
-        if (uiMode == 0)
+        if (uiMode == 0 && !mixerOpen)
         {
             auto overviewRow = area.removeFromBottom (kOverviewRowH);
             const int overviewY = overviewRow.getY() + kInterGap;
@@ -598,6 +598,9 @@ void DysektEditor::toggleMixerPanel()
         mixerOpen = false;
         mixerPanel.setVisible (false);
         headerBar.setBodeActive (false);
+        // Restore waveform overview if we're in Edit mode
+        if (uiMode == 0)
+            waveformOverview.setVisible (true);
     } else {
         if (browserOpen) {
             browserOpen = false;
@@ -607,6 +610,8 @@ void DysektEditor::toggleMixerPanel()
         mixerOpen = true;
         mixerPanel.setVisible (true);
         headerBar.setBodeActive (true);
+        // Hide waveform overview — mixer frame occupies that area
+        waveformOverview.setVisible (false);
     }
     resized(); repaint(); resized(); repaint();
 }
@@ -845,7 +850,7 @@ void DysektEditor::timerCallback()
     {
         const bool hasSample = (processor.sampleData.getSnapshot() != nullptr
                                  && processor.sampleData.getSnapshot()->buffer.getNumSamples() > 0);
-        const bool overviewShouldShow = hasSample && (uiMode == 0);
+        const bool overviewShouldShow = hasSample && (uiMode == 0) && !mixerOpen;
         if (overviewShouldShow != waveformOverview.isVisible())
         {
             waveformOverview.setVisible (overviewShouldShow);
