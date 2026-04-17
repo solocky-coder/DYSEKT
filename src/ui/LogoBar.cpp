@@ -75,12 +75,6 @@ void LogoBar::paint (juce::Graphics& g)
     g.setColour (accent);
     g.drawText (sekt, textX + dyW, 0, sektW + 2, h, juce::Justification::centredLeft);
 
-    // ── Tagline ───────────────────────────────────────────────────────────
-    g.setFont (DysektLookAndFeel::makeFont (11.5f));
-    g.setColour (fg.withAlpha (0.85f));
-    g.drawText ("SAMPLE SLICER", textX, cy + 4, wordW + 20, h - cy - 4,
-                juce::Justification::centredLeft);
-
     // ── Frame border — drawn last so it sits on top of the fill ──────────────
     // The component already has a 4px layout gap from the outer window border;
     // withTrimmedTop(3) adds a further 3px so the frame is clearly separated.
