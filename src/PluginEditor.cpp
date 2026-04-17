@@ -484,13 +484,15 @@ void DysektEditor::resized()
     const int kFW = getWidth() - si (kMargin) * 2;
 
     area.removeFromBottom (si (kMargin));
-    const int slotH = (mixerOpen || browserOpen) ? si (kPanelSlotH) : 0;
+    // Mixer gets its full preferred height (260px); browser uses kPanelSlotH.
+    // SCB is hidden when mixer open, so its 72px are available for the mixer.
+    const int slotH = mixerOpen ? si (MixerPanel::kPanelH)
+                                : (browserOpen ? si (kPanelSlotH) : 0);
     auto slot = area.removeFromBottom (slotH);
     area.removeFromBottom (si (kMargin));
 
     if (mixerOpen) {
-        const int mh = juce::jmin (si (MixerPanel::kPanelH), si (kPanelSlotH));
-        auto mb = juce::Rectangle (kFX, slot.getY(), kFW, mh);
+        auto mb = juce::Rectangle (kFX, slot.getY(), kFW, si (MixerPanel::kPanelH));
         mixerPanel.setBounds (mb);
         browserPanel.setBounds ({});
     }
@@ -513,7 +515,9 @@ void DysektEditor::resized()
         sliceControlBar.setBounds ({});
         waveformOverview.setBounds ({});
     } else {
-        if (uiMode == 0 || trimDialog != nullptr)
+        // SCB: visible only in Edit mode AND when mixer is NOT open
+        // (mixer open: SCB hidden so its 72px free up space for the mixer panel)
+        if (uiMode == 0 && !mixerOpen)
         {
             auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
             sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
@@ -521,7 +525,7 @@ void DysektEditor::resized()
         else
         {
             sliceControlBar.setBounds ({});
-            // SCB space NOT removed from area — pad grid uses it
+            // SCB space NOT removed from area — pad grid / mixer uses it
         }
 
         if (uiMode == 0 && !mixerOpen)
