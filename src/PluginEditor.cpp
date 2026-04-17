@@ -561,7 +561,15 @@ void DysektEditor::resized()
     // Trim mode always requires the waveform view, regardless of uiMode.
     const bool trimActive = (trimDialog != nullptr || (trimSession != nullptr && trimSession->active));
 
-    if (uiMode == 0 || trimActive)
+    if (mixerOpen)
+    {
+        // Mixer open: hide everything in the main content area
+        waveformView.setVisible (false);
+        waveformView.setBounds ({});
+        padGridView.setVisible (false);
+        padGridView.setBounds ({});
+    }
+    else if (uiMode == 0 || trimActive)
     {
         // Original waveform layout — unchanged
         waveformView.setVisible (true);
@@ -602,9 +610,10 @@ void DysektEditor::toggleMixerPanel()
         mixerOpen = false;
         mixerPanel.setVisible (false);
         headerBar.setBodeActive (false);
-        // Restore waveform overview if we're in Edit mode
-        if (uiMode == 0)
-            waveformOverview.setVisible (true);
+        // Restore content — resized() will set correct visibility based on uiMode
+        waveformOverview.setVisible (uiMode == 0);
+        waveformView.setVisible (uiMode == 0);
+        sliceControlBar.setVisible (uiMode == 0);
     } else {
         if (browserOpen) {
             browserOpen = false;
@@ -614,8 +623,10 @@ void DysektEditor::toggleMixerPanel()
         mixerOpen = true;
         mixerPanel.setVisible (true);
         headerBar.setBodeActive (true);
-        // Hide waveform overview — mixer frame occupies that area
+        // Hide everything behind the mixer
         waveformOverview.setVisible (false);
+        waveformView.setVisible (false);
+        sliceControlBar.setVisible (false);
     }
     resized(); repaint(); resized(); repaint();
 }
@@ -866,8 +877,10 @@ void DysektEditor::timerCallback()
     if (mixerOpen) mixerPanel.repaint();
 
     headerBar.repaint();
-    sliceControlBar.updateMidiLearnPulse();
-    sliceControlBar.repaint();
+    if (!mixerOpen && uiMode == 0) {
+        sliceControlBar.updateMidiLearnPulse();
+        sliceControlBar.repaint();
+    }
     if (uiChanged) actionPanel.repaint();
     if (mixerOpen) mixerPanel.updateFromSnapshot();
 }
