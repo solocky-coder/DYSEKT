@@ -513,7 +513,7 @@ void DysektEditor::resized()
         sliceControlBar.setBounds ({});
         waveformOverview.setBounds ({});
     } else {
-        if (uiMode == 0 || trimDialog != nullptr)
+        if ((uiMode == 0 || trimDialog != nullptr) && !mixerOpen)
         {
             auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
             sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
@@ -524,7 +524,7 @@ void DysektEditor::resized()
             // SCB space NOT removed from area — pad grid uses it
         }
 
-        if (uiMode == 0)
+        if (uiMode == 0 && !mixerOpen)
         {
             auto overviewRow = area.removeFromBottom (kOverviewRowH);
             const int overviewY = overviewRow.getY() + kInterGap;
@@ -557,7 +557,15 @@ void DysektEditor::resized()
     // Trim mode always requires the waveform view, regardless of uiMode.
     const bool trimActive = (trimDialog != nullptr || (trimSession != nullptr && trimSession->active));
 
-    if (uiMode == 0 || trimActive)
+    if (mixerOpen)
+    {
+        // Mixer is open — hide both main views so nothing overlaps the mixer panel
+        waveformView.setVisible (false);
+        waveformView.setBounds ({});
+        padGridView.setVisible (false);
+        padGridView.setBounds ({});
+    }
+    else if (uiMode == 0 || trimActive)
     {
         // Original waveform layout — unchanged
         waveformView.setVisible (true);
