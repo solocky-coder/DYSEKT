@@ -153,8 +153,8 @@ void DysektEditor::setUiMode (int mode)
     // Keep the EDIT|PAD tab in sync
     headerBar.dualFrame().setPadGridActive (uiMode == 1);
 
-    // Hide waveform overview immediately when switching to PAD mode
-    waveformOverview.setVisible (uiMode == 0);
+    // Hide waveform overview immediately when switching to PAD mode (also respect mixer state)
+    waveformOverview.setVisible (uiMode == 0 && !mixerOpen);
 
     // Persist the new mode
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
