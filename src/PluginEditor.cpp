@@ -153,8 +153,8 @@ void DysektEditor::setUiMode (int mode)
     // Keep the EDIT|PAD tab in sync
     headerBar.dualFrame().setPadGridActive (uiMode == 1);
 
-    // Hide waveform overview immediately when switching to PAD mode (also respect mixer state)
-    waveformOverview.setVisible (uiMode == 0 && !mixerOpen);
+    // Hide waveform overview immediately when switching to PAD mode
+    waveformOverview.setVisible (uiMode == 0);
 
     // Persist the new mode
     float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
@@ -484,15 +484,13 @@ void DysektEditor::resized()
     const int kFW = getWidth() - si (kMargin) * 2;
 
     area.removeFromBottom (si (kMargin));
-    // Mixer gets its full preferred height (260px); browser uses kPanelSlotH.
-    // SCB is hidden when mixer open, so its 72px are available for the mixer.
-    const int slotH = mixerOpen ? si (MixerPanel::kPanelH)
-                                : (browserOpen ? si (kPanelSlotH) : 0);
+    const int slotH = (mixerOpen || browserOpen) ? si (kPanelSlotH) : 0;
     auto slot = area.removeFromBottom (slotH);
     area.removeFromBottom (si (kMargin));
 
     if (mixerOpen) {
-        auto mb = juce::Rectangle (kFX, slot.getY(), kFW, si (MixerPanel::kPanelH));
+        const int mh = juce::jmin (si (MixerPanel::kPanelH), si (kPanelSlotH));
+        auto mb = juce::Rectangle (kFX, slot.getY(), kFW, mh);
         mixerPanel.setBounds (mb);
         browserPanel.setBounds ({});
     }
@@ -515,9 +513,7 @@ void DysektEditor::resized()
         sliceControlBar.setBounds ({});
         waveformOverview.setBounds ({});
     } else {
-        // SCB: visible only in Edit mode AND when mixer is NOT open
-        // (mixer open: SCB hidden so its 72px free up space for the mixer panel)
-        if (uiMode == 0 && !mixerOpen)
+        if (uiMode == 0 || trimDialog != nullptr)
         {
             auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
             sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
@@ -525,10 +521,10 @@ void DysektEditor::resized()
         else
         {
             sliceControlBar.setBounds ({});
-            // SCB space NOT removed from area — pad grid / mixer uses it
+            // SCB space NOT removed from area — pad grid uses it
         }
 
-        if (uiMode == 0 && !mixerOpen)
+        if (uiMode == 0)
         {
             auto overviewRow = area.removeFromBottom (kOverviewRowH);
             const int overviewY = overviewRow.getY() + kInterGap;
@@ -561,15 +557,7 @@ void DysektEditor::resized()
     // Trim mode always requires the waveform view, regardless of uiMode.
     const bool trimActive = (trimDialog != nullptr || (trimSession != nullptr && trimSession->active));
 
-    if (mixerOpen)
-    {
-        // Mixer open: hide everything in the main content area
-        waveformView.setVisible (false);
-        waveformView.setBounds ({});
-        padGridView.setVisible (false);
-        padGridView.setBounds ({});
-    }
-    else if (uiMode == 0 || trimActive)
+    if (uiMode == 0 || trimActive)
     {
         // Original waveform layout — unchanged
         waveformView.setVisible (true);
@@ -610,10 +598,6 @@ void DysektEditor::toggleMixerPanel()
         mixerOpen = false;
         mixerPanel.setVisible (false);
         headerBar.setBodeActive (false);
-        // Restore content — resized() will set correct visibility based on uiMode
-        waveformOverview.setVisible (uiMode == 0);
-        waveformView.setVisible (uiMode == 0);
-        sliceControlBar.setVisible (uiMode == 0);
     } else {
         if (browserOpen) {
             browserOpen = false;
@@ -623,10 +607,6 @@ void DysektEditor::toggleMixerPanel()
         mixerOpen = true;
         mixerPanel.setVisible (true);
         headerBar.setBodeActive (true);
-        // Hide everything behind the mixer
-        waveformOverview.setVisible (false);
-        waveformView.setVisible (false);
-        sliceControlBar.setVisible (false);
     }
     resized(); repaint(); resized(); repaint();
 }
@@ -789,6 +769,10 @@ void DysektEditor::timerCallback()
     if (scaleDirty || scale != lastScale)
     {
         scaleDirty = false; lastScale = scale;
+        // Reset to base size first so the host doesn't compound the scale on
+        // top of a previously-enlarged component (avoids double-scaling at 1.5×+)
+        setTransform (juce::AffineTransform::identity);
+        setSize (kBaseW, kTotalH);
         setTransform (juce::AffineTransform::scale (scale));
         DysektLookAndFeel::setMenuScale (scale);
         saveUserSettings (scale, getTheme().name);
@@ -802,7 +786,7 @@ void DysektEditor::timerCallback()
     const bool waveformAnimating = waveformInteracting || previewActive
                                 || playbackActive || processor.lazyChop.isActive()
                                 || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
-    const bool waveformShowing      = ((uiMode == 0) || processor.trimModeActive.load (std::memory_order_relaxed)) && !mixerOpen;
+    const bool waveformShowing      = (uiMode == 0) || processor.trimModeActive.load (std::memory_order_relaxed);
     const bool waveformNeedsRepaint = waveformShowing && (uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating);
     const bool laneNeedsRepaint     = waveformShowing && (uiChanged || viewportChanged || previewActive || lastPreviewActive);
 
@@ -861,7 +845,7 @@ void DysektEditor::timerCallback()
     {
         const bool hasSample = (processor.sampleData.getSnapshot() != nullptr
                                  && processor.sampleData.getSnapshot()->buffer.getNumSamples() > 0);
-        const bool overviewShouldShow = hasSample && (uiMode == 0) && !mixerOpen;
+        const bool overviewShouldShow = hasSample && (uiMode == 0);
         if (overviewShouldShow != waveformOverview.isVisible())
         {
             waveformOverview.setVisible (overviewShouldShow);
@@ -873,10 +857,8 @@ void DysektEditor::timerCallback()
     if (mixerOpen) mixerPanel.repaint();
 
     headerBar.repaint();
-    if (!mixerOpen && uiMode == 0) {
-        sliceControlBar.updateMidiLearnPulse();
-        sliceControlBar.repaint();
-    }
+    sliceControlBar.updateMidiLearnPulse();
+    sliceControlBar.repaint();
     if (uiChanged) actionPanel.repaint();
     if (mixerOpen) mixerPanel.updateFromSnapshot();
 }

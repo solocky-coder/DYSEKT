@@ -79,8 +79,8 @@ public:
         addRow ("LOCK ON",      "lockActive");
         addRow ("LOCK OFF",     "lockInactive");
 
-        // Slice palette (32 swatches, labelled 01-32)
-        for (int i = 1; i <= 32; ++i)
+        // Slice palette (16 swatches, labelled 01-16)
+        for (int i = 1; i <= 16; ++i)
             addRow ("SLICE " + juce::String (i).paddedLeft ('0', 2),
                     "slice" + juce::String (i));
 
@@ -438,7 +438,7 @@ private:
         set ("lockActive",     t.lockActive);
         set ("lockInactive",   t.lockInactive);
 
-        for (int i = 0; i < 32; ++i)
+        for (int i = 0; i < 16; ++i)
             set ("slice" + juce::String (i + 1), t.slicePalette[i]);
 
         repaint();
@@ -463,10 +463,10 @@ private:
         else if (key == "lockInactive")    working.lockInactive    = c;
         else
         {
-            // slice1..slice32
+            // slice1..slice16
             auto numStr = key.fromFirstOccurrenceOf ("slice", false, false);
             int idx = numStr.getIntValue() - 1;
-            if (idx >= 0 && idx < 32)
+            if (idx >= 0 && idx < 16)
                 working.slicePalette[idx] = c;
         }
     }
@@ -530,11 +530,11 @@ private:
 
         strip.removeFromLeft (6);
 
-        // 32 slice swatches
-        int paletteSize = 32;
+        // 16 slice swatches
+        int paletteSize = 16;
         const float sw = juce::jmin (20.0f, (float) strip.getWidth() / juce::jmax (1, paletteSize));
         float x = (float) strip.getX();
-        for (int i = 0; i < paletteSize && i < 32; ++i)
+        for (int i = 0; i < paletteSize && i < 16; ++i)
         {
             juce::Rectangle<float> r (x, (float) strip.getY(), sw - 2.0f, (float) strip.getHeight());
             g.setColour (working.slicePalette[i]);

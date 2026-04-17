@@ -81,21 +81,15 @@ void SliceManager::assignDefaults (Slice& s, int idx)
     s.loopMode       = 0;
 }
 
-void SliceManager::assignColor (Slice& s, int idx)
+void SliceManager::assignColor (Slice& s, int /*idx*/)
 {
-    const juce::Colour* p = palette.load (std::memory_order_relaxed);
-    if (p != nullptr)
-    {
-        s.colour = p[idx % 32];
-        return;
-    }
-
-    // Fallback: palette not yet set — use random HSV so the slice is
-    // at least visually distinct until the theme is applied.
+    // Generate a fully random hue across the entire colour wheel.
+    // Fixed high saturation + brightness ensures colours are vivid and
+    // maximally distinct from each other regardless of theme palette order.
     auto& rng = juce::Random::getSystemRandom();
-    const float hue = rng.nextFloat();
-    const float sat = 0.55f + rng.nextFloat() * 0.30f;
-    const float bri = 0.70f + rng.nextFloat() * 0.25f;
+    const float hue   = rng.nextFloat();              // 0..1, full wheel
+    const float sat   = 0.55f + rng.nextFloat() * 0.30f;  // 0.55..0.85
+    const float bri   = 0.70f + rng.nextFloat() * 0.25f;  // 0.70..0.95
     s.colour = juce::Colour::fromHSV (hue, sat, bri, 1.0f);
 }
 
