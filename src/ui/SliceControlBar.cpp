@@ -592,12 +592,11 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     }
 
     {
-        // Ghost bar: 2px tall, inset 2px from left/right/bottom border — stays inside the frame
-        const auto cellInner = cell.reduced (2).toFloat();
-        const auto bar = juce::Rectangle<float> (cellInner.getX(),
-                                                  cellInner.getBottom() - 2.0f,
-                                                  cellInner.getWidth(),
-                                                  2.0f);
+        // Remove 2px from bottom of cell (mutates cell so subsequent label/badge code
+        // stays at the same position as before — matching original removeFromBottom behaviour)
+        const auto barStrip = cell.removeFromBottom (2);
+        // Draw ghost bar inset 2px left/right so it sits inside the rounded border
+        const auto bar = barStrip.toFloat().reduced (2.0f, 0.0f);
         g.setColour (T.separator);
         g.fillRect (bar);
 
