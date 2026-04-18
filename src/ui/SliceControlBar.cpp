@@ -594,9 +594,22 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     }
 
     {
-        // Ghost bar: 3px strip at the bottom of the cell.
-        // Cell is already 2px short of the separator, so this sits inside the frame.
-        const auto bar = cell.removeFromBottom (3).toFloat();
+        // Ghost bar: 3px strip anchored to the inside-bottom of the cell frame.
+        // Inset by 1px on left/right/bottom so it never bleeds past the border.
+        // NOTE: do NOT use cell.removeFromBottom() here — that mutates cell and
+        // shifts the bar outside the rounded-rect border.  Use a non-mutating
+        // slice instead so the bar stays visually inside the frame.
+        const int inset = juce::roundToInt (1.0f * paintSf);
+        const int barH  = juce::roundToInt (3.0f * paintSf);
+        const auto bar  = juce::Rectangle<float> (
+            (float) (cell.getX()     + inset),
+            (float) (cell.getBottom() - inset - barH),
+            (float) (cell.getWidth() - 2 * inset),
+            (float) barH);
+
+        g.saveState();
+        g.reduceClipRegion (cell.reduced (inset));
+
         g.setColour (T.separator);
         g.fillRect (bar);
 
@@ -620,6 +633,8 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         // Solid marker bar — theme accent, always on top
         g.setColour (T.accent);
         g.fillRect (bar.withWidth (bar.getWidth() * frac));
+
+        g.restoreState();
     }
 
     // FINE toggle badge — top-right corner, only when a CC is mapped
@@ -938,9 +953,8 @@ void SliceControlBar::paint (juce::Graphics& g)
  {
  g.setColour (getTheme().separator.withAlpha (0.5f));
  g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
- x += si (8);
+ x += 8;
 
- if (x + psCellW > rightEdge) return;
  const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
  const int markerSample = (liveIdx == idx)
  ? processor.liveDragBoundsStart.load (std::memory_order_relaxed)
@@ -953,9 +967,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  {
  g.setColour (getTheme().separator.withAlpha (0.5f));
  g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
- x += si (8);
-
- if (x + psCellW > rightEdge) return;
+ x += 8;
 
  // GAIN
  {
@@ -992,9 +1004,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // ── Separator before chromatic group ────────────────────────────────
  g.setColour (getTheme().separator.withAlpha (0.5f));
  g.drawVerticalLine (x + 2, (float) row1y + 4.f, (float) row1y + 28.f);
- x += si (8);
-
- if (x + psCellW > rightEdge) return;
+ x += 8;
 
  // CHRO — chromatic channel badge (per-slice)
  {
@@ -1005,7 +1015,6 @@ void SliceControlBar::paint (juce::Graphics& g)
  }
 
  // LEGATO — chromatic legato toggle (per-slice)
- if (x + psCellW <= rightEdge)
  {
      const bool legatoLocked = (s.lockMask & kLockChromaticLegato) != 0;
      const bool legatoOn     = s.chromaticLegato;  // always read from slice
@@ -1014,7 +1023,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  }
 
  // ALGO -- Repitch / Stretch toggle (chromatic mode only)
- if (s.chromaticChannel > 0 && x + psCellW <= rightEdge)
+ if (s.chromaticChannel > 0)
  {
      const bool algoLocked = (s.lockMask & kLockAlgorithm) != 0;
      const int  algoVal    = algoLocked ? s.algorithm
