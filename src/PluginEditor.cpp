@@ -68,7 +68,21 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
     sliceLane.setWaveformView (&waveformView);
 
-    browserPanel.onFileLoaded = [this] { if (browserOpen) toggleBrowserPanel(); };
+    browserPanel.onFileLoaded = [this]
+    {
+        // Close whichever browser mode is active once a file has been chosen
+        if (initBrowserOpen)
+        {
+            initBrowserOpen = false;
+            browserPanel.setVisible (false);
+            headerBar.setBrowserActive (false);
+            resized(); repaint();
+        }
+        else if (browserOpen)
+        {
+            toggleBrowserPanel();
+        }
+    };
     browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
     waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
     waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
@@ -121,6 +135,21 @@ DysektEditor::DysektEditor (DysektProcessor& p)
     if (processor.sampleData.getSnapshot() == nullptr)
         processor.loadDefaultSampleIfNeeded();
 
+    // Open the browser immediately so the user picks a sample on first launch.
+    // initBrowserOpen is cleared automatically once a real sample is loaded.
+    {
+        auto snap = processor.sampleData.getSnapshot();
+        const bool hasReal = snap != nullptr
+                           && snap->buffer.getNumSamples() > 0
+                           && ! snap->filePath.containsIgnoreCase ("DYSEKT_default.wav");
+        if (! hasReal)
+        {
+            initBrowserOpen = true;
+            browserPanel.setVisible (true);
+            headerBar.setBrowserActive (true);
+        }
+    }
+
     float apvtsScale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
     if (apvtsScale == 1.0f && savedScale > 0.0f && savedScale != apvtsScale)
     {
@@ -167,6 +196,16 @@ void DysektEditor::setUiMode (int mode)
 // ─────────────────────────────────────────────────────────────────────────────
 void DysektEditor::toggleBrowserPanel()
 {
+    // If the init browser is showing, promote it to a normal browser toggle
+    // (keeps the panel open but switches from full-frame to slot mode).
+    if (initBrowserOpen)
+    {
+        initBrowserOpen = false;
+        browserOpen = true;   // keep panel visible, now in slot position
+        resized(); repaint(); resized(); repaint();
+        return;
+    }
+
     if (browserOpen) {
         browserOpen = false;
         browserPanel.setVisible (false);
@@ -500,7 +539,7 @@ void DysektEditor::resized()
     // NOTE: topArea and actionArea have already been removed from `area` above,
     // so minAboveH must only account for sections still to be placed inside the
     // remaining `area` (SCB + overview row + minimum waveform height + margins).
-    const int rawSlotH   = (mixerOpen || browserOpen) ? si (kPanelSlotH) : 0;
+    const int rawSlotH   = (mixerOpen || (browserOpen && !initBrowserOpen)) ? si (kPanelSlotH) : 0;
     // kOverviewH=28, kFrameInset=4 — used as literals here because they are
     // declared later in resized(); keeping them inline avoids a forward-ref error.
     const int minAboveH  = si (kSliceCtrlH)
@@ -518,12 +557,14 @@ void DysektEditor::resized()
         mixerPanel.setBounds (kFX, mixTop, kFW, mixBot - mixTop);
         browserPanel.setBounds ({});
     }
-    else if (browserOpen) {
+    else if (browserOpen && ! initBrowserOpen) {
         browserPanel.setBounds (kFX, slot.getY(), kFW, slot.getHeight());
         mixerPanel.setBounds ({});
     } else {
         mixerPanel.setBounds ({});
-        browserPanel.setBounds ({});
+        if (! initBrowserOpen)
+            browserPanel.setBounds ({});
+        // initBrowserOpen browser is sized below, in the waveform frame area
     }
 
     const int kFrameInset   = si (4);
@@ -591,6 +632,15 @@ void DysektEditor::resized()
     if (mixerOpen)
     {
         // Mixer is open — hide both main views so nothing overlaps the mixer panel
+        waveformView.setVisible (false);
+        waveformView.setBounds ({});
+        padGridView.setVisible (false);
+        padGridView.setBounds ({});
+    }
+    else if (initBrowserOpen)
+    {
+        // No real sample yet — browser occupies the full waveform frame area
+        browserPanel.setBounds (screenX, y, screenW, h);
         waveformView.setVisible (false);
         waveformView.setBounds ({});
         padGridView.setVisible (false);
@@ -893,6 +943,16 @@ void DysektEditor::timerCallback()
         // Only show the overview / zoom bar for a real user sample, not the default placeholder.
         const bool hasRealSampleNow = hasSample && timerSnap != nullptr
                                     && ! timerSnap->filePath.containsIgnoreCase ("DYSEKT_default.wav");
+
+        // Auto-close the init browser once the user has loaded a real sample.
+        if (initBrowserOpen && hasRealSampleNow)
+        {
+            initBrowserOpen = false;
+            browserPanel.setVisible (false);
+            headerBar.setBrowserActive (false);
+            resized(); repaint();
+        }
+
         const bool overviewShouldShow = hasRealSampleNow && (uiMode == 0);
         if (overviewShouldShow != waveformOverview.isVisible())
         {

@@ -82,7 +82,8 @@ private:
     int      lastNumSlices         = -1;
     bool     lastTrimActive        = false;
 
-    bool browserOpen = false;
+    bool browserOpen     = false;
+    bool initBrowserOpen = false;  // true until the first real sample is loaded
     bool mixerOpen   = false;
     int  waveformMode = 0;  // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
 
