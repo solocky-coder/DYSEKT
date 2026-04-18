@@ -501,8 +501,10 @@ void DysektEditor::resized()
     // so minAboveH must only account for sections still to be placed inside the
     // remaining `area` (SCB + overview row + minimum waveform height + margins).
     const int rawSlotH   = (mixerOpen || browserOpen) ? si (kPanelSlotH) : 0;
+    // kOverviewH=28, kFrameInset=4 — used as literals here because they are
+    // declared later in resized(); keeping them inline avoids a forward-ref error.
     const int minAboveH  = si (kSliceCtrlH)
-                         + si (kOverviewH + kMargin * 2 + 4 /*kFrameInset*/)
+                         + si (28 + kMargin * 2 + 4)
                          + si (80) + si (kMargin) * 3;
     const int maxSlotH   = juce::jmax (0, area.getHeight() - minAboveH);
     const int slotH      = juce::jmin (rawSlotH, maxSlotH);
@@ -536,7 +538,7 @@ void DysektEditor::resized()
     auto sampleSnap       = processor.sampleData.getSnapshot();
     const bool hasRealSample = hasSampleLoaded
                              && sampleSnap != nullptr
-                             && ! sampleSnap->isDefaultSample;
+                             && ! sampleSnap->filePath.containsIgnoreCase ("DYSEKT_default.wav");
 
     if (trimDialog != nullptr) {
         sliceControlBar.setBounds ({});
@@ -889,7 +891,8 @@ void DysektEditor::timerCallback()
             resized();   // expand/collapse SCB + zoom bar
         }
         // Only show the overview / zoom bar for a real user sample, not the default placeholder.
-        const bool hasRealSampleNow = hasSample && timerSnap != nullptr && ! timerSnap->isDefaultSample;
+        const bool hasRealSampleNow = hasSample && timerSnap != nullptr
+                                    && ! timerSnap->filePath.containsIgnoreCase ("DYSEKT_default.wav");
         const bool overviewShouldShow = hasRealSampleNow && (uiMode == 0);
         if (overviewShouldShow != waveformOverview.isVisible())
         {
