@@ -531,22 +531,12 @@ void DysektEditor::resized()
 
     area.removeFromBottom (si (kMargin));
 
-    // ── Panel slot: clamp to available height so scaled layouts never push the
-    // browser/mixer frame up into the waveform area.  We always anchor the slot
-    // to the very bottom of the window (kPanelSlotH unscaled) and only shrink
-    // it when there genuinely isn't enough room.  This prevents overlap when the
-    // host inflates component bounds to match setTransform (e.g. at 1.25×+).
-    // NOTE: topArea and actionArea have already been removed from `area` above,
-    // so minAboveH must only account for sections still to be placed inside the
-    // remaining `area` (SCB + overview row + minimum waveform height + margins).
-    const int rawSlotH   = (mixerOpen || (browserOpen && !initBrowserOpen)) ? si (kPanelSlotH) : 0;
-    // kOverviewH=28, kFrameInset=4 — used as literals here because they are
-    // declared later in resized(); keeping them inline avoids a forward-ref error.
-    const int minAboveH  = si (kSliceCtrlH)
-                         + si (28 + kMargin * 2 + 4)
-                         + si (80) + si (kMargin) * 3;
-    const int maxSlotH   = juce::jmax (0, area.getHeight() - minAboveH);
-    const int slotH      = juce::jmin (rawSlotH, maxSlotH);
+    // Panel slot: open for mixer, or for the normal (non-init) browser.
+    // initBrowserOpen uses the waveform frame area instead — no slot needed.
+    // At scale > 1.0 (host inflates bounds) we clamp to avoid overlap: the
+    // scaled slot must never exceed what the remaining height can accommodate.
+    const int wantedSlotH = (mixerOpen || (browserOpen && ! initBrowserOpen)) ? si (kPanelSlotH) : 0;
+    const int slotH       = juce::jmin (wantedSlotH, juce::jmax (0, area.getHeight() - si (80)));
     auto slot = area.removeFromBottom (slotH);
     area.removeFromBottom (si (kMargin));
 
