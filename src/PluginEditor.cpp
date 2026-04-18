@@ -83,7 +83,21 @@ DysektEditor::DysektEditor (DysektProcessor& p)
             toggleBrowserPanel();
         }
     };
-    browserPanel.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
+    browserPanel.onLoadRequest = [this] (const juce::File& f)
+    {
+        // Close the browser before entering any load/trim flow.
+        // Previously the browser was a small bottom slot so it could coexist with
+        // the waveform view — now it fills the full content area, so it must close
+        // first to let the waveform (required by trim mode) become visible again.
+        if (browserOpen)
+        {
+            browserOpen = false;
+            browserPanel.setVisible (false);
+            headerBar.setBrowserActive (false);
+            resized(); repaint();
+        }
+        showTrimDialog (f);
+    };
     waveformView.onLoadRequest = [this] (const juce::File& f) { showTrimDialog (f); };
     waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
     waveformView.onRenameRequest   = [this] (int sliceIdx, const juce::String& currentName)

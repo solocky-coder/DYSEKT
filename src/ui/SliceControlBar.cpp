@@ -938,8 +938,9 @@ void SliceControlBar::paint (juce::Graphics& g)
  {
  g.setColour (getTheme().separator.withAlpha (0.5f));
  g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
- x += 8;
+ x += si (8);
 
+ if (x + psCellW > rightEdge) return;
  const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
  const int markerSample = (liveIdx == idx)
  ? processor.liveDragBoundsStart.load (std::memory_order_relaxed)
@@ -952,7 +953,9 @@ void SliceControlBar::paint (juce::Graphics& g)
  {
  g.setColour (getTheme().separator.withAlpha (0.5f));
  g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
- x += 8;
+ x += si (8);
+
+ if (x + psCellW > rightEdge) return;
 
  // GAIN
  {
@@ -989,7 +992,9 @@ void SliceControlBar::paint (juce::Graphics& g)
  // ── Separator before chromatic group ────────────────────────────────
  g.setColour (getTheme().separator.withAlpha (0.5f));
  g.drawVerticalLine (x + 2, (float) row1y + 4.f, (float) row1y + 28.f);
- x += 8;
+ x += si (8);
+
+ if (x + psCellW > rightEdge) return;
 
  // CHRO — chromatic channel badge (per-slice)
  {
@@ -1000,6 +1005,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  }
 
  // LEGATO — chromatic legato toggle (per-slice)
+ if (x + psCellW <= rightEdge)
  {
      const bool legatoLocked = (s.lockMask & kLockChromaticLegato) != 0;
      const bool legatoOn     = s.chromaticLegato;  // always read from slice
@@ -1008,7 +1014,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  }
 
  // ALGO -- Repitch / Stretch toggle (chromatic mode only)
- if (s.chromaticChannel > 0)
+ if (s.chromaticChannel > 0 && x + psCellW <= rightEdge)
  {
      const bool algoLocked = (s.lockMask & kLockAlgorithm) != 0;
      const int  algoVal    = algoLocked ? s.algorithm
