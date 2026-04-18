@@ -548,7 +548,10 @@ void DysektEditor::resized()
         browserPanel.setBounds ({});
     }
     else if (browserOpen && ! initBrowserOpen) {
-        browserPanel.setBounds (kFX, slot.getY(), kFW, slot.getHeight());
+        // Expand browser to fill ALL available area (waveformView space + slot) — same as mixer
+        const int browserTop = actionArea.getY();
+        const int browserBot = slot.getBottom();
+        browserPanel.setBounds (kFX, browserTop, kFW, browserBot - browserTop);
         mixerPanel.setBounds ({});
     } else {
         mixerPanel.setBounds ({});
@@ -571,11 +574,13 @@ void DysektEditor::resized()
                              && sampleSnap != nullptr
                              && ! sampleSnap->filePath.containsIgnoreCase ("DYSEKT_default.wav");
 
+    const bool normalBrowserOpen = browserOpen && ! initBrowserOpen;
+
     if (trimDialog != nullptr) {
         sliceControlBar.setBounds ({});
         waveformOverview.setBounds ({});
     } else {
-        if ((trimDialog != nullptr || (uiMode == 0 && hasRealSample)) && !mixerOpen)
+        if ((trimDialog != nullptr || (uiMode == 0 && hasRealSample)) && !mixerOpen && !normalBrowserOpen)
         {
             auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
             sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
@@ -586,7 +591,7 @@ void DysektEditor::resized()
             // SCB space NOT removed from area — pad grid uses it
         }
 
-        if (uiMode == 0 && !mixerOpen && hasRealSample)
+        if (uiMode == 0 && !mixerOpen && !normalBrowserOpen && hasRealSample)
         {
             auto overviewRow = area.removeFromBottom (kOverviewRowH);
             const int overviewY = overviewRow.getY() + kInterGap;
@@ -619,9 +624,9 @@ void DysektEditor::resized()
     // Trim mode always requires the waveform view, regardless of uiMode.
     const bool trimActive = (trimDialog != nullptr || (trimSession != nullptr && trimSession->active));
 
-    if (mixerOpen)
+    if (mixerOpen || normalBrowserOpen)
     {
-        // Mixer is open — hide both main views so nothing overlaps the mixer panel
+        // Mixer or normal browser is open — hide both main views so nothing overlaps
         waveformView.setVisible (false);
         waveformView.setBounds ({});
         padGridView.setVisible (false);
