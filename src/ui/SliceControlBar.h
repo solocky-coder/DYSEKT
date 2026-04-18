@@ -92,7 +92,10 @@ private:
     float fromNorm (int fieldId, float norm) const;
 
     static constexpr int kKnobR = 9; // knob radius (px)
-    float paintSf = 1.0f;       // set at start of paint() — scales to component height
+    float paintSf = 1.0f;
+    int psCellW  { 74 };   // kParamCellWidth * paintSf
+    int psCellH  { 32 };   // 32 * paintSf
+    int psKnobR  { kKnobR };// kKnobR * paintSf       // set at start of paint() — scales to component height
 
     DysektProcessor& processor;
 

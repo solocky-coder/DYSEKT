@@ -109,18 +109,20 @@ void SliceControlBar::drawParamCell (juce::Graphics& g, int x, int y,
  int fieldId, float minVal, float maxVal, float step,
  bool isBoolean, bool isChoice, int& outWidth)
 {
- const int cellH = 32;
- const int cellW = kParamCellWidth;
+ const int cellH = psCellH;
+ const int cellW = psCellW;
+ const int textX = juce::roundToInt (14.0f * paintSf);
+ const int textW = juce::roundToInt (60.0f * paintSf);
 
- g.setFont (DysektLookAndFeel::makeFont (12.0f));
+ g.setFont (DysektLookAndFeel::makeFont (12.0f * paintSf));
  g.setColour (locked ? getTheme().lockActive.withAlpha (0.8f)
  : getTheme().foreground.withAlpha (0.45f));
- g.drawText (label, x + kParamCellTextX, y + 2, kParamCellTextWidth, 13, juce::Justification::centredLeft);
+ g.drawText (label, x + textX, y + juce::roundToInt (2.0f * paintSf), textW, juce::roundToInt (13.0f * paintSf), juce::Justification::centredLeft);
 
- g.setFont (DysektLookAndFeel::makeMonoFont (13.0f));
+ g.setFont (DysektLookAndFeel::makeMonoFont (13.0f * paintSf));
  g.setColour (locked ? getTheme().foreground
  : getTheme().foreground.withAlpha (0.4f));
- g.drawText (value, x + kParamCellTextX, y + 15, kParamCellTextWidth, 14, juce::Justification::centredLeft);
+ g.drawText (value, x + textX, y + juce::roundToInt (15.0f * paintSf), textW, juce::roundToInt (14.0f * paintSf), juce::Justification::centredLeft);
 
  outWidth = cellW;
  cells.push_back ({ x, y, outWidth, cellH, lockBit, fieldId,
@@ -233,9 +235,9 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
  float minVal, float maxVal, float step,
  int& outWidth)
 {
- const int cellW = kParamCellWidth;
- const int cellH = 32;
- const int knobCX = x + kKnobR + 3;
+ const int cellW = psCellW;
+ const int cellH = psCellH;
+ const int knobCX = x + psKnobR + juce::roundToInt (3.0f * paintSf);
  const int knobCY = y + cellH / 2;
 
  const bool armed = (processor.midiLearn.getArmedSlot() == fieldId);
@@ -260,7 +262,7 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
  // (cells is built sequentially so current cell index = cells.size() after push_back)
  // We compare after push_back below, so pass index = current cells.size() pre-push
  const int thisCellIdx = (int) cells.size();
- drawKnob (g, knobCX, knobCY, kKnobR, normVal, locked, armed, mapped,
+ drawKnob (g, knobCX, knobCY, psKnobR, normVal, locked, armed, mapped,
  adsrTintForField (fieldId), (hoveredCellIdx == thisCellIdx) && !armed);
 
  // ── Pickup chasing indicator ─────────────────────────────────────────
@@ -277,7 +279,7 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
      // Map raw smoother value back to 0-1 norm for display
      const float ccDisplayNorm = toNorm (fieldId, ccNorm);
      const float ccAngle = kKnobStart + ccDisplayNorm * (kKnobEnd - kKnobStart);
-     const float fcx2 = (float) knobCX, fcy2 = (float) knobCY, fr2 = (float) kKnobR;
+     const float fcx2 = (float) knobCX, fcy2 = (float) knobCY, fr2 = (float) psKnobR;
 
      // Ghost arc at CC position — white so it's visible on every theme
      juce::Path chaseArc;
@@ -300,29 +302,29 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
  g.setFont (DysektLookAndFeel::makeFont (8.0f * paintSf));
  g.setColour (getTheme().accent.withAlpha (armed ? 1.0f : 0.65f));
  g.drawText (armed ? "ARM" : processor.midiLearn.getLabelText (fieldId),
- x, y + cellH - 10, kKnobR * 2 + 6, 10,
+ x, y + cellH - juce::roundToInt (10.0f * paintSf), psKnobR * 2 + juce::roundToInt (6.0f * paintSf), juce::roundToInt (10.0f * paintSf),
  juce::Justification::centred);
  }
 
- const int textX = knobCX + kKnobR + juce::roundToInt (4.0f * paintSf);
- // Reserve 12px on the right for the lock icon (10px icon + 2px gap) when a lock exists
- const int lockReserve = (lockBit != 0) ? 12 : 0;
+ const int textX = knobCX + psKnobR + juce::roundToInt (4.0f * paintSf);
+ // Reserve scaled lock icon space on the right
+ const int lockReserve = (lockBit != 0) ? juce::roundToInt (12.0f * paintSf) : 0;
  const int textW = cellW - (textX - x) - 1 - lockReserve;
  const juce::Colour adsr = adsrTintForField (fieldId);
  const bool hasAdsr = ! adsr.isTransparent();
 
- g.setFont (DysektLookAndFeel::makeFont (10.0f));
+ g.setFont (DysektLookAndFeel::makeFont (10.0f * paintSf));
  // ADSR label always uses the fixed ADSR colour — even when locked.
  // Non-ADSR locked params use lockActive; everything else uses foreground.
  g.setColour (locked && ! hasAdsr ? getTheme().lockActive.withAlpha (0.8f)
  : hasAdsr ? adsr.withAlpha (0.70f)
  : getTheme().foreground.withAlpha (0.42f));
- g.drawText (label, textX, y + 2, textW, 12, juce::Justification::centredLeft);
+ g.drawText (label, textX, y + juce::roundToInt (2.0f * paintSf), textW, juce::roundToInt (12.0f * paintSf), juce::Justification::centredLeft);
 
- g.setFont (DysektLookAndFeel::makeMonoFont (11.0f));
+ g.setFont (DysektLookAndFeel::makeMonoFont (11.0f * paintSf));
  g.setColour (locked ? getTheme().foreground
  : getTheme().foreground.withAlpha (0.38f));
- g.drawText (valueText, textX, y + 14, textW, 14, juce::Justification::centredLeft);
+ g.drawText (valueText, textX, y + juce::roundToInt (14.0f * paintSf), textW, juce::roundToInt (14.0f * paintSf), juce::Justification::centredLeft);
 
  outWidth = cellW;
 
@@ -340,32 +342,33 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
  //    the field has no per-slice lock, e.g. FieldSliceStart).
  if (lockBit != 0)
  {
-     constexpr int kLockW = 10, kLockH = 10;
+     const int kLockW = juce::roundToInt (10.0f * paintSf);
+     const int kLockH = kLockW;
      // Position: right-aligned inside the text area, top of the label row
-     const int lx = x + cellW - kLockW - 1;
-     const int ly = y + 2;
+     const int lx = x + cellW - kLockW - juce::roundToInt (1.0f * paintSf);
+     const int ly = y + juce::roundToInt (2.0f * paintSf);
 
      // Padlock body
      if (locked)
      {
          g.setColour (getTheme().lockActive.withAlpha (0.90f));
-         g.fillRoundedRectangle ((float) lx + 1, (float) ly + 4,
-                                 (float) kLockW - 2, (float) kLockH - 4, 1.0f);
+         g.fillRoundedRectangle ((float) lx + paintSf, (float) ly + 4.0f * paintSf,
+                                 (float) kLockW - 2.0f * paintSf, (float) kLockH - 4.0f * paintSf, 1.0f);
          g.setColour (getTheme().lockActive);
          juce::Path shackle;
-         shackle.addCentredArc ((float) lx + kLockW * 0.5f, (float) ly + 4.5f,
-                                2.5f, 2.5f, 0.f,
+         shackle.addCentredArc ((float) lx + kLockW * 0.5f, (float) ly + 4.5f * paintSf,
+                                2.5f * paintSf, 2.5f * paintSf, 0.f,
                                 juce::MathConstants<float>::pi, 0.f, true);
          g.strokePath (shackle, juce::PathStrokeType (1.3f));
      }
      else
      {
          g.setColour (getTheme().lockInactive.withAlpha (0.45f));
-         g.drawRoundedRectangle ((float) lx + 1, (float) ly + 4,
-                                 (float) kLockW - 2, (float) kLockH - 4, 1.0f, 1.0f);
+         g.drawRoundedRectangle ((float) lx + paintSf, (float) ly + 4.0f * paintSf,
+                                 (float) kLockW - 2.0f * paintSf, (float) kLockH - 4.0f * paintSf, 1.0f, 1.0f);
          juce::Path shackle;
-         shackle.addCentredArc ((float) lx + kLockW * 0.5f, (float) ly + 4.0f,
-                                2.5f, 2.5f, 0.f,
+         shackle.addCentredArc ((float) lx + kLockW * 0.5f, (float) ly + 4.0f * paintSf,
+                                2.5f * paintSf, 2.5f * paintSf, 0.f,
                                 juce::MathConstants<float>::pi, 0.f, true);
          g.strokePath (shackle, juce::PathStrokeType (1.0f));
      }
@@ -373,7 +376,7 @@ void SliceControlBar::drawKnobCell (juce::Graphics& g, int x, int y,
      // Register as a separate hit cell — isLockIcon = true
      // Use a slightly taller hit area (full label row height) so it's easy to click
      ParamCell lc{};
-     lc.x = lx; lc.y = ly; lc.w = kLockW; lc.h = kLockH + 2;
+     lc.x = lx; lc.y = ly; lc.w = kLockW; lc.h = kLockH + juce::roundToInt (2.0f * paintSf);
      lc.lockBit = lockBit; lc.fieldId = fieldId;
      lc.isLockIcon = true;
      cells.push_back (lc);
@@ -387,8 +390,8 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
  float panValue, // -1..+1
  bool locked, int& outWidth)
 {
- const int cellW = kParamCellWidth;
- const int cellH = 32;
+ const int cellW = psCellW;
+ const int cellH = psCellH;
  const auto& theme = getTheme();
  const auto ac = theme.accent;
 
@@ -407,10 +410,10 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
  }
 
  // ── Label ──────────────────────────────────────────────────────────────
- g.setFont (DysektLookAndFeel::makeFont (10.0f));
+ g.setFont (DysektLookAndFeel::makeFont (10.0f * paintSf));
  g.setColour (locked ? theme.lockActive.withAlpha (0.8f)
  : theme.foreground.withAlpha (0.42f));
- g.drawText ("PAN", x, y + 2, cellW, 12, juce::Justification::centredLeft);
+ g.drawText ("PAN", x, y + juce::roundToInt (2.0f * paintSf), cellW, juce::roundToInt (12.0f * paintSf), juce::Justification::centredLeft);
 
  // MIDI-learn label
  if (armed || mapped)
@@ -422,19 +425,19 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
  }
 
  // ── Slider track ───────────────────────────────────────────────────────
- const int trackY = y + 18;
- const int trackH = 6;
- const int trackX = x + 2;
- const int trackW = cellW - 4;
+ const int trackY = y + juce::roundToInt (18.0f * paintSf);
+ const int trackH = juce::roundToInt (6.0f * paintSf);
+ const int trackX = x + juce::roundToInt (2.0f * paintSf);
+ const int trackW = cellW - juce::roundToInt (4.0f * paintSf);
 
  // ── Value text — centred above the slider track ────────────────────────────
  const int pct = juce::jlimit (-100, 100, (int) std::round (panValue * 100.f));
  juce::String panStr = (pct == 0) ? "C"
  : (pct < 0) ? ("L" + juce::String (-pct))
  : ("R" + juce::String ( pct));
- g.setFont (DysektLookAndFeel::makeMonoFont (10.0f));
+ g.setFont (DysektLookAndFeel::makeMonoFont (10.0f * paintSf));
  g.setColour (locked ? theme.foreground : theme.foreground.withAlpha (0.75f));
- g.drawText (panStr, trackX, trackY - 11, trackW, 10, juce::Justification::centred);
+ g.drawText (panStr, trackX, trackY - juce::roundToInt (11.0f * paintSf), trackW, juce::roundToInt (10.0f * paintSf), juce::Justification::centred);
 
  // Track background
  g.setColour (theme.darkBar.darker (0.3f));
@@ -464,8 +467,8 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
 
  // Thumb
  g.setColour (locked ? theme.lockActive : (armed ? ac.brighter (0.4f) : ac));
- g.fillRoundedRectangle ((float) (thumbX - 2), (float) (trackY - 1),
- 4.f, (float) (trackH + 2), 1.5f);
+ g.fillRoundedRectangle ((float) (thumbX - juce::roundToInt (2.0f * paintSf)), (float) (trackY - juce::roundToInt (1.0f * paintSf)),
+ 4.0f * paintSf, (float) (trackH + juce::roundToInt (2.0f * paintSf)), 1.5f);
 
  // ── Register cell ──────────────────────────────────────────────────────
  outWidth = cellW;
@@ -486,8 +489,8 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
                                             int sampleVal, int totalFrames,
                                             int& outWidth)
 {
-    const int cellW = kParamCellWidth;
-    const int cellH = 32;
+    const int cellW = psCellW;
+    const int cellH = psCellH;
     const auto& T = getTheme();
     auto cell = juce::Rectangle<int> (x, y, cellW, cellH);
     const bool armed = (processor.midiLearn.getArmedSlot() == DysektProcessor::FieldSliceStart);
@@ -614,14 +617,15 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     if (showFineBadge)
     {
         const bool fineOn = processor.markerFineMode.load (std::memory_order_relaxed);
-        const int bw = 22, bh = 10;
-        const int bx = cell.getRight() - bw - 2;
-        const int by = cell.getY() + 2;
+        const int bw = juce::roundToInt (22.0f * paintSf);
+        const int bh = juce::roundToInt (10.0f * paintSf);
+        const int bx = cell.getRight() - bw - juce::roundToInt (2.0f * paintSf);
+        const int by = cell.getY() + juce::roundToInt (2.0f * paintSf);
         markerFineModeToggleArea = juce::Rectangle<int> (bx, by, bw, bh);
 
         g.setColour (fineOn ? T.accent.withAlpha (0.85f) : T.foreground.withAlpha (0.18f));
         g.fillRoundedRectangle (markerFineModeToggleArea.toFloat(), 2.0f);
-        g.setFont (DysektLookAndFeel::makeFont (7.5f));
+        g.setFont (DysektLookAndFeel::makeFont (7.5f * paintSf));
         g.setColour (fineOn ? T.darkBar : T.foreground.withAlpha (0.45f));
         g.drawText ("FINE", markerFineModeToggleArea, juce::Justification::centred, false);
     }
@@ -635,18 +639,18 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     g.setFont (DysektLookAndFeel::makeFont (8.0f * paintSf));
     g.setColour (T.accent.withAlpha (0.65f));
     // Shrink label area if fine badge is shown
-    const int labelW = showFineBadge ? (cell.getWidth() - 26) : cell.getWidth();
+    const int labelW = showFineBadge ? (cell.getWidth() - juce::roundToInt (26.0f * paintSf)) : cell.getWidth();
     g.drawText ("MARKER",
                 cell.getX(), cell.getY() + 2,
                 labelW, midY - cell.getY() - 2,
                 juce::Justification::centred, false);
 
     // Value — bottom half
-    g.setFont (DysektLookAndFeel::makeMonoFont (10.0f));
+    g.setFont (DysektLookAndFeel::makeMonoFont (10.0f * paintSf));
     g.setColour (T.foreground);
     g.drawText (juce::String (sampleVal),
                 cell.getX(), midY,
-                cell.getWidth(), cell.getBottom() - midY - 3,
+                cell.getWidth(), cell.getBottom() - midY - juce::roundToInt (3.0f * paintSf),
                 juce::Justification::centred, false);
 
     // Directional arrow — relative encoder only, fades 300ms after last tick
@@ -657,7 +661,7 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         if (dir != 0 && elapsed < 300)
         {
             const float fade = 1.0f - (float) elapsed / 300.0f;
-            g.setFont (DysektLookAndFeel::makeFont (11.0f));
+            g.setFont (DysektLookAndFeel::makeFont (11.0f * paintSf));
             g.setColour (T.accent.withAlpha (fade * 0.9f));
             g.drawText (dir > 0 ? juce::CharPointer_UTF8 ("\xe2\x96\xb6")
                                 : juce::CharPointer_UTF8 ("\xe2\x97\x80"),
@@ -685,7 +689,7 @@ void SliceControlBar::drawMidiLearnCell (juce::Graphics& g, int x, int y,
  const juce::String& label,
  int fieldId, int& outWidth)
 {
- const int cellW = 52, cellH = 32;
+ const int cellW = juce::roundToInt (52.0f * paintSf), cellH = psCellH;
  const bool armed = (processor.midiLearn.getArmedSlot() == fieldId);
  const bool mapped = processor.midiLearn.isMapped (fieldId);
 
@@ -701,18 +705,18 @@ void SliceControlBar::drawMidiLearnCell (juce::Graphics& g, int x, int y,
  g.drawRoundedRectangle ((float) x + 0.5f, (float) y + 0.5f,
  (float) cellW - 1.f, (float) cellH - 1.f, 3.f, 1.f);
 
- g.setFont (DysektLookAndFeel::makeFont (12.0f));
+ g.setFont (DysektLookAndFeel::makeFont (12.0f * paintSf));
  g.setColour (armed ? getTheme().accent
  : mapped ? getTheme().foreground.withAlpha (0.65f)
  : getTheme().foreground.withAlpha (0.38f));
- g.drawText (label, x + 5, y + 2, cellW - 6, 13, juce::Justification::centredLeft);
+ g.drawText (label, x + juce::roundToInt (5.0f * paintSf), y + juce::roundToInt (2.0f * paintSf), cellW - juce::roundToInt (6.0f * paintSf), juce::roundToInt (13.0f * paintSf), juce::Justification::centredLeft);
 
- g.setFont (DysektLookAndFeel::makeMonoFont (13.0f));
+ g.setFont (DysektLookAndFeel::makeMonoFont (13.0f * paintSf));
  g.setColour (armed ? getTheme().accent
  : mapped ? getTheme().foreground
  : getTheme().foreground.withAlpha (0.28f));
  g.drawText (processor.midiLearn.getLabelText (fieldId),
- x + 5, y + 15, cellW - 6, 14, juce::Justification::centredLeft);
+ x + juce::roundToInt (5.0f * paintSf), y + juce::roundToInt (15.0f * paintSf), cellW - juce::roundToInt (6.0f * paintSf), juce::roundToInt (14.0f * paintSf), juce::Justification::centredLeft);
 
  outWidth = cellW;
 
@@ -1007,7 +1011,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  }
  }
  g.setColour (getTheme().separator);
- g.drawHorizontalLine (34, 8.0f, (float) getWidth() - 8.0f);
+ g.drawHorizontalLine (si (34), (float) si (8), (float) getWidth() - (float) si (8));
 
  // ── Row 2 ─────────────────────────────────────────────────────────
  x = si (8);
@@ -1122,10 +1126,10 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  // Shows peak level as a glowing fill + playback cursor for the selected slice
  if (idx >= 0 && idx < DysektProcessor::kMaxMeterSlices)
  {
- const int meterX = x + 4;
- const int meterW = juce::jmax (40, rightEdge - meterX - 4);
- const int meterY = row2y + 4;
- const int meterH = 22;
+ const int meterX = x + si (4);
+ const int meterW = juce::jmax (si (40), rightEdge - meterX - si (4));
+ const int meterY = row2y + si (4);
+ const int meterH = si (22);
 
  // Background track
  g.setColour (juce::Colour (0xFF080808));
@@ -1190,12 +1194,12 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  }
 
  // Label
- g.setFont (DysektLookAndFeel::makeFont (7.0f, true));
+ g.setFont (DysektLookAndFeel::makeFont (7.0f * paintSf, true));
  g.setColour (getTheme().foreground.withAlpha (0.30f));
- g.drawText ("", meterX, row2y, 22, 8, juce::Justification::centredLeft);
+ g.drawText ("", meterX, row2y, si (22), si (8), juce::Justification::centredLeft);
  }
  {
- g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
+ g.setFont (DysektLookAndFeel::makeFont (7.5f * paintSf, true));
  g.setColour (getTheme().foreground.withAlpha (0.40f));
 
  auto drawGroupLabel = [&] (int x1, int x2, const char* label)
@@ -1768,19 +1772,19 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
 void SliceControlBar::drawChroBadgeCell (juce::Graphics& g, int x, int y,
                                          int channel, bool locked, int& outWidth)
 {
-    const int cellW = kParamCellWidth;
-    const int cellH = 32;
+    const int cellW = psCellW;
+    const int cellH = psCellH;
     const auto& theme = getTheme();
     const bool active = (channel > 0);
 
     // Label
-    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setFont (DysektLookAndFeel::makeFont (10.0f * paintSf));
     g.setColour (locked ? theme.lockActive.withAlpha (0.8f)
                         : theme.foreground.withAlpha (0.42f));
-    g.drawText ("CHRO", x + 4, y + 2, cellW - 4, 12, juce::Justification::centredLeft);
+    g.drawText ("CHRO", x + juce::roundToInt (4.0f * paintSf), y + juce::roundToInt (2.0f * paintSf), cellW - juce::roundToInt (4.0f * paintSf), juce::roundToInt (12.0f * paintSf), juce::Justification::centredLeft);
 
     // Badge
-    const int bx = x + 4, by = y + 14, bw = cellW - 8, bh = 14;
+    const int bx = x + juce::roundToInt (4.0f * paintSf), by = y + juce::roundToInt (14.0f * paintSf), bw = cellW - juce::roundToInt (8.0f * paintSf), bh = juce::roundToInt (14.0f * paintSf);
     g.setColour (active ? (locked ? theme.lockActive.withAlpha (0.15f)
                                   : theme.accent.withAlpha (0.15f))
                         : theme.separator.withAlpha (0.25f));
@@ -1790,7 +1794,7 @@ void SliceControlBar::drawChroBadgeCell (juce::Graphics& g, int x, int y,
                                   : theme.foreground.withAlpha (0.22f)));
     g.drawRoundedRectangle ((float)bx, (float)by, (float)bw, (float)bh, 2.5f, 0.8f);
 
-    g.setFont (DysektLookAndFeel::makeMonoFont (11.0f));
+    g.setFont (DysektLookAndFeel::makeMonoFont (11.0f * paintSf));
     g.setColour (active ? (locked ? theme.lockActive : theme.accent)
                         : (locked ? theme.lockActive.withAlpha (0.5f)
                                   : theme.foreground.withAlpha (0.28f)));
@@ -1813,18 +1817,18 @@ void SliceControlBar::drawChroBadgeCell (juce::Graphics& g, int x, int y,
 void SliceControlBar::drawLegatoToggleCell (juce::Graphics& g, int x, int y,
                                             bool on, bool locked, int& outWidth)
 {
-    const int cellW = kParamCellWidth;
-    const int cellH = 32;
+    const int cellW = psCellW;
+    const int cellH = psCellH;
     const auto& theme = getTheme();
 
     // Label
-    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setFont (DysektLookAndFeel::makeFont (10.0f * paintSf));
     g.setColour (locked ? theme.lockActive.withAlpha (0.8f)
                         : theme.foreground.withAlpha (0.42f));
-    g.drawText ("LGTO", x + 4, y + 2, cellW - 4, 12, juce::Justification::centredLeft);
+    g.drawText ("LGTO", x + juce::roundToInt (4.0f * paintSf), y + juce::roundToInt (2.0f * paintSf), cellW - juce::roundToInt (4.0f * paintSf), juce::roundToInt (12.0f * paintSf), juce::Justification::centredLeft);
 
     // Toggle pill
-    const int bx = x + 4, by = y + 14, bw = cellW - 8, bh = 14;
+    const int bx = x + juce::roundToInt (4.0f * paintSf), by = y + juce::roundToInt (14.0f * paintSf), bw = cellW - juce::roundToInt (8.0f * paintSf), bh = juce::roundToInt (14.0f * paintSf);
     const juce::Colour col = on ? (locked ? theme.lockActive : theme.accent)
                                : (locked ? theme.lockActive.withAlpha (0.4f)
                                          : theme.foreground.withAlpha (0.18f));
@@ -1833,7 +1837,7 @@ void SliceControlBar::drawLegatoToggleCell (juce::Graphics& g, int x, int y,
     g.setColour (col);
     g.drawRoundedRectangle ((float)bx, (float)by, (float)bw, (float)bh, 2.5f, 0.8f);
 
-    g.setFont (DysektLookAndFeel::makeMonoFont (11.0f));
+    g.setFont (DysektLookAndFeel::makeMonoFont (11.0f * paintSf));
     g.setColour (col);
     g.drawText (on ? "ON" : "OFF", bx, by, bw, bh, juce::Justification::centred);
 
