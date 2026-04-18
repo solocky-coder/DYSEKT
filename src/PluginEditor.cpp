@@ -491,7 +491,18 @@ void DysektEditor::resized()
     const int kFW = getWidth() - si (kMargin) * 2;
 
     area.removeFromBottom (si (kMargin));
-    const int slotH = (mixerOpen || browserOpen) ? si (kPanelSlotH) : 0;
+
+    // ── Panel slot: clamp to available height so scaled layouts never push the
+    // browser/mixer frame up into the waveform area.  We always anchor the slot
+    // to the very bottom of the window (kPanelSlotH unscaled) and only shrink
+    // it when there genuinely isn't enough room.  This prevents overlap when the
+    // host inflates component bounds to match setTransform (e.g. at 1.25×+).
+    const int rawSlotH   = (mixerOpen || browserOpen) ? si (kPanelSlotH) : 0;
+    // Minimum headroom we must leave above the slot for the waveform / pad view.
+    const int minAboveH  = si (kLogoH) + si (kLcdRowH) + si (kActionH)
+                         + si (kSliceCtrlH) + si (80) + si (kMargin) * 4;
+    const int maxSlotH   = juce::jmax (0, area.getHeight() - minAboveH);
+    const int slotH      = juce::jmin (rawSlotH, maxSlotH);
     auto slot = area.removeFromBottom (slotH);
     area.removeFromBottom (si (kMargin));
 
