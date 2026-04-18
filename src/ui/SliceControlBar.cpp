@@ -490,7 +490,9 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
                                             int& outWidth)
 {
     const int cellW = psCellW;
-    const int cellH = psCellH;
+    // Stop 2px short of the separator line (which sits at row1y + psCellH)
+    // so the frame bottom is visually above the separator, not on it.
+    const int cellH = psCellH - juce::roundToInt (2.0f * paintSf);
     const auto& T = getTheme();
     auto cell = juce::Rectangle<int> (x, y, cellW, cellH);
     const bool armed = (processor.midiLearn.getArmedSlot() == DysektProcessor::FieldSliceStart);
@@ -592,17 +594,9 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     }
 
     {
-        // Ghost bar: 2px tall, sits at the bottom of the 3px-inset interior
-        // cell.reduced(3) → interior bottom is 3px above cell outer edge,
-        // which is 2px above the border inner edge → clearly inside on all sides.
-        const auto interior = cell.reduced (3).toFloat();
-        const auto bar = juce::Rectangle<float> (
-            interior.getX(),
-            interior.getBottom() - 2.0f,
-            interior.getWidth(),
-            2.0f);
-        // Mutate cell by same 3px so FINE badge + label bounds are unchanged
-        cell.removeFromBottom (3);
+        // Ghost bar: 3px strip at the bottom of the cell.
+        // Cell is already 2px short of the separator, so this sits inside the frame.
+        const auto bar = cell.removeFromBottom (3).toFloat();
         g.setColour (T.separator);
         g.fillRect (bar);
 
