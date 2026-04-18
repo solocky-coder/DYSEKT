@@ -702,28 +702,27 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 7, susStr, relStr);
     }
 
-    // ── Row 8:  FMNT:+x.xst  |  TONAL:xxx ───────────────────────────────────
+    // ── Row 8:  BODY:+x.xst  |  TUNE:xxx ────────────────────────────────────
     {
         const float fmnt = data.formantSemitones;
-        juce::String fmntStr = juce::String ("FMNT:") + (fmnt >= 0.0f ? "+" : "")
+        juce::String fmntStr = juce::String ("BODY:") + (fmnt >= 0.0f ? "+" : "")
                              + juce::String (fmnt, 1) + "st";
-        juce::String tonalStr = "TONAL:" + (data.tonalityHz < 1.0f
+        juce::String tonalStr = "ROOT:" + (data.tonalityHz < 1.0f
                               ? juce::String ("OFF")
                               : juce::String (juce::roundToInt (data.tonalityHz)) + "Hz");
         drawRowPair (g, 8, fmntStr, tonalStr);
     }
 
-    // ── Row 9:  FRES:x.xx  |  (right empty) ──────────────────────────────────
+    // ── Row 9:  RESO:x.xx  |  (right empty) ─────────────────────────────────
     {
-        juce::String fresStr = "FRES " + juce::String (data.filterRes, 2);
+        juce::String fresStr = "RESO " + juce::String (data.filterRes, 2);
         drawRowPair (g, 9, fresStr, {});
     }
 
-    // ── Row 10:  OUT:xx  |  BPM:xxx.xx ───────────────────────────────────────
+    // ── Row 10:  OUT:xx  |  (BPM removed — host-controlled) ─────────────────
     {
         juce::String outStr = "OUT:" + juce::String (data.outputBus + 1);
-        juce::String bpmStr = "BPM:" + juce::String (data.bpm, 1);
-        drawRowPair (g, 10, outStr, bpmStr);
+        drawRowPair (g, 10, outStr, {});
     }
 
     // ── Floating flags — right-edge vertical column (always visible) ──────────

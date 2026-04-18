@@ -889,7 +889,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  float gTonal = processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load();
  bool locked = (s.lockMask & kLockTonality) != 0;
  float tv = locked ? s.tonalityHz : gTonal;
- drawKnobCell (g, x, row1y, "TONAL",
+ drawKnobCell (g, x, row1y, "ROOT",
  juce::String ((int) tv) + "Hz",
  toNorm (F::FieldTonality, tv),
  locked, kLockTonality, F::FieldTonality, 0.f, 8000.f, 100.f, cw);
@@ -898,7 +898,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  float gFmnt = processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load();
  locked = (s.lockMask & kLockFormant) != 0;
  float fv = locked ? s.formantSemitones : gFmnt;
- drawKnobCell (g, x, row1y, "FMNT",
+ drawKnobCell (g, x, row1y, "BODY",
  (fv >= 0.f ? "+" : "") + juce::String (fv, 1),
  toNorm (F::FieldFormant, fv),
  locked, kLockFormant, F::FieldFormant, -24.f, 24.f, 0.1f, cw);
@@ -1105,7 +1105,7 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  float gFRes = processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
  bool locked = (s.lockMask & kLockFilter) != 0;
  float rv = locked ? s.filterRes : gFRes;
- drawKnobCell (g, x, row2y, "FRES",
+ drawKnobCell (g, x, row2y, "RESO",
  juce::String ((int) (rv * 100.f)) + "%",
  toNorm (F::FieldFilterRes, rv),
  locked, kLockFilter, F::FieldFilterRes,
