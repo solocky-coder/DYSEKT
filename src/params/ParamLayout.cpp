@@ -137,7 +137,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParamIds::uiScale, 1 },
         "UI Scale",
-        juce::NormalisableRange<float> (0.5f, 3.0f, 0.25f),
+        juce::NormalisableRange<float> (0.5f, 2.0f, 0.25f),
         1.0f));
 
     // ── v17: Pan, Filter ──────────────────────────────────────────────────────
