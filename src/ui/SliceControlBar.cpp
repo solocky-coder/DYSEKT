@@ -529,34 +529,36 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     const bool fineActive   = mapped && !endless && !prePickup
         && fineWinLo >= 0.0f && fineWinHi > fineWinLo;
 
-    // ── Pre-pickup ghost overlay (clip to cell interior) ─────────────────
+    // ── Pre-pickup ghost overlay (drawn explicitly inside cell interior) ──
     if (prePickup)
     {
+        const auto inner = cell.reduced (2).toFloat();
+
         g.saveState();
         g.reduceClipRegion (cell.reduced (2));
 
         // Dim fill from 0 to marker position (the target the knob must reach)
-        const float markerX = cell.getX() + frac * (float) cell.getWidth();
+        const float markerX = inner.getX() + frac * inner.getWidth();
         g.setColour (juce::Colours::white.withAlpha (0.08f));
-        g.fillRect (juce::Rectangle<float> ((float) cell.getX(), (float) cell.getY(),
-                                             markerX - (float) cell.getX(), (float) cell.getHeight()));
+        g.fillRect (juce::Rectangle<float> (inner.getX(), inner.getY(),
+                                             markerX - inner.getX(), inner.getHeight()));
 
         // Bright tick at the marker (pickup target)
-        const float clampedMkr = juce::jlimit ((float) cell.getX() + 0.5f,
-                                                (float) cell.getRight() - 0.5f, markerX);
+        const float clampedMkr = juce::jlimit (inner.getX() + 0.5f,
+                                                inner.getRight() - 0.5f, markerX);
         g.setColour (juce::Colours::white.withAlpha (0.85f));
-        g.fillRect (juce::Rectangle<float> (clampedMkr - 0.5f, (float) cell.getY(),
-                                             1.0f, (float) cell.getHeight()));
+        g.fillRect (juce::Rectangle<float> (clampedMkr - 0.5f, inner.getY(),
+                                             1.0f, inner.getHeight()));
 
-        // Physical knob position tick (when known)
+        // Physical knob position tick (when known) — 1 px, inside frame
         if (ghostNorm >= 0.0f)
         {
-            const float knobX = cell.getX() + ghostNorm * (float) cell.getWidth();
-            const float clampedKnob = juce::jlimit ((float) cell.getX() + 1.0f,
-                                                    (float) cell.getRight() - 1.0f, knobX);
+            const float knobX = inner.getX() + ghostNorm * inner.getWidth();
+            const float clampedKnob = juce::jlimit (inner.getX() + 0.5f,
+                                                    inner.getRight() - 0.5f, knobX);
             g.setColour (juce::Colours::white.withAlpha (0.45f));
-            g.fillRect (juce::Rectangle<float> (clampedKnob - 1.0f, (float) cell.getY(),
-                                                2.0f, (float) cell.getHeight()));
+            g.fillRect (juce::Rectangle<float> (clampedKnob - 0.5f, inner.getY(),
+                                                1.0f, inner.getHeight()));
         }
 
         g.restoreState();
