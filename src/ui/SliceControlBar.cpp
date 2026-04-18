@@ -534,7 +534,7 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     {
         // 4 px horizontal + 2 px vertical inset — keeps ghost content clearly
         // inside the rounded-rect border at all positions including 0 and 1.
-        const auto inner = cell.toFloat().reduced (4.0f, 2.0f);
+        const auto inner = cell.reduced (2).toFloat();
 
         g.saveState();
         g.reduceClipRegion (cell.reduced (2));
@@ -569,7 +569,7 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     // ── Post-pickup fine window overlay ───────────────────────────────────
     if (fineActive)
     {
-        const auto fineInner = cell.toFloat().reduced (4.0f, 2.0f);
+        const auto fineInner = cell.reduced (2).toFloat();
 
         g.saveState();
         g.reduceClipRegion (cell.reduced (2));
@@ -592,7 +592,12 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     }
 
     {
-        auto bar = cell.removeFromBottom (3).toFloat();
+        // Ghost bar: 2px tall, inset 2px from left/right/bottom border — stays inside the frame
+        const auto cellInner = cell.reduced (2).toFloat();
+        const auto bar = juce::Rectangle<float> (cellInner.getX(),
+                                                  cellInner.getBottom() - 2.0f,
+                                                  cellInner.getWidth(),
+                                                  2.0f);
         g.setColour (T.separator);
         g.fillRect (bar);
 
