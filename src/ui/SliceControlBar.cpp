@@ -799,6 +799,9 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  // Scale all fixed pixel constants proportionally with component height
  paintSf = (float) getHeight() / 72.0f;
+ psCellW = juce::roundToInt ((float) kParamCellWidth * paintSf);
+ psCellH = juce::roundToInt (32.0f * paintSf);
+ psKnobR = juce::roundToInt ((float) kKnobR * paintSf);
  auto si  = [this](int v) { return juce::roundToInt ((float) v * paintSf); };
 
  const auto& ui = processor.getUiSliceSnapshot();
@@ -981,7 +984,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // CHRO — chromatic channel badge (per-slice)
  {
      const bool chromaLocked = (s.lockMask & kLockChromaticChannel) != 0;
-     const int  chVal        = chromaLocked ? s.chromaticChannel : 0;
+     const int  chVal        = s.chromaticChannel;  // always read from slice
      drawChroBadgeCell (g, x, row1y, chVal, chromaLocked, cw);
      x += cw + si (4);
  }
@@ -989,7 +992,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // LEGATO — chromatic legato toggle (per-slice)
  {
      const bool legatoLocked = (s.lockMask & kLockChromaticLegato) != 0;
-     const bool legatoOn     = legatoLocked ? s.chromaticLegato : false;
+     const bool legatoOn     = s.chromaticLegato;  // always read from slice
      drawLegatoToggleCell (g, x, row1y, legatoOn, legatoLocked, cw);
      x += cw + si (4);
  }
@@ -1383,6 +1386,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  else if (cell.fieldId == F::FieldFormantComp) currentVal = sliceLocked ? sl.formantComp : (processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load() > 0.5f);
  else if (cell.fieldId == F::FieldReleaseTail) currentVal = sliceLocked ? sl.releaseTail : (processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load() > 0.5f);
  else if (cell.fieldId == F::FieldReverse) currentVal = sliceLocked ? sl.reverse : (processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load() > 0.5f);
+ else if (cell.fieldId == F::FieldChromaticLegato) currentVal = sl.chromaticLegato;
  else if (cell.fieldId == F::FieldOneShot)
  {
  // Two-pill: left=ONE SHOT(1), right=HOLD(0) — pick by click X vs cell centre
@@ -1452,7 +1456,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  }
  else if (fieldId == F::FieldChromaticChannel)
  {
- int cur = (sl.lockMask & kLockChromaticChannel) ? sl.chromaticChannel : 0;
+ int cur = sl.chromaticChannel;  // always read from slice
  juce::StringArray names; names.add ("Off");
  for (int i = 1; i <= 16; ++i) names.add ("Channel " + juce::String (i));
  addItems (names, cur);
