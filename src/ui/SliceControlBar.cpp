@@ -823,7 +823,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  ? processor.sliceManager.getSlice (idx)
  : ui.slices[(size_t) juce::jmax (0, idx)];
 
- float gBpm = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
+ // float gBpm = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();  // BPM cell removed
  float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
  float gAttack = processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load();
  float gDecay = processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load();
@@ -854,22 +854,6 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  // ── Row 1 params ──────────────────────────────────────────────────
  int x = si (8);
-
- // BPM — knob
- {
- bool locked = (s.lockMask & kLockBpm) != 0;
- float bpmVal = locked ? s.bpm : gBpm;
- juce::String bpmStr = juce::String (bpmVal, 2);
- if (bpmStr.contains ("."))
- {
- while (bpmStr.endsWith ("0")) bpmStr = bpmStr.dropLastCharacters (1);
- if (bpmStr.endsWith (".")) bpmStr = bpmStr.dropLastCharacters (1);
- }
- drawKnobCell (g, x, row1y, "BPM", bpmStr,
- toNorm (F::FieldBpm, bpmVal),
- locked, kLockBpm, F::FieldBpm, 20.f, 999.f, 0.01f, cw);
- x += cw + si (4);
- }
 
  // PITCH — knob
  {
@@ -1007,6 +991,23 @@ void SliceControlBar::paint (juce::Graphics& g)
      const bool legatoLocked = (s.lockMask & kLockChromaticLegato) != 0;
      const bool legatoOn     = legatoLocked ? s.chromaticLegato : false;
      drawLegatoToggleCell (g, x, row1y, legatoOn, legatoLocked, cw);
+     x += cw + si (4);
+ }
+
+ // ALGO -- Repitch / Stretch toggle (chromatic mode only)
+ if (s.chromaticChannel > 0)
+ {
+     const bool algoLocked = (s.lockMask & kLockAlgorithm) != 0;
+     const int  algoVal    = algoLocked ? s.algorithm
+                                        : (int) processor.apvts
+                                              .getRawParameterValue (ParamIds::defaultAlgorithm)
+                                              ->load();
+     drawParamCell (g, x, row1y,
+                    "MODE",
+                    algoVal == 0 ? "RPITCH" : "STRETCH",
+                    algoLocked, kLockAlgorithm, F::FieldAlgorithm,
+                    0.f, 1.f, 1.f,
+                    false, true, cw);
      x += cw + si (4);
  }
  }
@@ -1426,7 +1427,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  {
  int cur = (sl.lockMask & kLockAlgorithm) ? sl.algorithm
  : (int) processor.apvts.getRawParameterValue (ParamIds::defaultAlgorithm)->load();
- addItems ({ "Standard", "Tonal", "Formant", "Formant Comp", "Grain" }, cur);
+ addItems ({ "Repitch", "Stretch" }, cur);
  }
  else if (fieldId == F::FieldLoop)
  {
