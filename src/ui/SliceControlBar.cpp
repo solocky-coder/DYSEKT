@@ -532,7 +532,9 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     // ── Pre-pickup ghost overlay (drawn explicitly inside cell interior) ──
     if (prePickup)
     {
-        const auto inner = cell.reduced (2).toFloat();
+        // 4 px horizontal + 2 px vertical inset — keeps ghost content clearly
+        // inside the rounded-rect border at all positions including 0 and 1.
+        const auto inner = cell.toFloat().reduced (4.0f, 2.0f);
 
         g.saveState();
         g.reduceClipRegion (cell.reduced (2));
@@ -543,7 +545,7 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
         g.fillRect (juce::Rectangle<float> (inner.getX(), inner.getY(),
                                              markerX - inner.getX(), inner.getHeight()));
 
-        // Bright tick at the marker (pickup target)
+        // Bright tick at the marker (pickup target) — 1 px, inside frame
         const float clampedMkr = juce::jlimit (inner.getX() + 0.5f,
                                                 inner.getRight() - 0.5f, markerX);
         g.setColour (juce::Colours::white.withAlpha (0.85f));
@@ -567,22 +569,24 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     // ── Post-pickup fine window overlay ───────────────────────────────────
     if (fineActive)
     {
+        const auto fineInner = cell.toFloat().reduced (4.0f, 2.0f);
+
         g.saveState();
         g.reduceClipRegion (cell.reduced (2));
 
-        const float loX = cell.getX() + fineWinLo * (float) cell.getWidth();
-        const float hiX = cell.getX() + fineWinHi * (float) cell.getWidth();
+        const float loX = fineInner.getX() + fineWinLo * fineInner.getWidth();
+        const float hiX = fineInner.getX() + fineWinHi * fineInner.getWidth();
 
         // Shaded band showing the fine window range
         g.setColour (T.accent.withAlpha (0.10f));
-        g.fillRect (juce::Rectangle<float> (loX, (float) cell.getY(),
-                                             hiX - loX, (float) cell.getHeight()));
+        g.fillRect (juce::Rectangle<float> (loX, fineInner.getY(),
+                                             hiX - loX, fineInner.getHeight()));
 
         // Edge tick — low boundary
         g.setColour (T.accent.withAlpha (0.55f));
-        g.fillRect (juce::Rectangle<float> (loX, (float) cell.getY(), 1.0f, (float) cell.getHeight()));
+        g.fillRect (juce::Rectangle<float> (loX, fineInner.getY(), 1.0f, fineInner.getHeight()));
         // Edge tick — high boundary
-        g.fillRect (juce::Rectangle<float> (hiX - 1.0f, (float) cell.getY(), 1.0f, (float) cell.getHeight()));
+        g.fillRect (juce::Rectangle<float> (hiX - 1.0f, fineInner.getY(), 1.0f, fineInner.getHeight()));
 
         g.restoreState();
     }
