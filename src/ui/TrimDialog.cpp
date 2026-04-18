@@ -33,6 +33,7 @@ void TrimDialog::drawTrimKnob (juce::Graphics& g,
                                 const char* label, int sampleVal, int totalFrames)
 {
     const auto& T = getTheme();
+    const float sf = (float) getHeight() / 34.0f;   // scale relative to nominal 34px bar height
 
     // Background + border
     g.setColour (T.darkBar);
@@ -40,12 +41,18 @@ void TrimDialog::drawTrimKnob (juce::Graphics& g,
     g.setColour (T.accent.withAlpha (0.55f));
     g.drawRoundedRectangle (cell.toFloat().reduced (0.5f), 3.0f, 1.0f);
 
-    // Progress bar along bottom edge (shows position in file, 0–1)
+    // Progress bar — inset inside frame, does NOT mutate cell
     if (totalFrames > 0)
     {
-        const float frac = juce::jlimit (0.0f, 1.0f,
-                                         (float) sampleVal / (float) totalFrames);
-        const auto bar = cell.removeFromBottom (3).toFloat();
+        const float frac   = juce::jlimit (0.0f, 1.0f,
+                                            (float) sampleVal / (float) totalFrames);
+        const int   inset  = juce::roundToInt (1.0f * sf);
+        const int   barH   = juce::roundToInt (3.0f * sf);
+        const auto  bar    = juce::Rectangle<float> (
+            (float) (cell.getX()      + inset),
+            (float) (cell.getBottom() - inset - barH),
+            (float) (cell.getWidth()  - 2 * inset),
+            (float) barH);
         g.setColour (T.separator);
         g.fillRect (bar);
         g.setColour (T.accent);
@@ -54,7 +61,7 @@ void TrimDialog::drawTrimKnob (juce::Graphics& g,
 
     // Label — top half, small caps style
     const int midY = cell.getY() + cell.getHeight() / 2;
-    g.setFont (DysektLookAndFeel::makeFont (8.0f));
+    g.setFont (DysektLookAndFeel::makeFont (8.0f * sf));
     g.setColour (T.accent.withAlpha (0.65f));
     g.drawText (label,
                 cell.getX(), cell.getY() + 2,
@@ -62,11 +69,12 @@ void TrimDialog::drawTrimKnob (juce::Graphics& g,
                 juce::Justification::centred, false);
 
     // Value — bottom half, full brightness
-    g.setFont (DysektLookAndFeel::makeFont (10.0f));
+    g.setFont (DysektLookAndFeel::makeFont (10.0f * sf));
     g.setColour (T.foreground);
+    const int barH = juce::roundToInt (4.0f * sf);   // reserve space for progress bar
     g.drawText (juce::String (sampleVal),
                 cell.getX(), midY,
-                cell.getWidth(), cell.getBottom() - midY - 3,
+                cell.getWidth(), cell.getBottom() - midY - barH,
                 juce::Justification::centred, false);
 }
 
@@ -97,7 +105,8 @@ void TrimDialog::paint (juce::Graphics& g)
         g.drawRoundedRectangle (r.reduced (0.5f), 3.0f, 1.0f);
 
         // Title text — single line: "TRIM SAMPLE" centred
-        g.setFont (DysektLookAndFeel::makeFont (11.0f));
+        const float sf = (float) getHeight() / 34.0f;
+        g.setFont (DysektLookAndFeel::makeFont (11.0f * sf));
         g.setColour (T.accent);
         g.drawText ("TRIM SAMPLE", r.getX(), (int) r.getY(),
                     (int) r.getWidth(), (int) r.getHeight(),
@@ -107,11 +116,14 @@ void TrimDialog::paint (juce::Graphics& g)
 
 void TrimDialog::resized()
 {
-    auto b = getLocalBounds().reduced (6, 4);
+    const float sf = (float) getHeight() / 34.0f;   // scale relative to nominal 34px bar height
+    auto si = [sf](int v) { return juce::roundToInt ((float) v * sf); };
 
-    const int btnW  = 72;
-    const int knobW = 72;   // wide enough for 6-digit sample number
-    const int gap   = 5;
+    auto b = getLocalBounds().reduced (si (6), si (4));
+
+    const int btnW  = si (72);
+    const int knobW = si (72);   // wide enough for 6-digit sample number
+    const int gap   = si (5);
 
     cancelBtn.setBounds (b.removeFromRight (btnW));
     b.removeFromRight (gap);

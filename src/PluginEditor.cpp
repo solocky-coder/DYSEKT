@@ -661,7 +661,7 @@ void DysektEditor::resized()
     }
 
     if (trimDialog != nullptr)
-        trimDialog->setBounds (screenX, y + h, screenW, kTrimBarH);
+        trimDialog->setBounds (screenX, y + h, screenW, si (kTrimBarH));
 
     if (shortcutsPanel.isVisible())
         shortcutsPanel.setBounds (getLocalBounds());
