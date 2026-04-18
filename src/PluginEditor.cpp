@@ -497,10 +497,13 @@ void DysektEditor::resized()
     // to the very bottom of the window (kPanelSlotH unscaled) and only shrink
     // it when there genuinely isn't enough room.  This prevents overlap when the
     // host inflates component bounds to match setTransform (e.g. at 1.25×+).
+    // NOTE: topArea and actionArea have already been removed from `area` above,
+    // so minAboveH must only account for sections still to be placed inside the
+    // remaining `area` (SCB + overview row + minimum waveform height + margins).
     const int rawSlotH   = (mixerOpen || browserOpen) ? si (kPanelSlotH) : 0;
-    // Minimum headroom we must leave above the slot for the waveform / pad view.
-    const int minAboveH  = si (kLogoH) + si (kLcdRowH) + si (kActionH)
-                         + si (kSliceCtrlH) + si (80) + si (kMargin) * 4;
+    const int minAboveH  = si (kSliceCtrlH)
+                         + si (kOverviewH + kMargin * 2 + 4 /*kFrameInset*/)
+                         + si (80) + si (kMargin) * 3;
     const int maxSlotH   = juce::jmax (0, area.getHeight() - minAboveH);
     const int slotH      = juce::jmin (rawSlotH, maxSlotH);
     auto slot = area.removeFromBottom (slotH);
@@ -528,11 +531,18 @@ void DysektEditor::resized()
 
     int overviewTopGuard = area.getBottom();
 
+    // SCB and zoom bar (overview) are only shown when a real user sample is loaded —
+    // the default Empty.wav placeholder does not count.
+    auto sampleSnap       = processor.sampleData.getSnapshot();
+    const bool hasRealSample = hasSampleLoaded
+                             && sampleSnap != nullptr
+                             && ! sampleSnap->isDefaultSample;
+
     if (trimDialog != nullptr) {
         sliceControlBar.setBounds ({});
         waveformOverview.setBounds ({});
     } else {
-        if ((trimDialog != nullptr || (uiMode == 0 && hasSampleLoaded)) && !mixerOpen)
+        if ((trimDialog != nullptr || (uiMode == 0 && hasRealSample)) && !mixerOpen)
         {
             auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
             sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
@@ -543,7 +553,7 @@ void DysektEditor::resized()
             // SCB space NOT removed from area — pad grid uses it
         }
 
-        if (uiMode == 0 && !mixerOpen && hasSampleLoaded)
+        if (uiMode == 0 && !mixerOpen && hasRealSample)
         {
             auto overviewRow = area.removeFromBottom (kOverviewRowH);
             const int overviewY = overviewRow.getY() + kInterGap;
@@ -870,14 +880,17 @@ void DysektEditor::timerCallback()
     sliceWaveformLcd.repaintLcd();
 
     {
-        const bool hasSample = (processor.sampleData.getSnapshot() != nullptr
-                                 && processor.sampleData.getSnapshot()->buffer.getNumSamples() > 0);
+        auto timerSnap = processor.sampleData.getSnapshot();
+        const bool hasSample = (timerSnap != nullptr
+                                 && timerSnap->buffer.getNumSamples() > 0);
         if (hasSample != hasSampleLoaded)
         {
             hasSampleLoaded = hasSample;
             resized();   // expand/collapse SCB + zoom bar
         }
-        const bool overviewShouldShow = hasSample && (uiMode == 0);
+        // Only show the overview / zoom bar for a real user sample, not the default placeholder.
+        const bool hasRealSampleNow = hasSample && timerSnap != nullptr && ! timerSnap->isDefaultSample;
+        const bool overviewShouldShow = hasRealSampleNow && (uiMode == 0);
         if (overviewShouldShow != waveformOverview.isVisible())
         {
             waveformOverview.setVisible (overviewShouldShow);
