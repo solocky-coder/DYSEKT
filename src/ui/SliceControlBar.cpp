@@ -592,15 +592,17 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     }
 
     {
-        // Ghost bar: 2px tall, inset 2px from all sides — computed BEFORE mutating cell
-        // Bottom is cell.getBottom()-2 so it clears the 1px border inner edge
+        // Ghost bar: 2px tall, sits at the bottom of the 3px-inset interior
+        // cell.reduced(3) → interior bottom is 3px above cell outer edge,
+        // which is 2px above the border inner edge → clearly inside on all sides.
+        const auto interior = cell.reduced (3).toFloat();
         const auto bar = juce::Rectangle<float> (
-            cell.getX()    + 2.0f,
-            cell.getBottom() - 4.0f,   // 4px from outer bottom → 2px inside border
-            cell.getWidth() - 4.0f,
+            interior.getX(),
+            interior.getBottom() - 2.0f,
+            interior.getWidth(),
             2.0f);
-        // Mutate cell by 2px so FINE badge + label bounds stay unchanged
-        cell.removeFromBottom (2);
+        // Mutate cell by same 3px so FINE badge + label bounds are unchanged
+        cell.removeFromBottom (3);
         g.setColour (T.separator);
         g.fillRect (bar);
 
