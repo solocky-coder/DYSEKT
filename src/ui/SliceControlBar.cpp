@@ -1290,9 +1290,8 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  dragStartValue = (float) ui.rootNote; return;
  }
 
- // Priority pass: lock icon cells must win over the knob body that
- // shares the same bounding box. Without this, the knob cell (registered
- // first) always captures the click and the lock icon is never reachable.
+ // ── Priority pass: lock icons share bounds with their knob cell.
+ //    Check lock-icon cells first so they always win the hit test.
  for (int li = 0; li < (int) cells.size(); ++li)
  {
      const auto& lc = cells[(size_t) li];
@@ -1315,7 +1314,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  for (int i = 0; i < (int) cells.size(); ++i)
  {
  const auto& cell = cells[(size_t) i];
- if (cell.isLockIcon) continue; // already handled in priority pass above
+ if (cell.isLockIcon) continue; // handled in priority pass above
  if (! juce::Rectangle<int> (cell.x, cell.y, cell.w, cell.h).contains (pos)) continue;
 
  // MIDI Learn boundary button
@@ -1353,6 +1352,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  DysektProcessor::Command gc; gc.type = DysektProcessor::CmdBeginGesture;
  processor.pushCommand (gc);
  activeDragCell = i;
+ activeCellSnapshot = cell; // snapshot before cells[] is rebuilt by next repaint()
  // Pan and Marker sliders are horizontal - store x; all others store y
  dragStartY = (cell.fieldId == DysektProcessor::FieldPan
             || cell.fieldId == DysektProcessor::FieldSliceStart) ? pos.x : pos.y;
@@ -1553,8 +1553,10 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  processor.pushCommand (cmd); repaint(); return;
  }
 
- if (activeDragCell < 0 || activeDragCell >= (int) cells.size()) return;
- const auto& cell = cells[(size_t) activeDragCell];
+ if (activeDragCell < 0) return;
+ // Use the snapshot taken at mouseDown — cells[] is rebuilt by every repaint()
+ // so indexing by activeDragCell after a repaint reads the wrong cell.
+ const auto& cell = activeCellSnapshot;
  if (! cell.isKnob) return;
 
  float deltaY = (float) (dragStartY - e.y);
@@ -1686,8 +1688,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  DysektProcessor::Command cmd;
  cmd.type = F::CmdSetSliceParam;
  cmd.intParam1 = cell.fieldId; cmd.floatParam1 = newNative;
- cmd.intParam2 = 1; // skipLock — always store value without auto-locking;
-                    // locking is only triggered explicitly via the lock icon click.
+ if (isAdsr) cmd.intParam2 = 1; // skipLock — store in per-slice field without modifying lockMask
  processor.pushCommand (cmd); repaint();
 }
 
@@ -1698,9 +1699,10 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
 {
  using F = DysektProcessor;
 
- if (activeDragCell >= 0 && activeDragCell < (int) cells.size())
+ if (activeDragCell >= 0)
  {
- const auto& cell = cells[(size_t) activeDragCell];
+ // Use the snapshot — cells[] may have been rebuilt since mouseDown.
+ const auto& cell = activeCellSnapshot;
  if (cell.fieldId == F::FieldSliceStart)
  {
  const int liveIdx = processor.liveDragSliceIdx.load (std::memory_order_acquire);
