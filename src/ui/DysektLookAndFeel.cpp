@@ -52,7 +52,11 @@ juce::Font DysektLookAndFeel::makeMonoFont (float pointSize, bool bold)
 
 juce::Typeface::Ptr DysektLookAndFeel::getTypefaceForFont (const juce::Font& f)
 {
-    if (f.isBold())
+    // Check both the bold flag and the typeface style string — macOS can request
+    // bold via style name ("Bold", "SemiBold") rather than the isBold() flag,
+    // which would otherwise fall through to a system typeface (Helvetica, etc.)
+    auto style = f.getTypefaceStyle().toLowerCase();
+    if (f.isBold() || style.contains ("bold") || style.contains ("semi"))
         return boldTypeface;
     return regularTypeface;
 }
@@ -213,7 +217,7 @@ void DysektLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g,
 
 juce::Font DysektLookAndFeel::getPopupMenuFont()
 {
-    return makeFont (15.0f * sMenuScale);
+    return makeFont (12.0f * sMenuScale);
 }
 
 // ── ComboBox ──────────────────────────────────────────────────────────────────

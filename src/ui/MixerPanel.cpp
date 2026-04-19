@@ -380,7 +380,7 @@ void MixerPanel::drawMeter (juce::Graphics& g,
     // toFill uses sqrt mapping so we must invert: fill = sqrt(linear) → tickX.
     struct Tick { float db; const char* label; };
     static constexpr Tick kTicks[] = { {-6,"−6"}, {-12,"−12"}, {-18,"−18"}, {-24,"−24"} };
-    g.setFont (juce::Font (6.5f));
+    g.setFont (DysektLookAndFeel::makeFont (6.5f));
     for (const auto& tick : kTicks)
     {
         const float linear = juce::Decibels::decibelsToGain (tick.db);

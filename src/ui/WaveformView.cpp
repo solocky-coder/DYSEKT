@@ -809,14 +809,14 @@ void WaveformView::drawSlices (juce::Graphics& g)
         {
             // Name: centred in slice, font size scales with available width
             const float nameFontH = juce::jlimit (9.0f, 13.0f, (float)sw * 0.18f);
-            g.setFont (juce::Font (nameFontH, juce::Font::bold));
+            g.setFont (DysektLookAndFeel::makeFont (nameFontH, true));
             g.drawText (s.name.toUpperCase(), x1 + 2, kTopPad + 1, sw - 4, 14,
                         juce::Justification::centred, true);
         }
         else
         {
             // Number: top-left corner, bold 10pt
-            g.setFont (juce::Font (10.0f, juce::Font::bold));
+            g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
             g.drawText (juce::String (i + 1), x1 + 4, 3, 20, 12, juce::Justification::left);
         }
     }

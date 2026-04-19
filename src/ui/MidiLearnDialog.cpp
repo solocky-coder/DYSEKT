@@ -67,7 +67,7 @@ MidiLearnDialog::MappingRowComponent::MappingRowComponent()
 {
     const auto& th = getTheme();
 
-    paramLabel.setFont (juce::Font (12.f));
+    paramLabel.setFont (DysektLookAndFeel::makeFont (12.0f));
     paramLabel.setColour (juce::Label::textColourId, th.foreground);
     paramLabel.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (paramLabel);
@@ -288,7 +288,7 @@ void MidiLearnDialog::paint (juce::Graphics& g)
     g.setColour (th.accent.withAlpha (0.25f));
     g.drawHorizontalLine (36, 1.f, (float)(w - 1));
     g.setColour (th.foreground);
-    g.setFont (juce::Font (15.f, juce::Font::bold));
+    g.setFont (DysektLookAndFeel::makeFont (15.0f, true));
     g.drawText ("MIDI Learn Assignments", 0, 0, w, 36, juce::Justification::centred);
 
     // Column headers
@@ -296,7 +296,7 @@ void MidiLearnDialog::paint (juce::Graphics& g)
     g.setColour (th.darkBar);
     g.fillRect (10, hdrY, w - 20, hdrH);
     g.setColour (th.foreground.withAlpha (0.55f));
-    g.setFont (juce::Font (10.f, juce::Font::bold));
+    g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
     g.drawText ("PARAMETER",    14, hdrY, 136, hdrH, juce::Justification::centredLeft);
     g.drawText ("CHANNEL",     154, hdrY,  62, hdrH, juce::Justification::centredLeft);
     g.drawText ("CC",          220, hdrY,  68, hdrH, juce::Justification::centredLeft);
