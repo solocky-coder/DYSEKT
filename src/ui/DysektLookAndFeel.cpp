@@ -206,7 +206,7 @@ void DysektLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g,
                                                      const juce::Rectangle<int>& area,
                                                      const juce::String& sectionName)
 {
-    g.setFont (getPopupMenuFont().boldened());
+    g.setFont (makeFont (12.0f * sMenuScale, true));
     g.setColour (getTheme().foreground);
     g.drawFittedText (sectionName,
                       area.getX() + (int) (12 * sMenuScale), area.getY(),
