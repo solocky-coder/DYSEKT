@@ -103,7 +103,6 @@ void ShortcutsPanel::buildShortcutData()
         slicing.entries = {
             { "Double-click", "Add slice at position"  },
             { "L",            "MIDI Slice"              },
-            { "C",            "Auto Chop panel"         },
             { "Del",          "Delete selected slice"   },
         };
         categories.push_back (std::move (slicing));
