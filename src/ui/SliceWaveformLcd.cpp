@@ -478,9 +478,15 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  const float kSEnd_eff = env.ax + remain * 0.65f;
  env.sxEnd = kSEnd_eff;
 
- // Clamp D into its zone; R is free to span full display width
- env.dx = juce::jlimit (env.ax, kDX_eff, env.dx);
- env.rx = juce::jlimit (0.0f, 1.0f, env.rx);
+ // Standard ADSR behaviour: D/S/R nodes keep their own positions unless Attack
+ // physically overlaps them. Only push them forward to avoid visual overlap —
+ // do NOT re-clamp them into the proportional zone (that caused them to jump
+ // every time A was moved, which is non-standard and confusing).
+ if (dragRole == NodeRole::Attack)
+ {
+     if (env.dx < env.ax) env.dx = env.ax;  // push D only if A overtook it
+     if (env.rx < env.dx) env.rx = env.dx;  // push R only if D pushed into it
+ }
 
  if (dragRole == NodeRole::Decay)
  {
