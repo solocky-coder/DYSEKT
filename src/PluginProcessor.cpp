@@ -776,15 +776,15 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     else if (bit == kLockAlgorithm)
                         s.algorithm = (s.lockMask & kLockAlgorithm) ? s.algorithm : (int) algoParam->load();
                     else if (bit == kLockAttack)
-                        s.attackSec = (s.lockMask & kLockAttack) ? s.attackSec : attackParam->load() / 1000.0f;
+                        // s.attackSec unchanged — skipLock=1 drags always keep s.attackSec current
                     else if (bit == kLockHold)
-                        s.holdSec = (s.lockMask & kLockHold) ? s.holdSec : holdParam->load() / 1000.0f;
+                        // s.holdSec unchanged
                     else if (bit == kLockDecay)
-                        s.decaySec = (s.lockMask & kLockDecay) ? s.decaySec : decayParam->load() / 1000.0f;
+                        // s.decaySec unchanged
                     else if (bit == kLockSustain)
-                        s.sustainLevel = (s.lockMask & kLockSustain) ? s.sustainLevel : sustainParam->load() / 100.0f;
+                        // s.sustainLevel unchanged
                     else if (bit == kLockRelease)
-                        s.releaseSec = (s.lockMask & kLockRelease) ? s.releaseSec : releaseParam->load() / 1000.0f;
+                        // s.releaseSec unchanged
                     else if (bit == kLockMuteGroup)
                         s.muteGroup = (s.lockMask & kLockMuteGroup) ? s.muteGroup : (int) muteGroupParam->load();
                     else if (bit == kLockLoop)
