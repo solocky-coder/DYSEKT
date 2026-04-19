@@ -166,20 +166,20 @@ void PadGridView::drawPad (juce::Graphics& g,
     g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, sel ? 1.5f : 1.0f);
 
     // ── Inner layout ──────────────────────────────────────────────────────────
-    auto inner     = bounds.reduced (5, 4);
+    auto inner     = bounds.reduced (3, 3);
 
-    // Top row: note name left + slice name centred  (fixed height = 14 px)
-    auto topRow    = inner.removeFromTop (14);
+    // Top row: note name left + slice name centred  (fixed height = 11 px)
+    auto topRow    = inner.removeFromTop (11);
 
     // Remaining space = waveform canvas (no meter strip any more)
     auto waveArea  = inner;
 
     // ── MIDI note name — top-left (replaces old pad number) ──────────────────
     {
-        g.setFont (DysektLookAndFeel::makeMonoFont (8.0f));
+        g.setFont (DysektLookAndFeel::makeMonoFont (7.5f));
         g.setColour (sliceCol.brighter (0.55f).withAlpha (0.90f));
         g.drawText (midiNoteName (slice.midiNote),
-                    topRow.withWidth (30),
+                    topRow.withWidth (28),
                     juce::Justification::centredLeft);
     }
 
@@ -188,7 +188,7 @@ void PadGridView::drawPad (juce::Graphics& g,
         const juce::String displayName = slice.name.isNotEmpty()
                                        ? slice.name
                                        : ("Slice " + juce::String (absIndex + 1));
-        g.setFont (DysektLookAndFeel::makeFont (9.5f, true));
+        g.setFont (DysektLookAndFeel::makeFont (8.5f, true));
         g.setColour (juce::Colours::white.withAlpha (sel ? 1.0f : 0.88f));
         g.drawText (displayName, topRow, juce::Justification::centred, true);
     }
@@ -521,8 +521,13 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
         menu.addItem (1, "Rename Slice...");
         menu.addItem (2, "Delete Slice");
 
+        float ms      = DysektLookAndFeel::getMenuScale();
+        auto* topLvl  = getTopLevelComponent();
         menu.showMenuAsync (
-            juce::PopupMenu::Options().withTargetComponent (this),
+            juce::PopupMenu::Options()
+                .withTargetScreenArea (juce::Rectangle<int> (e.getScreenX(), e.getScreenY(), 1, 1))
+                .withParentComponent (topLvl)
+                .withStandardItemHeight ((int) (24 * ms)),
             [this, idx] (int result)
             {
                 if (result == 1)

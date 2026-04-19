@@ -596,9 +596,8 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
     {
         // Ghost bar: 3px strip anchored to the inside-bottom of the cell frame.
         // Inset by 1px on left/right/bottom so it never bleeds past the border.
-        // NOTE: do NOT use cell.removeFromBottom() here — that mutates cell and
-        // shifts the bar outside the rounded-rect border.  Use a non-mutating
-        // slice instead so the bar stays visually inside the frame.
+        // Clip to the frame's rounded-rect shape (not a plain rectangle) so the
+        // bar is masked by the visible rounded corners at any UI scale.
         const int inset = juce::roundToInt (1.0f * paintSf);
         const int barH  = juce::roundToInt (3.0f * paintSf);
         const auto bar  = juce::Rectangle<float> (
@@ -608,7 +607,14 @@ void SliceControlBar::drawMarkerSliderCell (juce::Graphics& g, int x, int y,
             (float) barH);
 
         g.saveState();
-        g.reduceClipRegion (cell.reduced (inset));
+        // Use a rounded-rect path that exactly matches the visible frame border
+        // so content drawn near the corners is clipped to the rounded shape
+        // rather than a plain rectangle (which leaks past the corners at higher scales).
+        {
+            juce::Path roundedClip;
+            roundedClip.addRoundedRectangle (cell.toFloat().reduced (0.5f), 3.0f);
+            g.reduceClipRegion (roundedClip);
+        }
 
         g.setColour (T.separator);
         g.fillRect (bar);
