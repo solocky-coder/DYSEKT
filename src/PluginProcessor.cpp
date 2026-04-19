@@ -775,16 +775,11 @@ void DysektProcessor::handleCommand (const Command& cmd)
                         s.pitchSemitones = (s.lockMask & kLockPitch) ? s.pitchSemitones : pitchParam->load();
                     else if (bit == kLockAlgorithm)
                         s.algorithm = (s.lockMask & kLockAlgorithm) ? s.algorithm : (int) algoParam->load();
-                    else if (bit == kLockAttack)
-                        // s.attackSec unchanged — skipLock=1 drags always keep s.attackSec current
-                    else if (bit == kLockHold)
-                        // s.holdSec unchanged
-                    else if (bit == kLockDecay)
-                        // s.decaySec unchanged
-                    else if (bit == kLockSustain)
-                        // s.sustainLevel unchanged
-                    else if (bit == kLockRelease)
-                        // s.releaseSec unchanged
+                    else if (bit == kLockAttack)  { /* s.attackSec unchanged — skipLock=1 drags keep it current */ }
+                    else if (bit == kLockHold)    { /* s.holdSec unchanged */ }
+                    else if (bit == kLockDecay)   { /* s.decaySec unchanged */ }
+                    else if (bit == kLockSustain) { /* s.sustainLevel unchanged */ }
+                    else if (bit == kLockRelease) { /* s.releaseSec unchanged */ }
                     else if (bit == kLockMuteGroup)
                         s.muteGroup = (s.lockMask & kLockMuteGroup) ? s.muteGroup : (int) muteGroupParam->load();
                     else if (bit == kLockLoop)
