@@ -852,7 +852,6 @@ void SliceControlBar::paint (juce::Graphics& g)
  : ui.slices[(size_t) juce::jmax (0, idx)];
 
  // float gBpm = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();  // BPM cell removed
- float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
  float gAttack = processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load();
  float gDecay = processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load();
  float gSustain = processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load();
@@ -886,7 +885,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // PITCH — knob
  {
  bool locked = (s.lockMask & kLockPitch) != 0;
- float pv = locked ? s.pitchSemitones : gPitch;
+ float pv = s.pitchSemitones; // always read per-slice; processor keeps this current
  int pvi = (int) std::round (pv);
  drawKnobCell (g, x, row1y, "PITCH",
  (pvi >= 0 ? "+" : "") + juce::String (pvi) + "st",
@@ -897,9 +896,8 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  // TUNE — knob
  {
- float gCents = processor.apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load();
  bool locked = (s.lockMask & kLockCentsDetune) != 0;
- float cv = locked ? s.centsDetune : gCents;
+ float cv = s.centsDetune;
  int cvi = juce::jlimit (-100, 100, (int) std::round (cv));
  drawKnobCell (g, x, row1y, "TUNE",
  (cvi >= 0 ? "+" : "") + juce::String (cvi) + "ct",
@@ -911,27 +909,24 @@ void SliceControlBar::paint (juce::Graphics& g)
  // ALGO selector removed — Repitch vs Stretch is now derived from the STCH toggle
  if (stretchVal)
  {
- float gTonal = processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load();
  bool locked = (s.lockMask & kLockTonality) != 0;
- float tv = locked ? s.tonalityHz : gTonal;
+ float tv = s.tonalityHz;
  drawKnobCell (g, x, row1y, "ROOT",
  juce::String ((int) tv) + "Hz",
  toNorm (F::FieldTonality, tv),
  locked, kLockTonality, F::FieldTonality, 0.f, 8000.f, 100.f, cw);
  x += cw + si (4);
 
- float gFmnt = processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load();
  locked = (s.lockMask & kLockFormant) != 0;
- float fv = locked ? s.formantSemitones : gFmnt;
+ float fv = s.formantSemitones;
  drawKnobCell (g, x, row1y, "BODY",
  (fv >= 0.f ? "+" : "") + juce::String (fv, 1),
  toNorm (F::FieldFormant, fv),
  locked, kLockFormant, F::FieldFormant, -24.f, 24.f, 0.1f, cw);
  x += cw + si (4);
 
- bool gFmntC = processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load() > 0.5f;
  locked = (s.lockMask & kLockFormantComp) != 0;
- bool fmntCVal = locked ? s.formantComp : gFmntC;
+ bool fmntCVal = s.formantComp;
  drawParamCell (g, x, row1y, "FMNT C", fmntCVal ? "ON" : "OFF",
  locked, kLockFormantComp, F::FieldFormantComp,
  0.f, 1.f, 1.f, true, false, cw);
@@ -940,7 +935,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // STRETCH — boolean
  {
  bool locked = (s.lockMask & kLockStretch) != 0;
- bool sv = locked ? s.stretchEnabled : gStretch;
+ bool sv = s.stretchEnabled;
  drawParamCell (g, x, row1y, "STRETCH", sv ? "ON" : "OFF",
  locked, kLockStretch, F::FieldStretchEnabled,
  0.f, 1.f, 1.f, true, false, cw);
@@ -971,9 +966,8 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  // GAIN
  {
- float gGainDb = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
  bool locked = (s.lockMask & kLockVolume) != 0;
- float gv = locked ? s.volume : gGainDb;
+ float gv = s.volume;
  drawKnobCell (g, x, row1y, "GAIN",
  (gv >= 0.f ? "+" : "") + juce::String (gv, 1) + "dB",
  toNorm (F::FieldVolume, gv),
@@ -983,9 +977,8 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  // PAN
  {
- float gPanVal = processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
  bool locked = (s.lockMask & kLockPan) != 0;
- float pv = locked ? s.pan : gPanVal;
+ float pv = s.pan;
  drawPanSliderCell (g, x, row1y, pv, locked, cw);
  x += cw + si (4);
  }
@@ -1112,9 +1105,8 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  // FCUT — filter cutoff knob (log-scaled, 20–20000 Hz)
  {
  filterGroupX1 = x;
- float gFCut = processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load();
  bool locked = (s.lockMask & kLockFilter) != 0;
- float fv = locked ? s.filterCutoff : gFCut;
+ float fv = s.filterCutoff;
  juce::String fStr = (fv >= 1000.f)
  ? (juce::String (fv / 1000.f, 1) + "k")
  : (juce::String ((int) fv) + "Hz");
@@ -1127,9 +1119,8 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
 
  // FRES — filter resonance knob (0–1, display as 0–100%)
  {
- float gFRes = processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
  bool locked = (s.lockMask & kLockFilter) != 0;
- float rv = locked ? s.filterRes : gFRes;
+ float rv = s.filterRes;
  drawKnobCell (g, x, row2y, "RESO",
  juce::String ((int) (rv * 100.f)) + "%",
  toNorm (F::FieldFilterRes, rv),
@@ -1376,11 +1367,11 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  using F = DysektProcessor;
  switch (cell.fieldId)
  {
- case F::FieldBpm: dragStartValue = (sl.lockMask & kLockBpm) ? sl.bpm : processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load(); break;
- case F::FieldPitch: dragStartValue = (sl.lockMask & kLockPitch) ? sl.pitchSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load(); break;
- case F::FieldCentsDetune: dragStartValue = (sl.lockMask & kLockCentsDetune) ? sl.centsDetune : processor.apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load(); break;
- case F::FieldTonality: dragStartValue = (sl.lockMask & kLockTonality) ? sl.tonalityHz : processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load(); break;
- case F::FieldFormant: dragStartValue = (sl.lockMask & kLockFormant) ? sl.formantSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load(); break;
+ case F::FieldBpm: dragStartValue = sl.bpm; break;
+ case F::FieldPitch: dragStartValue = sl.pitchSemitones; break;
+ case F::FieldCentsDetune: dragStartValue = sl.centsDetune; break;
+ case F::FieldTonality: dragStartValue = sl.tonalityHz; break;
+ case F::FieldFormant: dragStartValue = sl.formantSemitones; break;
  case F::FieldAttack:  dragStartValue = sl.attackSec;    break;
  case F::FieldHold:    dragStartValue = sl.holdSec;      break;
  case F::FieldDecay:   dragStartValue = sl.decaySec;     break;
@@ -1389,11 +1380,11 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  case F::FieldMuteGroup: dragStartValue = (float)((sl.lockMask & kLockMuteGroup) ? sl.muteGroup : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load()); break;
  case F::FieldSliceStart: dragStartValue = (float) sl.startSample; break;
  case F::FieldMidiNote: dragStartValue = (float) sl.midiNote; break;
- case F::FieldVolume: dragStartValue = (sl.lockMask & kLockVolume) ? sl.volume : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load(); break;
+ case F::FieldVolume: dragStartValue = sl.volume; break;
  case F::FieldOutputBus: dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
- case F::FieldPan: dragStartValue = (sl.lockMask & kLockPan) ? sl.pan : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load(); break;
- case F::FieldFilterCutoff: dragStartValue = (sl.lockMask & kLockFilter) ? sl.filterCutoff : processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load(); break;
- case F::FieldFilterRes: dragStartValue = (sl.lockMask & kLockFilter) ? sl.filterRes : processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load(); break;
+ case F::FieldPan: dragStartValue = sl.pan; break;
+ case F::FieldFilterCutoff: dragStartValue = sl.filterCutoff; break;
+ case F::FieldFilterRes: dragStartValue = sl.filterRes; break;
         case kFieldGlide:
             dragStartValue = processor.voicePool.legatoGlideMs.load (std::memory_order_relaxed);
             break;
@@ -1688,7 +1679,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  DysektProcessor::Command cmd;
  cmd.type = F::CmdSetSliceParam;
  cmd.intParam1 = cell.fieldId; cmd.floatParam1 = newNative;
- if (isAdsr) cmd.intParam2 = 1; // skipLock — store in per-slice field without modifying lockMask
+ cmd.intParam2 = 1; // skipLock — never auto-lock on drag; lock only via explicit lock-icon click
  processor.pushCommand (cmd); repaint();
 }
 
@@ -1780,11 +1771,11 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  // Values in display units (ms, %, raw)
  switch (cell.fieldId)
  {
- case F::FieldBpm: currentVal = (sl.lockMask & kLockBpm) ? sl.bpm : processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load(); break;
- case F::FieldPitch: currentVal = (sl.lockMask & kLockPitch) ? sl.pitchSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load(); break;
- case F::FieldCentsDetune: currentVal = (sl.lockMask & kLockCentsDetune) ? sl.centsDetune : processor.apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load(); break;
- case F::FieldTonality: currentVal = (sl.lockMask & kLockTonality) ? sl.tonalityHz : processor.apvts.getRawParameterValue (ParamIds::defaultTonality)->load(); break;
- case F::FieldFormant: currentVal = (sl.lockMask & kLockFormant) ? sl.formantSemitones : processor.apvts.getRawParameterValue (ParamIds::defaultFormant)->load(); break;
+ case F::FieldBpm: currentVal = sl.bpm; break;
+ case F::FieldPitch: currentVal = sl.pitchSemitones; break;
+ case F::FieldCentsDetune: currentVal = sl.centsDetune; break;
+ case F::FieldTonality: currentVal = sl.tonalityHz; break;
+ case F::FieldFormant: currentVal = sl.formantSemitones; break;
  case F::FieldAttack:  currentVal = sl.attackSec   * 1000.f; break;
  case F::FieldHold:    currentVal = sl.holdSec     * 1000.f; break;
  case F::FieldDecay:   currentVal = sl.decaySec    * 1000.f; break;
@@ -1792,11 +1783,11 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  case F::FieldRelease: currentVal = sl.releaseSec  * 1000.f; break;
  case F::FieldMuteGroup: currentVal = (float)((sl.lockMask & kLockMuteGroup) ? sl.muteGroup : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load()); break;
  case F::FieldMidiNote: currentVal = (float) sl.midiNote; break;
- case F::FieldVolume: currentVal = (sl.lockMask & kLockVolume) ? sl.volume : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load(); break;
+ case F::FieldVolume: currentVal = sl.volume; break;
  case F::FieldOutputBus: currentVal = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
- case F::FieldPan: currentVal = (sl.lockMask & kLockPan) ? sl.pan : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load(); break;
- case F::FieldFilterCutoff: currentVal = (sl.lockMask & kLockFilter) ? sl.filterCutoff : processor.apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load(); break;
- case F::FieldFilterRes: currentVal = (sl.lockMask & kLockFilter) ? sl.filterRes : processor.apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load(); break;
+ case F::FieldPan: currentVal = sl.pan; break;
+ case F::FieldFilterCutoff: currentVal = sl.filterCutoff; break;
+ case F::FieldFilterRes: currentVal = sl.filterRes; break;
  default: break;
  }
  }
