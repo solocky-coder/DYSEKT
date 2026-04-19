@@ -106,7 +106,7 @@ int PadGridView::padIndexAt (juce::Point<int> p) const noexcept
 juce::String PadGridView::midiNoteName (int note)
 {
     static const char* kNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-    const int oct = (note / 12) - 1;
+    const int oct = (note / 12) - 2;  // matches LCD: MIDI 60 = C3
     return juce::String (kNames[note % 12]) + juce::String (oct);
 }
 
@@ -442,52 +442,7 @@ void PadGridView::drawPad (juce::Graphics& g,
         }
     }
 
-    // ── Playhead — one per active voice playing this slice ───────────────────
-    if (ui.sampleLoaded && waveArea.getWidth() > 4)
-    {
-        const int startSamp = slice.startSample;
-        const int endSamp   = processor.sliceManager.getEndForSlice (absIndex, ui.sampleNumFrames);
-        const int sliceLen  = endSamp - startSamp;
-
-        if (sliceLen > 0)
-        {
-            auto& vp = processor.voicePool;
-
-            for (int i = 0; i < VoicePool::kMaxVoices; ++i)
-            {
-                const auto& v = vp.getVoice (i);
-                if (! v.active || v.sliceIdx != absIndex)
-                    continue;
-
-                const float rawPos = vp.voicePositions[i].load (std::memory_order_relaxed);
-                float xn = (rawPos - (float) startSamp) / (float) sliceLen;
-                xn = juce::jlimit (0.0f, 1.0f, xn);
-
-                const float x  = (float) waveArea.getX() + xn * (float) waveArea.getWidth();
-                const float y1 = (float) waveArea.getY();
-                const float y2 = (float) waveArea.getBottom();
-
-                // Phosphor glow halo (matches SliceWaveformLcd style)
-                g.setColour (sliceCol.brighter (0.6f).withAlpha (0.15f));
-                g.drawLine (x - 1.5f, y1, x - 1.5f, y2, 1.0f);
-                g.drawLine (x + 1.5f, y1, x + 1.5f, y2, 1.0f);
-
-                // Main playhead line
-                g.setColour (sliceCol.brighter (0.8f).withAlpha (0.90f));
-                g.drawLine (x, y1, x, y2, 1.5f);
-
-                // Small downward triangle cap at top
-                const float capH = 4.5f;
-                juce::Path cap;
-                cap.addTriangle (x - 3.0f, y1,
-                                 x + 3.0f, y1,
-                                 x,        y1 + capH);
-                g.fillPath (cap);
-
-                break;  // show only the most recently triggered voice (same as LCD)
-            }
-        }
-    }
+    // Playhead removed from pad view by design.
 }
 
 //==============================================================================
@@ -552,6 +507,67 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
     const auto& ui = processor.getUiSliceSnapshot();
     if (idx >= ui.numSlices) return;
 
+    // ── Right-click: context menu ─────────────────────────────────────────────
+    if (e.mods.isRightButtonDown())
+    {
+        // Select the pad first so the menu acts on the right slice
+        DysektProcessor::Command selCmd;
+        selCmd.type      = DysektProcessor::CmdSelectSlice;
+        selCmd.intParam1 = idx;
+        processor.pushCommand (selCmd);
+        repaint();
+
+        juce::PopupMenu menu;
+        menu.addItem (1, "Rename Slice...");
+        menu.addItem (2, "Delete Slice");
+
+        menu.showMenuAsync (
+            juce::PopupMenu::Options().withTargetComponent (this),
+            [this, idx] (int result)
+            {
+                if (result == 1)
+                {
+                    // Rename — show overlay via processor command (mirrors WaveformView)
+                    const auto& snap = processor.getUiSliceSnapshot();
+                    if (idx < snap.numSlices)
+                    {
+                        juce::String current = snap.slices[(size_t) idx].name;
+                        auto* rw = new juce::AlertWindow ("Rename Slice",
+                                                          "Enter a new name:",
+                                                          juce::MessageBoxIconType::NoIcon);
+                        rw->addTextEditor ("name", current);
+                        rw->addButton ("OK",     1, juce::KeyPress (juce::KeyPress::returnKey));
+                        rw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+                        rw->enterModalState (true, juce::ModalCallbackFunction::create (
+                            [this, idx, rw] (int res)
+                            {
+                                if (res == 1)
+                                {
+                                    juce::String newName = rw->getTextEditorContents ("name").trim();
+                                    DysektProcessor::Command cmd;
+                                    cmd.type = DysektProcessor::CmdSetSliceName;
+                                    cmd.intParam1 = idx;
+                                    cmd.stringParam = newName;
+                                    processor.pushCommand (cmd);
+                                }
+                                delete rw;
+                                repaint();
+                            }), true);
+                    }
+                }
+                else if (result == 2)
+                {
+                    DysektProcessor::Command cmd;
+                    cmd.type      = DysektProcessor::CmdDeleteSlice;
+                    cmd.intParam1 = idx;
+                    processor.pushCommand (cmd);
+                    repaint();
+                }
+            });
+        return;
+    }
+
+    // ── Left-click: select + play ─────────────────────────────────────────────
     DysektProcessor::Command cmd;
     cmd.type      = DysektProcessor::CmdSelectSlice;
     cmd.intParam1 = idx;

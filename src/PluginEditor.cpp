@@ -298,6 +298,7 @@ void DysektEditor::toggleSoftWave()
     waveformMode = (waveformMode + 1) % 8;
     waveformView.setWaveformMode (waveformMode);
     waveformOverview.setWaveformMode (waveformMode);
+    padGridView.setWaveformMode (waveformMode);   // keep pad view in sync
     actionPanel.setWaveActive (waveformMode != 0);
     headerBar.setBrowserActive (browserOpen);
     headerBar.setWaveMode (waveformMode);

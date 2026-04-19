@@ -998,7 +998,7 @@ void WaveformView::mouseDown (const juce::MouseEvent& e)
             menu.addSeparator();
             menu.addItem (1, "Delete Slice");
             menu.addSeparator();
-            menu.addSubMenu ("Slice Colour", colourSub);
+            menu.addSubMenu ("Slice Color", colourSub);
             menu.addSeparator();
             menu.addItem (2, lockLabel, true, allLocked);
             menu.addSubMenu ("AHDSR Lock", adsrSub);  // ← Changed label from "ADSR Lock" to "AHDSR Lock"

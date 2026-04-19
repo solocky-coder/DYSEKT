@@ -347,7 +347,7 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
             juce::PopupMenu menu;
             menu.addItem (1, "Delete Slice");
             menu.addSeparator();
-            menu.addSubMenu ("Slice Colour", colourSub);
+            menu.addSubMenu ("Slice Color", colourSub);
             menu.addSeparator();
             menu.addItem (2, lockLabel, true, allLocked);
             menu.addSubMenu ("AHDSR Lock", adsrSub);  // Changed label to AHDSR
