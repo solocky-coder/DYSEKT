@@ -1290,27 +1290,33 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  dragStartValue = (float) ui.rootNote; return;
  }
 
- for (int i = 0; i < (int) cells.size(); ++i)
+ // Priority pass: lock icon cells must win over the knob body that
+ // shares the same bounding box. Without this, the knob cell (registered
+ // first) always captures the click and the lock icon is never reachable.
+ for (int li = 0; li < (int) cells.size(); ++li)
  {
- const auto& cell = cells[(size_t) i];
- if (! juce::Rectangle (cell.x, cell.y, cell.w, cell.h).contains (pos)) continue;
-
- // ── Lock icon click — toggle lock for this field, preserving current value ─
- if (cell.isLockIcon && cell.lockBit != 0)
- {
+     const auto& lc = cells[(size_t) li];
+     if (! lc.isLockIcon || lc.lockBit == 0) continue;
+     if (! juce::Rectangle<int> (lc.x, lc.y, lc.w, lc.h).contains (pos)) continue;
      const auto& snap = processor.getUiSliceSnapshot();
      const int sIdx = snap.selectedSlice;
      if (sIdx >= 0 && sIdx < snap.numSlices)
      {
          DysektProcessor::Command cmd;
          cmd.type      = DysektProcessor::CmdToggleLock;
-         cmd.intParam1 = sIdx;               // explicit slice index
-         cmd.intParam2 = (int) cell.lockBit; // the bit to toggle
+         cmd.intParam1 = sIdx;
+         cmd.intParam2 = (int) lc.lockBit;
          processor.pushCommand (cmd);
          repaint();
      }
      return;
  }
+
+ for (int i = 0; i < (int) cells.size(); ++i)
+ {
+ const auto& cell = cells[(size_t) i];
+ if (cell.isLockIcon) continue; // already handled in priority pass above
+ if (! juce::Rectangle<int> (cell.x, cell.y, cell.w, cell.h).contains (pos)) continue;
 
  // MIDI Learn boundary button
  if (cell.isMidiLearnBtn)
@@ -1680,7 +1686,8 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  DysektProcessor::Command cmd;
  cmd.type = F::CmdSetSliceParam;
  cmd.intParam1 = cell.fieldId; cmd.floatParam1 = newNative;
- if (isAdsr) cmd.intParam2 = 1; // skipLock — store in per-slice field without modifying lockMask
+ cmd.intParam2 = 1; // skipLock — always store value without auto-locking;
+                    // locking is only triggered explicitly via the lock icon click.
  processor.pushCommand (cmd); repaint();
 }
 
