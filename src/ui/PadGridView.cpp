@@ -532,32 +532,14 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
             {
                 if (result == 1)
                 {
-                    // Rename — show overlay via processor command (mirrors WaveformView)
+                    // Delegate rename to the editor so it renders the themed
+                    // RenameOverlay inside the plugin window instead of a
+                    // native AlertWindow that floats outside the frame.
                     const auto& snap = processor.getUiSliceSnapshot();
-                    if (idx < snap.numSlices)
+                    if (idx < snap.numSlices && onRenameRequest)
                     {
-                        juce::String current = snap.slices[(size_t) idx].name;
-                        auto* rw = new juce::AlertWindow ("Rename Slice",
-                                                          "Enter a new name:",
-                                                          juce::MessageBoxIconType::NoIcon);
-                        rw->addTextEditor ("name", current);
-                        rw->addButton ("OK",     1, juce::KeyPress (juce::KeyPress::returnKey));
-                        rw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-                        rw->enterModalState (true, juce::ModalCallbackFunction::create (
-                            [this, idx, rw] (int res)
-                            {
-                                if (res == 1)
-                                {
-                                    juce::String newName = rw->getTextEditorContents ("name").trim();
-                                    DysektProcessor::Command cmd;
-                                    cmd.type = DysektProcessor::CmdSetSliceName;
-                                    cmd.intParam1 = idx;
-                                    cmd.stringParam = newName;
-                                    processor.pushCommand (cmd);
-                                }
-                                delete rw;
-                                repaint();
-                            }), true);
+                        const juce::String current = snap.slices[(size_t) idx].name;
+                        onRenameRequest (idx, current);
                     }
                 }
                 else if (result == 2)

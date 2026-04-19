@@ -33,6 +33,10 @@ public:
     /// Mirror the editor's current waveformMode (0-7).
     void setWaveformMode (int mode) noexcept { waveformMode = mode; repaint(); }
 
+    /// Fired when the user chooses Rename from the right-click menu.
+    /// The editor wires this to showRenameOverlay so the dialog stays inside the plugin window.
+    std::function<void (int sliceIdx, const juce::String& currentName)> onRenameRequest;
+
     //==========================================================================
     // Layout constants
     static constexpr int kNumCols    = 4;   ///< Columns per bank.

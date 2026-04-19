@@ -105,6 +105,9 @@ DysektEditor::DysektEditor (DysektProcessor& p)
             }
         };
     };
+    // Pad grid view shares the same rename overlay path so the dialog always
+    // renders inside the plugin window regardless of which view is active.
+    padGridView.onRenameRequest = waveformView.onRenameRequest;
     waveformView.onTrimApplied = [this] (int s, int e)
     {
         processor.applyTrimToCurrentSample (s, e);
@@ -673,6 +676,8 @@ void DysektEditor::resized()
         midiLearnDialog->setBounds (getLocalBounds().reduced (40));
     if (confirmOverlay != nullptr)
         confirmOverlay->setBounds (getLocalBounds());
+    if (renameOverlay != nullptr)
+        renameOverlay->setBounds (getLocalBounds());
     if (themeEditorPanel != nullptr)
         themeEditorPanel->setBounds (getLocalBounds());
 }
