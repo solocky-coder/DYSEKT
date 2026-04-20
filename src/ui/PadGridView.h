@@ -47,7 +47,7 @@ public:
 
     static constexpr int kBankBarH   = 30;  ///< Height of the bank-switcher bar (px).
     static constexpr int kPadGap     = 5;   ///< Gap between cells (px).
-    static constexpr int kBarW       = 6;   ///< Width of the colour accent bar on pad left.
+    static constexpr int kBarW       = 6;   ///< Width of the color accent bar on pad left.
     static constexpr int kPadPadX    = 8;   ///< Horizontal outer padding.
     static constexpr int kPadPadY    = 6;   ///< Vertical outer padding (below bank bar).
 
@@ -82,6 +82,12 @@ private:
                   bool isEmpty) const;
 
     static juce::String midiNoteName (int note);
+
+    /// Builds and shows the full right-click context menu for a pad.
+    void showPadContextMenu (int idx, juce::Point<int> screenPos);
+
+    /// Opens a color picker (JUCE ColourSelector) in a CallOutBox for the given pad.
+    void launchColorPicker (int idx, juce::Rectangle<int> padScreenBounds);
 
     //==========================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PadGridView)

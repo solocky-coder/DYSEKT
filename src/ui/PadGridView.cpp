@@ -1,6 +1,7 @@
 #include "PadGridView.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include "../params/ParamIds.h"
 #include <cmath>
 
 //==============================================================================
@@ -120,7 +121,7 @@ void PadGridView::drawPad (juce::Graphics& g,
     const bool  sel = (ui.selectedSlice == absIndex);
     const bool  hov = (hoveredPad == absIndex);
 
-    // ── Background: full pad filled with the slice colour ─────────────────────
+    // ── Background: full pad filled with the slice color ─────────────────────
     if (isEmpty)
     {
         // Background gradient — same recipe as DualLcdControlFrame
@@ -144,12 +145,12 @@ void PadGridView::drawPad (juce::Graphics& g,
     const auto& slice    = ui.slices[(size_t) absIndex];
     const juce::Colour sliceCol = slice.colour;
 
-    // Darkened version of the slice colour for the pad body
+    // Darkened version of the slice color for the pad body
     // Selected pads are a bit brighter so they stand out clearly.
     juce::Colour padBg = sliceCol.darker (sel ? 0.38f : 0.58f);
     if (hov) padBg = padBg.brighter (0.12f);
 
-    // Background fill — darkened slice colour with subtle gradient
+    // Background fill — darkened slice color with subtle gradient
     {
         juce::ColourGradient grad (padBg.brighter (0.08f), 0, (float) bounds.getY(),
                                    padBg.darker (0.12f),  0, (float) bounds.getBottom(), false);
@@ -157,7 +158,7 @@ void PadGridView::drawPad (juce::Graphics& g,
         g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
     }
 
-    // Outer glow — always accent colour (matches every other frame in the UI)
+    // Outer glow — always accent color (matches every other frame in the UI)
     g.setColour (th.accent.withAlpha (sel ? 0.28f : 0.14f));
     g.drawRoundedRectangle (bounds.toFloat().expanded (1.0f), 5.0f, 1.0f);
 
@@ -221,7 +222,7 @@ void PadGridView::drawPad (juce::Graphics& g,
             const float cy    = oy + (float) H * 0.5f;
             const float scale = (float) H * 0.44f;
 
-            // Use slice colour (brightened slightly) to mirror SliceWaveformLcd
+            // Use slice color (brightened slightly) to mirror SliceWaveformLcd
             const juce::Colour waveCol = sliceCol.brighter (0.25f);
 
             auto px2x = [&] (int px) -> float { return ox + (float) px; };
@@ -517,40 +518,7 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
         processor.pushCommand (selCmd);
         repaint();
 
-        juce::PopupMenu menu;
-        menu.addItem (1, "Rename Slice...");
-        menu.addItem (2, "Delete Slice");
-
-        float ms      = DysektLookAndFeel::getMenuScale();
-        auto* topLvl  = getTopLevelComponent();
-        menu.showMenuAsync (
-            juce::PopupMenu::Options()
-                .withTargetScreenArea (juce::Rectangle<int> (e.getScreenX(), e.getScreenY(), 1, 1))
-                .withParentComponent (topLvl)
-                .withStandardItemHeight ((int) (24 * ms)),
-            [this, idx] (int result)
-            {
-                if (result == 1)
-                {
-                    // Delegate rename to the editor so it renders the themed
-                    // RenameOverlay inside the plugin window instead of a
-                    // native AlertWindow that floats outside the frame.
-                    const auto& snap = processor.getUiSliceSnapshot();
-                    if (idx < snap.numSlices && onRenameRequest)
-                    {
-                        const juce::String current = snap.slices[(size_t) idx].name;
-                        onRenameRequest (idx, current);
-                    }
-                }
-                else if (result == 2)
-                {
-                    DysektProcessor::Command cmd;
-                    cmd.type      = DysektProcessor::CmdDeleteSlice;
-                    cmd.intParam1 = idx;
-                    processor.pushCommand (cmd);
-                    repaint();
-                }
-            });
+        showPadContextMenu (idx, { e.getScreenX(), e.getScreenY() });
         return;
     }
 
@@ -604,7 +572,253 @@ void PadGridView::mouseExit (const juce::MouseEvent&)
 }
 
 //==============================================================================
-void PadGridView::repaintGrid()
+// Pad right-click context menu
+//==============================================================================
+
+void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
+{
+    const auto& snap  = processor.getUiSliceSnapshot();
+    if (idx < 0 || idx >= snap.numSlices) return;
+    const auto& slice = snap.slices[(size_t) idx];
+
+    float ms     = DysektLookAndFeel::getMenuScale();
+    int   itemH  = (int) (24 * ms);
+    auto* topLvl = getTopLevelComponent();
+
+    // ── Volume sub-menu (preset dB steps) ────────────────────────────────────
+    juce::PopupMenu volMenu;
+    {
+        static const float  kVolSteps[]  = { -100.f, -24.f, -18.f, -12.f, -6.f, 0.f, 3.f, 6.f, 12.f };
+        static const char*  kVolLabels[] = { "-inf dB", "-24 dB", "-18 dB", "-12 dB",
+                                             "-6 dB",   "0 dB",   "+3 dB",  "+6 dB", "+12 dB" };
+        for (int i = 0; i < 9; ++i)
+        {
+            const bool isCur = (std::abs (slice.volume - kVolSteps[i]) < 0.5f);
+            volMenu.addItem (200 + i, juce::String (kVolLabels[i]), true, isCur);
+        }
+    }
+
+    // ── Pitch sub-menu (semitone steps) ──────────────────────────────────────
+    juce::PopupMenu pitchMenu;
+    {
+        static const float kPitchSteps[]  = { -24.f,-12.f,-7.f,-5.f,-3.f,-2.f,-1.f,
+                                                0.f, 1.f, 2.f, 3.f, 5.f, 7.f,12.f,24.f };
+        static const char* kPitchLabels[] = { "-24","-12","-7","-5","-3","-2","-1",
+                                               "0",  "+1","+2","+3","+5","+7","+12","+24" };
+        for (int i = 0; i < 15; ++i)
+        {
+            const bool isCur = (std::abs (slice.pitchSemitones - kPitchSteps[i]) < 0.5f);
+            pitchMenu.addItem (300 + i, juce::String (kPitchLabels[i]) + " st", true, isCur);
+        }
+    }
+
+    // ── Mute-group sub-menu ───────────────────────────────────────────────────
+    juce::PopupMenu muteMenu;
+    {
+        const int curMute = (slice.lockMask & kLockMuteGroup)
+                          ? slice.muteGroup
+                          : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load();
+        muteMenu.addItem (400, "Off  (0)", true, curMute == 0);
+        for (int g = 1; g <= 16; ++g)
+            muteMenu.addItem (400 + g, "Group " + juce::String (g), true, curMute == g);
+    }
+
+    // ── Output-bus sub-menu ───────────────────────────────────────────────────
+    juce::PopupMenu outMenu;
+    {
+        const int curOut = (slice.lockMask & kLockOutputBus) ? slice.outputBus : 0;
+        outMenu.addItem (500, "Main  (0)", true, curOut == 0);
+        for (int o = 1; o <= 15; ++o)
+            outMenu.addItem (500 + o, "Output " + juce::String (o), true, curOut == o);
+    }
+
+    // ── Root menu ─────────────────────────────────────────────────────────────
+    juce::PopupMenu menu;
+    menu.addItem (1, "Rename Slice...");
+    menu.addItem (3, "Pad Color...");
+    menu.addSeparator();
+    menu.addSubMenu ("Volume",     volMenu);
+    menu.addSubMenu ("Pitch",      pitchMenu);
+    menu.addSeparator();
+    menu.addSubMenu ("Mute Group", muteMenu);
+    menu.addSubMenu ("Output",     outMenu);
+    menu.addSeparator();
+    menu.addItem (2, "Delete Slice");
+
+    // Screen-space bounds of this pad (used to anchor the color picker later)
+    const juce::Rectangle<int> padScreenBounds =
+        cellBounds (idx) + getScreenPosition() - getPosition();
+
+    menu.showMenuAsync (
+        juce::PopupMenu::Options()
+            .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 })
+            .withParentComponent (topLvl)
+            .withStandardItemHeight (itemH),
+        [this, idx, padScreenBounds] (int result)
+        {
+            if (result == 0) return;
+
+            // ── Rename ────────────────────────────────────────────────────
+            if (result == 1)
+            {
+                const auto& snap2 = processor.getUiSliceSnapshot();
+                if (idx < snap2.numSlices && onRenameRequest)
+                    onRenameRequest (idx, snap2.slices[(size_t) idx].name);
+                return;
+            }
+
+            // ── Delete ────────────────────────────────────────────────────
+            if (result == 2)
+            {
+                DysektProcessor::Command cmd;
+                cmd.type      = DysektProcessor::CmdDeleteSlice;
+                cmd.intParam1 = idx;
+                processor.pushCommand (cmd);
+                repaint();
+                return;
+            }
+
+            // ── Color picker ─────────────────────────────────────────────
+            if (result == 3)
+            {
+                launchColorPicker (idx, padScreenBounds);
+                return;
+            }
+
+            // ── Volume ────────────────────────────────────────────────────
+            if (result >= 200 && result < 300)
+            {
+                static const float kVolSteps[] = { -100.f,-24.f,-18.f,-12.f,-6.f,0.f,3.f,6.f,12.f };
+                DysektProcessor::Command cmd;
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = idx;
+                cmd.intParam2   = DysektProcessor::FieldVolume;
+                cmd.floatParam1 = kVolSteps[result - 200];
+                processor.pushCommand (cmd);
+                return;
+            }
+
+            // ── Pitch ─────────────────────────────────────────────────────
+            if (result >= 300 && result < 400)
+            {
+                static const float kPitchSteps[] = { -24.f,-12.f,-7.f,-5.f,-3.f,-2.f,-1.f,
+                                                       0.f,  1.f, 2.f, 3.f, 5.f, 7.f,12.f,24.f };
+                DysektProcessor::Command cmd;
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = idx;
+                cmd.intParam2   = DysektProcessor::FieldPitch;
+                cmd.floatParam1 = kPitchSteps[result - 300];
+                processor.pushCommand (cmd);
+                return;
+            }
+
+            // ── Mute group ────────────────────────────────────────────────
+            if (result >= 400 && result < 500)
+            {
+                DysektProcessor::Command cmd;
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = idx;
+                cmd.intParam2   = DysektProcessor::FieldMuteGroup;
+                cmd.floatParam1 = (float) (result - 400);  // 0=off, 1-16=groups
+                processor.pushCommand (cmd);
+                return;
+            }
+
+            // ── Output bus ────────────────────────────────────────────────
+            if (result >= 500 && result < 600)
+            {
+                DysektProcessor::Command cmd;
+                cmd.type        = DysektProcessor::CmdSetSliceParam;
+                cmd.intParam1   = idx;
+                cmd.intParam2   = DysektProcessor::FieldOutputBus;
+                cmd.floatParam1 = (float) (result - 500);  // 0=main, 1-15=outputs
+                processor.pushCommand (cmd);
+                return;
+            }
+        });
+}
+
+//------------------------------------------------------------------------------
+
+void PadGridView::launchColorPicker (int idx, juce::Rectangle<int> padScreenBounds)
+{
+    const auto& snap = processor.getUiSliceSnapshot();
+    if (idx < 0 || idx >= snap.numSlices) return;
+
+    const juce::Colour current = snap.slices[(size_t) idx].colour;
+
+    auto* selector = new juce::ColourSelector (
+        juce::ColourSelector::showColourAtTop |
+        juce::ColourSelector::showSliders     |
+        juce::ColourSelector::showColourspace, 4, 8);
+
+    selector->setName ("padColor");
+    selector->setCurrentColour (current);
+    selector->setSize (280, 320);
+
+    // Pre-fill the 32 swatches with the same palette used by Slice.h
+    static const juce::uint32 kPal[32] = {
+        0xFFD82626, 0xFFF45F3D, 0xFFAD541E, 0xFFF28D0C,
+        0xFFE0BC51, 0xFFC1B60A, 0xFFC2D826, 0xFFBBF43D,
+        0xFF66AD1E, 0xFF54F20C, 0xFF63E051, 0xFF0AC115, 0xFF26D852,
+        0xFF3DF48D, 0xFF1EAD77, 0xFF0CF2C7, 0xFF51E0E0, 0xFF0A9FC1,
+        0xFF2695D8, 0xFF3D8DF4, 0xFF1E42AD, 0xFF0C1BF2,
+        0xFF6351E0, 0xFF430AC1, 0xFF7F26D8, 0xFFBB3DF4, 0xFF9B1EAD,
+        0xFFF20CE3, 0xFFE051BC, 0xFFC10A71, 0xFFD82669, 0xFFF43D5F,
+    };
+    selector->setNumSwatches (32);
+    for (int i = 0; i < 32; ++i)
+        selector->setSwatchColour (i, juce::Colour (kPal[i]));
+
+    // Inline ChangeListener that forwards color changes to the processor
+    struct ColourListener : public juce::ChangeListener
+    {
+        DysektProcessor& proc;
+        int              sliceIdx;
+        ColourListener (DysektProcessor& p, int i) : proc (p), sliceIdx (i) {}
+        void changeListenerCallback (juce::ChangeBroadcaster* src) override
+        {
+            if (auto* cs = dynamic_cast<juce::ColourSelector*> (src))
+            {
+                DysektProcessor::Command cmd;
+                cmd.type      = DysektProcessor::CmdSetSliceColour;
+                cmd.intParam1 = sliceIdx;
+                cmd.intParam2 = (int)(unsigned) cs->getCurrentColour().withAlpha (1.0f).getARGB();
+                proc.pushCommand (cmd);
+            }
+        }
+    };
+
+    // Ownership: the selector outlives us, so heap-allocate the listener and
+    // let the selector's ComponentListener chain clean it up via deleteWhenParentDeleted.
+    auto* listener = new ColourListener (processor, idx);
+    selector->addChangeListener (listener);
+
+    // Store raw pointer in properties so the selector can delete it on destruction
+    // by using a custom deleter component as a child.
+    struct ListenerDeleter : public juce::Component
+    {
+        juce::ChangeListener* target;
+        juce::ChangeBroadcaster* broadcaster;
+        ListenerDeleter (juce::ChangeListener* t, juce::ChangeBroadcaster* b)
+            : target (t), broadcaster (b) {}
+        ~ListenerDeleter() override
+        {
+            broadcaster->removeChangeListener (target);
+            delete target;
+        }
+    };
+    auto* deleter = new ListenerDeleter (listener, selector);
+    deleter->setSize (0, 0);
+    selector->addAndMakeVisible (deleter);
+
+    juce::CallOutBox::launchAsynchronously (
+        std::unique_ptr<juce::Component> (selector),
+        padScreenBounds, nullptr);
+}
+
+//==============================================================================
+
 {
     const int activePad = processor.sliceManager.selectedSlice
                               .load (std::memory_order_relaxed);
