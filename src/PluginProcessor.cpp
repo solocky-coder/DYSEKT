@@ -196,6 +196,8 @@ bool DysektProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void DysektProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
 {
+    const bool rateChanged = (std::abs (sampleRate - currentSampleRate) > 0.01);
+
     currentSampleRate = sampleRate;
     voicePool.setSampleRate (sampleRate);
     std::fill (std::begin (heldNotes), std::end (heldNotes), false);
@@ -204,6 +206,19 @@ void DysektProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
     for (auto& sliceRow : ccSmoothers)
         for (auto& s : sliceRow)
             s.reset (sampleRate, 0.020);
+
+    // ── Re-decode sample if rate changed ─────────────────────────────────────
+    // In some DAWs (Nuendo, Studio One) setStateInformation fires before
+    // prepareToPlay, so the sample is decoded at the default 44100 Hz fallback
+    // rather than the true project rate. When prepareToPlay later arrives with
+    // the real rate we re-request the load so the buffer is decoded correctly.
+    // clearVoicesBeforeSampleSwap() is called first to prevent any active voice
+    // from reading a buffer that is about to be replaced on the background thread.
+    if (rateChanged && sampleData.getFilePath().isNotEmpty())
+    {
+        clearVoicesBeforeSampleSwap();
+        requestSampleLoad (juce::File (sampleData.getFilePath()), LoadKindRelink);
+    }
 }
 
 void DysektProcessor::releaseResources() {}

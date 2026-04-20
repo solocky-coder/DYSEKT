@@ -82,12 +82,28 @@ std::unique_ptr<SampleData::DecodedSample> SampleData::decodeFromFile (const juc
     if (numFrames > kMaxSamples)
         return nullptr;
 
-    // ── MP3 safety pad ────────────────────────────────────────────────────────
-    // JUCE's dr_mp3 wrapper skips the Xing/VBR header frame during init but
-    // still counts it in lengthInSamples. Allocating one extra MPEG frame
-    // (1152 samples) prevents read() from writing past the buffer end.
-    const bool isMp3      = file.hasFileExtension ("mp3|MP3");
-    const int  allocFrames = numFrames + (isMp3 ? 1152 : 0);
+    // ── Decode buffer padding ─────────────────────────────────────────────────
+    // Two sources of over-read past the logical numFrames allocation:
+    //
+    // 1. MP3 / VBR pad (1152 * 4 = 4608 samples):
+    //    JUCE's dr_mp3 wrapper trusts the Xing/VBRI header for lengthInSamples,
+    //    but some VBR encoders write inaccurate frame counts and deliver more
+    //    decoded samples than reported. Four MPEG frames covers the worst-case
+    //    encoder drift observed in the wild.
+    //
+    // 2. LagrangeInterpolator look-ahead (4 samples):
+    //    JUCE's LagrangeInterpolator uses a 4-point kernel. On the final output
+    //    sample it reads src[i+1..i+3] — 3 samples past the end of its input
+    //    pointer. setSize(..., avoidReallocating=true) below trims the *logical*
+    //    size back to numFrames, but getReadPointer() still points into the
+    //    physical allocation, so we must ensure that allocation extends at least
+    //    4 samples beyond numFrames for any file that may be resampled.
+    //    Applying it unconditionally is safe and simpler than predicting whether
+    //    a rate-conversion will be needed.
+    const bool isMp3           = file.hasFileExtension ("mp3|MP3");
+    static constexpr int kMp3VbrPad       = 4 * 1152;  // 4 MPEG frames
+    static constexpr int kInterpolatorPad = 4;          // Lagrange look-ahead
+    const int  allocFrames = numFrames + (isMp3 ? kMp3VbrPad : 0) + kInterpolatorPad;
 
     juce::AudioBuffer<float> sourceBuffer (numChannels, allocFrames);
     sourceBuffer.clear();
