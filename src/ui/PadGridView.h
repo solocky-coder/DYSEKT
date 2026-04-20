@@ -89,6 +89,9 @@ private:
     /// Opens a color picker (JUCE ColourSelector) in a CallOutBox for the given pad.
     void launchColorPicker (int idx, juce::Rectangle<int> padScreenBounds);
 
+    /// Inline draggable slider row used inside the right-click PopupMenu.
+    class MenuSliderItem;
+
     //==========================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PadGridView)
 };

@@ -575,6 +575,112 @@ void PadGridView::mouseExit (const juce::MouseEvent&)
 // Pad right-click context menu
 //==============================================================================
 
+// ── Inline slider CustomComponent ────────────────────────────────────────────
+/// A draggable slider row that lives directly inside a PopupMenu.
+/// Drag left/right to change value; double-click to reset to default.
+/// Fires onChange live while dragging so the processor is updated in real time.
+class PadGridView::MenuSliderItem  : public juce::PopupMenu::CustomComponent
+{
+public:
+    juce::String            label;
+    float                   value    { 0.f };
+    float                   minVal   { 0.f };
+    float                   maxVal   { 1.f };
+    float                   resetVal { 0.f };
+    std::function<juce::String (float)> formatValue;
+    std::function<void (float)>         onChange;
+
+    MenuSliderItem (const juce::String& lbl,
+                    float cur, float lo, float hi, float def,
+                    std::function<juce::String (float)> fmt,
+                    std::function<void (float)>         cb)
+        : juce::PopupMenu::CustomComponent (false),
+          label (lbl), value (cur), minVal (lo), maxVal (hi), resetVal (def),
+          formatValue (std::move (fmt)), onChange (std::move (cb))
+    {
+        setSize (220, 36);
+    }
+
+    void getIdealSize (int& w, int& h) override  { w = 220; h = 36; }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& th  = getTheme();
+        const auto  b   = getLocalBounds().toFloat().reduced (2.f, 2.f);
+        const float norm = (value - minVal) / (maxVal - minVal);
+
+        // Background
+        g.setColour (th.darkBar.darker (0.2f));
+        g.fillRoundedRectangle (b, 3.f);
+
+        // Filled track — centred for bipolar ranges (pan/pitch), left-to-right for unipolar (volume)
+        const bool bipolar = (minVal < 0.f && maxVal > 0.f);
+        const float cx = b.getX() + b.getWidth() * (bipolar ? (-minVal / (maxVal - minVal)) : 0.f);
+        const float fx = b.getX() + b.getWidth() * norm;
+
+        juce::Rectangle<float> fill;
+        if (bipolar)
+            fill = { juce::jmin (cx, fx), b.getY(), std::abs (fx - cx), b.getHeight() };
+        else
+            fill = { b.getX(), b.getY(), fx - b.getX(), b.getHeight() };
+
+        g.setColour (th.accent.withAlpha (isItemHighlighted() ? 0.55f : 0.38f));
+        g.fillRoundedRectangle (fill, 3.f);
+
+        // Centre line for bipolar
+        if (bipolar)
+        {
+            g.setColour (th.separator.withAlpha (0.6f));
+            g.drawLine (cx, b.getY() + 3.f, cx, b.getBottom() - 3.f, 1.f);
+        }
+
+        // Border
+        g.setColour (th.separator.withAlpha (0.5f));
+        g.drawRoundedRectangle (b, 3.f, 0.8f);
+
+        // Label (left)
+        g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
+        g.setColour (th.foreground.withAlpha (0.80f));
+        g.drawText (label, b.reduced (7.f, 0.f).withWidth (60.f),
+                    juce::Justification::centredLeft);
+
+        // Value (right)
+        g.setFont (DysektLookAndFeel::makeFont (10.5f, false));
+        g.setColour (th.foreground);
+        g.drawText (formatValue (value), b.reduced (7.f, 0.f),
+                    juce::Justification::centredRight);
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.getNumberOfClicks() == 2)
+        {
+            value = resetVal;
+            if (onChange) onChange (value);
+            repaint();
+            return;
+        }
+        dragStart    = e.position.x;
+        dragStartVal = value;
+    }
+
+    void mouseDrag (const juce::MouseEvent& e) override
+    {
+        const float range    = maxVal - minVal;
+        const float pxRange  = (float) getWidth() - 14.f;
+        const float delta    = (e.position.x - dragStart) / pxRange * range;
+        value = juce::jlimit (minVal, maxVal, dragStartVal + delta);
+        if (onChange) onChange (value);
+        repaint();
+    }
+
+private:
+    float dragStart    { 0.f };
+    float dragStartVal { 0.f };
+};
+
+//==============================================================================
+
 void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
 {
     const auto& snap  = processor.getUiSliceSnapshot();
@@ -583,34 +689,62 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
 
     float ms     = DysektLookAndFeel::getMenuScale();
     int   itemH  = (int) (24 * ms);
+    int   sliderH = (int) (36 * ms);
     auto* topLvl = getTopLevelComponent();
 
-    // ── Volume sub-menu (preset dB steps) ────────────────────────────────────
-    juce::PopupMenu volMenu;
+    // ── Volume inline slider  (-100..+24 dB, default 0) ──────────────────────
+    auto makeVolLabel = [] (float v) -> juce::String
     {
-        static const float  kVolSteps[]  = { -100.f, -24.f, -18.f, -12.f, -6.f, 0.f, 3.f, 6.f, 12.f };
-        static const char*  kVolLabels[] = { "-inf dB", "-24 dB", "-18 dB", "-12 dB",
-                                             "-6 dB",   "0 dB",   "+3 dB",  "+6 dB", "+12 dB" };
-        for (int i = 0; i < 9; ++i)
+        if (v <= -99.f) return "-inf";
+        return (v >= 0.f ? "+" : "") + juce::String (v, 1) + " dB";
+    };
+    auto* volSlider = new MenuSliderItem (
+        "VOL", slice.volume, -100.f, 24.f, 0.f, makeVolLabel,
+        [this, idx] (float v)
         {
-            const bool isCur = (std::abs (slice.volume - kVolSteps[i]) < 0.5f);
-            volMenu.addItem (200 + i, juce::String (kVolLabels[i]), true, isCur);
-        }
-    }
+            DysektProcessor::Command cmd;
+            cmd.type        = DysektProcessor::CmdSetSliceParam;
+            cmd.intParam1   = idx;
+            cmd.intParam2   = DysektProcessor::FieldVolume;
+            cmd.floatParam1 = v;
+            processor.pushCommand (cmd);
+        });
 
-    // ── Pitch sub-menu (semitone steps) ──────────────────────────────────────
-    juce::PopupMenu pitchMenu;
+    // ── Pitch inline slider  (-48..+48 st, default 0) ────────────────────────
+    auto makePitchLabel = [] (float v) -> juce::String
     {
-        static const float kPitchSteps[]  = { -24.f,-12.f,-7.f,-5.f,-3.f,-2.f,-1.f,
-                                                0.f, 1.f, 2.f, 3.f, 5.f, 7.f,12.f,24.f };
-        static const char* kPitchLabels[] = { "-24","-12","-7","-5","-3","-2","-1",
-                                               "0",  "+1","+2","+3","+5","+7","+12","+24" };
-        for (int i = 0; i < 15; ++i)
+        return (v >= 0.f ? "+" : "") + juce::String (v, 2) + " st";
+    };
+    auto* pitchSlider = new MenuSliderItem (
+        "PITCH", slice.pitchSemitones, -48.f, 48.f, 0.f, makePitchLabel,
+        [this, idx] (float v)
         {
-            const bool isCur = (std::abs (slice.pitchSemitones - kPitchSteps[i]) < 0.5f);
-            pitchMenu.addItem (300 + i, juce::String (kPitchLabels[i]) + " st", true, isCur);
-        }
-    }
+            DysektProcessor::Command cmd;
+            cmd.type        = DysektProcessor::CmdSetSliceParam;
+            cmd.intParam1   = idx;
+            cmd.intParam2   = DysektProcessor::FieldPitch;
+            cmd.floatParam1 = v;
+            processor.pushCommand (cmd);
+        });
+
+    // ── Pan inline slider  (-1..+1, default 0) ───────────────────────────────
+    auto makePanLabel = [] (float v) -> juce::String
+    {
+        if (std::abs (v) < 0.01f) return "C";
+        const int pct = (int) std::round (std::abs (v) * 100.f);
+        return juce::String (pct) + (v < 0.f ? "L" : "R");
+    };
+    auto* panSlider = new MenuSliderItem (
+        "PAN", slice.pan, -1.f, 1.f, 0.f, makePanLabel,
+        [this, idx] (float v)
+        {
+            DysektProcessor::Command cmd;
+            cmd.type        = DysektProcessor::CmdSetSliceParam;
+            cmd.intParam1   = idx;
+            cmd.intParam2   = DysektProcessor::FieldPan;
+            cmd.floatParam1 = v;
+            processor.pushCommand (cmd);
+        });
 
     // ── Mute-group sub-menu ───────────────────────────────────────────────────
     juce::PopupMenu muteMenu;
@@ -628,8 +762,8 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
     {
         const int curOut = (slice.lockMask & kLockOutputBus) ? slice.outputBus : 0;
         outMenu.addItem (500, "Main  (0)", true, curOut == 0);
-        for (int o = 1; o <= 15; ++o)
-            outMenu.addItem (500 + o, "Output " + juce::String (o), true, curOut == o);
+        for (int o = 1; o <= 31; ++o)
+            outMenu.addItem (500 + o, "Output " + juce::String (o + 1), true, curOut == o);
     }
 
     // ── Root menu ─────────────────────────────────────────────────────────────
@@ -637,8 +771,9 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
     menu.addItem (1, "Rename Slice...");
     menu.addItem (3, "Pad Color...");
     menu.addSeparator();
-    menu.addSubMenu ("Volume",     volMenu);
-    menu.addSubMenu ("Pitch",      pitchMenu);
+    menu.addCustomItem (-1, std::unique_ptr<MenuSliderItem> (volSlider),   nullptr, "Volume");
+    menu.addCustomItem (-1, std::unique_ptr<MenuSliderItem> (pitchSlider), nullptr, "Pitch");
+    menu.addCustomItem (-1, std::unique_ptr<MenuSliderItem> (panSlider),   nullptr, "Pan");
     menu.addSeparator();
     menu.addSubMenu ("Mute Group", muteMenu);
     menu.addSubMenu ("Output",     outMenu);
@@ -648,6 +783,8 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
     // Screen-space bounds of this pad (used to anchor the color picker later)
     const juce::Rectangle<int> padScreenBounds =
         cellBounds (idx) + getScreenPosition() - getPosition();
+
+    juce::ignoreUnused (itemH, sliderH);
 
     menu.showMenuAsync (
         juce::PopupMenu::Options()
@@ -685,33 +822,6 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
                 return;
             }
 
-            // ── Volume ────────────────────────────────────────────────────
-            if (result >= 200 && result < 300)
-            {
-                static const float kVolSteps[] = { -100.f,-24.f,-18.f,-12.f,-6.f,0.f,3.f,6.f,12.f };
-                DysektProcessor::Command cmd;
-                cmd.type        = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1   = idx;
-                cmd.intParam2   = DysektProcessor::FieldVolume;
-                cmd.floatParam1 = kVolSteps[result - 200];
-                processor.pushCommand (cmd);
-                return;
-            }
-
-            // ── Pitch ─────────────────────────────────────────────────────
-            if (result >= 300 && result < 400)
-            {
-                static const float kPitchSteps[] = { -24.f,-12.f,-7.f,-5.f,-3.f,-2.f,-1.f,
-                                                       0.f,  1.f, 2.f, 3.f, 5.f, 7.f,12.f,24.f };
-                DysektProcessor::Command cmd;
-                cmd.type        = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1   = idx;
-                cmd.intParam2   = DysektProcessor::FieldPitch;
-                cmd.floatParam1 = kPitchSteps[result - 300];
-                processor.pushCommand (cmd);
-                return;
-            }
-
             // ── Mute group ────────────────────────────────────────────────
             if (result >= 400 && result < 500)
             {
@@ -719,7 +829,7 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
                 cmd.type        = DysektProcessor::CmdSetSliceParam;
                 cmd.intParam1   = idx;
                 cmd.intParam2   = DysektProcessor::FieldMuteGroup;
-                cmd.floatParam1 = (float) (result - 400);  // 0=off, 1-16=groups
+                cmd.floatParam1 = (float) (result - 400);
                 processor.pushCommand (cmd);
                 return;
             }
@@ -731,7 +841,7 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
                 cmd.type        = DysektProcessor::CmdSetSliceParam;
                 cmd.intParam1   = idx;
                 cmd.intParam2   = DysektProcessor::FieldOutputBus;
-                cmd.floatParam1 = (float) (result - 500);  // 0=main, 1-15=outputs
+                cmd.floatParam1 = (float) (result - 500);
                 processor.pushCommand (cmd);
                 return;
             }
