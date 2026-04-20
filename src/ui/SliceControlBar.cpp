@@ -474,7 +474,7 @@ void SliceControlBar::drawPanSliderCell (juce::Graphics& g, int x, int y,
  outWidth = cellW;
  ParamCell c{};
  c.x = x; c.y = y; c.w = cellW; c.h = cellH;
- c.lockBit = kLockPan; c.fieldId = DysektProcessor::FieldPan;
+ c.lockBit = 0; c.fieldId = DysektProcessor::FieldPan;
  c.minVal = -1.f; c.maxVal = 1.f; c.step = 0.01f;
  c.isKnob = true; c.isMidiLearnable = true;
  c.knobNorm = norm;
@@ -886,12 +886,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  const bool  effStretch  = resolveF (kLockStretch, s.stretchEnabled ? 1.f : 0.f, apvtsVal (ParamIds::defaultStretchEnabled)) > 0.5f;
 
  // Aliases used by existing paint code further down
- const bool  gStretch      = effStretch;
  const bool  stretchVal    = effStretch;
- const bool  stretchLocked = (s.lockMask & kLockStretch) != 0;
- const int   gLoopMode     = (int) resolveF (kLockLoop,      (float) s.loopMode,  apvtsVal (ParamIds::defaultLoop));
- const int   gMG           = (int) resolveF (kLockMuteGroup, (float) s.muteGroup, apvtsVal (ParamIds::defaultMuteGroup));
- (void) gLoopMode; (void) gMG;
 
  int cw;
  using F = DysektProcessor;
@@ -911,62 +906,56 @@ void SliceControlBar::paint (juce::Graphics& g)
  // ── Row 1 params ──────────────────────────────────────────────────
  int x = si (8);
 
- // PITCH — knob
+ // PITCH — knob (no lock — always per-slice)
  {
- bool locked = (s.lockMask & kLockPitch) != 0;
  float pv = effPitch;
  int pvi = (int) std::round (pv);
  drawKnobCell (g, x, row1y, "PITCH",
  (pvi >= 0 ? "+" : "") + juce::String (pvi) + "st",
  toNorm (F::FieldPitch, pv),
- locked, kLockPitch, F::FieldPitch, -48.f, 48.f, 0.1f, cw);
+ true, 0, F::FieldPitch, -48.f, 48.f, 0.1f, cw);
  x += cw + si (4);
  }
 
- // TUNE — knob
+ // TUNE — knob (no lock — always per-slice)
  {
- bool locked = (s.lockMask & kLockCentsDetune) != 0;
  float cv = effCents;
  int cvi = juce::jlimit (-100, 100, (int) std::round (cv));
  drawKnobCell (g, x, row1y, "TUNE",
  (cvi >= 0 ? "+" : "") + juce::String (cvi) + "ct",
  toNorm (F::FieldCentsDetune, cv),
- locked, kLockCentsDetune, F::FieldCentsDetune, -100.f, 100.f, 0.1f, cw);
+ true, 0, F::FieldCentsDetune, -100.f, 100.f, 0.1f, cw);
  x += cw + si (4);
  }
 
  // ALGO selector removed — Repitch vs Stretch is now derived from the STCH toggle
  if (stretchVal)
  {
- bool locked = (s.lockMask & kLockTonality) != 0;
  float tv = effTonality;
  drawKnobCell (g, x, row1y, "ROOT",
  juce::String ((int) tv) + "Hz",
  toNorm (F::FieldTonality, tv),
- locked, kLockTonality, F::FieldTonality, 0.f, 8000.f, 100.f, cw);
+ true, 0, F::FieldTonality, 0.f, 8000.f, 100.f, cw);
  x += cw + si (4);
 
- locked = (s.lockMask & kLockFormant) != 0;
  float fv = effFormant;
  drawKnobCell (g, x, row1y, "BODY",
  (fv >= 0.f ? "+" : "") + juce::String (fv, 1),
  toNorm (F::FieldFormant, fv),
- locked, kLockFormant, F::FieldFormant, -24.f, 24.f, 0.1f, cw);
+ true, 0, F::FieldFormant, -24.f, 24.f, 0.1f, cw);
  x += cw + si (4);
 
- locked = (s.lockMask & kLockFormantComp) != 0;
  bool fmntCVal = effFComp;
  drawParamCell (g, x, row1y, "FMNT C", fmntCVal ? "ON" : "OFF",
- locked, kLockFormantComp, F::FieldFormantComp,
+ true, 0, F::FieldFormantComp,
  0.f, 1.f, 1.f, true, false, cw);
  x += cw + si (4);
  }
- // STRETCH — boolean
+ // STRETCH — boolean (no lock)
  {
- bool locked = (s.lockMask & kLockStretch) != 0;
  bool sv = effStretch;
  drawParamCell (g, x, row1y, "STRETCH", sv ? "ON" : "OFF",
- locked, kLockStretch, F::FieldStretchEnabled,
+ true, 0, F::FieldStretchEnabled,
  0.f, 1.f, 1.f, true, false, cw);
  x += cw + si (4);
  }
@@ -993,32 +982,29 @@ void SliceControlBar::paint (juce::Graphics& g)
  g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
  x += 8;
 
- // GAIN
+ // GAIN (no lock — always per-slice)
  {
- bool locked = (s.lockMask & kLockVolume) != 0;
  float gv = effVolume;
  drawKnobCell (g, x, row1y, "GAIN",
  (gv >= 0.f ? "+" : "") + juce::String (gv, 1) + "dB",
  toNorm (F::FieldVolume, gv),
- locked, kLockVolume, F::FieldVolume, -100.f, 24.f, 0.1f, cw);
+ true, 0, F::FieldVolume, -100.f, 24.f, 0.1f, cw);
  x += cw + si (4);
  }
 
- // PAN
+ // PAN (no lock — always per-slice)
  {
- bool locked = (s.lockMask & kLockPan) != 0;
  float pv = effPan;
- drawPanSliderCell (g, x, row1y, pv, locked, cw);
+ drawPanSliderCell (g, x, row1y, pv, true, cw);
  x += cw + si (4);
  }
 
- // OUT
+ // OUT (no lock — always per-slice)
  {
- bool locked = (s.lockMask & kLockOutputBus) != 0;
  int ov = effOutputBus;
  const juce::String outLabel = (ov == 0) ? juce::String ("MAIN") : ("AUX " + juce::String (ov));
  drawParamCell (g, x, row1y, "OUT", outLabel,
- locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f,
+ true, 0, F::FieldOutputBus, 0.f, 15.f, 1.f,
  false, true, cw);
  x += cw + si (4);
  }
@@ -1030,32 +1016,26 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  // CHRO — chromatic channel badge (per-slice)
  {
-     const bool chromaLocked = (s.lockMask & kLockChromaticChannel) != 0;
      const int  chVal        = s.chromaticChannel;  // always read from slice
-     drawChroBadgeCell (g, x, row1y, chVal, chromaLocked, cw);
+     drawChroBadgeCell (g, x, row1y, chVal, true, cw);
      x += cw + si (4);
  }
 
- // LEGATO — chromatic legato toggle (per-slice)
+ // LEGATO — chromatic legato toggle (per-slice, no lock)
  {
-     const bool legatoLocked = (s.lockMask & kLockChromaticLegato) != 0;
      const bool legatoOn     = s.chromaticLegato;  // always read from slice
-     drawLegatoToggleCell (g, x, row1y, legatoOn, legatoLocked, cw);
+     drawLegatoToggleCell (g, x, row1y, legatoOn, true, cw);
      x += cw + si (4);
  }
 
- // ALGO -- Repitch / Stretch toggle (chromatic mode only)
+ // ALGO -- Repitch / Stretch toggle (chromatic mode only, no lock)
  if (s.chromaticChannel > 0)
  {
-     const bool algoLocked = (s.lockMask & kLockAlgorithm) != 0;
-     const int  algoVal    = algoLocked ? s.algorithm
-                                        : (int) processor.apvts
-                                              .getRawParameterValue (ParamIds::defaultAlgorithm)
-                                              ->load();
+     const int  algoVal    = s.algorithm;
      drawParamCell (g, x, row1y,
                     "MODE",
                     algoVal == 0 ? "RPITCH" : "STRETCH",
-                    algoLocked, kLockAlgorithm, F::FieldAlgorithm,
+                    true, 0, F::FieldAlgorithm,
                     0.f, 1.f, 1.f,
                     false, true, cw);
      x += cw + si (4);
@@ -1131,29 +1111,27 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  adsrGroupX2 = x - 4;
  }
 
- // FCUT — filter cutoff knob (log-scaled, 20–20000 Hz)
+ // FCUT — filter cutoff knob (no lock — always per-slice)
  {
  filterGroupX1 = x;
- bool locked = (s.lockMask & kLockFilter) != 0;
  float fv = effFCut;
  juce::String fStr = (fv >= 1000.f)
  ? (juce::String (fv / 1000.f, 1) + "k")
  : (juce::String ((int) fv) + "Hz");
  drawKnobCell (g, x, row2y, "FCUT", fStr,
  toNorm (F::FieldFilterCutoff, fv),
- locked, kLockFilter, F::FieldFilterCutoff,
+ true, 0, F::FieldFilterCutoff,
  20.f, 20000.f, 1.f, cw);
  x += cw + si (4);
  }
 
- // FRES — filter resonance knob (0–1, display as 0–100%)
+ // FRES — filter resonance knob (no lock — always per-slice)
  {
- bool locked = (s.lockMask & kLockFilter) != 0;
  float rv = effFRes;
  drawKnobCell (g, x, row2y, "RESO",
  juce::String ((int) (rv * 100.f)) + "%",
  toNorm (F::FieldFilterRes, rv),
- locked, kLockFilter, F::FieldFilterRes,
+ true, 0, F::FieldFilterRes,
  0.f, 1.f, 0.01f, cw);
  x += cw + si (4);
  filterGroupX2 = x - 4;
