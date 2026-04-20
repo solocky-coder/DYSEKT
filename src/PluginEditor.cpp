@@ -865,7 +865,7 @@ void DysektEditor::timerCallback()
         setSize (kBaseW, kTotalH);
         setTransform (juce::AffineTransform::scale (scale));
         DysektLookAndFeel::setMenuScale (scale);
-        saveUserSettings (scale, getTheme().name);
+        saveUserSettings (userScale, getTheme().name);  // persist user portion only — hostScale must not be baked in
         uiChanged = true;
     }
 
@@ -1032,8 +1032,37 @@ void DysektEditor::applyTheme (const juce::String& themeName)
 
 void DysektEditor::setScaleFactor (float newScale)
 {
-    hostScale = newScale;
+    // On Windows HiDPI, JUCE's component peer already multiplies coordinates by
+    // the OS DPI scale factor internally.  The VST3 host (Nuendo 12, Studio One 7)
+    // calls setScaleFactor() with the *content* scale it expects (e.g. 2.0 on a
+    // 200 % display).  If we store that raw value and later do
+    //   setTransform(scale(userScale * newScale))
+    // we double-apply the OS scaling → UI renders at 4× / crops badly.
+    //
+    // Fix: divide newScale by the display's native DPI scale so that the product
+    //   userScale * hostScale
+    // represents only the delta above what JUCE already handles.
+    float nativeSF = 1.0f;
+    if (auto* disp = juce::Desktop::getInstance().getDisplays()
+                         .getDisplayForRect (getScreenBounds()))
+        nativeSF = juce::jmax (0.01f, (float) disp->scale);
+
+    hostScale  = newScale / nativeSF;
     scaleDirty = true;
+
+    // Apply immediately — Nuendo 12 queries the window size synchronously
+    // right after this call, so we cannot wait for the next timer tick.
+    const float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load()
+                        * hostScale;
+    if (std::abs (scale - lastScale) > 0.001f)
+    {
+        lastScale  = scale;
+        scaleDirty = false;
+        setTransform (juce::AffineTransform{});
+        setSize (kBaseW, kTotalH);
+        setTransform (juce::AffineTransform::scale (scale));
+        DysektLookAndFeel::setMenuScale (scale);
+    }
 }
 
 void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)
