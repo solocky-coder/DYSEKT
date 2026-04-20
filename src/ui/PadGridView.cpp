@@ -692,42 +692,55 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
     int   sliderH = (int) (36 * ms);
     auto* topLvl = getTopLevelComponent();
 
-    // ── Volume inline slider  (-100..+24 dB, default 0) ──────────────────────
+    // Resolve effective values the same way the SCB does:
+    // if the field is locked on this slice use the slice value,
+    // otherwise fall back to the global APVTS default.
+    const float effVolume = (slice.lockMask & kLockVolume)
+                          ? slice.volume
+                          : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
+    const float effPitch  = (slice.lockMask & kLockPitch)
+                          ? slice.pitchSemitones
+                          : processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
+    const float effPan    = (slice.lockMask & kLockPan)
+                          ? slice.pan
+                          : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
+
+    // ── Volume inline slider  (-100..+24 dB) ─────────────────────────────────
     auto makeVolLabel = [] (float v) -> juce::String
     {
         if (v <= -99.f) return "-inf";
         return (v >= 0.f ? "+" : "") + juce::String (v, 1) + " dB";
     };
     auto* volSlider = new MenuSliderItem (
-        "VOL", slice.volume, -100.f, 24.f, 0.f, makeVolLabel,
-        [this, idx] (float v)
+        "VOL", effVolume, -100.f, 24.f, 0.f, makeVolLabel,
+        [this] (float v)
         {
             DysektProcessor::Command cmd;
             cmd.type        = DysektProcessor::CmdSetSliceParam;
-            cmd.intParam1   = idx;
-            cmd.intParam2   = DysektProcessor::FieldVolume;
+            cmd.intParam1   = DysektProcessor::FieldVolume;  // field ID
+            cmd.intParam2   = 0;                              // 0 = normal lock behaviour
             cmd.floatParam1 = v;
             processor.pushCommand (cmd);
         });
 
-    // ── Pitch inline slider  (-48..+48 st, default 0) ────────────────────────
+    // ── Pitch inline slider  (-48..+48 st) ───────────────────────────────────
     auto makePitchLabel = [] (float v) -> juce::String
     {
         return (v >= 0.f ? "+" : "") + juce::String (v, 2) + " st";
     };
     auto* pitchSlider = new MenuSliderItem (
-        "PITCH", slice.pitchSemitones, -48.f, 48.f, 0.f, makePitchLabel,
-        [this, idx] (float v)
+        "PITCH", effPitch, -48.f, 48.f, 0.f, makePitchLabel,
+        [this] (float v)
         {
             DysektProcessor::Command cmd;
             cmd.type        = DysektProcessor::CmdSetSliceParam;
-            cmd.intParam1   = idx;
-            cmd.intParam2   = DysektProcessor::FieldPitch;
+            cmd.intParam1   = DysektProcessor::FieldPitch;   // field ID
+            cmd.intParam2   = 0;                              // 0 = normal lock behaviour
             cmd.floatParam1 = v;
             processor.pushCommand (cmd);
         });
 
-    // ── Pan inline slider  (-1..+1, default 0) ───────────────────────────────
+    // ── Pan inline slider  (-1..+1) ───────────────────────────────────────────
     auto makePanLabel = [] (float v) -> juce::String
     {
         if (std::abs (v) < 0.01f) return "C";
@@ -735,13 +748,13 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
         return juce::String (pct) + (v < 0.f ? "L" : "R");
     };
     auto* panSlider = new MenuSliderItem (
-        "PAN", slice.pan, -1.f, 1.f, 0.f, makePanLabel,
-        [this, idx] (float v)
+        "PAN", effPan, -1.f, 1.f, 0.f, makePanLabel,
+        [this] (float v)
         {
             DysektProcessor::Command cmd;
             cmd.type        = DysektProcessor::CmdSetSliceParam;
-            cmd.intParam1   = idx;
-            cmd.intParam2   = DysektProcessor::FieldPan;
+            cmd.intParam1   = DysektProcessor::FieldPan;     // field ID
+            cmd.intParam2   = 0;                              // 0 = normal lock behaviour
             cmd.floatParam1 = v;
             processor.pushCommand (cmd);
         });
@@ -827,8 +840,8 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
             {
                 DysektProcessor::Command cmd;
                 cmd.type        = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1   = idx;
-                cmd.intParam2   = DysektProcessor::FieldMuteGroup;
+                cmd.intParam1   = DysektProcessor::FieldMuteGroup;  // field ID
+                cmd.intParam2   = 0;                                  // normal lock behaviour
                 cmd.floatParam1 = (float) (result - 400);
                 processor.pushCommand (cmd);
                 return;
@@ -839,8 +852,8 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
             {
                 DysektProcessor::Command cmd;
                 cmd.type        = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1   = idx;
-                cmd.intParam2   = DysektProcessor::FieldOutputBus;
+                cmd.intParam1   = DysektProcessor::FieldOutputBus;  // field ID
+                cmd.intParam2   = 0;                                  // normal lock behaviour
                 cmd.floatParam1 = (float) (result - 500);
                 processor.pushCommand (cmd);
                 return;
