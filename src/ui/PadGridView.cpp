@@ -766,8 +766,10 @@ void PadGridView::launchColorPicker (int idx, juce::Rectangle<int> padScreenBoun
         0xFF6351E0, 0xFF430AC1, 0xFF7F26D8, 0xFFBB3DF4, 0xFF9B1EAD,
         0xFFF20CE3, 0xFFE051BC, 0xFFC10A71, 0xFFD82669, 0xFFF43D5F,
     };
-    selector->setNumSwatches (32);
-    for (int i = 0; i < 32; ++i)
+    // Pre-fill swatches with the same palette used by Slice.h.
+    // setSwatchColour writes into whatever slots the selector already provides.
+    const int numSwatches = selector->getNumSwatches();
+    for (int i = 0; i < juce::jmin (numSwatches, 32); ++i)
         selector->setSwatchColour (i, juce::Colour (kPal[i]));
 
     // Inline ChangeListener that forwards color changes to the processor
@@ -818,7 +820,7 @@ void PadGridView::launchColorPicker (int idx, juce::Rectangle<int> padScreenBoun
 }
 
 //==============================================================================
-
+void PadGridView::repaintGrid()
 {
     const int activePad = processor.sliceManager.selectedSlice
                               .load (std::memory_order_relaxed);
