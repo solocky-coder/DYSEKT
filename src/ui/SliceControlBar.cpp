@@ -857,18 +857,41 @@ void SliceControlBar::paint (juce::Graphics& g)
  ? processor.sliceManager.getSlice (idx)
  : ui.slices[(size_t) juce::jmax (0, idx)];
 
- // float gBpm = processor.apvts.getRawParameterValue (ParamIds::defaultBpm)->load();  // BPM cell removed
- float gAttack = processor.apvts.getRawParameterValue (ParamIds::defaultAttack)->load();
- float gDecay = processor.apvts.getRawParameterValue (ParamIds::defaultDecay)->load();
- float gSustain = processor.apvts.getRawParameterValue (ParamIds::defaultSustain)->load();
- float gRelease = processor.apvts.getRawParameterValue (ParamIds::defaultRelease)->load();
- int gMG = (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load();
- int gLoopMode = (int) processor.apvts.getRawParameterValue (ParamIds::defaultLoop)->load();
- bool gStretch = processor.apvts.getRawParameterValue (ParamIds::defaultStretchEnabled)->load() > 0.5f;
+ // ── Resolve all per-slice params against their global APVTS fallbacks ────────
+ // This mirrors SliceManager::resolveParam on the UI thread so knob display,
+ // drag-start values, and audio all show/play the same effective value.
+ // Rule: if lock bit set → use slice value; otherwise → use global APVTS value.
+ auto apvtsVal = [&] (const juce::String& id) -> float {
+     auto* p = processor.apvts.getRawParameterValue (id);
+     return p ? p->load() : 0.0f;
+ };
+ auto resolveF = [&] (uint32_t bit, float sliceVal, float globalVal) -> float {
+     return (s.lockMask & bit) ? sliceVal : globalVal;
+ };
 
- // algo is now derived from stretchVal — no user-facing algo selector
- bool stretchLocked = (s.lockMask & kLockStretch) != 0;
- bool stretchVal = stretchLocked ? s.stretchEnabled : gStretch;
+ const float effPitch    = resolveF (kLockPitch,   s.pitchSemitones,  apvtsVal (ParamIds::defaultPitch));
+ const float effCents    = resolveF (kLockCentsDetune, s.centsDetune,  apvtsVal (ParamIds::defaultCentsDetune));
+ const float effAttack   = resolveF (kLockAttack,  s.attackSec,       apvtsVal (ParamIds::defaultAttack) / 1000.0f);
+ const float effDecay    = resolveF (kLockDecay,   s.decaySec,        apvtsVal (ParamIds::defaultDecay)  / 1000.0f);
+ const float effSustain  = resolveF (kLockSustain, s.sustainLevel,    apvtsVal (ParamIds::defaultSustain) / 100.0f);
+ const float effRelease  = resolveF (kLockRelease, s.releaseSec,      apvtsVal (ParamIds::defaultRelease) / 1000.0f);
+ const float effVolume   = resolveF (kLockVolume,  s.volume,          apvtsVal (ParamIds::masterVolume));
+ const float effPan      = resolveF (kLockPan,     s.pan,             apvtsVal (ParamIds::defaultPan));
+ const float effTonality = resolveF (kLockTonality, s.tonalityHz,     apvtsVal (ParamIds::defaultTonality));
+ const float effFormant  = resolveF (kLockFormant,  s.formantSemitones, apvtsVal (ParamIds::defaultFormant));
+ const bool  effFComp    = resolveF (kLockFormantComp, s.formantComp ? 1.f : 0.f, apvtsVal (ParamIds::defaultFormantComp)) > 0.5f;
+ const float effFCut     = resolveF (kLockFilter,  s.filterCutoff,    apvtsVal (ParamIds::defaultFilterCutoff));
+ const float effFRes     = resolveF (kLockFilter,  s.filterRes,       apvtsVal (ParamIds::defaultFilterRes));
+ const int   effOutputBus = (int) resolveF (kLockOutputBus, (float) s.outputBus, 0.0f);
+ const bool  effStretch  = resolveF (kLockStretch, s.stretchEnabled ? 1.f : 0.f, apvtsVal (ParamIds::defaultStretchEnabled)) > 0.5f;
+
+ // Aliases used by existing paint code further down
+ const bool  gStretch      = effStretch;
+ const bool  stretchVal    = effStretch;
+ const bool  stretchLocked = (s.lockMask & kLockStretch) != 0;
+ const int   gLoopMode     = (int) resolveF (kLockLoop,      (float) s.loopMode,  apvtsVal (ParamIds::defaultLoop));
+ const int   gMG           = (int) resolveF (kLockMuteGroup, (float) s.muteGroup, apvtsVal (ParamIds::defaultMuteGroup));
+ (void) gLoopMode; (void) gMG;
 
  int cw;
  using F = DysektProcessor;
@@ -891,7 +914,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // PITCH — knob
  {
  bool locked = (s.lockMask & kLockPitch) != 0;
- float pv = s.pitchSemitones; // always read per-slice; processor keeps this current
+ float pv = effPitch;
  int pvi = (int) std::round (pv);
  drawKnobCell (g, x, row1y, "PITCH",
  (pvi >= 0 ? "+" : "") + juce::String (pvi) + "st",
@@ -903,7 +926,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // TUNE — knob
  {
  bool locked = (s.lockMask & kLockCentsDetune) != 0;
- float cv = s.centsDetune;
+ float cv = effCents;
  int cvi = juce::jlimit (-100, 100, (int) std::round (cv));
  drawKnobCell (g, x, row1y, "TUNE",
  (cvi >= 0 ? "+" : "") + juce::String (cvi) + "ct",
@@ -916,7 +939,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  if (stretchVal)
  {
  bool locked = (s.lockMask & kLockTonality) != 0;
- float tv = s.tonalityHz;
+ float tv = effTonality;
  drawKnobCell (g, x, row1y, "ROOT",
  juce::String ((int) tv) + "Hz",
  toNorm (F::FieldTonality, tv),
@@ -924,7 +947,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  x += cw + si (4);
 
  locked = (s.lockMask & kLockFormant) != 0;
- float fv = s.formantSemitones;
+ float fv = effFormant;
  drawKnobCell (g, x, row1y, "BODY",
  (fv >= 0.f ? "+" : "") + juce::String (fv, 1),
  toNorm (F::FieldFormant, fv),
@@ -932,7 +955,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  x += cw + si (4);
 
  locked = (s.lockMask & kLockFormantComp) != 0;
- bool fmntCVal = s.formantComp;
+ bool fmntCVal = effFComp;
  drawParamCell (g, x, row1y, "FMNT C", fmntCVal ? "ON" : "OFF",
  locked, kLockFormantComp, F::FieldFormantComp,
  0.f, 1.f, 1.f, true, false, cw);
@@ -941,7 +964,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // STRETCH — boolean
  {
  bool locked = (s.lockMask & kLockStretch) != 0;
- bool sv = s.stretchEnabled;
+ bool sv = effStretch;
  drawParamCell (g, x, row1y, "STRETCH", sv ? "ON" : "OFF",
  locked, kLockStretch, F::FieldStretchEnabled,
  0.f, 1.f, 1.f, true, false, cw);
@@ -973,7 +996,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // GAIN
  {
  bool locked = (s.lockMask & kLockVolume) != 0;
- float gv = s.volume;
+ float gv = effVolume;
  drawKnobCell (g, x, row1y, "GAIN",
  (gv >= 0.f ? "+" : "") + juce::String (gv, 1) + "dB",
  toNorm (F::FieldVolume, gv),
@@ -984,7 +1007,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // PAN
  {
  bool locked = (s.lockMask & kLockPan) != 0;
- float pv = s.pan;
+ float pv = effPan;
  drawPanSliderCell (g, x, row1y, pv, locked, cw);
  x += cw + si (4);
  }
@@ -992,7 +1015,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // OUT
  {
  bool locked = (s.lockMask & kLockOutputBus) != 0;
- int ov = locked ? s.outputBus : 0;
+ int ov = effOutputBus;
  const juce::String outLabel = (ov == 0) ? juce::String ("MAIN") : ("AUX " + juce::String (ov));
  drawParamCell (g, x, row1y, "OUT", outLabel,
  locked, kLockOutputBus, F::FieldOutputBus, 0.f, 15.f, 1.f,
@@ -1061,7 +1084,7 @@ float relMaxSec = 5.0f;
  {
  adsrGroupX1 = x;
  bool locked = (s.lockMask & kLockAttack) != 0;
- float atk = s.attackSec;
+ float atk = effAttack;
  drawKnobCell (g, x, row2y, "ATK",
  juce::String ((int) (atk * 1000.f)) + "ms",
  toNorm (F::FieldAttack, atk),
@@ -1075,7 +1098,7 @@ float relMaxSec = 5.0f;
  // DEC — knob
  {
  bool locked = (s.lockMask & kLockDecay) != 0;
- float dec = s.decaySec;
+ float dec = effDecay;
  drawKnobCell (g, x, row2y, "DEC",
  juce::String ((int) (dec * 1000.f)) + "ms",
  toNorm (F::FieldDecay, dec),
@@ -1086,7 +1109,7 @@ float relMaxSec = 5.0f;
  // SUS — knob (stored 0-1, display %)
  {
  bool locked = (s.lockMask & kLockSustain) != 0;
- float sus = s.sustainLevel;
+ float sus = effSustain;
  drawKnobCell (g, x, row2y, "SUS",
  juce::String ((int) (sus * 100.f)) + "%",
  toNorm (F::FieldSustain, sus),
@@ -1097,7 +1120,7 @@ float relMaxSec = 5.0f;
  // REL — knob
  {
  bool locked = (s.lockMask & kLockRelease) != 0;
- float rel = s.releaseSec;
+ float rel = effRelease;
 // REL spans the full selected-slice duration; matches SliceWaveformLcd mapping.
 const float relNorm = juce::jlimit (0.f, 1.f, rel / relMaxSec);
  drawKnobCell (g, x, row2y, "REL",
@@ -1112,7 +1135,7 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  {
  filterGroupX1 = x;
  bool locked = (s.lockMask & kLockFilter) != 0;
- float fv = s.filterCutoff;
+ float fv = effFCut;
  juce::String fStr = (fv >= 1000.f)
  ? (juce::String (fv / 1000.f, 1) + "k")
  : (juce::String ((int) fv) + "Hz");
@@ -1126,7 +1149,7 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  // FRES — filter resonance knob (0–1, display as 0–100%)
  {
  bool locked = (s.lockMask & kLockFilter) != 0;
- float rv = s.filterRes;
+ float rv = effFRes;
  drawKnobCell (g, x, row2y, "RESO",
  juce::String ((int) (rv * 100.f)) + "%",
  toNorm (F::FieldFilterRes, rv),
@@ -1371,29 +1394,39 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  {
  const auto& sl = ui.slices[(size_t) sIdx];
  using F = DysektProcessor;
+ // Resolve each field against its global APVTS fallback — mirrors
+ // SliceManager::resolveParam so the drag starts from what the audio
+ // engine actually uses, not the raw (possibly stale) per-slice field.
+ auto apvtsRaw = [&] (const juce::String& id) -> float {
+     auto* p = processor.apvts.getRawParameterValue (id);
+     return p ? p->load() : 0.0f;
+ };
+ auto res = [&] (uint32_t bit, float sv, float gv) -> float {
+     return (sl.lockMask & bit) ? sv : gv;
+ };
  switch (cell.fieldId)
  {
- case F::FieldBpm: dragStartValue = sl.bpm; break;
- case F::FieldPitch: dragStartValue = sl.pitchSemitones; break;
- case F::FieldCentsDetune: dragStartValue = sl.centsDetune; break;
- case F::FieldTonality: dragStartValue = sl.tonalityHz; break;
- case F::FieldFormant: dragStartValue = sl.formantSemitones; break;
- case F::FieldAttack:  dragStartValue = sl.attackSec;    break;
- case F::FieldHold:    dragStartValue = sl.holdSec;      break;
- case F::FieldDecay:   dragStartValue = sl.decaySec;     break;
- case F::FieldSustain: dragStartValue = sl.sustainLevel; break;
- case F::FieldRelease: dragStartValue = sl.releaseSec;   break;
- case F::FieldMuteGroup: dragStartValue = (float)((sl.lockMask & kLockMuteGroup) ? sl.muteGroup : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load()); break;
- case F::FieldSliceStart: dragStartValue = (float) sl.startSample; break;
- case F::FieldMidiNote: dragStartValue = (float) sl.midiNote; break;
- case F::FieldVolume: dragStartValue = sl.volume; break;
- case F::FieldOutputBus: dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
- case F::FieldPan: dragStartValue = sl.pan; break;
- case F::FieldFilterCutoff: dragStartValue = sl.filterCutoff; break;
- case F::FieldFilterRes: dragStartValue = sl.filterRes; break;
-        case kFieldGlide:
-            dragStartValue = processor.voicePool.legatoGlideMs.load (std::memory_order_relaxed);
-            break;
+ case F::FieldBpm:         dragStartValue = sl.bpm; break;
+ case F::FieldPitch:       dragStartValue = res (kLockPitch,       sl.pitchSemitones,   apvtsRaw (ParamIds::defaultPitch)); break;
+ case F::FieldCentsDetune: dragStartValue = res (kLockCentsDetune, sl.centsDetune,      apvtsRaw (ParamIds::defaultCentsDetune)); break;
+ case F::FieldTonality:    dragStartValue = res (kLockTonality,    sl.tonalityHz,       apvtsRaw (ParamIds::defaultTonality)); break;
+ case F::FieldFormant:     dragStartValue = res (kLockFormant,     sl.formantSemitones, apvtsRaw (ParamIds::defaultFormant)); break;
+ case F::FieldAttack:      dragStartValue = res (kLockAttack,      sl.attackSec,        apvtsRaw (ParamIds::defaultAttack)  / 1000.f); break;
+ case F::FieldHold:        dragStartValue = res (kLockHold,        sl.holdSec,          apvtsRaw (ParamIds::defaultHold)    / 1000.f); break;
+ case F::FieldDecay:       dragStartValue = res (kLockDecay,       sl.decaySec,         apvtsRaw (ParamIds::defaultDecay)   / 1000.f); break;
+ case F::FieldSustain:     dragStartValue = res (kLockSustain,     sl.sustainLevel,     apvtsRaw (ParamIds::defaultSustain) / 100.f);  break;
+ case F::FieldRelease:     dragStartValue = res (kLockRelease,     sl.releaseSec,       apvtsRaw (ParamIds::defaultRelease) / 1000.f); break;
+ case F::FieldVolume:      dragStartValue = res (kLockVolume,      sl.volume,           apvtsRaw (ParamIds::masterVolume)); break;
+ case F::FieldPan:         dragStartValue = res (kLockPan,         sl.pan,              apvtsRaw (ParamIds::defaultPan)); break;
+ case F::FieldFilterCutoff: dragStartValue = res (kLockFilter,     sl.filterCutoff,     apvtsRaw (ParamIds::defaultFilterCutoff)); break;
+ case F::FieldFilterRes:   dragStartValue = res (kLockFilter,      sl.filterRes,        apvtsRaw (ParamIds::defaultFilterRes)); break;
+ case F::FieldMuteGroup:   dragStartValue = (float)((sl.lockMask & kLockMuteGroup) ? sl.muteGroup : (int) apvtsRaw (ParamIds::defaultMuteGroup)); break;
+ case F::FieldOutputBus:   dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
+ case F::FieldSliceStart:  dragStartValue = (float) sl.startSample; break;
+ case F::FieldMidiNote:    dragStartValue = (float) sl.midiNote; break;
+ case kFieldGlide:
+     dragStartValue = processor.voicePool.legatoGlideMs.load (std::memory_order_relaxed);
+     break;
  default: dragStartValue = 0.f; break;
  }
  }
@@ -1685,7 +1718,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  DysektProcessor::Command cmd;
  cmd.type = F::CmdSetSliceParam;
  cmd.intParam1 = cell.fieldId; cmd.floatParam1 = newNative;
- cmd.intParam2 = 1; // skipLock — never auto-lock on drag; lock only via explicit lock-icon click
+ cmd.intParam2 = 0; // normal lock behaviour — dragging a knob means the user wants this slice to have its own value
  processor.pushCommand (cmd); repaint();
 }
 
@@ -1965,10 +1998,7 @@ void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
  DysektProcessor::Command cmd;
  cmd.type = DysektProcessor::CmdSetSliceParam;
  cmd.intParam1 = fieldId; cmd.floatParam1 = val;
- const bool isAdsrField = (fieldId == F2::FieldAttack || fieldId == F2::FieldHold
-                        || fieldId == F2::FieldDecay  || fieldId == F2::FieldSustain
-                        || fieldId == F2::FieldRelease);
- if (isAdsrField) cmd.intParam2 = 1; // skipLock
+ cmd.intParam2 = 0; // normal lock behaviour — all SCB edits lock the field; skipLock is only for live ADSR node drags
  processor.pushCommand (cmd); textEditor.reset(); repaint();
  };
  textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };
