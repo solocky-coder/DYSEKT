@@ -3,6 +3,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "DysektLookAndFeel.h"
+#include "ArchiveIntegration.h"
 
 class DysektProcessor;
 
@@ -74,13 +75,10 @@ public:
                        int buttonX, int, int, int, juce::ComboBox& box) override
     {
         const auto& t = getTheme();
-        // Sharp background
         g.setColour (t.darkBar.darker (0.3f));
         g.fillRect (0, 0, width, height);
-        // Sharp border
         g.setColour (box.hasKeyboardFocus (false) ? t.accent.withAlpha (0.5f) : t.separator);
         g.drawRect (0, 0, width, height, 1);
-        // Centred arrow — sharp V shape, no unicode
         const int cx = buttonX + (width - buttonX) / 2;
         const int cy = height / 2;
         g.setColour (t.foreground.withAlpha (0.85f));
@@ -144,7 +142,6 @@ public:
     {
         auto area = getLocalBounds().toFloat().reduced (5.0f);
 
-        // Background hover/press effect
         if (isButtonDown)
             g.setColour (getTheme().accent.withAlpha (0.18f));
         else if (isMouseOver)
@@ -153,19 +150,16 @@ public:
             g.setColour (getTheme().accent.withAlpha (0.08f));
         g.fillEllipse (area);
 
-        // Icon color
         g.setColour (getTheme().accent.withAlpha (0.95f));
 
         if (state == Playing)
         {
-            // Draw stop icon (square)
             float iconSize = std::min (area.getWidth(), area.getHeight()) * 0.50f;
             juce::Rectangle<float> r = area.withSizeKeepingCentre (iconSize, iconSize);
             g.fillRect (r);
         }
         else
         {
-            // Draw play icon (triangle)
             juce::Path triangle;
             auto cx = area.getCentreX();
             auto cy = area.getCentreY();
@@ -198,9 +192,21 @@ public:
     }
 };
 
+// ── Archive list row ─────────────────────────────────────────────────────────
+struct ArchiveRow
+{
+    juce::String name;
+    juce::String format;       // empty for collection entries
+    juce::String downloadUrl;  // empty for collection entries
+    juce::int64  sizeBytes = 0;
+    bool         isFolder  = false;   // true = collection sub-item
+    juce::String folderId;            // identifier for drill-in
+};
+
 class FileBrowserPanel : public juce::Component,
                          private juce::FileBrowserListener,
-                         private juce::ChangeListener
+                         private juce::ChangeListener,
+                         private juce::Timer
 {
 public:
     explicit FileBrowserPanel (DysektProcessor& p);
@@ -215,25 +221,31 @@ public:
     std::function<void (const juce::File&)> onLoadRequest;
 
 private:
+    // ── FileBrowserListener ───────────────────────────────────────────────────
     void selectionChanged() override {}
     void fileClicked       (const juce::File& f, const juce::MouseEvent&) override;
     void fileDoubleClicked (const juce::File& f) override;
     void browserRootChanged (const juce::File&) override {}
 
+    // ── ChangeListener ────────────────────────────────────────────────────────
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
 
+    // ── Timer (spinner animation) ─────────────────────────────────────────────
+    void timerCallback() override;
+
+    // ── Preview ───────────────────────────────────────────────────────────────
     void startPreview (const juce::File& f);
     void stopPreview();
     void updatePlayButton();
 
     DysektProcessor& processor;
 
-    // ── Cloud bookmarks ───────────────────────────────────────────────────────
+    // ── Local folder bookmarks ────────────────────────────────────────────────
     struct Bookmark
     {
         juce::String name;
         juce::File   path;
-        bool         removable = true;   // false = auto-detected, always shown
+        bool         removable = true;
     };
 
     juce::Array<Bookmark>              bookmarks;
@@ -248,7 +260,50 @@ private:
 
     static constexpr int kBmH = 28;
 
+    // ── Internet Archive bookmarks ────────────────────────────────────────────
+    struct ArchiveBookmark
+    {
+        juce::String url;         ///< The original archive.org URL
+        juce::String title;       ///< Resolved display name
+        bool         isCollection = false;
+        bool         pending      = false;  ///< Still resolving
+    };
 
+    juce::Array<ArchiveBookmark>       archiveBookmarks;
+    juce::OwnedArray<RemovableButton>  archiveBtns;
+    juce::TextButton                   addArchiveBtn;
+
+    void loadArchiveBookmarks();
+    void saveArchiveBookmarks();
+    void rebuildArchiveButtons();
+    void showArchiveUrlDialog();
+    void resolveAndAddArchiveBookmark (const juce::String& url);
+
+    static juce::File getArchiveBookmarksFile();
+
+    // ── Archive list view (shown instead of local browser) ───────────────────
+    bool                         archiveViewActive  = false;
+    int                          activeArchiveIndex = -1;   ///< index in archiveBookmarks
+    juce::Array<ArchiveRow>      archiveRows;
+    juce::ListBox                archiveList;
+    juce::String                 archiveListTitle;
+
+    // Simple ListBoxModel inline
+    struct ArchiveListModel : public juce::ListBoxModel
+    {
+        FileBrowserPanel* owner = nullptr;
+        int getNumRows() override;
+        void paintListBoxItem (int row, juce::Graphics& g, int w, int h, bool selected) override;
+        void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
+        void listBoxItemClicked (int row, const juce::MouseEvent&) override;
+    } archiveModel;
+
+    void showArchiveItem (int bookmarkIndex);
+    void showCollectionItem (const juce::String& collectionId);
+    void loadArchiveFile (const ArchiveRow& row);
+    void exitArchiveView();
+
+    // ── Preview bar ───────────────────────────────────────────────────────────
     SmallListLookAndFeel           smallLAF;
     juce::WildcardFileFilter       fileFilter;
     juce::TimeSliceThread          ioThread  { "FileBrowserIO" };
@@ -267,6 +322,9 @@ private:
     IconButton                     playStopBtn;
     juce::Slider                   volumeSlider;
     juce::Label                    fileNameLabel;
+
+    // ── Spinner state for pending archive bookmarks ───────────────────────────
+    int spinnerFrame = 0;
 
     static constexpr int kBarH = 36;
 };

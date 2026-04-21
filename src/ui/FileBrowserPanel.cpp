@@ -2,6 +2,91 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 
+// ── ArchiveListModel ─────────────────────────────────────────────────────────
+
+int FileBrowserPanel::ArchiveListModel::getNumRows()
+{
+    return owner ? owner->archiveRows.size() : 0;
+}
+
+void FileBrowserPanel::ArchiveListModel::paintListBoxItem (int row, juce::Graphics& g,
+                                                           int w, int h, bool selected)
+{
+    if (! owner) return;
+    if (row < 0 || row >= owner->archiveRows.size()) return;
+
+    const auto& R = owner->archiveRows[row];
+    const auto& T = getTheme();
+
+    if (selected)
+    {
+        g.setColour (T.accent.withAlpha (0.12f));
+        g.fillAll();
+    }
+
+    g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
+
+    // Folder icon placeholder
+    if (R.isFolder)
+    {
+        g.setColour (T.accent.withAlpha (0.6f));
+        g.drawText (u8"\U0001F4C1", 4, 0, 18, h, juce::Justification::centredLeft);
+        g.setColour (selected ? T.accent : T.foreground.withAlpha (0.8f));
+        g.drawText (R.name, 24, 0, w - 28, h, juce::Justification::centredLeft, true);
+    }
+    else
+    {
+        g.setColour (selected ? T.accent : T.foreground.withAlpha (0.75f));
+        g.drawText (R.name, 4, 0, w - 120, h, juce::Justification::centredLeft, true);
+
+        // Format badge
+        if (R.format.isNotEmpty())
+        {
+            auto badgeW = 40;
+            auto badgeRect = juce::Rectangle<int> (w - badgeW - 60, (h - 13) / 2, badgeW, 13);
+            g.setColour (T.accent.withAlpha (0.18f));
+            g.fillRoundedRectangle (badgeRect.toFloat(), 2.0f);
+            g.setColour (T.accent.withAlpha (0.85f));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.0f)));
+            g.drawText (R.format, badgeRect, juce::Justification::centred);
+        }
+
+        // Size
+        if (R.sizeBytes > 0)
+        {
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f)));
+            g.setColour (T.foreground.withAlpha (0.4f));
+            juce::String sizeStr;
+            if (R.sizeBytes >= 1024 * 1024)
+                sizeStr = juce::String (R.sizeBytes / (1024 * 1024)) + " MB";
+            else
+                sizeStr = juce::String (R.sizeBytes / 1024) + " KB";
+            g.drawText (sizeStr, w - 58, 0, 55, h, juce::Justification::centredRight, true);
+        }
+    }
+}
+
+void FileBrowserPanel::ArchiveListModel::listBoxItemClicked (int /*row*/, const juce::MouseEvent&) {}
+
+void FileBrowserPanel::ArchiveListModel::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
+{
+    if (! owner) return;
+    if (row < 0 || row >= owner->archiveRows.size()) return;
+
+    const auto& R = owner->archiveRows[row];
+
+    if (R.isFolder)
+    {
+        owner->showCollectionItem (R.folderId);
+    }
+    else
+    {
+        owner->loadArchiveFile (R);
+    }
+}
+
+// ── Constructor / Destructor ─────────────────────────────────────────────────
+
 FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     : processor (p),
       fileFilter ("*.wav;*.aif;*.aiff;*.ogg;*.flac;*.mp3;*.sf2;*.sfz", "*", "Audio & SoundFont Files"),
@@ -16,6 +101,15 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     browser.setLookAndFeel (&smallLAF);
     smallLAF.refreshTheme();
     addAndMakeVisible (browser);
+
+    // ── Archive list view (initially hidden) ─────────────────────────────────
+    archiveModel.owner = this;
+    archiveList.setModel (&archiveModel);
+    archiveList.setLookAndFeel (&smallLAF);
+    archiveList.setRowHeight (18);
+    archiveList.setColour (juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
+    archiveList.setColour (juce::ListBox::outlineColourId, juce::Colours::transparentBlack);
+    addChildComponent (archiveList);
 
     // ── Audio preview setup ───────────────────────────────────────────────────
     formatManager.registerBasicFormats();
@@ -55,7 +149,7 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     fileNameLabel.setEditable (false, false, false);
     addChildComponent (fileNameLabel);
 
-    // Hiding browser filename bar & making editors read-only for safety
+    // Hiding browser filename bar & making editors read-only
     auto enforceReadOnly = [this]
     {
         std::function<void(juce::Component*)> walk = [&](juce::Component* comp)
@@ -85,7 +179,8 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
 
     juce::Timer::callAfterDelay (100,  [enforceReadOnly] { enforceReadOnly(); });
     juce::Timer::callAfterDelay (500,  [enforceReadOnly] { enforceReadOnly(); });
-    // ── Cloud bookmarks ───────────────────────────────────────────────────────
+
+    // ── Local folder bookmarks ────────────────────────────────────────────────
     detectCloudFolders();
     loadCustomBookmarks();
     rebuildBookmarkBar();
@@ -117,11 +212,24 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
             });
     };
     addAndMakeVisible (addBmBtn);
+
+    // ── Internet Archive bookmarks ────────────────────────────────────────────
+    addArchiveBtn.setButtonText ("IA");
+    addArchiveBtn.setTooltip    ("Add Internet Archive bookmark");
+    addArchiveBtn.setColour (juce::TextButton::buttonColourId,  getTheme().darkBar.darker (0.5f));
+    addArchiveBtn.setColour (juce::TextButton::textColourOffId, getTheme().accent.withAlpha (0.90f));
+    addArchiveBtn.onClick = [this] { showArchiveUrlDialog(); };
+    addAndMakeVisible (addArchiveBtn);
+
+    loadArchiveBookmarks();
+    rebuildArchiveButtons();
 }
 
 FileBrowserPanel::~FileBrowserPanel()
 {
+    stopTimer();
     browser.setLookAndFeel (nullptr);
+    archiveList.setLookAndFeel (nullptr);
     transport.removeChangeListener (this);
     transport.stop();
     transport.setSource (nullptr);
@@ -133,26 +241,33 @@ FileBrowserPanel::~FileBrowserPanel()
     ioThread.stopThread (2000);
 }
 
-// ── Layout ─────────────────────────────────────────────────────────────
+// ── Timer (spinner) ──────────────────────────────────────────────────────────
+
+void FileBrowserPanel::timerCallback()
+{
+    ++spinnerFrame;
+    rebuildArchiveButtons();
+    resized();
+}
+
+// ── Layout ───────────────────────────────────────────────────────────────────
 
 void FileBrowserPanel::resized()
 {
     auto bounds = getLocalBounds();
 
-    // -- Preview bar at the bottom (outside frame)
+    // Preview bar at the bottom
     if (previewVisible)
     {
         auto bar = bounds.removeFromBottom (kBarH);
-
-        playStopBtn.setBounds (bar.removeFromLeft (kBarH).reduced (4));
+        playStopBtn.setBounds  (bar.removeFromLeft (kBarH).reduced (4));
         volumeSlider.setBounds (bar.removeFromRight (90).reduced (4, 8));
         fileNameLabel.setBounds (bar.reduced (6, 4));
     }
 
-    // ── Inner screen area — 4 px inset from the LCD frame border ─────────────
     auto inner = bounds.reduced (4);
 
-    // ── Bookmark bar at the top of the inner screen ───────────────────────────
+    // ── Bookmark bar row 1: local folders ────────────────────────────────────
     {
         auto bmBar = inner.removeFromTop (kBmH);
         const int addW  = 22;
@@ -171,9 +286,39 @@ void FileBrowserPanel::resized()
                             bmBar.getY() + 4, addW, bmBar.getHeight() - 8);
     }
 
-    // Browser fills remaining inner space. We give it ~28 px extra height below
-    // the visible area so JUCE's internal filename text bar is clipped out.
-    browser.setBounds (inner.withBottom (inner.getBottom() + 28));
+    // ── Bookmark bar row 2: archive bookmarks ─────────────────────────────────
+    {
+        auto archBar = inner.removeFromTop (kBmH);
+        const int addW  = 22;
+        const int gap   = 3;
+        const int n     = archiveBtns.size();
+        const int avail = archBar.getWidth() - addW - gap - 4;
+        const int btnW  = n > 0 ? juce::jmin (90, juce::jmax (40, (avail - gap * (n - 1)) / n)) : 0;
+
+        int bx = archBar.getX() + 2;
+        for (auto* btn : archiveBtns)
+        {
+            btn->setBounds (bx, archBar.getY() + 4, btnW, archBar.getHeight() - 8);
+            bx += btnW + gap;
+        }
+        addArchiveBtn.setBounds (archBar.getRight() - addW - 2,
+                                 archBar.getY() + 4, addW, archBar.getHeight() - 8);
+    }
+
+    // Main content area: archive list or local browser
+    auto contentBounds = inner.withBottom (inner.getBottom() + 28);
+    if (archiveViewActive)
+    {
+        archiveList.setVisible (true);
+        browser.setVisible (false);
+        archiveList.setBounds (inner);
+    }
+    else
+    {
+        archiveList.setVisible (false);
+        browser.setVisible (true);
+        browser.setBounds (contentBounds);
+    }
 }
 
 void FileBrowserPanel::paint (juce::Graphics& g)
@@ -181,7 +326,6 @@ void FileBrowserPanel::paint (juce::Graphics& g)
     auto bounds = getLocalBounds();
     const auto& T = getTheme();
 
-    // Preview bar background when visible (below the LCD frame)
     if (previewVisible)
     {
         auto bar = bounds.removeFromBottom (kBarH);
@@ -192,7 +336,6 @@ void FileBrowserPanel::paint (juce::Graphics& g)
                     (float) bar.getRight(), (float) bar.getY(), 1.0f);
     }
 
-    // ── LCD frame — wraps the full area including the bookmark bar ────────────
     const auto ac = T.accent;
     auto b = bounds;
 
@@ -201,7 +344,7 @@ void FileBrowserPanel::paint (juce::Graphics& g)
     g.setGradientFill (outerGrad);
     g.fillRect (b);
 
-    g.setColour (ac.withAlpha (0.65f));              // matches MixerPanel / other frames
+    g.setColour (ac.withAlpha (0.65f));
     g.drawRect (b.toFloat(), 1.0f);
 
     auto screen = b.reduced (4);
@@ -220,7 +363,7 @@ void FileBrowserPanel::paint (juce::Graphics& g)
     g.setColour (ac.withAlpha (0.12f));
     g.drawRect (screen.expanded (0), 1.0f);
 
-    // ── Bookmark bar background (inside the screen) ───────────────────────────
+    // Bookmark bar row 1 background
     {
         auto bmRect = screen.removeFromTop (kBmH).toFloat();
         juce::ColourGradient bmGrad (T.darkBar.darker (0.5f), 0, bmRect.getY(),
@@ -231,9 +374,29 @@ void FileBrowserPanel::paint (juce::Graphics& g)
         g.drawLine (bmRect.getX(), bmRect.getBottom(),
                     bmRect.getRight(), bmRect.getBottom(), 1.0f);
     }
+
+    // Bookmark bar row 2 background (archive)
+    {
+        auto archRect = screen.removeFromTop (kBmH).toFloat();
+        juce::ColourGradient bmGrad (T.darkBar.darker (0.45f), 0, archRect.getY(),
+                                     T.darkBar.darker (0.25f), 0, archRect.getBottom(), false);
+        g.setGradientFill (bmGrad);
+        g.fillRect (archRect);
+        g.setColour (T.accent.withAlpha (0.15f));
+        g.drawLine (archRect.getX(), archRect.getBottom(),
+                    archRect.getRight(), archRect.getBottom(), 1.0f);
+
+        // If archive view is active, draw title
+        if (archiveViewActive && archiveListTitle.isNotEmpty())
+        {
+            g.setColour (T.accent.withAlpha (0.6f));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
+            g.drawText (archiveListTitle, archRect.reduced (4, 0), juce::Justification::centredRight);
+        }
+    }
 }
 
-// -- FileBrowserListener ----------------------------------------------------
+// ── FileBrowserListener ──────────────────────────────────────────────────────
 
 void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&)
 {
@@ -244,8 +407,6 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
     previewVisible = true;
 
     fileNameLabel.setText (f.getFileName(), juce::dontSendNotification);
-
-    // Stop preview & update icon (don’t auto-play)
     stopPreview();
     updatePlayButton();
 
@@ -253,9 +414,7 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
     volumeSlider.setVisible  (true);
     fileNameLabel.setVisible (true);
 
-    if (! wasVisible)
-        resized();
-
+    if (! wasVisible) resized();
     repaint();
 }
 
@@ -285,7 +444,7 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
     }
 }
 
-// -- Preview engine ---------------------------------------------------------
+// ── Preview engine ───────────────────────────────────────────────────────────
 
 void FileBrowserPanel::startPreview (const juce::File& f)
 {
@@ -350,7 +509,6 @@ void FileBrowserPanel::detectCloudFolders()
 {
     auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
 
-    // Fixed-path services (macOS / Windows)
     struct CloudDef { const char* name; const char* rel; };
     static const CloudDef defs[] =
     {
@@ -374,7 +532,6 @@ void FileBrowserPanel::detectCloudFolders()
         }
     }
 
-    // macOS ~/Library/CloudStorage — Google Drive, OneDrive 365, Box, etc.
     auto cs = home.getChildFile ("Library/CloudStorage");
     if (cs.isDirectory())
     {
@@ -399,7 +556,7 @@ void FileBrowserPanel::detectCloudFolders()
     }
 }
 
-// ── Bookmark persistence ──────────────────────────────────────────────────────
+// ── Local bookmark persistence ────────────────────────────────────────────────
 
 static juce::File getBookmarksFile()
 {
@@ -441,8 +598,6 @@ void FileBrowserPanel::saveCustomBookmarks()
     f.replaceWithText (lines.joinIntoString ("\n"));
 }
 
-// ── Bookmark bar rebuild ──────────────────────────────────────────────────────
-
 void FileBrowserPanel::rebuildBookmarkBar()
 {
     bmBtns.clear();
@@ -458,7 +613,11 @@ void FileBrowserPanel::rebuildBookmarkBar()
         btn->setColour (juce::TextButton::textColourOffId, T.accent.withAlpha (0.85f));
         btn->setColour (juce::TextButton::textColourOnId,  T.accent);
 
-        btn->onClick = [this, i] { browser.setRoot (bookmarks[i].path); };
+        btn->onClick = [this, i]
+        {
+            exitArchiveView();
+            browser.setRoot (bookmarks[i].path);
+        };
 
         if (bookmarks[i].removable)
         {
@@ -483,4 +642,426 @@ void FileBrowserPanel::rebuildBookmarkBar()
 
         addAndMakeVisible (btn);
     }
+}
+
+// ── Internet Archive bookmark persistence ─────────────────────────────────────
+
+juce::File FileBrowserPanel::getArchiveBookmarksFile()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+               .getChildFile ("DYSEKT/archive_bookmarks.txt");
+}
+
+void FileBrowserPanel::loadArchiveBookmarks()
+{
+    auto f = getArchiveBookmarksFile();
+    if (! f.existsAsFile()) return;
+
+    juce::StringArray lines;
+    f.readLines (lines);
+
+    for (auto& line : lines)
+    {
+        auto url = line.trim();
+        if (url.isEmpty()) continue;
+        if (! ArchiveIntegration::isValidArchiveUrl (url)) continue;
+
+        bool dupe = false;
+        for (auto& b : archiveBookmarks)
+            if (b.url == url) { dupe = true; break; }
+        if (dupe) continue;
+
+        // Add as pending while we re-resolve the title
+        ArchiveBookmark bm;
+        bm.url     = url;
+        bm.title   = ArchiveIntegration::identifierFromUrl (url);
+        bm.pending = true;
+        archiveBookmarks.add (bm);
+
+        // Fire resolve (captures index)
+        int idx = archiveBookmarks.size() - 1;
+        ArchiveIntegration::fetchItem (url, [this, idx] (bool ok, ArchiveIntegration::Item item)
+        {
+            if (idx >= archiveBookmarks.size()) return;
+            auto& bm = archiveBookmarks.getReference (idx);
+            bm.pending      = false;
+            bm.isCollection = item.isCollection;
+            if (ok && item.title.isNotEmpty())
+                bm.title = item.title;
+
+            // Stop spinner if no more pending
+            bool anyPending = false;
+            for (auto& b : archiveBookmarks)
+                if (b.pending) { anyPending = true; break; }
+            if (! anyPending) stopTimer();
+
+            rebuildArchiveButtons();
+            resized();
+            repaint();
+        });
+    }
+
+    if (! archiveBookmarks.isEmpty())
+    {
+        bool anyPending = false;
+        for (auto& b : archiveBookmarks)
+            if (b.pending) { anyPending = true; break; }
+        if (anyPending)
+            startTimer (400);
+    }
+}
+
+void FileBrowserPanel::saveArchiveBookmarks()
+{
+    auto f = getArchiveBookmarksFile();
+    f.getParentDirectory().createDirectory();
+
+    juce::StringArray lines;
+    for (auto& b : archiveBookmarks)
+        if (! b.pending)
+            lines.add (b.url);
+
+    f.replaceWithText (lines.joinIntoString ("\n"));
+}
+
+// ── Archive bookmark UI ───────────────────────────────────────────────────────
+
+static const juce::String kSpinnerFrames[] = { "|", "/", "-", "\\" };
+
+void FileBrowserPanel::rebuildArchiveButtons()
+{
+    archiveBtns.clear();
+    const auto& T = getTheme();
+
+    for (int i = 0; i < archiveBookmarks.size(); ++i)
+    {
+        const auto& bm = archiveBookmarks[i];
+        auto* btn = archiveBtns.add (new RemovableButton());
+
+        if (bm.pending)
+        {
+            // Show spinner
+            btn->setButtonText (kSpinnerFrames[spinnerFrame % 4]);
+            btn->setTooltip ("Resolving: " + bm.url);
+            btn->setEnabled (false);
+        }
+        else
+        {
+            btn->setButtonText (bm.title);
+            btn->setTooltip    (bm.url);
+            btn->setEnabled (true);
+        }
+
+        btn->setColour (juce::TextButton::buttonColourId,   T.darkBar.darker (0.3f));
+        btn->setColour (juce::TextButton::buttonOnColourId,  T.accent.withAlpha (0.2f));
+        btn->setColour (juce::TextButton::textColourOffId,   T.accent.withAlpha (bm.pending ? 0.4f : 0.85f));
+        btn->setColour (juce::TextButton::textColourOnId,    T.accent);
+
+        if (! bm.pending)
+        {
+            btn->onClick = [this, i] { showArchiveItem (i); };
+
+            btn->onRightClick = [this, i]
+            {
+                juce::PopupMenu menu;
+                menu.addItem (1, "Remove Archive bookmark");
+                menu.addSeparator();
+
+                auto cacheBytes = ArchiveIntegration::getCacheSize();
+                juce::String cacheLabel = "Clear download cache";
+                if (cacheBytes > 0)
+                    cacheLabel += " (" + juce::String (cacheBytes / (1024 * 1024)) + " MB)";
+                menu.addItem (2, cacheLabel, cacheBytes > 0);
+
+                menu.showMenuAsync (juce::PopupMenu::Options(),
+                    [this, i] (int result)
+                    {
+                        if (result == 1)
+                        {
+                            if (activeArchiveIndex == i) exitArchiveView();
+                            archiveBookmarks.remove (i);
+                            saveArchiveBookmarks();
+                            rebuildArchiveButtons();
+                            resized();
+                            repaint();
+                        }
+                        else if (result == 2)
+                        {
+                            ArchiveIntegration::clearCache();
+                        }
+                    });
+            };
+        }
+
+        addAndMakeVisible (btn);
+    }
+}
+
+void FileBrowserPanel::showArchiveUrlDialog()
+{
+    auto* dlg = new juce::AlertWindow ("Add Internet Archive URL",
+                                       "Paste an archive.org URL or bare identifier:",
+                                       juce::MessageBoxIconType::NoIcon);
+    dlg->addTextEditor ("url", "", "URL:");
+    dlg->addButton ("Add", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    dlg->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    dlg->enterModalState (true,
+        juce::ModalCallbackFunction::create ([this, dlg] (int result)
+        {
+            if (result != 1) { delete dlg; return; }
+
+            auto url = dlg->getTextEditorContents ("url").trim();
+            delete dlg;
+
+            if (url.isEmpty()) return;
+
+            if (! ArchiveIntegration::isValidArchiveUrl (url))
+            {
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Invalid URL",
+                    "That doesn't look like a valid archive.org URL or identifier.\n\n"
+                    "Expected formats:\n"
+                    "  https://archive.org/details/IDENTIFIER\n"
+                    "  IDENTIFIER",
+                    "OK");
+                return;
+            }
+
+            // Check for duplicate
+            for (auto& b : archiveBookmarks)
+                if (b.url == url) return;
+
+            resolveAndAddArchiveBookmark (url);
+        }),
+        true);
+}
+
+void FileBrowserPanel::resolveAndAddArchiveBookmark (const juce::String& url)
+{
+    ArchiveBookmark bm;
+    bm.url     = url;
+    bm.title   = ArchiveIntegration::identifierFromUrl (url);
+    bm.pending = true;
+    archiveBookmarks.add (bm);
+
+    int idx = archiveBookmarks.size() - 1;
+
+    rebuildArchiveButtons();
+    resized();
+
+    if (! isTimerRunning())
+        startTimer (400);
+
+    ArchiveIntegration::fetchItem (url, [this, idx, url] (bool ok, ArchiveIntegration::Item item)
+    {
+        if (idx >= archiveBookmarks.size()) return;
+        auto& bm = archiveBookmarks.getReference (idx);
+        bm.pending      = false;
+        bm.isCollection = item.isCollection;
+
+        if (! ok || (item.audioFiles.isEmpty() && ! item.isCollection))
+        {
+            // No usable content
+            archiveBookmarks.remove (idx);
+            rebuildArchiveButtons();
+            resized();
+
+            juce::AlertWindow::showMessageBoxAsync (
+                juce::MessageBoxIconType::InfoIcon,
+                "No Audio Found",
+                "No supported audio files were found at that URL.\n\n"
+                "Only WAV, FLAC, MP3, OGG, and AIFF files are supported.",
+                "OK");
+        }
+        else
+        {
+            if (ok && item.title.isNotEmpty())
+                bm.title = item.title;
+
+            saveArchiveBookmarks();
+            rebuildArchiveButtons();
+            resized();
+        }
+
+        bool anyPending = false;
+        for (auto& b : archiveBookmarks)
+            if (b.pending) { anyPending = true; break; }
+        if (! anyPending) stopTimer();
+
+        repaint();
+    });
+}
+
+// ── Archive list view ─────────────────────────────────────────────────────────
+
+void FileBrowserPanel::showArchiveItem (int bookmarkIndex)
+{
+    if (bookmarkIndex < 0 || bookmarkIndex >= archiveBookmarks.size()) return;
+
+    const auto& bm = archiveBookmarks[bookmarkIndex];
+    activeArchiveIndex = bookmarkIndex;
+
+    if (bm.isCollection)
+    {
+        archiveViewActive  = true;
+        archiveRows.clear();
+        archiveListTitle   = "Loading collection\u2026";
+        archiveList.updateContent();
+        resized();
+        repaint();
+
+        ArchiveIntegration::fetchCollection (
+            ArchiveIntegration::identifierFromUrl (bm.url),
+            [this] (bool ok, juce::Array<ArchiveIntegration::CollectionEntry> entries)
+            {
+                archiveRows.clear();
+                if (ok)
+                {
+                    archiveListTitle = juce::String (entries.size()) + " items";
+                    for (auto& e : entries)
+                    {
+                        ArchiveRow r;
+                        r.name     = e.title.isNotEmpty() ? e.title : e.identifier;
+                        r.isFolder = true;
+                        r.folderId = e.identifier;
+                        archiveRows.add (r);
+                    }
+                }
+                else
+                {
+                    archiveListTitle = "Failed to load collection";
+                }
+                archiveList.updateContent();
+                resized();
+                repaint();
+            });
+    }
+    else
+    {
+        archiveViewActive  = true;
+        archiveRows.clear();
+        archiveListTitle   = "Loading\u2026";
+        archiveList.updateContent();
+        resized();
+        repaint();
+
+        ArchiveIntegration::fetchItem (bm.url,
+            [this] (bool ok, ArchiveIntegration::Item item)
+            {
+                archiveRows.clear();
+                if (ok)
+                {
+                    archiveListTitle = item.title;
+                    for (auto& af : item.audioFiles)
+                    {
+                        ArchiveRow r;
+                        r.name        = af.name;
+                        r.format      = af.format;
+                        r.downloadUrl = af.downloadUrl;
+                        r.sizeBytes   = af.sizeBytes;
+                        r.isFolder    = false;
+                        archiveRows.add (r);
+                    }
+                }
+                else
+                {
+                    archiveListTitle = "Failed to load";
+                }
+                archiveList.updateContent();
+                resized();
+                repaint();
+            });
+    }
+}
+
+void FileBrowserPanel::showCollectionItem (const juce::String& collectionId)
+{
+    archiveViewActive  = true;
+    archiveRows.clear();
+    archiveListTitle   = "Loading " + collectionId + "\u2026";
+    archiveList.updateContent();
+    resized();
+    repaint();
+
+    ArchiveIntegration::fetchItem (collectionId,
+        [this] (bool ok, ArchiveIntegration::Item item)
+        {
+            archiveRows.clear();
+            if (ok)
+            {
+                archiveListTitle = item.title;
+                for (auto& af : item.audioFiles)
+                {
+                    ArchiveRow r;
+                    r.name        = af.name;
+                    r.format      = af.format;
+                    r.downloadUrl = af.downloadUrl;
+                    r.sizeBytes   = af.sizeBytes;
+                    r.isFolder    = false;
+                    archiveRows.add (r);
+                }
+            }
+            else
+            {
+                archiveListTitle = "Failed to load";
+            }
+            archiveList.updateContent();
+            resized();
+            repaint();
+        });
+}
+
+void FileBrowserPanel::loadArchiveFile (const ArchiveRow& row)
+{
+    if (row.downloadUrl.isEmpty()) return;
+
+    fileNameLabel.setText ("Downloading: " + row.name, juce::dontSendNotification);
+    fileNameLabel.setVisible (true);
+    previewVisible = true;
+    playStopBtn.setVisible  (false);
+    volumeSlider.setVisible (false);
+    resized();
+    repaint();
+
+    ArchiveIntegration::downloadFile (row.downloadUrl,
+        [this] (bool ok, juce::File localFile)
+        {
+            if (ok)
+            {
+                fileNameLabel.setText (localFile.getFileName(), juce::dontSendNotification);
+                previewFile    = localFile;
+                previewVisible = true;
+                playStopBtn.setVisible  (true);
+                volumeSlider.setVisible (true);
+                stopPreview();
+                updatePlayButton();
+
+                if (onLoadRequest)
+                    onLoadRequest (localFile);
+                else
+                    processor.loadFileAsync (localFile);
+
+                if (onFileLoaded) onFileLoaded();
+            }
+            else
+            {
+                fileNameLabel.setText ("Download failed \u2014 check connection",
+                                       juce::dontSendNotification);
+            }
+            resized();
+            repaint();
+        });
+}
+
+void FileBrowserPanel::exitArchiveView()
+{
+    archiveViewActive  = false;
+    activeArchiveIndex = -1;
+    archiveRows.clear();
+    archiveListTitle.clear();
+    archiveList.updateContent();
+    resized();
+    repaint();
 }
