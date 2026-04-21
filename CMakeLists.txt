@@ -79,6 +79,9 @@ target_sources(Dysekt PRIVATE
     src/ui/SliceWaveformLcd.cpp
     src/ui/DualLcdControlFrame.cpp
     src/ui/WaveformOverview.cpp
+
+    # ⭐ REQUIRED FIX — this was missing
+    src/integration/ArchiveIntegration.cpp
 )
 
 target_include_directories(Dysekt PRIVATE
