@@ -88,7 +88,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  waveformView.onShortcutsToggle = [this] { toggleShortcutsPanel(); };
  waveformView.onRenameRequest = [this] (int sliceIdx, const juce::String& currentName)
  {
- renameOverlay = std::make_unique (sliceIdx + 1, currentName);
+ renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
  addAndMakeVisible (*renameOverlay);
  renameOverlay->setBounds (getLocalBounds());
  renameOverlay->toFront (true);
@@ -247,7 +247,7 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
  if (pref == DysektProcessor::TrimPrefAsk) {
  juce::AudioFormatManager fm;
  fm.registerBasicFormats();
- std::unique_ptr reader (fm.createReaderFor (file));
+ std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
  double duration = 0.0;
  if (reader != nullptr && reader->sampleRate > 0.0)
  duration = (double) reader->lengthInSamples / reader->sampleRate;
@@ -260,7 +260,7 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
  return;
  }
 
- confirmOverlay = std::make_unique (
+ confirmOverlay = std::make_unique<ConfirmOverlay> (
  "Trim Sample?",
  "This sample is long. Would you like to trim it before slicing?",
  "Trim",
@@ -287,7 +287,7 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
 
 void DysektEditor::showTrimMode (const juce::File& file)
 {
- trimSession = std::make_unique();
+ trimSession = std::make_unique<TrimSession>();
  trimSession->file = file;
  trimSession->active = false;
 
@@ -338,7 +338,7 @@ void DysektEditor::toggleThemeEditor()
  return;
  }
 
- themeEditorPanel = std::make_unique (getThemesDir());
+ themeEditorPanel = std::make_unique<ThemeEditorPanel> (getThemesDir());
 
  themeEditorPanel->onThemeChanged = [this] (const ThemeData& t)
  {
@@ -364,9 +364,9 @@ void DysektEditor::toggleThemeEditor()
 }
 
 // ── Waveform frame rect helper ────────────────────────────────────────────────
-static juce::Rectangle waveformFrameRect (const DysektEditor& ed,
- const juce::Rectangle& wvBounds,
- bool hasTrimDialog)
+static juce::Rectangle<float> waveformFrameRect (const DysektEditor& ed,
+                                                  const juce::Rectangle<int>& wvBounds,
+                                                  bool hasTrimDialog)
 {
  const float sf = (float) ed.getWidth() / (float) kBaseW;
  const int kFrameInset = juce::roundToInt (4.0f * sf);
@@ -463,7 +463,7 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  if (logoBar.isVisible() && logoBar.getHeight() > 0)
  {
  const auto ac = getTheme().accent;
- const juce::Rectangle logoF (logoBar.getBounds().toFloat()
+ const juce::Rectangle<float> logoF (logoBar.getBounds().toFloat()
  .withTrimmedTop (4.0f * sf));
  g.setColour (ac.withAlpha (0.18f));
  g.drawRoundedRectangle (logoF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
@@ -476,7 +476,7 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  // Full-window accent frame
  {
  const auto ac = getTheme().accent;
- const juce::Rectangle win (getLocalBounds().toFloat());
+ const juce::Rectangle<float> win (getLocalBounds().toFloat());
  g.setColour (ac.withAlpha (0.60f));
  g.drawRoundedRectangle (win.reduced (2.0f * sf), 2.5f * sf, 1.5f * sf);
  g.setColour (ac.withAlpha (0.14f));
@@ -492,7 +492,7 @@ void DysektEditor::resized()
  const float sf = (float) getWidth() / (float) kBaseW;
  auto si = [sf](int v) -> int { return juce::roundToInt ((float) v * sf); };
 
- auto area = juce::Rectangle (0, 0, getWidth(), getHeight());
+ auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
 
  // ── Top strip ─────────────────────────────────────────────────────────────
  // In PAD mode shrink LCD rows to 65% — frees ~116px for the pad grid
@@ -587,7 +587,7 @@ void DysektEditor::resized()
  if ((trimDialog != nullptr || (uiMode == 0 && hasRealSample)) && !mixerOpen && !normalBrowserOpen)
  {
  auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
- sliceControlBar.setBounds (juce::Rectangle (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+ sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
  }
  else
  {
@@ -649,7 +649,7 @@ void DysektEditor::resized()
  {
  // Original waveform layout — unchanged
  waveformView.setVisible (true);
- waveformView.setBounds (juce::Rectangle (screenX, y, screenW, h));
+ waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
 
  padGridView.setVisible (false);
  padGridView.setBounds ({});
@@ -658,7 +658,7 @@ void DysektEditor::resized()
  {
  // Pad grid layout
  padGridView.setVisible (true);
- padGridView.setBounds (juce::Rectangle (screenX, y, screenW, h));
+ padGridView.setBounds (juce::Rectangle<int> (screenX, y, screenW, h));
 
  waveformView.setVisible (false);
  waveformView.setBounds ({});
@@ -740,11 +740,11 @@ bool DysektEditor::keyPressed (const juce::KeyPress& key)
  g.fillAll (juce::Colours::black.withAlpha (0.55f));
  }
  };
- midiLearnBackdrop = std::make_unique();
+ midiLearnBackdrop = std::make_unique<Backdrop>();
  addAndMakeVisible (*midiLearnBackdrop);
  midiLearnBackdrop->toFront (false);
 
- midiLearnDialog = std::make_unique (
+ midiLearnDialog = std::make_unique<MidiLearnDialog> (
  processor.midiLearn,
  processor,
  [this] { midiLearnDialog.reset(); midiLearnBackdrop.reset(); resized(); }
@@ -877,7 +877,7 @@ void DysektEditor::timerCallback()
 
  const bool playbackActive = std::any_of (processor.voicePool.voicePositions.begin(),
  processor.voicePool.voicePositions.end(),
- [] (const std::atomic& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
+ [] (const std::atomic<float>& pos) { return pos.load (std::memory_order_relaxed) > 0.0f; });
 
  const bool waveformAnimating = waveformInteracting || previewActive
  || playbackActive || processor.lazyChop.isActive()
@@ -908,7 +908,7 @@ void DysektEditor::timerCallback()
 
  if (trimDialog == nullptr)
  {
- trimDialog = std::make_unique (processor, waveformView);
+ trimDialog = std::make_unique<TrimDialog> (processor, waveformView);
  addAndMakeVisible (*trimDialog);
  trimDialog->toFront (false);
  resized();
