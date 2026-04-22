@@ -10,6 +10,7 @@
 #include "audio/VoicePool.h"
 #include "audio/LazyChopEngine.h"
 #include "audio/SoundFontLoader.h"
+#include "audio/SfzPlayer.h"
 #include "UndoManager.h"
 #include "MidiLearnManager.h"
 #include "params/ParamIds.h"
@@ -463,6 +464,13 @@ private:
     bool   heldNotes[128]    {};
 
     friend class SoundFontLoader;
+
+    // ── SFZ live player ───────────────────────────────────────────────────────
+    SfzPlayer sfzPlayer;
+
+    // Peak meters written by processBlock, read by SfzModulePanel timer
+    std::atomic<float> sfzPeakL { 0.0f };
+    std::atomic<float> sfzPeakR { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektProcessor)
 };

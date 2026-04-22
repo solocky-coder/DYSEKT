@@ -89,6 +89,29 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         g.drawLine (cx, bY + bH, cx, bY + bH + 3.5f, 1.5f);
         g.fillEllipse (cx - 2.0f, bY + bH + 3.0f, 4.0f, 3.0f);
     }
+    else if (type == 4) // SFZ / SF2 instrument — mini piano keys
+    {
+        const float keyW  = 5.0f;
+        const float keyH  = 11.0f;
+        const float startX = cx - keyW * 1.5f - 3.0f;
+        const float keyY  = cy2 - keyH * 0.5f;
+
+        // Three white keys
+        for (int k = 0; k < 3; ++k)
+        {
+            float kx = startX + k * (keyW + 1.0f);
+            g.setColour (active ? accent.withAlpha (0.20f) : fg.withAlpha (0.08f));
+            g.fillRoundedRectangle (kx, keyY, keyW, keyH, 1.0f);
+            g.setColour (col);
+            g.drawRoundedRectangle (kx, keyY, keyW, keyH, 1.0f, 1.0f);
+        }
+
+        // Two black keys between white keys
+        const float bkW = 3.5f, bkH = 6.5f;
+        g.setColour (col.withAlpha (active ? 0.95f : 0.70f));
+        g.fillRoundedRectangle (startX + keyW - bkW * 0.5f,                 keyY, bkW, bkH, 0.8f);
+        g.fillRoundedRectangle (startX + keyW * 2.0f + 1.0f - bkW * 0.5f,  keyY, bkW, bkH, 0.8f);
+    }
     else // type == 3: Mixer — three vertical faders at different positions
     {
         // Three fader grooves
@@ -190,26 +213,28 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
     // ── Top row: four icons evenly spread across full width ──────────────────
     {
-        const int btnSz  = 36;
+        const int btnSz  = 32;
         const int btnY   = (half - btnSz) / 2;
-        const int gap    = (w - 4 * btnSz) / 5;
+        const int gap    = (w - 5 * btnSz) / 6;
 
-        filIconArea  = { gap,                       btnY, btnSz, btnSz };
-        waIconArea   = { gap * 2 + btnSz,           btnY, btnSz, btnSz };
-        midiFollowIconArea   = { gap * 3 + btnSz * 2,       btnY, btnSz, btnSz };
-        bodeIconArea = { gap * 4 + btnSz * 3,       btnY, btnSz, btnSz };
+        filIconArea        = { gap,                       btnY, btnSz, btnSz };
+        waIconArea         = { gap * 2 + btnSz,           btnY, btnSz, btnSz };
+        midiFollowIconArea = { gap * 3 + btnSz * 2,       btnY, btnSz, btnSz };
+        bodeIconArea       = { gap * 4 + btnSz * 3,       btnY, btnSz, btnSz };
+        sfzIconArea        = { gap * 5 + btnSz * 4,       btnY, btnSz, btnSz };
 
-        drawIcon (g, filIconArea .toFloat(), 0, browserActive);
-        drawIcon (g, waIconArea  .toFloat(), 1, waveMode != 0);
-        drawIcon (g, midiFollowIconArea  .toFloat(), 2, midiFollowActive);
-        drawIcon (g, bodeIconArea.toFloat(), 3, bodeActive);
+        drawIcon (g, filIconArea       .toFloat(), 0, browserActive);
+        drawIcon (g, waIconArea        .toFloat(), 1, waveMode != 0);
+        drawIcon (g, midiFollowIconArea.toFloat(), 2, midiFollowActive);
+        drawIcon (g, bodeIconArea      .toFloat(), 3, bodeActive);
+        drawIcon (g, sfzIconArea       .toFloat(), 4, sfzActive);
 
         // ── Hover tooltip label ──────────────────────────────────────
         if (hoveredIcon >= 0)
         {
-            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER" };
+            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER", "SFZ PLAYER" };
             const juce::Rectangle<int>* areas[] = { &filIconArea, &waIconArea,
-                                                     &midiFollowIconArea, &bodeIconArea };
+                                                     &midiFollowIconArea, &bodeIconArea, &sfzIconArea };
             const auto& area = *areas[hoveredIcon];
             const int labelY = area.getBottom() + 2;
             g.setFont (DysektLookAndFeel::makeFont (7.0f));
@@ -321,6 +346,13 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
         bodeActive = ! bodeActive;
         repaint();
         if (onBodeToggle) onBodeToggle();
+        return;
+    }
+    if (sfzIconArea.contains (pos))
+    {
+        sfzActive = ! sfzActive;
+        repaint();
+        if (onSfzToggle) onSfzToggle();
         return;
     }
 
@@ -460,10 +492,11 @@ void DualLcdControlFrame::mouseMove (const juce::MouseEvent& e)
 {
     const auto pos = e.getPosition();
     int found = -1;
-    if (filIconArea.contains (pos))        found = 0;
-    else if (waIconArea.contains (pos))    found = 1;
+    if (filIconArea.contains (pos))             found = 0;
+    else if (waIconArea.contains (pos))         found = 1;
     else if (midiFollowIconArea.contains (pos)) found = 2;
-    else if (bodeIconArea.contains (pos))  found = 3;
+    else if (bodeIconArea.contains (pos))       found = 3;
+    else if (sfzIconArea.contains (pos))        found = 4;
 
     if (found != hoveredIcon)
     {

@@ -22,6 +22,7 @@
 #include "ui/SliceLcdDisplay.h"
 #include "ui/SliceWaveformLcd.h"
 #include "ui/WaveformOverview.h"
+#include "ui/SfzModulePanel.h"
 
 // ── Alternate interface (Pad Grid) ────────────────────────────────────────────
 #include "ui/PadGridView.h"
@@ -125,6 +126,7 @@ private:
 
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;
+    SfzModulePanel   sfzModule;
     ShortcutsPanel   shortcutsPanel { processor };
 
     juce::TooltipWindow tooltipWindow { this, 500 };

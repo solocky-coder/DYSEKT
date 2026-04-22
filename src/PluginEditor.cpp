@@ -27,6 +27,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  padGridView (p),
  browserPanel (p),
  mixerPanel (p),
+ sfzModule (p),
  shortcutsPanel (p)
 {
  juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
@@ -54,6 +55,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  addChildComponent (browserPanel);
  mixerPanel.setVisible (false);
  addChildComponent (mixerPanel);
+ sfzModule.setVisible (false);
+ addChildComponent (sfzModule);
  shortcutsPanel.setVisible (false);
  addChildComponent (shortcutsPanel);
  shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
@@ -126,7 +129,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  resized();
  };
 
- headerBar.onBodeToggle = [this] { toggleMixerPanel(); };
+ headerBar.onBodeToggle  = [this] { toggleMixerPanel(); };
+ headerBar.onSfzToggle   = [this] { toggleSfzModule(); };
  headerBar.onBrowserToggle = [this] { toggleBrowserPanel(); };
  headerBar.onWaveToggle = [this] { toggleSoftWave(); };
  headerBar.onMidiFollowToggle = [this] { toggleMidiFollow(); };
@@ -677,11 +681,10 @@ void DysektEditor::resized()
  waveformView.setBounds ({});
  }
 
- // ── SFZ module placeholder bounds (panel wired in next step) ─────────────
- // When SfzModulePanel is added as a member, assign it here:
- //   sfzModule.setVisible (sfzVisible);
- //   if (sfzVisible)
- //       sfzModule.setBounds (screenX, y + waveH + sfzGap, screenW, sfzStripH);
+ // ── SFZ module strip ─────────────────────────────────────────────────────
+ sfzModule.setVisible (sfzVisible);
+ if (sfzVisible)
+     sfzModule.setBounds (screenX, y + waveH + sfzGap, screenW, sfzStripH);
 
  // ── Trim bar: hide behind browser or mixer, restore when they close ───────
  if (trimDialog != nullptr)
@@ -729,6 +732,7 @@ void DysektEditor::toggleMixerPanel()
 void DysektEditor::toggleSfzModule()
 {
  sfzModuleOpen = ! sfzModuleOpen;
+ if (sfzModuleOpen) sfzModule.panelDidShow();
  resized(); repaint();
 }
 
@@ -996,6 +1000,7 @@ void DysektEditor::timerCallback()
  waveformOverview.repaintOverview();
  if (activeSlot == SlotContent::Mixer) mixerPanel.repaint();
 
+ headerBar.setSfzActive (sfzModuleOpen);
  headerBar.repaint();
  sliceControlBar.updateMidiLearnPulse();
  sliceControlBar.repaint();

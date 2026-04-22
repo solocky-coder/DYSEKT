@@ -194,12 +194,13 @@ bool DysektProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
     return true;
 }
 
-void DysektProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
+void DysektProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     const bool rateChanged = (std::abs (sampleRate - currentSampleRate) > 0.01);
 
     currentSampleRate = sampleRate;
     voicePool.setSampleRate (sampleRate);
+    sfzPlayer.prepare (sampleRate, samplesPerBlock > 0 ? samplesPerBlock : 512);
     std::fill (std::begin (heldNotes), std::end (heldNotes), false);
 
     // Initialise CC smoothers — 20 ms ramp gives silky response on absolute knobs
@@ -2460,6 +2461,28 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
     masterPeakL.store(masterL, std::memory_order_relaxed);
     masterPeakR.store(masterR, std::memory_order_relaxed);
+
+    // ── SFZ live player — mixed into bus 0 after slice engine ────────────────
+    if (buffer.getNumChannels() >= 2 && buffer.getNumSamples() > 0)
+    {
+        float* sfzL = buffer.getWritePointer (0);
+        float* sfzR = buffer.getWritePointer (1);
+        sfzPlayer.process (midi, sfzL, sfzR, buffer.getNumSamples());
+
+        // Update SFZ peak meters for UI
+        float pkL = 0.f, pkR = 0.f;
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            pkL = std::max (pkL, std::abs (sfzL[i]));
+            pkR = std::max (pkR, std::abs (sfzR[i]));
+        }
+        // Decay toward new peak (fast attack, slow release)
+        const float decaySFZ = 0.85f;
+        sfzPeakL.store (std::max (sfzPeakL.load (std::memory_order_relaxed) * decaySFZ, pkL),
+                        std::memory_order_relaxed);
+        sfzPeakR.store (std::max (sfzPeakR.load (std::memory_order_relaxed) * decaySFZ, pkR),
+                        std::memory_order_relaxed);
+    }
 
     // Decay all slice peak meters toward zero (60 dB/s at typical block sizes)
     static const float kDecayPerBlock = 0.60f;  // approx 60 dB/s at 512 @ 44100
