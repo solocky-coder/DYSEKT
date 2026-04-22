@@ -28,4 +28,4 @@ constexpr int kMargin     = 8;
 
 // SFZ instrument strip — stacks below the waveform/pad frame when open.
 // Window expands by this amount; waveform shrinks to make room.
-constexpr int kSfzModuleH = 140;
+constexpr int kSfzModuleH = 185;

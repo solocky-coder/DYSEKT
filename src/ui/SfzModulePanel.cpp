@@ -33,7 +33,7 @@ void SfzModulePanel::resized()
     auto area = getLocalBounds().reduced (kPad);
 
     // Bottom portion — keyboard
-    const int kbH = juce::jmax (80, area.getHeight() / 2);
+    const int kbH = juce::jmax (90, (area.getHeight() * 3) / 5);
     auto kbArea = area.removeFromBottom (kbH);
     keysPanel.setBounds (kbArea);
     area.removeFromBottom (4); // gap
