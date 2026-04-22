@@ -407,8 +407,7 @@ void FileBrowserPanel::fileClicked (const juce::File& f, const juce::MouseEvent&
     previewVisible = true;
 
     fileNameLabel.setText (f.getFileName(), juce::dontSendNotification);
-    stopPreview();
-    updatePlayButton();
+    startPreview (f);
 
     playStopBtn.setVisible   (true);
     volumeSlider.setVisible  (true);
