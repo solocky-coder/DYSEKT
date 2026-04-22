@@ -25,3 +25,7 @@ constexpr int kBaseHCore  = kLogoH + kLcdRowH + kSliceLaneH + kScrollbarH
                            + kSliceCtrlH + kActionH + 120;
 constexpr int kTotalH     = kBaseHCore + kPanelSlotH + 16;
 constexpr int kMargin     = 8;
+
+// SFZ instrument strip — stacks below the waveform/pad frame when open.
+// Window expands by this amount; waveform shrinks to make room.
+constexpr int kSfzModuleH = 140;

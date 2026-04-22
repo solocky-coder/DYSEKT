@@ -82,9 +82,14 @@ private:
     int      lastNumSlices         = -1;
     bool     lastTrimActive        = false;
 
-    bool browserOpen     = false;
-    bool initBrowserOpen = false;  // true until the first real sample is loaded
-    bool mixerOpen   = false;
+    /// Which panel occupies the bottom slot (browser or mixer).
+    /// Mutually exclusive; SfzModule is separate (it stacks, not replaces).
+    enum class SlotContent { None, Browser, Mixer };
+    SlotContent activeSlot   = SlotContent::None;
+    bool initBrowserOpen     = false;  // true until the first real sample is loaded
+
+    /// SFZ instrument strip — expands window height and splits frame area.
+    bool sfzModuleOpen = false;
     int  waveformMode = 0;  // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
 
     /// Current interface layout mode.
@@ -127,6 +132,7 @@ private:
     void toggleMixerPanel();
     void toggleShortcutsPanel();
     void toggleThemeEditor();
+    void toggleSfzModule();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektEditor)
 };
