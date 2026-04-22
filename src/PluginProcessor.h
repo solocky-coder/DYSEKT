@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <atomic>
 #include <array>
@@ -231,6 +231,9 @@ public:
     SampleData       sampleData;
     MidiLearnManager midiLearn;
 
+    // ── SFZ live player ───────────────────────────────────────────────────────
+    SfzPlayer sfzPlayer;
+
     // =========================================================================
     // UI-readable state atomics
     // =========================================================================
@@ -247,6 +250,9 @@ public:
     std::array<std::atomic<float>, kMaxMeterSlices> slicePeakR {};
     // Master output peak meters (0..1, decaying, written in audio thread, read by UI)
     std::atomic<float> masterPeakL {0.0f}, masterPeakR {0.0f};
+    // Peak meters written by processBlock, read by SfzModulePanel timer
+    std::atomic<float> sfzPeakL { 0.0f };
+    std::atomic<float> sfzPeakR { 0.0f };
     // Live drag bounds (UI -> audio thread, bypasses FIFO for low latency)
     std::atomic<int> liveDragBoundsStart { 0 };
     std::atomic<int> liveDragBoundsEnd   { 0 };
@@ -464,13 +470,6 @@ private:
     bool   heldNotes[128]    {};
 
     friend class SoundFontLoader;
-
-    // ── SFZ live player ───────────────────────────────────────────────────────
-    SfzPlayer sfzPlayer;
-
-    // Peak meters written by processBlock, read by SfzModulePanel timer
-    std::atomic<float> sfzPeakL { 0.0f };
-    std::atomic<float> sfzPeakR { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektProcessor)
 };
