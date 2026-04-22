@@ -17,8 +17,10 @@ static constexpr int kLoadBtnH = 26;
 // ── Constructor / destructor ──────────────────────────────────────────────────
 
 SfzModulePanel::SfzModulePanel (DysektProcessor& p)
-    : processor (p)
+    : processor (p),
+      keysPanel (p)
 {
+    addAndMakeVisible (keysPanel);
     startTimerHz (30);
 }
 
@@ -29,6 +31,12 @@ SfzModulePanel::~SfzModulePanel() = default;
 void SfzModulePanel::resized()
 {
     auto area = getLocalBounds().reduced (kPad);
+
+    // Bottom portion — keyboard
+    const int kbH = juce::jmax (80, area.getHeight() / 2);
+    auto kbArea = area.removeFromBottom (kbH);
+    keysPanel.setBounds (kbArea);
+    area.removeFromBottom (4); // gap
 
     // Left-to-right: name | load btn | VOL knob | TRANS knob | CH | meter | status
     loadBtnZone = area.removeFromLeft (kLoadBtnW).withSizeKeepingCentre (kLoadBtnW, kLoadBtnH);
@@ -425,7 +433,9 @@ void SfzModulePanel::filesDropped (const juce::StringArray& files, int, int)
         const auto ext = juce::File (f).getFileExtension().toLowerCase();
         if (ext == ".sf2" || ext == ".sfz")
         {
-            processor.sfzPlayer.loadFile (juce::File (f));
+            juce::File file (f);
+            processor.sfzPlayer.loadFile (file);
+            reloadZones (file);
             repaint();
             return;
         }
@@ -449,6 +459,7 @@ void SfzModulePanel::openFileChooser()
             if (result.existsAsFile())
             {
                 processor.sfzPlayer.loadFile (result);
+                reloadZones (result);
                 repaint();
             }
         });
@@ -458,6 +469,8 @@ void SfzModulePanel::openFileChooser()
 
 void SfzModulePanel::panelDidShow()
 {
+    if (processor.sfzPlayer.isLoaded())
+        reloadZones (processor.sfzPlayer.getLoadedFile());
     repaint();
 }
 
@@ -467,3 +480,217 @@ float SfzModulePanel::volToNorm   (float linear) const { return juce::jlimit (0.
 float SfzModulePanel::normToVol   (float n)      const { return n * 2.0f; }
 float SfzModulePanel::transToNorm (int semi)      const { return ((float) semi + 24.0f) / 48.0f; }
 int   SfzModulePanel::normToTrans (float n)       const { return juce::roundToInt (n * 48.0f - 24.0f); }
+
+// =============================================================================
+//  Zone parsers
+// =============================================================================
+
+// Palette of distinct colours for successive zones
+static juce::Colour zoneColour (int index)
+{
+    static const juce::Colour palette[] = {
+        juce::Colour (0xFF4FC3F7),  // sky blue
+        juce::Colour (0xFF81C784),  // green
+        juce::Colour (0xFFFFB74D),  // amber
+        juce::Colour (0xFFE57373),  // red
+        juce::Colour (0xFFBA68C8),  // purple
+        juce::Colour (0xFF4DD0E1),  // cyan
+        juce::Colour (0xFFF06292),  // pink
+        juce::Colour (0xFFA1887F),  // brown
+    };
+    return palette[index % 8];
+}
+
+std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File& f)
+{
+    std::vector<KeysPanel::Keyzone> zones;
+    const auto text = f.loadFileAsString();
+    const auto lines = juce::StringArray::fromLines (text);
+
+    int loKey = 0, hiKey = 127;
+    bool inRegion = false;
+    int  colIdx   = 0;
+
+    auto flush = [&]
+    {
+        if (inRegion && hiKey >= loKey)
+        {
+            zones.push_back ({ loKey, hiKey, zoneColour (colIdx++) });
+            loKey = 0; hiKey = 127;
+        }
+        inRegion = false;
+    };
+
+    for (auto line : lines)
+    {
+        line = line.trim().toLowerCase();
+        if (line.startsWith ("<region>")) { flush(); inRegion = true; loKey = 0; hiKey = 127; }
+        else if (line.startsWith ("<group>") || line.startsWith ("<global>")) flush();
+
+        if (inRegion)
+        {
+            auto get = [&] (const juce::String& key) -> int
+            {
+                int pos = line.indexOf (key + "=");
+                if (pos < 0) return -999;
+                auto val = line.substring (pos + key.length() + 1)
+                               .trimStart()
+                               .upToFirstOccurrenceOf (" ", false, false)
+                               .upToFirstOccurrenceOf ("	", false, false);
+                return val.getIntValue();
+            };
+            // lokey / hikey (numeric or note name both supported)
+            auto loRaw = line.indexOf ("lokey=");
+            if (loRaw >= 0)
+            {
+                auto s = line.substring (loRaw + 6)
+                             .upToFirstOccurrenceOf (" ", false, false)
+                             .trim();
+                loKey = s.containsAnyOf ("abcdefg") ? juce::MidiMessage::getMidiNoteInHertz(0) >= 0
+                        ? juce::jlimit (0, 127, (int) s.getIntValue()) : s.getIntValue()
+                        : s.getIntValue();
+                // Best-effort: just parse integer; SFZ note names handled below
+                loKey = juce::jlimit (0, 127, s.getIntValue());
+            }
+            auto hiRaw = line.indexOf ("hikey=");
+            if (hiRaw >= 0)
+            {
+                auto s = line.substring (hiRaw + 6)
+                             .upToFirstOccurrenceOf (" ", false, false)
+                             .trim();
+                hiKey = juce::jlimit (0, 127, s.getIntValue());
+            }
+            auto kRaw = line.indexOf ("key=");
+            if (kRaw >= 0 && line.indexOf ("lokey=") < 0)
+            {
+                auto s = line.substring (kRaw + 4)
+                             .upToFirstOccurrenceOf (" ", false, false)
+                             .trim();
+                const int k = juce::jlimit (0, 127, s.getIntValue());
+                loKey = hiKey = k;
+            }
+            (void) get;
+        }
+    }
+    flush();
+    return zones;
+}
+
+std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File& f)
+{
+    // Lightweight SF2 RIFF parser — extracts keyRange (gen 43) from IGEN chunk.
+    std::vector<KeysPanel::Keyzone> zones;
+
+    juce::FileInputStream stream (f);
+    if (stream.failedToOpen()) return zones;
+
+    // RIFF header
+    char riff[4]; stream.read (riff, 4);
+    if (juce::String::fromUTF8 (riff, 4) != "RIFF") return zones;
+    stream.readInt();  // file size
+    char sfbk[4]; stream.read (sfbk, 4);
+    if (juce::String::fromUTF8 (sfbk, 4) != "sfbk") return zones;
+
+    // Walk top-level LIST chunks to find "pdta"
+    juce::MemoryBlock igenData;
+
+    while (! stream.isExhausted())
+    {
+        char id[4]; if (stream.read (id, 4) < 4) break;
+        const auto chunkId = juce::String::fromUTF8 (id, 4);
+        const int  sz      = stream.readInt();
+
+        if (chunkId == "LIST")
+        {
+            char listId[4]; stream.read (listId, 4);
+            const auto lid = juce::String::fromUTF8 (listId, 4);
+
+            if (lid == "pdta")
+            {
+                // Scan sub-chunks for "igen"
+                const int pdtaEnd = (int) stream.getPosition() + sz - 4;
+                while (stream.getPosition() < pdtaEnd && ! stream.isExhausted())
+                {
+                    char sub[4]; if (stream.read (sub, 4) < 4) break;
+                    const auto subId = juce::String::fromUTF8 (sub, 4);
+                    const int  subSz = stream.readInt();
+                    if (subId == "igen")
+                    {
+                        igenData.setSize ((size_t) subSz);
+                        stream.read (igenData.getData(), subSz);
+                        break;
+                    }
+                    stream.skipNextBytes (subSz);
+                }
+                break;
+            }
+            else
+            {
+                stream.skipNextBytes (sz - 4);
+            }
+        }
+        else
+        {
+            stream.skipNextBytes (sz);
+        }
+    }
+
+    if (igenData.isEmpty()) return zones;
+
+    // Each IGEN record is 4 bytes: sfGenOper (uint16) + genAmount (union 2 bytes)
+    struct IgenRecord { uint16_t oper; uint8_t lo, hi; };
+    const size_t numRecs = igenData.getSize() / 4;
+    const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
+
+    int  loKey = 0, hiKey = 127;
+    bool hasKey = false;
+    int  colIdx = 0;
+
+    for (size_t i = 0; i < numRecs; ++i)
+    {
+        const uint16_t oper = (uint16_t)(data[i*4] | (data[i*4+1] << 8));
+        const uint8_t  lo   = data[i*4 + 2];
+        const uint8_t  hi   = data[i*4 + 3];
+
+        if (oper == 43)  // keyRange
+        {
+            loKey  = lo;
+            hiKey  = hi;
+            hasKey = true;
+        }
+        else if (oper == 0)  // endOper — end of zone
+        {
+            if (hasKey && hiKey >= loKey)
+                zones.push_back ({ loKey, hiKey, zoneColour (colIdx++) });
+            loKey  = 0; hiKey = 127; hasKey = false;
+        }
+    }
+
+    // Deduplicate identical ranges (SF2 files often repeat per-preset)
+    std::sort (zones.begin(), zones.end(),
+               [] (auto& a, auto& b) { return a.loKey < b.loKey; });
+    zones.erase (std::unique (zones.begin(), zones.end(),
+                               [] (auto& a, auto& b) { return a.loKey == b.loKey && a.hiKey == b.hiKey; }),
+                 zones.end());
+
+    // Re-assign colours after dedup
+    for (size_t i = 0; i < zones.size(); ++i)
+        zones[i].colour = zoneColour ((int) i);
+
+    return zones;
+}
+
+void SfzModulePanel::reloadZones (const juce::File& f)
+{
+    const auto ext = f.getFileExtension().toLowerCase();
+    std::vector<KeysPanel::Keyzone> zones;
+
+    if (ext == ".sfz")
+        zones = parseSfzZones (f);
+    else if (ext == ".sf2")
+        zones = parseSf2Zones (f);
+
+    keysPanel.setKeyzones (zones);
+    if (! zones.empty())
+        keysPanel.autoScrollToZones();
+}

@@ -10,6 +10,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <functional>
+#include "KeysPanel.h"
 
 class DysektProcessor;
 
@@ -34,6 +35,9 @@ public:
 
     // Callback wired by editor — triggers file chooser
     std::function<void()> onLoadRequest;
+
+    // Keyboard sub-component
+    KeysPanel keysPanel;
 
 private:
     // ── Layout zones (computed in resized) ────────────────────────────────────
@@ -73,6 +77,11 @@ private:
                            const juce::MouseWheelDetails&) override;
 
     std::unique_ptr<juce::FileChooser> chooser;
+
+    // Zone parsers
+    static std::vector<KeysPanel::Keyzone> parseSfzZones  (const juce::File& f);
+    static std::vector<KeysPanel::Keyzone> parseSf2Zones  (const juce::File& f);
+    void reloadZones (const juce::File& f);
 
     DysektProcessor& processor;
 
