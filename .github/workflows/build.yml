@@ -44,6 +44,14 @@ jobs:
             git clone --depth 1 https://github.com/Signalsmith-Audio/linear.git signalsmith-linear
           }
 
+      - name: Fetch sfizz
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "sfizz/CMakeLists.txt")) {
+            Remove-Item -Recurse -Force sfizz -ErrorAction SilentlyContinue
+            git clone --depth 1 --branch v1.2.3 --recurse-submodules https://github.com/sfztools/sfizz.git sfizz
+          }
+
       - name: Configure CMake
         shell: pwsh
         run: |
