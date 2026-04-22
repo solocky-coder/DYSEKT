@@ -81,7 +81,7 @@ target_sources(Dysekt PRIVATE
   src/ui/WaveformOverview.cpp
 
   # ⭐ REQUIRED FIX — this was missing
-  src/integration/ArchiveIntegration.cpp
+  src/ui/ArchiveIntegration.cpp
 )
 
 target_include_directories(Dysekt PRIVATE
