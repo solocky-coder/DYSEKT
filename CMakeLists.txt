@@ -36,9 +36,12 @@ juce_add_plugin(Dysekt
     EDITOR_WANTS_KEYBOARD_FOCUS TRUE
 )
 
-# FIXED: Use source-charset ONLY to fix character reading without breaking Nuendo compatibility
+# /source-charset:utf-8  — tell the compiler the .cpp files are UTF-8 encoded
+# /execution-charset:utf-8 — keep UTF-8 in string literals at runtime,
+#   preventing C4566 "character cannot be represented in current code page"
+#   warnings for Unicode characters such as the minus sign (U+2212) in MixerPanel.cpp
 if(MSVC)
-    target_compile_options(Dysekt PRIVATE /source-charset:utf-8)
+    target_compile_options(Dysekt PRIVATE /source-charset:utf-8 /execution-charset:utf-8)
 endif()
 
 juce_add_binary_data(DysektFonts SOURCES
@@ -58,6 +61,7 @@ target_sources(Dysekt PRIVATE
     src/audio/VoicePool.cpp
     src/audio/GrainEngine.cpp
     src/audio/LazyChopEngine.cpp
+    src/audio/SfzPlayer.cpp
     src/audio/SoundFontLoader.cpp
     src/params/ParamLayout.cpp
     src/ui/DysektLookAndFeel.cpp
@@ -88,6 +92,10 @@ target_include_directories(Dysekt PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/signalsmith-stretch
     ${CMAKE_CURRENT_SOURCE_DIR}/signalsmith-linear
+    # Explicitly expose sfizz's public header directory.
+    # sfizz::sfizz does not reliably propagate INTERFACE_INCLUDE_DIRECTORIES
+    # through the sfizz CMake build, so MSVC cannot find <sfizz.h> without this.
+    $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:${CMAKE_CURRENT_SOURCE_DIR}/sfizz/src>
 )
 
 target_compile_definitions(Dysekt PUBLIC
