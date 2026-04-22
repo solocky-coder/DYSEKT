@@ -232,14 +232,15 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         // ── Hover tooltip label ──────────────────────────────────────
         if (hoveredIcon >= 0)
         {
-            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER", "SFZ PLAYER" };
+            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER", "SF PLAYER" };
             const juce::Rectangle<int>* areas[] = { &filIconArea, &waIconArea,
                                                      &midiFollowIconArea, &bodeIconArea, &sfzIconArea };
             const auto& area = *areas[hoveredIcon];
-            const int labelY = area.getBottom() + 2;
+            const int labelH  = 9;
+            const int labelY  = area.getY() - labelH - 2;
             g.setFont (DysektLookAndFeel::makeFont (7.0f));
             g.setColour (getTheme().accent.withAlpha (0.80f));
-            g.drawText (kLabels[hoveredIcon], area.getX() - 20, labelY, area.getWidth() + 40, 9,
+            g.drawText (kLabels[hoveredIcon], area.getX() - 20, labelY, area.getWidth() + 40, labelH,
                         juce::Justification::centred);
         }
     }
