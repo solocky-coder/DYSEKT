@@ -59,6 +59,7 @@ target_sources(Dysekt PRIVATE
     src/audio/GrainEngine.cpp
     src/audio/LazyChopEngine.cpp
     src/audio/SoundFontLoader.cpp
+    src/audio/SfzPlayer.cpp
     src/params/ParamLayout.cpp
     src/ui/DysektLookAndFeel.cpp
     src/ui/HeaderBar.cpp
@@ -78,6 +79,7 @@ target_sources(Dysekt PRIVATE
     src/ui/PadGridView.cpp
     src/ui/SliceWaveformLcd.cpp
     src/ui/DualLcdControlFrame.cpp
+    src/ui/SfzModulePanel.cpp
     src/ui/WaveformOverview.cpp
 
     # ⭐ REQUIRED FIX — this was missing
