@@ -11,6 +11,7 @@ SfzPlayer::~SfzPlayer()
     delete pendingLoad.exchange (nullptr, std::memory_order_acq_rel);
 
 #if DYSEKT_HAS_SFIZZ
+#include <sfizz.h>
     if (sfz != nullptr)
     {
         sfizz_free (sfz);

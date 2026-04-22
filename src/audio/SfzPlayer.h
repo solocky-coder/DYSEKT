@@ -15,8 +15,11 @@
 #include <juce_core/juce_core.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 
+// Forward-declare sfizz_t — full include is in SfzPlayer.cpp only.
+// Keeps this header compilable without sfizz on the include path.
 #if DYSEKT_HAS_SFIZZ
-  #include <sfizz.h>
+  struct sfizz_s;
+  typedef struct sfizz_s sfizz_t;
 #endif
 
 class SfzPlayer
