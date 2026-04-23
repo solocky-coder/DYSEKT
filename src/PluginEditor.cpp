@@ -28,6 +28,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  browserPanel (p),
  mixerPanel (p),
  sfzModule (p),
+ sfzDropdown (p),
  shortcutsPanel (p)
 {
  juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
@@ -57,6 +58,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  addChildComponent (mixerPanel);
  sfzModule.setVisible (false);
  addChildComponent (sfzModule);
+ sfzDropdown.setVisible (false);
+ addChildComponent (sfzDropdown);
  shortcutsPanel.setVisible (false);
  addChildComponent (shortcutsPanel);
  shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
@@ -186,7 +189,7 @@ int DysektEditor::computeTotalHeight() const
     const float sf_   = (float) juce::jmax (getWidth(), kBaseW) / (float) kBaseW;
     const int   base_ = juce::roundToInt ((float) kTotalH * sf_);
     return base_ + (sfzModuleOpen
-        ? juce::roundToInt ((float) (kSfzModuleH + kMargin) * sf_) : 0);
+        ? juce::roundToInt ((float) (sfzDropdown.getAnimatedHeight() + kMargin) * sf_) : 0);
 }
 
 // ── Interface mode switch ─────────────────────────────────────────────────────
@@ -686,15 +689,16 @@ void DysektEditor::resized()
  }
 
  // ── SFZ module strip: sits below the SCB in the expanded window area ────────
- // computeTotalHeight() expands the window by kSfzModuleH + kMargin when open.
+ // computeTotalHeight() expands the window by sfzDropdown.getAnimatedHeight() + kMargin when open.
  // That extra space starts at kTotalH (base height) and runs to getHeight().
  // We centre the panel vertically in that gap using kFX/kFW for full width.
- sfzModule.setVisible (sfzVisible);
+ // ── SFZ dropdown strip: sits below the SCB in the expanded window area ─────
+ // Height is self-animated; the panel calls parent->resized() each timer tick
+ // so the window tracks the open/close animation automatically.
+ sfzDropdown.setVisible (sfzVisible);
+ sfzModule.setVisible (false);
  if (sfzVisible)
  {
-     // Derive gapTop from the actual bottom of the last laid-out component
-     // rather than si(kTotalH), which diverges from true content height when
-     // the window is wider than kBaseW (sf > 1). Fixes SFZ overlap and disappear.
      int contentBot = 0;
      if (sliceControlBar.isVisible() && sliceControlBar.getHeight() > 0)
          contentBot = sliceControlBar.getBottom();
@@ -706,11 +710,8 @@ void DysektEditor::resized()
          contentBot = juce::roundToInt ((float) kTotalH * ((float) getWidth() / (float) kBaseW));
 
      const int gapTop = contentBot + si (kMargin);
-     const int gapBot = getHeight() - si (kMargin);
-     const int gapH   = juce::jmax (0, gapBot - gapTop);
-     const int panelH = juce::jmin (si (kSfzModuleH), gapH);
-     const int panelY = gapTop + (gapH - panelH) / 2;     // vertically centred
-     sfzModule.setBounds (kFX, panelY, kFW, panelH);
+     const int panelH = sfzDropdown.getAnimatedHeight();
+     sfzDropdown.setBounds (kFX, gapTop, kFW, panelH);
  }
 
   // ── Trim bar: hide behind browser or mixer, restore when they close ───────
@@ -759,7 +760,7 @@ void DysektEditor::toggleMixerPanel()
 void DysektEditor::toggleSfzModule()
 {
  sfzModuleOpen = ! sfzModuleOpen;
- if (sfzModuleOpen) sfzModule.panelDidShow();
+ if (sfzModuleOpen) sfzDropdown.panelDidShow();
  // Resize the window first so getHeight() reflects the new height in resized()
  setSize (getWidth(), computeTotalHeight());
  repaint();
