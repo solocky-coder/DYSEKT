@@ -27,7 +27,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  padGridView (p),
  browserPanel (p),
  mixerPanel (p),
- sfzModule (p),
  sfzDropdown (p),
  shortcutsPanel (p)
 {
@@ -56,8 +55,6 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  addChildComponent (browserPanel);
  mixerPanel.setVisible (false);
  addChildComponent (mixerPanel);
- sfzModule.setVisible (false);
- addChildComponent (sfzModule);
  sfzDropdown.setVisible (false);
  addChildComponent (sfzDropdown);
  shortcutsPanel.setVisible (false);
@@ -170,7 +167,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  setWantsKeyboardFocus (true);
  setResizable (true, false);
  setResizeLimits (kBaseW, 650, 3840, 2160);
- setSize (kBaseW, computeTotalHeight());
+ setSize (kBaseW, kTotalH);
  lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
  startTimerHz (30);
 }
@@ -179,17 +176,6 @@ DysektEditor::~DysektEditor()
 {
  juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
  setLookAndFeel (nullptr);
-}
-
-int DysektEditor::computeTotalHeight() const
-{
-    // Expand window when the SFZ module strip is open so it sits below the SCB.
-    // Scale total height by current width ratio so SFZ strip always
-    // sits below content at any window scale, not just 1:1.
-    const float sf_   = (float) juce::jmax (getWidth(), kBaseW) / (float) kBaseW;
-    const int   base_ = juce::roundToInt ((float) kTotalH * sf_);
-    return base_ + (sfzModuleOpen
-        ? juce::roundToInt ((float) (sfzDropdown.getAnimatedHeight() + kMargin) * sf_) : 0);
 }
 
 // ── Interface mode switch ─────────────────────────────────────────────────────
@@ -567,6 +553,17 @@ void DysektEditor::resized()
  const int mixBot = slot.getBottom();
  mixerPanel.setBounds (kFX, mixTop, kFW, mixBot - mixTop);
  browserPanel.setBounds ({});
+ sfzDropdown.setVisible (false);
+ sfzDropdown.setBounds ({});
+ }
+ else if (activeSlot == SlotContent::Sfz) {
+ // Expand SFZ panel to fill ALL available area — same pattern as mixer
+ const int sfzTop = actionArea.getY();
+ const int sfzBot = slot.getBottom();
+ sfzDropdown.setVisible (true);
+ sfzDropdown.setBounds (kFX, sfzTop, kFW, sfzBot - sfzTop);
+ mixerPanel.setBounds ({});
+ browserPanel.setBounds ({});
  }
  else if (activeSlot == SlotContent::Browser && ! initBrowserOpen) {
  // Expand browser to fill ALL available area (waveformView space + slot)
@@ -574,8 +571,12 @@ void DysektEditor::resized()
  const int browserBot = slot.getBottom();
  browserPanel.setBounds (kFX, browserTop, kFW, browserBot - browserTop);
  mixerPanel.setBounds ({});
+ sfzDropdown.setVisible (false);
+ sfzDropdown.setBounds ({});
  } else {
  mixerPanel.setBounds ({});
+ sfzDropdown.setVisible (false);
+ sfzDropdown.setBounds ({});
  if (! initBrowserOpen)
  browserPanel.setBounds ({});
  // initBrowserOpen browser is sized below, in the waveform frame area
@@ -601,7 +602,7 @@ void DysektEditor::resized()
  sliceControlBar.setBounds ({});
  waveformOverview.setBounds ({});
  } else {
- if ((trimDialog != nullptr || (uiMode == 0 && hasRealSample)) && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
+ if ((trimDialog != nullptr || (uiMode == 0 && hasRealSample)) && activeSlot != SlotContent::Mixer && activeSlot != SlotContent::Sfz && !normalBrowserOpen)
  {
  auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
  sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
@@ -612,7 +613,7 @@ void DysektEditor::resized()
  // SCB space NOT removed from area — pad grid uses it
  }
 
- if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample)
+ if (uiMode == 0 && activeSlot != SlotContent::Mixer && activeSlot != SlotContent::Sfz && !normalBrowserOpen && hasRealSample)
  {
  auto overviewRow = area.removeFromBottom (kOverviewRowH);
  const int overviewY = overviewRow.getY() + kInterGap;
@@ -641,11 +642,7 @@ void DysektEditor::resized()
  int trimH = (trimDialog != nullptr) ? si (kTrimBarH) : 0;
  int h = juce::jmax (si (80), screenBot - trimH - y);
 
- // ── SFZ module strip (stacks below waveform when open) ────────────────────
- // Hidden whenever mixer, browser, or init-browser is covering the frame.
- // ── SFZ module strip visibility ───────────────────────────────────────────────
  const bool slotCoveringFrame = (activeSlot != SlotContent::None && ! initBrowserOpen);
- const bool sfzVisible = sfzModuleOpen && ! slotCoveringFrame && ! initBrowserOpen;
  const int  waveH      = juce::jmax (si (80), h);
 
  // ── Route the main content area to the active view ────────────────────────
@@ -654,7 +651,7 @@ void DysektEditor::resized()
 
  if (slotCoveringFrame)
  {
- // Mixer or normal browser is open — hide both main views so nothing overlaps
+ // Mixer, SFZ, or normal browser is open — hide both main views so nothing overlaps
  waveformView.setVisible (false);
  waveformView.setBounds ({});
  padGridView.setVisible (false);
@@ -688,37 +685,11 @@ void DysektEditor::resized()
  waveformView.setBounds ({});
  }
 
- // ── SFZ module strip: sits below the SCB in the expanded window area ────────
- // computeTotalHeight() expands the window by sfzDropdown.getAnimatedHeight() + kMargin when open.
- // That extra space starts at kTotalH (base height) and runs to getHeight().
- // We centre the panel vertically in that gap using kFX/kFW for full width.
- // ── SFZ dropdown strip: sits below the SCB in the expanded window area ─────
- // Height is self-animated; the panel calls parent->resized() each timer tick
- // so the window tracks the open/close animation automatically.
- sfzDropdown.setVisible (sfzVisible);
- sfzModule.setVisible (false);
- if (sfzVisible)
- {
-     int contentBot = 0;
-     if (sliceControlBar.isVisible() && sliceControlBar.getHeight() > 0)
-         contentBot = sliceControlBar.getBottom();
-     else if (waveformOverview.isVisible() && waveformOverview.getHeight() > 0)
-         contentBot = waveformOverview.getBottom();
-     else if (waveformView.isVisible() && waveformView.getHeight() > 0)
-         contentBot = waveformView.getBottom();
-     else
-         contentBot = juce::roundToInt ((float) kTotalH * ((float) getWidth() / (float) kBaseW));
-
-     const int gapTop = contentBot + si (kMargin);
-     const int panelH = sfzDropdown.getAnimatedHeight();
-     sfzDropdown.setBounds (kFX, gapTop, kFW, panelH);
- }
-
   // ── Trim bar: hide behind browser or mixer, restore when they close ───────
  if (trimDialog != nullptr)
  {
- if (normalBrowserOpen || activeSlot == SlotContent::Mixer)
- trimDialog->setBounds ({}); // hide trim bar — browser/mixer is covering the workspace
+ if (normalBrowserOpen || activeSlot == SlotContent::Mixer || activeSlot == SlotContent::Sfz)
+ trimDialog->setBounds ({}); // hide trim bar — browser/mixer/sfz is covering the workspace
  else
  trimDialog->setBounds (screenX, y + h, screenW, si (kTrimBarH));
  }
@@ -759,11 +730,24 @@ void DysektEditor::toggleMixerPanel()
 
 void DysektEditor::toggleSfzModule()
 {
- sfzModuleOpen = ! sfzModuleOpen;
- if (sfzModuleOpen) sfzDropdown.panelDidShow();
- // Resize the window first so getHeight() reflects the new height in resized()
- setSize (getWidth(), computeTotalHeight());
- repaint();
+    if (activeSlot == SlotContent::Sfz) {
+        activeSlot = SlotContent::None;
+        sfzDropdown.setVisible (false);
+        headerBar.setSfzActive (false);
+    } else {
+        if (activeSlot == SlotContent::Mixer) {
+            mixerPanel.setVisible (false);
+            headerBar.setBodeActive (false);
+        } else if (activeSlot == SlotContent::Browser) {
+            browserPanel.setVisible (false);
+            headerBar.setBrowserActive (false);
+        }
+        activeSlot = SlotContent::Sfz;
+        sfzDropdown.setVisible (true);
+        sfzDropdown.panelDidShow();
+        headerBar.setSfzActive (true);
+    }
+    resized(); repaint(); resized(); repaint();
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
@@ -927,7 +911,7 @@ void DysektEditor::timerCallback()
  // Reset to base size first so the host doesn't compound the scale on
  // top of a previously-enlarged component (avoids double-scaling at 1.5×+)
  setTransform (juce::AffineTransform{});
- setSize (kBaseW, computeTotalHeight());
+ setSize (kBaseW, kTotalH);
  setTransform (juce::AffineTransform::scale (scale));
  DysektLookAndFeel::setMenuScale (scale);
  saveUserSettings (userScale, getTheme().name); // persist user portion only — hostScale must not be baked in
@@ -1030,7 +1014,7 @@ void DysektEditor::timerCallback()
  waveformOverview.repaintOverview();
  if (activeSlot == SlotContent::Mixer) mixerPanel.repaint();
 
- headerBar.setSfzActive (sfzModuleOpen);
+ headerBar.setSfzActive (activeSlot == SlotContent::Sfz);
  headerBar.repaint();
  sliceControlBar.updateMidiLearnPulse();
  sliceControlBar.repaint();
@@ -1125,7 +1109,7 @@ void DysektEditor::setScaleFactor (float newScale)
  lastScale = scale;
  scaleDirty = false;
  setTransform (juce::AffineTransform{});
- setSize (kBaseW, computeTotalHeight());
+ setSize (kBaseW, kTotalH);
  setTransform (juce::AffineTransform::scale (scale));
  DysektLookAndFeel::setMenuScale (scale);
  }

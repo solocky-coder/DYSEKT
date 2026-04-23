@@ -22,7 +22,6 @@
 #include "ui/SliceLcdDisplay.h"
 #include "ui/SliceWaveformLcd.h"
 #include "ui/WaveformOverview.h"
-#include "ui/SfzModulePanel.h"
 #include "ui/SfzDropdownPanel.h"
 
 // ── Alternate interface (Pad Grid) ────────────────────────────────────────────
@@ -67,7 +66,6 @@ private:
     void ensureDefaultThemes();
     void saveUserSettings (float scale, const juce::String& themeName);
     void loadUserSettings();
-    int  computeTotalHeight() const;
 
     DysektProcessor& processor;
     float    lastScale             = 1.0f;
@@ -84,14 +82,11 @@ private:
     int      lastNumSlices         = -1;
     bool     lastTrimActive        = false;
 
-    /// Which panel occupies the bottom slot (browser or mixer).
-    /// Mutually exclusive; SfzModule is separate (it stacks, not replaces).
-    enum class SlotContent { None, Browser, Mixer };
+    /// Which panel occupies the bottom slot (browser, mixer, or sfz).
+    /// Mutually exclusive.
+    enum class SlotContent { None, Browser, Mixer, Sfz };
     SlotContent activeSlot   = SlotContent::None;
     bool initBrowserOpen     = false;  // true until the first real sample is loaded
-
-    /// SFZ instrument strip — expands window height and splits frame area.
-    bool sfzModuleOpen = false;
     int  waveformMode = 0;  // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
 
     /// Current interface layout mode.
@@ -127,7 +122,6 @@ private:
 
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;
-    SfzModulePanel   sfzModule;
     SfzDropdownPanel sfzDropdown;
     ShortcutsPanel   shortcutsPanel { processor };
 
