@@ -180,8 +180,8 @@ DysektEditor::~DysektEditor()
 
 int DysektEditor::computeTotalHeight() const
 {
-    // Expand window when the SFZ module strip is open.
-    return kTotalH + (sfzModuleOpen ? kSfzModuleH + 8 : 0);
+    // SFZ panel lives in the existing space below the SCB — no extra height needed.
+    return kTotalH;
 }
 
 // ── Interface mode switch ─────────────────────────────────────────────────────
@@ -467,19 +467,6 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  g.drawRoundedRectangle (outerF.reduced (4.0f * sf), 2.0f * sf, 1.0f * sf);
  }
 
- // SFZ module frame border — same multi-layer CRT recipe as waveform/pad frames
- if (sfzModule.isVisible() && sfzModule.getHeight() > 0)
- {
- const auto outerF = sfzModule.getBounds().toFloat();
- const auto ac = getTheme().accent;
- g.setColour (ac.withAlpha (0.18f));
- g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
- g.setColour (ac.withAlpha (0.60f));
- g.drawRoundedRectangle (outerF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
- g.setColour (ac.withAlpha (0.18f));
- g.drawRoundedRectangle (outerF.reduced (4.0f * sf), 2.0f * sf, 1.0f * sf);
- }
-
  // Logo frame border
  if (logoBar.isVisible() && logoBar.getHeight() > 0)
  {
@@ -648,11 +635,13 @@ void DysektEditor::resized()
 
  // ── SFZ module strip (stacks below waveform when open) ────────────────────
  // Hidden whenever mixer, browser, or init-browser is covering the frame.
+ // ── SFZ module strip — placed BELOW the SCB in the slot/margin gap ──────────────────────────
+ // It never steals height from the waveform frame. The available vertical
+ // space is between the bottom of the slot area and the plugin's bottom edge.
+ // We centre the panel within that gap.
  const bool slotCoveringFrame = (activeSlot != SlotContent::None && ! initBrowserOpen);
  const bool sfzVisible = sfzModuleOpen && ! slotCoveringFrame && ! initBrowserOpen;
- const int  sfzStripH  = sfzVisible ? si (kSfzModuleH) : 0;
- const int  sfzGap     = sfzVisible ? si (4) : 0;
- const int  waveH      = juce::jmax (si (80), h - sfzStripH - sfzGap);
+ const int  waveH      = juce::jmax (si (80), h);
 
  // ── Route the main content area to the active view ────────────────────────
  // Trim mode always requires the waveform view, regardless of uiMode.
@@ -694,15 +683,21 @@ void DysektEditor::resized()
  waveformView.setBounds ({});
  }
 
- // ── SFZ module strip ─────────────────────────────────────────────────────
- // Use kFX/kFW (same as sliceControlBar / waveformOverview) so the strip
- // aligns flush with the rest of the UI rather than being inset by the
- // extra kFrameInset that screenX/screenW carry inside the CRT frame.
+ // ── SFZ module strip: centred in gap between slot bottom and plugin bottom ────────
+ // slot was removed from area earlier; its bottom is the top of this gap.
+ // Plugin bottom edge = getHeight() - si(kMargin) (the margin already removed).
  sfzModule.setVisible (sfzVisible);
  if (sfzVisible)
-     sfzModule.setBounds (kFX, y + waveH + sfzGap, kFW, sfzStripH);
+ {
+     const int gapTop = slot.getBottom();
+     const int gapBot = getHeight() - si (kMargin);
+     const int gapH   = juce::jmax (0, gapBot - gapTop);
+     const int panelH = juce::jmin (si (kSfzModuleH), gapH);
+     const int panelY = gapTop + (gapH - panelH) / 2;
+     sfzModule.setBounds (kFX, panelY, kFW, panelH);
+ }
 
- // ── Trim bar: hide behind browser or mixer, restore when they close ───────
+  // ── Trim bar: hide behind browser or mixer, restore when they close ───────
  if (trimDialog != nullptr)
  {
  if (normalBrowserOpen || activeSlot == SlotContent::Mixer)
