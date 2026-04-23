@@ -2,12 +2,22 @@
 // =============================================================================
 //  SfzPlayer.h  —  Real-time SF2/SFZ playback engine (sfizz backend)
 // =============================================================================
-//  No sfizz headers are included here — sfizz.h lives in SfzPlayer.cpp only.
-//  The internal sfizz handle is stored as void* and cast in the .cpp.
+//  Owned by DysektProcessor.  prepareToPlay / processBlock / loadFile are
+//  called from the audio thread (processBlock) or UI thread (load/param set).
+//
+//  Thread safety:
+//    loadFile()        — UI thread; swaps sfizz_t* atomically via pendingLoad
+//    setVolume/Trans() — UI thread; stored as std::atomic<float>
+//    prepare()         — audio thread (prepareToPlay)
+//    process()         — audio thread (processBlock)
 // =============================================================================
 
 #include <juce_core/juce_core.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+
+#if DYSEKT_HAS_SFIZZ
+  #include <sfizz.h>
+#endif
 
 class SfzPlayer
 {
@@ -23,26 +33,27 @@ public:
     /** Unload current instrument (silent output). */
     void unload();
 
-    void setVolume      (float gainLinear);   ///< 0..2
-    void setTranspose   (int semitones);      ///< -24..+24
-    void setMidiChannel (int ch);             ///< 0 = omni, 1-16 = specific
+    void setVolume    (float gainLinear);   ///< 0..2
+    void setTranspose (int semitones);      ///< -24..+24
+    void setMidiChannel (int ch);           ///< 0 = omni, 1-16 = specific
 
-    float      getVolume()      const noexcept { return volume.load(); }
-    int        getTranspose()   const noexcept { return transpose.load(); }
-    int        getMidiChannel() const noexcept { return midiChannel.load(); }
-    juce::File getLoadedFile()  const;
-    bool       isLoaded()       const noexcept { return loaded.load(); }
+    float       getVolume()      const noexcept { return volume.load(); }
+    int         getTranspose()   const noexcept { return transpose.load(); }
+    int         getMidiChannel() const noexcept { return midiChannel.load(); }
+    juce::File  getLoadedFile()  const;
+    bool        isLoaded()       const noexcept { return loaded.load(); }
 
     // ── Called from audio thread ──────────────────────────────────────────────
 
-    void prepare (double sampleRate, int maxBlockSize);
+    void prepare  (double sampleRate, int maxBlockSize);
 
     /**
-     * Process one block.  MIDI events matching midiChannel (0 = omni) are
-     * forwarded to sfizz.  Stereo output is mixed additively into outL/outR.
+     * Process one block. MIDI events from @p midiIn whose channel matches
+     * midiChannel (0 = all) are forwarded to sfizz.  Rendered stereo audio is
+     * mixed additively into @p outL / @p outR (already-cleared by processBlock).
      */
-    void process (const juce::MidiBuffer& midiIn,
-                  float* outL, float* outR, int numSamples);
+    void process  (const juce::MidiBuffer& midiIn,
+                   float* outL, float* outR, int numSamples);
 
 private:
     // ── Pending load (UI → audio thread handoff) ──────────────────────────────
@@ -55,12 +66,11 @@ private:
     std::atomic<PendingLoad*> pendingLoad { nullptr };
 
     // ── Audio-thread state ────────────────────────────────────────────────────
-    // Stored as void* so this header needs no sfizz dependency.
-    // Cast to sfizz_t* wherever used in SfzPlayer.cpp.
-    void*  sfzHandle  { nullptr };
-
-    double currentSR    { 44100.0 };
-    int    currentBlock { 256 };
+#if DYSEKT_HAS_SFIZZ
+    sfizz_t* sfz          { nullptr };
+#endif
+    double   currentSR    { 44100.0 };
+    int      currentBlock { 256 };
 
     juce::File activeFile;
 
