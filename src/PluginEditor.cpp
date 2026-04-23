@@ -180,8 +180,8 @@ DysektEditor::~DysektEditor()
 
 int DysektEditor::computeTotalHeight() const
 {
-    // SFZ panel lives in the existing space below the SCB — no extra height needed.
-    return kTotalH;
+    // Expand window when the SFZ module strip is open so it sits below the SCB.
+    return kTotalH + (sfzModuleOpen ? kSfzModuleH + kMargin : 0);
 }
 
 // ── Interface mode switch ─────────────────────────────────────────────────────
@@ -635,10 +635,7 @@ void DysektEditor::resized()
 
  // ── SFZ module strip (stacks below waveform when open) ────────────────────
  // Hidden whenever mixer, browser, or init-browser is covering the frame.
- // ── SFZ module strip — placed BELOW the SCB in the slot/margin gap ──────────────────────────
- // It never steals height from the waveform frame. The available vertical
- // space is between the bottom of the slot area and the plugin's bottom edge.
- // We centre the panel within that gap.
+ // ── SFZ module strip visibility ───────────────────────────────────────────────
  const bool slotCoveringFrame = (activeSlot != SlotContent::None && ! initBrowserOpen);
  const bool sfzVisible = sfzModuleOpen && ! slotCoveringFrame && ! initBrowserOpen;
  const int  waveH      = juce::jmax (si (80), h);
@@ -683,17 +680,15 @@ void DysektEditor::resized()
  waveformView.setBounds ({});
  }
 
- // ── SFZ module strip: centred in the kPanelSlotH gap below the SCB ──────────
- // kTotalH always allocates kPanelSlotH pixels below the SCB for the slot
- // panels (mixer/browser). When none of those are open that space is empty
- // — which is exactly where the SFZ strip lives, vertically centred.
- // gapTop = bottom of the SCB/overview region = where slot begins (even when
- // slotH == 0, slot.getY() is the correct top of the allocated slot space).
+ // ── SFZ module strip: sits below the SCB in the expanded window area ────────
+ // computeTotalHeight() expands the window by kSfzModuleH + kMargin when open.
+ // That extra space starts at kTotalH (base height) and runs to getHeight().
+ // We centre the panel vertically in that gap using kFX/kFW for full width.
  sfzModule.setVisible (sfzVisible);
  if (sfzVisible)
  {
-     const int gapTop = slot.getY();                       // top of slot region
-     const int gapBot = getHeight() - si (kMargin);        // plugin bottom edge
+     const int gapTop = si (kTotalH);                      // base window bottom
+     const int gapBot = getHeight() - si (kMargin);
      const int gapH   = juce::jmax (0, gapBot - gapTop);
      const int panelH = juce::jmin (si (kSfzModuleH), gapH);
      const int panelY = gapTop + (gapH - panelH) / 2;     // vertically centred
@@ -747,7 +742,9 @@ void DysektEditor::toggleSfzModule()
 {
  sfzModuleOpen = ! sfzModuleOpen;
  if (sfzModuleOpen) sfzModule.panelDidShow();
- resized(); repaint();
+ // Resize the window first so getHeight() reflects the new height in resized()
+ setSize (getWidth(), computeTotalHeight());
+ repaint();
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
