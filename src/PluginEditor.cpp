@@ -181,7 +181,12 @@ DysektEditor::~DysektEditor()
 int DysektEditor::computeTotalHeight() const
 {
     // Expand window when the SFZ module strip is open so it sits below the SCB.
-    return kTotalH + (sfzModuleOpen ? kSfzModuleH + kMargin : 0);
+    // Scale total height by current width ratio so SFZ strip always
+    // sits below content at any window scale, not just 1:1.
+    const float sf_   = (float) juce::jmax (getWidth(), kBaseW) / (float) kBaseW;
+    const int   base_ = juce::roundToInt ((float) kTotalH * sf_);
+    return base_ + (sfzModuleOpen
+        ? juce::roundToInt ((float) (kSfzModuleH + kMargin) * sf_) : 0);
 }
 
 // ── Interface mode switch ─────────────────────────────────────────────────────
@@ -687,7 +692,20 @@ void DysektEditor::resized()
  sfzModule.setVisible (sfzVisible);
  if (sfzVisible)
  {
-     const int gapTop = si (kTotalH);                      // base window bottom
+     // Derive gapTop from the actual bottom of the last laid-out component
+     // rather than si(kTotalH), which diverges from true content height when
+     // the window is wider than kBaseW (sf > 1). Fixes SFZ overlap and disappear.
+     int contentBot = 0;
+     if (sliceControlBar.isVisible() && sliceControlBar.getHeight() > 0)
+         contentBot = sliceControlBar.getBottom();
+     else if (waveformOverview.isVisible() && waveformOverview.getHeight() > 0)
+         contentBot = waveformOverview.getBottom();
+     else if (waveformView.isVisible() && waveformView.getHeight() > 0)
+         contentBot = waveformView.getBottom();
+     else
+         contentBot = juce::roundToInt ((float) kTotalH * ((float) getWidth() / (float) kBaseW));
+
+     const int gapTop = contentBot + si (kMargin);
      const int gapBot = getHeight() - si (kMargin);
      const int gapH   = juce::jmax (0, gapBot - gapTop);
      const int panelH = juce::jmin (si (kSfzModuleH), gapH);
