@@ -79,6 +79,7 @@ target_sources(Dysekt PRIVATE
     src/ui/PadGridView.cpp
     src/ui/SliceWaveformLcd.cpp
     src/ui/DualLcdControlFrame.cpp
+    src/ui/SfzDropdownPanel.cpp
     src/ui/SfzModulePanel.cpp
     src/ui/WaveformOverview.cpp
 
