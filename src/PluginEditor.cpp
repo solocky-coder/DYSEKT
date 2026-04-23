@@ -467,6 +467,19 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  g.drawRoundedRectangle (outerF.reduced (4.0f * sf), 2.0f * sf, 1.0f * sf);
  }
 
+ // SFZ module frame border — same multi-layer CRT recipe as waveform/pad frames
+ if (sfzModule.isVisible() && sfzModule.getHeight() > 0)
+ {
+ const auto outerF = sfzModule.getBounds().toFloat();
+ const auto ac = getTheme().accent;
+ g.setColour (ac.withAlpha (0.18f));
+ g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ g.setColour (ac.withAlpha (0.60f));
+ g.drawRoundedRectangle (outerF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
+ g.setColour (ac.withAlpha (0.18f));
+ g.drawRoundedRectangle (outerF.reduced (4.0f * sf), 2.0f * sf, 1.0f * sf);
+ }
+
  // Logo frame border
  if (logoBar.isVisible() && logoBar.getHeight() > 0)
  {
@@ -682,9 +695,12 @@ void DysektEditor::resized()
  }
 
  // ── SFZ module strip ─────────────────────────────────────────────────────
+ // Use kFX/kFW (same as sliceControlBar / waveformOverview) so the strip
+ // aligns flush with the rest of the UI rather than being inset by the
+ // extra kFrameInset that screenX/screenW carry inside the CRT frame.
  sfzModule.setVisible (sfzVisible);
  if (sfzVisible)
-     sfzModule.setBounds (screenX, y + waveH + sfzGap, screenW, sfzStripH);
+     sfzModule.setBounds (kFX, y + waveH + sfzGap, kFW, sfzStripH);
 
  // ── Trim bar: hide behind browser or mixer, restore when they close ───────
  if (trimDialog != nullptr)

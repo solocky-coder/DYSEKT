@@ -67,12 +67,11 @@ void SfzModulePanel::paint (juce::Graphics& g)
     const float sf = (float) getWidth() / 1114.0f;  // approx kBaseW minus margins
 
     // ── Background ────────────────────────────────────────────────────────────
+    // Border is drawn by the editor's paintOverChildren (same CRT-frame recipe
+    // as the waveform / pad-grid panels) so we only fill the background here.
     auto bounds = getLocalBounds().toFloat();
     g.setColour (theme.darkBar.darker (0.25f));
     g.fillRoundedRectangle (bounds, 4.0f);
-
-    g.setColour (theme.accent.withAlpha (0.35f));
-    g.drawRoundedRectangle (bounds.reduced (0.5f), 4.0f, 1.0f);
 
     // ── Header label ─────────────────────────────────────────────────────────
     {

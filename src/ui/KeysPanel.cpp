@@ -2,10 +2,25 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 
-const int KeysPanel::whiteOffsets[14] = { 0,2,4,5,7,9,11, 12,14,16,17,19,21,23 };
-const KeysPanel::BlackDef KeysPanel::blackDefs[10] = {
+// 4 octaves: semitone offsets for each white key within the span
+const int KeysPanel::whiteOffsets[28] = {
+    0,2,4,5,7,9,11,      // octave 0
+    12,14,16,17,19,21,23, // octave 1
+    24,26,28,29,31,33,35, // octave 2
+    36,38,40,41,43,45,47  // octave 3
+};
+
+// afterWhite = index of the white key this black key sits to the right of
+// offset     = semitone offset from base note
+const KeysPanel::BlackDef KeysPanel::blackDefs[20] = {
+    // octave 0
     {0,1},{1,3},{3,6},{4,8},{5,10},
-    {7,13},{8,15},{10,18},{11,20},{12,22}
+    // octave 1
+    {7,13},{8,15},{10,18},{11,20},{12,22},
+    // octave 2
+    {14,25},{15,27},{17,30},{18,32},{19,34},
+    // octave 3
+    {21,37},{22,39},{24,42},{25,44},{26,46}
 };
 
 KeysPanel::KeysPanel (DysektProcessor& p) : processor (p)
@@ -65,7 +80,9 @@ void KeysPanel::resized()
     kTransposeRowH = juce::jmin (24, h / 5);
     kZoneBarH      = keyzones.empty() ? 0 : 8;
     kKeyH          = h - kTransposeRowH - kZoneBarH - 2;
-    kWhiteKeyW     = juce::jmax (8, w / kNumWhite);
+    // Cap white key width so keys don't become comically wide at large panel sizes.
+    // kNumWhite keys must fit in w; also hard-cap at 36px for visual proportions.
+    kWhiteKeyW     = juce::jmin (36, juce::jmax (8, w / kNumWhite));
     kBlackKeyW     = juce::roundToInt (kWhiteKeyW * 0.58f);
     kBlackKeyH     = juce::roundToInt (kKeyH * 0.60f);
 
