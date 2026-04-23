@@ -683,17 +683,20 @@ void DysektEditor::resized()
  waveformView.setBounds ({});
  }
 
- // ── SFZ module strip: centred in gap between slot bottom and plugin bottom ────────
- // slot was removed from area earlier; its bottom is the top of this gap.
- // Plugin bottom edge = getHeight() - si(kMargin) (the margin already removed).
+ // ── SFZ module strip: centred in the kPanelSlotH gap below the SCB ──────────
+ // kTotalH always allocates kPanelSlotH pixels below the SCB for the slot
+ // panels (mixer/browser). When none of those are open that space is empty
+ // — which is exactly where the SFZ strip lives, vertically centred.
+ // gapTop = bottom of the SCB/overview region = where slot begins (even when
+ // slotH == 0, slot.getY() is the correct top of the allocated slot space).
  sfzModule.setVisible (sfzVisible);
  if (sfzVisible)
  {
-     const int gapTop = slot.getBottom();
-     const int gapBot = getHeight() - si (kMargin);
+     const int gapTop = slot.getY();                       // top of slot region
+     const int gapBot = getHeight() - si (kMargin);        // plugin bottom edge
      const int gapH   = juce::jmax (0, gapBot - gapTop);
      const int panelH = juce::jmin (si (kSfzModuleH), gapH);
-     const int panelY = gapTop + (gapH - panelH) / 2;
+     const int panelY = gapTop + (gapH - panelH) / 2;     // vertically centred
      sfzModule.setBounds (kFX, panelY, kFW, panelH);
  }
 
