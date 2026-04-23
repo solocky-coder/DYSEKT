@@ -51,12 +51,12 @@ private:
     int kWhiteKeyW     = 0;   // set in resized()
     int kBlackKeyW     = 0;
     int kBlackKeyH     = 0;
-    int kNumWhite      = 28;  // 4 octaves
-    int kNumBlack      = 20;
+    int kNumWhite      = 14;  // 2 octaves
+    int kNumBlack      = 10;
 
-    static const int whiteOffsets[28];
+    static const int whiteOffsets[14];
     struct BlackDef { int afterWhite; int offset; };
-    static const BlackDef blackDefs[20];
+    static const BlackDef blackDefs[10];
 
     // helpers
     void drawKey        (juce::Graphics&, const KeyRect&, bool hasSlice, bool hovered, bool active) const;

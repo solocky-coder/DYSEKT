@@ -2,25 +2,17 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 
-// 4 octaves: semitone offsets for each white key within the span
-const int KeysPanel::whiteOffsets[28] = {
+// 2 octaves: semitone offsets for each white key
+const int KeysPanel::whiteOffsets[14] = {
     0,2,4,5,7,9,11,      // octave 0
-    12,14,16,17,19,21,23, // octave 1
-    24,26,28,29,31,33,35, // octave 2
-    36,38,40,41,43,45,47  // octave 3
+    12,14,16,17,19,21,23  // octave 1
 };
 
-// afterWhite = index of the white key this black key sits to the right of
+// afterWhite = index of white key this black key sits to the right of
 // offset     = semitone offset from base note
-const KeysPanel::BlackDef KeysPanel::blackDefs[20] = {
-    // octave 0
-    {0,1},{1,3},{3,6},{4,8},{5,10},
-    // octave 1
-    {7,13},{8,15},{10,18},{11,20},{12,22},
-    // octave 2
-    {14,25},{15,27},{17,30},{18,32},{19,34},
-    // octave 3
-    {21,37},{22,39},{24,42},{25,44},{26,46}
+const KeysPanel::BlackDef KeysPanel::blackDefs[10] = {
+    {0,1},{1,3},{3,6},{4,8},{5,10},       // octave 0
+    {7,13},{8,15},{10,18},{11,20},{12,22}  // octave 1
 };
 
 KeysPanel::KeysPanel (DysektProcessor& p) : processor (p)
@@ -34,66 +26,46 @@ KeysPanel::KeysPanel (DysektProcessor& p) : processor (p)
     transposeUpBtn  .setMouseCursor (juce::MouseCursor::NormalCursor);
 
     transposeDownBtn.onClick = [this] { if (baseOctave > 0) { --baseOctave; resized(); repaint(); } };
-    transposeUpBtn  .onClick = [this] { if (baseOctave < 7) { ++baseOctave; resized(); repaint(); } };
+    transposeUpBtn  .onClick = [this] { if (baseOctave < 8) { ++baseOctave; resized(); repaint(); } };
 
     startTimerHz (30);
 }
 
 KeysPanel::~KeysPanel() { stopTimer(); }
 
-// ── Keyzone API ───────────────────────────────────────────────────────────────
-
-void KeysPanel::setKeyzones (std::vector<Keyzone> zones)
-{
-    keyzones = std::move (zones);
-    repaint();
-}
-
-void KeysPanel::clearKeyzones()
-{
-    keyzones.clear();
-    repaint();
-}
+void KeysPanel::setKeyzones (std::vector<Keyzone> zones) { keyzones = std::move (zones); repaint(); }
+void KeysPanel::clearKeyzones() { keyzones.clear(); repaint(); }
 
 void KeysPanel::autoScrollToZones()
 {
     if (keyzones.empty()) return;
-    // Find the midpoint of all zones and centre the view there
     int lo = 127, hi = 0;
     for (auto& z : keyzones) { lo = std::min (lo, z.loKey); hi = std::max (hi, z.hiKey); }
-    int mid = (lo + hi) / 2;
-    // Each octave = 7 white keys; view = 2 octaves = 14 white keys centred on mid
-    int octave = juce::jlimit (0, 7, mid / 12 - 1);
-    baseOctave = octave;
-    resized();
-    repaint();
+    baseOctave = juce::jlimit (0, 8, (lo + hi) / 2 / 12 - 1);
+    resized(); repaint();
 }
-
-// ── Layout ────────────────────────────────────────────────────────────────────
 
 void KeysPanel::resized()
 {
     const int w = getWidth();
     const int h = getHeight();
 
-    // Derive key dimensions from available height
-    kTransposeRowH = juce::jmin (24, h / 5);
-    kZoneBarH      = keyzones.empty() ? 0 : 8;
+    kTransposeRowH = juce::jmin (22, h / 5);
+    kZoneBarH      = keyzones.empty() ? 0 : 6;
     kKeyH          = h - kTransposeRowH - kZoneBarH - 2;
-    // Cap white key width so keys don't become comically wide at large panel sizes.
-    // kNumWhite keys must fit in w; also hard-cap at 36px for visual proportions.
-    kWhiteKeyW     = juce::jmin (36, juce::jmax (8, w / kNumWhite));
-    kBlackKeyW     = juce::roundToInt (kWhiteKeyW * 0.58f);
-    kBlackKeyH     = juce::roundToInt (kKeyH * 0.60f);
+
+    // Fill the full panel width — keys expand to fit, no upper cap
+    kWhiteKeyW = juce::jmax (6, w / kNumWhite);
+    kBlackKeyW = juce::roundToInt (kWhiteKeyW * 0.52f);
+    kBlackKeyH = juce::roundToInt (kKeyH * 0.62f);
 
     const int kbW       = kWhiteKeyW * kNumWhite;
     const int keyboardX = (w - kbW) / 2;
     const int keyboardY = kTransposeRowH + kZoneBarH;
 
-    // Transpose buttons flanking the octave label
     const int cx = w / 2;
-    transposeDownBtn.setBounds (cx - 80, 2, 22, kTransposeRowH - 4);
-    transposeUpBtn  .setBounds (cx + 58, 2, 22, kTransposeRowH - 4);
+    transposeDownBtn.setBounds (cx - 72, 2, 20, kTransposeRowH - 4);
+    transposeUpBtn  .setBounds (cx + 52, 2, 20, kTransposeRowH - 4);
 
     keyRects.clear();
     for (int i = 0; i < kNumWhite; ++i)
@@ -115,67 +87,44 @@ void KeysPanel::resized()
     }
 }
 
-// ── Paint ─────────────────────────────────────────────────────────────────────
-
 void KeysPanel::paint (juce::Graphics& g)
 {
-    const auto& theme = getTheme();
+    const auto& theme  = getTheme();
     const auto  accent = theme.accent;
 
-    // Background
-    g.setColour (theme.darkBar.darker (0.3f));
+    g.setColour (theme.darkBar.darker (0.35f));
     g.fillRoundedRectangle (getLocalBounds().toFloat(), 3.0f);
 
-    // Re-theme transpose buttons inline
     for (auto* btn : { &transposeDownBtn, &transposeUpBtn })
     {
-        btn->setColour (juce::TextButton::buttonColourId,  theme.darkBar.brighter (0.1f));
-        btn->setColour (juce::TextButton::textColourOffId, accent.withAlpha (0.85f));
+        btn->setColour (juce::TextButton::buttonColourId,   theme.darkBar.brighter (0.08f));
+        btn->setColour (juce::TextButton::textColourOffId,  accent.withAlpha (0.80f));
         btn->setColour (juce::TextButton::buttonOnColourId, accent.withAlpha (0.2f));
     }
 
-    // Octave label
     {
         const juce::String label = "C" + juce::String (baseOctave)
                                  + "  \xe2\x80\x93  C" + juce::String (baseOctave + 2);
-        g.setFont (DysektLookAndFeel::makeFont (9.5f, true));
-        g.setColour (accent.withAlpha (0.55f));
+        g.setFont (DysektLookAndFeel::makeFont (9.0f, true));
+        g.setColour (accent.withAlpha (0.50f));
         g.drawText (label, 0, 2, getWidth(), kTransposeRowH - 2, juce::Justification::centred);
     }
 
-    // Active MIDI notes from slice engine
     const auto& ui = processor.getUiSliceSnapshot();
     std::set<int> slicedNotes;
     for (int s = 0; s < ui.numSlices; ++s)
         slicedNotes.insert (ui.slices[(size_t) s].midiNote);
 
-    // Zone bar
     if (kZoneBarH > 0 && ! keyRects.empty())
-    {
-        const int kbW       = kWhiteKeyW * kNumWhite;
-        const int keyboardX = keyRects.front().bounds.getX();
-        drawZoneBar (g, keyboardX, kTransposeRowH, kbW);
-    }
+        drawZoneBar (g, keyRects.front().bounds.getX(), kTransposeRowH, kWhiteKeyW * kNumWhite);
 
-    // White keys
     for (const auto& kr : keyRects)
-    {
-        if (kr.isBlack) continue;
-        const bool hasSlice = slicedNotes.count (kr.note) > 0;
-        const bool hovered  = (kr.note == hoveredNote);
-        const bool active   = (kr.note == lastActiveNote);
-        drawKey (g, kr, hasSlice, hovered, active);
-    }
+        if (! kr.isBlack)
+            drawKey (g, kr, slicedNotes.count (kr.note) > 0, kr.note == hoveredNote, kr.note == lastActiveNote);
 
-    // Black keys (drawn on top)
     for (const auto& kr : keyRects)
-    {
-        if (! kr.isBlack) continue;
-        const bool hasSlice = slicedNotes.count (kr.note) > 0;
-        const bool hovered  = (kr.note == hoveredNote);
-        const bool active   = (kr.note == lastActiveNote);
-        drawKey (g, kr, hasSlice, hovered, active);
-    }
+        if (kr.isBlack)
+            drawKey (g, kr, slicedNotes.count (kr.note) > 0, kr.note == hoveredNote, kr.note == lastActiveNote);
 }
 
 void KeysPanel::drawKey (juce::Graphics& g, const KeyRect& kr,
@@ -183,109 +132,91 @@ void KeysPanel::drawKey (juce::Graphics& g, const KeyRect& kr,
 {
     const auto& theme  = getTheme();
     const auto  accent = theme.accent;
-    const auto  bounds = kr.bounds.toFloat();
+    const auto  b      = kr.bounds.toFloat();
 
     if (! kr.isBlack)
     {
-        // ── White key ─────────────────────────────────────────────────────────
-        // Body gradient: warm near-white top, cream bottom
-        juce::ColourGradient grad (
-            active  ? accent.withAlpha (0.55f).withBrightness (0.95f)
-            : hovered ? juce::Colour (0xFFF0F0F0)
-                      : juce::Colour (0xFFE8E8E8),
-            0.f, bounds.getY(),
-            active  ? accent.withAlpha (0.30f)
-            : hovered ? juce::Colour (0xFFD8D8D8)
-                      : juce::Colour (0xFFC8C8C8),
-            0.f, bounds.getBottom(), false);
+        const juce::Colour topCol = active  ? accent.withBrightness (0.92f).withAlpha (0.9f)
+                                  : hovered ? juce::Colour (0xFFF4F4F4)
+                                            : juce::Colour (0xFFECECEC);
+        const juce::Colour botCol = active  ? accent.withBrightness (0.75f).withAlpha (0.7f)
+                                  : hovered ? juce::Colour (0xFFDCDCDC)
+                                            : juce::Colour (0xFFD0D0D0);
+
+        juce::ColourGradient grad (topCol, 0.f, b.getY(), botCol, 0.f, b.getBottom(), false);
         g.setGradientFill (grad);
-        g.fillRoundedRectangle (bounds.reduced (0.5f, 0.0f)
-                                      .withTrimmedBottom (-3.0f), 4.0f);
+        g.fillRoundedRectangle (b.reduced (0.5f, 0.f).withTrimmedBottom (-4.f), 3.0f);
 
-        // Side shadow lines (gives depth between adjacent keys)
-        g.setColour (juce::Colour (0xFF888888).withAlpha (0.6f));
-        g.fillRect (bounds.getRight() - 1.0f, bounds.getY() + 2.0f, 1.0f, bounds.getHeight() - 4.0f);
+        // Right-edge gap shadow
+        g.setColour (juce::Colour (0xFF707070).withAlpha (0.40f));
+        g.fillRect (b.getRight() - 1.0f, b.getY() + 4.0f, 1.0f, b.getHeight() - 8.0f);
 
-        // Bottom rounded cap highlight
-        g.setColour (juce::Colours::white.withAlpha (active ? 0.6f : 0.25f));
-        g.fillRoundedRectangle (bounds.getX() + 3.0f,
-                                 bounds.getBottom() - 14.0f,
-                                 bounds.getWidth() - 6.0f, 10.0f, 3.0f);
+        // Bottom cap highlight
+        g.setColour (juce::Colours::white.withAlpha (active ? 0.55f : 0.18f));
+        g.fillRoundedRectangle (b.getX() + 2.0f, b.getBottom() - 10.0f, b.getWidth() - 4.0f, 7.0f, 2.0f);
 
-        // Zone colour dot at top of key
+        // Zone color dot
         const auto zc = zoneColourForNote (kr.note);
         if (zc.getAlpha() > 0)
         {
-            g.setColour (zc.withAlpha (0.85f));
-            g.fillRoundedRectangle (bounds.getX() + 3.0f, bounds.getY() + 3.0f,
-                                     bounds.getWidth() - 6.0f, 5.0f, 2.0f);
+            g.setColour (zc.withAlpha (0.88f));
+            g.fillRoundedRectangle (b.getX() + 2.5f, b.getY() + 3.0f, b.getWidth() - 5.0f, 4.0f, 1.5f);
         }
 
-        // Slice assigned marker — subtle accent border
         if (hasSlice)
         {
-            g.setColour (accent.withAlpha (0.75f));
-            g.drawRoundedRectangle (bounds.reduced (1.5f, 0.5f), 4.0f, 1.5f);
+            g.setColour (accent.withAlpha (0.80f));
+            g.drawRoundedRectangle (b.reduced (1.0f, 0.5f), 3.0f, 1.2f);
         }
 
-        // Note label (C notes only to avoid clutter)
-        const int semitone = kr.note % 12;
-        if (semitone == 0)
+        if ((kr.note % 12) == 0)
         {
-            g.setFont (DysektLookAndFeel::makeFont (7.0f));
-            g.setColour (hasSlice ? accent : juce::Colour (0xFF888888));
+            g.setFont (DysektLookAndFeel::makeFont (6.5f));
+            g.setColour (hasSlice ? accent.withAlpha (0.9f) : juce::Colour (0xFF999999));
             g.drawText (juce::MidiMessage::getMidiNoteName (kr.note, true, true, 3),
-                        kr.bounds.getX(), kr.bounds.getBottom() - 13,
+                        kr.bounds.getX(), kr.bounds.getBottom() - 12,
                         kr.bounds.getWidth(), 11, juce::Justification::centred);
         }
     }
     else
     {
-        // ── Black key ─────────────────────────────────────────────────────────
-        // Glossy dark body
-        juce::ColourGradient grad (
-            active  ? accent.darker (0.2f)
-            : hovered ? juce::Colour (0xFF3A3A3A)
-                      : juce::Colour (0xFF2A2A2A),
-            0.f, bounds.getY(),
-            active  ? accent.darker (0.6f)
-            : hovered ? juce::Colour (0xFF1A1A1A)
-                      : juce::Colour (0xFF0D0D0D),
-            0.f, bounds.getBottom(), false);
+        const juce::Colour topCol = active  ? accent.darker (0.1f)
+                                  : hovered ? juce::Colour (0xFF383838)
+                                            : juce::Colour (0xFF222222);
+        const juce::Colour botCol = active  ? accent.darker (0.5f)
+                                  : hovered ? juce::Colour (0xFF181818)
+                                            : juce::Colour (0xFF0A0A0A);
+
+        juce::ColourGradient grad (topCol, 0.f, b.getY(), botCol, 0.f, b.getBottom(), false);
         g.setGradientFill (grad);
-        g.fillRoundedRectangle (bounds, 3.5f);
+        g.fillRoundedRectangle (b, 2.5f);
 
-        // Gloss highlight strip at top
-        g.setColour (juce::Colours::white.withAlpha (active ? 0.25f : 0.12f));
-        g.fillRoundedRectangle (bounds.getX() + 3.0f, bounds.getY() + 2.0f,
-                                 bounds.getWidth() - 6.0f, 7.0f, 2.0f);
+        // Gloss strip
+        g.setColour (juce::Colours::white.withAlpha (active ? 0.22f : 0.09f));
+        g.fillRoundedRectangle (b.getX() + 2.0f, b.getY() + 1.5f, b.getWidth() - 4.0f, 5.0f, 1.5f);
 
-        // Zone colour dot
+        // Zone color dot at bottom
         const auto zc = zoneColourForNote (kr.note);
         if (zc.getAlpha() > 0)
         {
             g.setColour (zc.withAlpha (0.80f));
-            g.fillRoundedRectangle (bounds.getX() + 3.0f,
-                                     bounds.getBottom() - 8.0f,
-                                     bounds.getWidth() - 6.0f, 4.0f, 1.5f);
+            g.fillRoundedRectangle (b.getX() + 2.0f, b.getBottom() - 7.0f, b.getWidth() - 4.0f, 4.0f, 1.0f);
         }
 
-        // Slice marker
         if (hasSlice)
         {
-            g.setColour (accent.withAlpha (0.80f));
-            g.drawRoundedRectangle (bounds.reduced (1.0f), 3.5f, 1.5f);
+            g.setColour (accent.withAlpha (0.85f));
+            g.drawRoundedRectangle (b.reduced (0.8f), 2.5f, 1.0f);
         }
 
-        // Outer edge shadow
-        g.setColour (juce::Colours::black.withAlpha (0.55f));
-        g.drawRoundedRectangle (bounds.expanded (0.5f), 4.0f, 1.0f);
+        // Outer shadow
+        g.setColour (juce::Colours::black.withAlpha (0.60f));
+        g.drawRoundedRectangle (b.expanded (0.5f), 3.0f, 0.8f);
     }
 }
 
 void KeysPanel::drawZoneBar (juce::Graphics& g, int keyboardX, int zoneBarY, int kbW) const
 {
-    // Full-width dim background
     g.setColour (getTheme().darkBar.darker (0.4f));
     g.fillRect (keyboardX, zoneBarY, kbW, kZoneBarH);
 
@@ -298,29 +229,24 @@ void KeysPanel::drawZoneBar (juce::Graphics& g, int keyboardX, int zoneBarY, int
         const int hi = juce::jlimit (loNote, hiNote, z.hiKey + 1);
         if (lo >= hi) continue;
 
-        // Map note → x pixel (approximate — white-key spacing)
         auto noteToX = [&] (int note) -> float
         {
             const int rel = note - loNote;
-            // Count white keys up to this semitone
             static const int whiteCount[] = { 0,0,1,1,2,3,3,4,4,5,5,6,7 };
             const int octaves = rel / 12;
             const int semi    = rel % 12;
-            const float wx    = (float)(octaves * 7 + (semi < 13 ? whiteCount[semi] : 7));
-            return (float) keyboardX + wx * (float) kWhiteKeyW;
+            return (float) keyboardX + (float)(octaves * 7 + (semi < 13 ? whiteCount[semi] : 7)) * (float) kWhiteKeyW;
         };
 
         const float x1 = noteToX (lo);
         const float x2 = noteToX (hi);
         if (x2 <= x1) continue;
 
-        g.setColour (z.colour.withAlpha (0.75f));
-        g.fillRoundedRectangle (x1 + 1.0f, (float) zoneBarY + 1.0f,
-                                 x2 - x1 - 1.0f, (float) kZoneBarH - 2.0f, 2.0f);
+        g.setColour (z.colour.withAlpha (0.78f));
+        g.fillRoundedRectangle (x1 + 1.0f, (float) zoneBarY + 1.0f, x2 - x1 - 1.0f, (float) kZoneBarH - 2.0f, 1.5f);
     }
 
-    // Thin separator line
-    g.setColour (getTheme().accent.withAlpha (0.15f));
+    g.setColour (getTheme().accent.withAlpha (0.12f));
     g.fillRect (keyboardX, zoneBarY + kZoneBarH - 1, kbW, 1);
 }
 
@@ -332,29 +258,14 @@ juce::Colour KeysPanel::zoneColourForNote (int note) const
     return juce::Colour (0);
 }
 
-// ── Mouse ─────────────────────────────────────────────────────────────────────
-
 void KeysPanel::mouseDown (const juce::MouseEvent& e)
 {
-    // Black keys first (on top)
     for (auto it = keyRects.rbegin(); it != keyRects.rend(); ++it)
-    {
         if (it->isBlack && it->bounds.contains (e.getPosition()))
-        {
-            lastActiveNote = it->note;
-            repaint();
-            return;
-        }
-    }
+            { lastActiveNote = it->note; repaint(); return; }
     for (const auto& kr : keyRects)
-    {
         if (! kr.isBlack && kr.bounds.contains (e.getPosition()))
-        {
-            lastActiveNote = kr.note;
-            repaint();
-            return;
-        }
-    }
+            { lastActiveNote = kr.note; repaint(); return; }
 }
 
 void KeysPanel::mouseMove (const juce::MouseEvent& e)
