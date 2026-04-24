@@ -17,7 +17,7 @@ public:
     void mouseExit  (const juce::MouseEvent& e) override;
 
     // ── Keyzone overlay ───────────────────────────────────────────────────────
-    struct Keyzone { int loKey{0}; int hiKey{127}; juce::Colour colour; };
+    struct Keyzone { int loKey{0}; int hiKey{127}; juce::Colour colour; juce::String name; };
     void setKeyzones (std::vector<Keyzone> zones);
     void clearKeyzones();
     void autoScrollToZones();

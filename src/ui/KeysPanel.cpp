@@ -236,128 +236,98 @@ void KeysPanel::drawZoneView (juce::Graphics& g,
 
     if (keyzones.empty())
     {
-        // Empty state hint
         g.setFont (DysektLookAndFeel::makeFont (9.0f));
         g.setColour (theme.foreground.withAlpha (0.18f));
         g.drawText ("No zones loaded", kbX, zoneY, kbW, zoneH,
                     juce::Justification::centred, false);
-        // Bottom border
         g.setColour (theme.accent.withAlpha (0.15f));
         g.fillRect (kbX, zoneY + zoneH - 1, kbW, 1);
         return;
     }
 
-    // ── Vertical grid lines at each C (octave boundary) ──────────────────────
-    {
-        g.setColour (theme.accent.withAlpha (0.08f));
-        const int loNote = baseOctave * 12;
-        const int hiNote = loNote + 24;
-        for (int note = loNote; note <= hiNote; note += 12)
-        {
-            const float x = noteToX (note, kbX);
-            g.fillRect (x, (float) zoneY, 1.0f, (float) zoneH);
-        }
-    }
-
-    // ── Semitone grid lines (subtle) ──────────────────────────────────────────
-    {
-        g.setColour (theme.accent.withAlpha (0.03f));
-        const int loNote = baseOctave * 12;
-        const int hiNote = loNote + 24;
-        for (int note = loNote; note <= hiNote; ++note)
-        {
-            const float x = noteToX (note, kbX);
-            g.fillRect (x, (float) zoneY, 1.0f, (float) zoneH);
-        }
-    }
-
-    // ── Stack zones into rows — overlapping zones get separate rows ───────────
-    // Simple greedy bin-packing: assign each zone to the first row it fits in.
     const int loNote = baseOctave * 12;
     const int hiNote = loNote + 24;
 
-    // Only process zones that overlap the visible range
-    std::vector<const Keyzone*> visible;
-    for (const auto& z : keyzones)
-        if (z.hiKey >= loNote && z.loKey <= hiNote)
-            visible.push_back (&z);
-
-    // Assign rows
-    struct Row { int hiKeyUsed; };
-    std::vector<Row> rows;
-    std::vector<int> zoneRow (visible.size(), 0);
-
-    for (size_t i = 0; i < visible.size(); ++i)
+    // ── Subtle octave grid lines ──────────────────────────────────────────────
+    g.setColour (theme.accent.withAlpha (0.08f));
+    for (int note = loNote; note <= hiNote; note += 12)
     {
-        const auto* z = visible[i];
-        int assigned = -1;
-        for (int r = 0; r < (int) rows.size(); ++r)
-        {
-            if (z->loKey > rows[r].hiKeyUsed)
-            {
-                assigned = r;
-                rows[r].hiKeyUsed = z->hiKey;
-                break;
-            }
-        }
-        if (assigned < 0)
-        {
-            assigned = (int) rows.size();
-            rows.push_back ({ z->hiKey });
-        }
-        zoneRow[i] = assigned;
+        const float x = noteToX (note, kbX);
+        g.fillRect (x, (float) zoneY, 1.0f, (float) zoneH);
     }
 
-    const int numRows  = juce::jmax (1, (int) rows.size());
-    const int rowH     = juce::jmax (12, (zoneH - 4) / numRows);
-    const float cornerR = 3.0f;
-    const float kBorderAlpha = 0.55f;
+    const float barTopPad = 2.0f;
+    const float barBotPad = 2.0f;
+    const float barH      = (float) zoneH - barTopPad - barBotPad;
+    const float cornerR   = 2.5f;
 
-    for (size_t i = 0; i < visible.size(); ++i)
+    for (size_t i = 0; i < keyzones.size(); ++i)
     {
-        const auto* z = visible[i];
-        const int row = zoneRow[i];
+        const auto& z = keyzones[i];
+        if (z.hiKey < loNote || z.loKey > hiNote) continue;
 
-        // Clamp to visible range
-        const int lo = juce::jmax (loNote, z->loKey);
-        const int hi = juce::jmin (hiNote, z->hiKey + 1);
+        const int lo = juce::jmax (loNote, z.loKey);
+        const int hi = juce::jmin (hiNote, z.hiKey + 1);
         if (lo >= hi) continue;
 
-        const float x1 = noteToX (lo, kbX);
-        const float x2 = noteToX (hi, kbX);
-        if (x2 - x1 < 1.0f) continue;
+        const float x1   = noteToX (lo, kbX);
+        const float x2   = noteToX (hi, kbX);
+        const float barW = x2 - x1 - 1.0f;   // 1 px gap between adjacent bars
+        if (barW < 1.0f) continue;
 
-        const float ry = (float) zoneY + 2.0f + (float) row * (float) rowH;
-        const float rh = (float) rowH - 2.0f;
+        const float barX = x1;
+        const float barY = (float) zoneY + barTopPad;
+        const float cx   = barX + barW * 0.5f;
+        const float cy   = barY + barH * 0.5f;
 
-        // Zone fill — semi-transparent colour fill like HALion
-        g.setColour (z->colour.withAlpha (0.32f));
-        g.fillRoundedRectangle (x1, ry, x2 - x1, rh, cornerR);
+        // ── Fill: vertical gradient, lighter at top ───────────────────────────
+        juce::ColourGradient grad (
+            z.colour.brighter (0.18f), barX, barY,
+            z.colour.darker   (0.30f), barX, barY + barH,
+            false);
+        g.setGradientFill (grad);
+        g.fillRoundedRectangle (barX, barY, barW, barH, cornerR);
 
-        // Brighter top half gradient feel (simple second fill)
-        g.setColour (z->colour.withAlpha (0.18f));
-        g.fillRoundedRectangle (x1, ry, x2 - x1, rh * 0.45f, cornerR);
+        // ── Gloss stripe at top ───────────────────────────────────────────────
+        g.setColour (z.colour.brighter (0.55f).withAlpha (0.40f));
+        g.fillRoundedRectangle (barX + 1.0f, barY + 1.0f,
+                                barW - 2.0f, juce::jmin (4.0f, barH * 0.15f), 1.0f);
 
-        // Border
-        g.setColour (z->colour.withAlpha (kBorderAlpha));
-        g.drawRoundedRectangle (x1 + 0.5f, ry + 0.5f, x2 - x1 - 1.0f, rh - 1.0f, cornerR, 1.2f);
+        // ── Border ────────────────────────────────────────────────────────────
+        g.setColour (z.colour.brighter (0.35f).withAlpha (0.80f));
+        g.drawRoundedRectangle (barX + 0.5f, barY + 0.5f,
+                                barW - 1.0f, barH - 1.0f, cornerR, 1.0f);
 
-        // Label — zone name or note range, only if wide enough
-        const float labelW = x2 - x1 - 6.0f;
-        if (labelW > 20.0f)
+        // ── Vertical label (rotated -90 deg, reads bottom-to-top) ────────────
+        if (barW >= 6.0f && barH >= 14.0f)
         {
-            const auto loName = juce::MidiMessage::getMidiNoteName (z->loKey, true, true, 3);
-            const auto hiName = juce::MidiMessage::getMidiNoteName (z->hiKey, true, true, 3);
-            const auto label  = (z->loKey == z->hiKey) ? loName
-                                                        : (loName + " - " + hiName);
-            g.setFont (DysektLookAndFeel::makeFont (8.5f, true));
-            g.setColour (z->colour.brighter (0.6f).withAlpha (0.90f));
-            g.drawText (label, juce::Rectangle<float> (x1 + 3.0f, ry, labelW, rh),
-                        juce::Justification::centredLeft, true);
+            const juce::String label = z.name.isNotEmpty()
+                ? z.name
+                : (juce::MidiMessage::getMidiNoteName (z.loKey, true, true, 3)
+                   + (z.loKey != z.hiKey
+                        ? "-" + juce::MidiMessage::getMidiNoteName (z.hiKey, true, true, 3)
+                        : juce::String()));
+
+            const float fontSize = juce::jlimit (6.5f, 9.0f, barW * 0.75f);
+            g.setFont (DysektLookAndFeel::makeFont (fontSize, true));
+            g.setColour (z.colour.brighter (0.95f).withAlpha (0.95f));
+
+            // Rotate -90 deg around bar centre so text reads bottom to top
+            g.saveState();
+            g.addTransform (juce::AffineTransform::rotation (
+                -juce::MathConstants<float>::halfPi, cx, cy));
+
+            // In rotated space: width = barH, height = barW
+            g.drawText (label,
+                        juce::Rectangle<float> (cx - barH * 0.5f,
+                                                cy - barW * 0.5f,
+                                                barH, barW),
+                        juce::Justification::centred, true);
+            g.restoreState();
         }
     }
 
-    // ── Bottom border ─────────────────────────────────────────────────────────
+    // ── Bottom separator line ─────────────────────────────────────────────────
     g.setColour (theme.accent.withAlpha (0.20f));
     g.fillRect (kbX, zoneY + zoneH - 1, kbW, 1);
 }

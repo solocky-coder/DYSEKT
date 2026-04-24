@@ -488,14 +488,14 @@ int   SfzModulePanel::normToTrans (float n)       const { return juce::roundToIn
 static juce::Colour zoneColour (int index)
 {
     static const juce::Colour palette[] = {
-        juce::Colour (0xFF4FC3F7),  // sky blue
-        juce::Colour (0xFF81C784),  // green
-        juce::Colour (0xFFFFB74D),  // amber
-        juce::Colour (0xFFE57373),  // red
-        juce::Colour (0xFFBA68C8),  // purple
-        juce::Colour (0xFF4DD0E1),  // cyan
-        juce::Colour (0xFFF06292),  // pink
-        juce::Colour (0xFFA1887F),  // brown
+        juce::Colour (0xFFD47810),  // bright amber
+        juce::Colour (0xFF8B4500),  // dark orange
+        juce::Colour (0xFFA85215),  // medium orange
+        juce::Colour (0xFF7A3C08),  // deep amber
+        juce::Colour (0xFFBF6A18),  // warm amber
+        juce::Colour (0xFF924E10),  // rich orange
+        juce::Colour (0xFFCC7215),  // golden orange
+        juce::Colour (0xFF7F3C0A),  // dark rich orange
     };
     return palette[index % 8];
 }
@@ -509,13 +509,14 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
     int loKey = 0, hiKey = 127;
     bool inRegion = false;
     int  colIdx   = 0;
+    juce::String sampleName;
 
     auto flush = [&]
     {
         if (inRegion && hiKey >= loKey)
         {
-            zones.push_back ({ loKey, hiKey, zoneColour (colIdx++) });
-            loKey = 0; hiKey = 127;
+            zones.push_back ({ loKey, hiKey, zoneColour (colIdx++), sampleName });
+            loKey = 0; hiKey = 127; sampleName = {};
         }
         inRegion = false;
     };
@@ -569,6 +570,23 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
                 loKey = hiKey = k;
             }
             (void) get;
+
+            // Extract sample name as zone label
+            {
+                int smpPos = line.indexOf ("sample=");
+                if (smpPos >= 0)
+                {
+                    auto s = line.substring (smpPos + 7)
+                                 .upToFirstOccurrenceOf (" ", false, false)
+                                 .trim();
+                    sampleName = s.fromLastOccurrenceOf ("/",  false, false)
+                                  .fromLastOccurrenceOf ("\\", false, false)
+                                  .upToLastOccurrenceOf (".",  false, false)
+                                  .trim();
+                    if (sampleName.isEmpty())
+                        sampleName = "Zone " + juce::String (colIdx + 1);
+                }
+            }
         }
     }
     flush();
@@ -660,7 +678,11 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
         else if (oper == 0)  // endOper — end of zone
         {
             if (hasKey && hiKey >= loKey)
-                zones.push_back ({ loKey, hiKey, zoneColour (colIdx++) });
+            {
+                zones.push_back ({ loKey, hiKey, zoneColour (colIdx),
+                                   "Zone " + juce::String (colIdx + 1) });
+                ++colIdx;
+            }
             loKey  = 0; hiKey = 127; hasKey = false;
         }
     }
@@ -674,7 +696,11 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
 
     // Re-assign colours after dedup
     for (size_t i = 0; i < zones.size(); ++i)
+    {
         zones[i].colour = zoneColour ((int) i);
+        if (zones[i].name.isEmpty())
+            zones[i].name = "Zone " + juce::String ((int) i + 1);
+    }
 
     return zones;
 }
