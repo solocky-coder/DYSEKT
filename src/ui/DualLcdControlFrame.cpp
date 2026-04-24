@@ -208,33 +208,32 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         };
 
         drawTab (editTabArea, "EDIT", ! padGridActive);
-        drawTab (padTabArea,  "PAD",  padGridActive);
+        drawTab (padTabArea,  "SFZ",  padGridActive);
     }
 
     // ── Top row: four icons evenly spread across full width ──────────────────
     {
         const int btnSz  = 32;
         const int btnY   = (half - btnSz) / 2;
-        const int gap    = (w - 5 * btnSz) / 6;
+        const int gap    = (w - 4 * btnSz) / 5;
 
         filIconArea        = { gap,                       btnY, btnSz, btnSz };
         waIconArea         = { gap * 2 + btnSz,           btnY, btnSz, btnSz };
         midiFollowIconArea = { gap * 3 + btnSz * 2,       btnY, btnSz, btnSz };
         bodeIconArea       = { gap * 4 + btnSz * 3,       btnY, btnSz, btnSz };
-        sfzIconArea        = { gap * 5 + btnSz * 4,       btnY, btnSz, btnSz };
+        sfzIconArea        = {};
 
         drawIcon (g, filIconArea       .toFloat(), 0, browserActive);
         drawIcon (g, waIconArea        .toFloat(), 1, waveMode != 0);
         drawIcon (g, midiFollowIconArea.toFloat(), 2, midiFollowActive);
         drawIcon (g, bodeIconArea      .toFloat(), 3, bodeActive);
-        drawIcon (g, sfzIconArea       .toFloat(), 4, sfzActive);
 
         // ── Hover tooltip label ──────────────────────────────────────
         if (hoveredIcon >= 0)
         {
-            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER", "SF PLAYER" };
+            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER" };
             const juce::Rectangle<int>* areas[] = { &filIconArea, &waIconArea,
-                                                     &midiFollowIconArea, &bodeIconArea, &sfzIconArea };
+                                                     &midiFollowIconArea, &bodeIconArea };
             const auto& area = *areas[hoveredIcon];
             const int labelH  = 9;
             const int labelY  = area.getY() - labelH - 2;
@@ -349,15 +348,8 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
         if (onBodeToggle) onBodeToggle();
         return;
     }
-    if (sfzIconArea.contains (pos))
-    {
-        sfzActive = ! sfzActive;
-        repaint();
-        if (onSfzToggle) onSfzToggle();
-        return;
-    }
 
-    // ── EDIT | PAD tabs ──────────────────────────────────────────────────────
+    // ── EDIT | SFZ tabs ──────────────────────────────────────────────────────
     if (editTabArea.contains (pos))
     {
         if (padGridActive)
@@ -497,7 +489,6 @@ void DualLcdControlFrame::mouseMove (const juce::MouseEvent& e)
     else if (waIconArea.contains (pos))         found = 1;
     else if (midiFollowIconArea.contains (pos)) found = 2;
     else if (bodeIconArea.contains (pos))       found = 3;
-    else if (sfzIconArea.contains (pos))        found = 4;
 
     if (found != hoveredIcon)
     {

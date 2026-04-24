@@ -20,7 +20,6 @@ public:
     std::function<void()> onWaveToggle;
     std::function<void()> onMidiFollowToggle;
     std::function<void()> onBodeToggle;
-    std::function<void()> onSfzToggle;
 
     // State sync
     void setBrowserActive    (bool v);
@@ -30,7 +29,6 @@ public:
     void setWaveMode         (int m);
     void setMidiFollowActive (bool v);
     void setBodeActive       (bool v);
-    void setSfzActive        (bool v);
 
     /** Returns the control frame component (FIL/WA/CH icons + ROOT/PITCH/VOL knobs).
      *  PluginEditor adds this as a visible child and positions it between the LCDs. */

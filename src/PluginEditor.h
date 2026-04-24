@@ -24,9 +24,6 @@
 #include "ui/WaveformOverview.h"
 #include "ui/SfzDropdownPanel.h"
 
-// ── Alternate interface (Pad Grid) ────────────────────────────────────────────
-#include "ui/PadGridView.h"
-
 // ── Layout constants ──────────────────────────────────────────────────────────
 #include "ui/PluginEditorConstants.h"
 
@@ -58,7 +55,7 @@ public:
     void showTrimMode   (const juce::File& file);
 
     /// Switch between interface modes.
-    /// 0 = Waveform View (original), 1 = Pad Grid.
+    /// 0 = Waveform View (original), 1 = SFZ Player.
     void setUiMode (int mode);
 
 private:
@@ -82,16 +79,16 @@ private:
     int      lastNumSlices         = -1;
     bool     lastTrimActive        = false;
 
-    /// Which panel occupies the bottom slot (browser, mixer, or sfz).
+    /// Which panel occupies the bottom slot (browser or mixer).
     /// Mutually exclusive.
-    enum class SlotContent { None, Browser, Mixer, Sfz };
+    enum class SlotContent { None, Browser, Mixer };
     SlotContent activeSlot   = SlotContent::None;
     bool initBrowserOpen     = false;  // true until the first real sample is loaded
     int  waveformMode = 0;  // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
 
     /// Current interface layout mode.
     /// 0 = Waveform View (original UI — never overwritten).
-    /// 1 = Pad Grid.
+    /// 1 = SFZ Player.
     int uiMode = 0;
     bool hasSampleLoaded = false;   // true once a sample with audio is loaded
 
@@ -117,9 +114,6 @@ private:
     SliceControlBar  sliceControlBar;
     ActionPanel      actionPanel;
 
-    // ── Alternate view (Pad Grid) ─────────────────────────────────────────────
-    PadGridView      padGridView;
-
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;
     SfzDropdownPanel sfzDropdown;
@@ -130,7 +124,6 @@ private:
     void toggleMixerPanel();
     void toggleShortcutsPanel();
     void toggleThemeEditor();
-    void toggleSfzModule();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DysektEditor)
 };
