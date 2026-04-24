@@ -46,7 +46,7 @@ private:
 
     // Layout constants — computed dynamically from component size
     int kTransposeRowH = 24;
-    int kZoneBarH      = 8;   // keyzone bar strip height
+    int kZoneViewH     = 0;   // HALion-style zone editor area (above keyboard)
     int kKeyH          = 60;
     int kWhiteKeyW     = 0;   // set in resized()
     int kBlackKeyW     = 0;
@@ -60,6 +60,7 @@ private:
 
     // helpers
     void drawKey        (juce::Graphics&, const KeyRect&, bool hasSlice, bool hovered, bool active) const;
-    void drawZoneBar    (juce::Graphics&, int keyboardX, int zoneBarY, int kbW) const;
+    void drawZoneView   (juce::Graphics&, int kbX, int zoneY, int zoneH, int kbW) const;
+    float noteToX       (int note, int kbX) const;   ///< midi note → pixel x within keyboard
     juce::Colour zoneColourForNote (int note) const;
 };
