@@ -1,14 +1,10 @@
 #pragma once
 // =============================================================================
-//  SfzDropdownPanel.h  —  Kontakt-style collapsible SFZ / SF2 strip
+//  SfzDropdownPanel.h  —  SFZ / SF2 instrument strip
 // =============================================================================
-//  A self-animating component that lives at a fixed position in the editor.
-//  Collapsed: shows only a 36-px header strip (chevron, load btn, vol/trans
-//  knobs, MIDI channel selector, VU meter, status pill).
-//  Expanded:  animates open to reveal a KeysPanel above the strip.
-//
-//  Height is animated each timer tick; the parent's resized() is called so
-//  the editor can reposition siblings automatically.
+//  Occupies the full slot area assigned by the editor (same pattern as the
+//  mixer panel).  Always shows the 36-px header strip at the bottom and the
+//  KeysPanel filling the space above it.  No window-expansion or animation.
 // =============================================================================
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -38,12 +34,8 @@ public:
     /// Call when the panel first becomes visible so zones / state are refreshed.
     void panelDidShow();
 
-    /// Animated height — read by the parent's resized() to size this component.
-    int  getAnimatedHeight() const { return juce::roundToInt (animH); }
-
     // ── Layout constants ──────────────────────────────────────────────────────
-    static constexpr int kStripH    = 36;   ///< Collapsed height (header strip only)
-    static constexpr int kExpandedH = 200;  ///< Fully expanded height
+    static constexpr int kStripH    = 36;   ///< Height of the header strip
 
     // ── Keyboard sub-component (public so editor can query if needed) ─────────
     KeysPanel keysPanel;
@@ -57,13 +49,9 @@ private:
     void drawMeter (juce::Graphics& g) const;
 
     // ── Layout zones (computed in resized) ────────────────────────────────────
-    juce::Rectangle<int> chevronZone, nameZone, loadBtnZone,
+    juce::Rectangle<int> nameZone, loadBtnZone,
                           volZone, transZone, chZone,
                           meterZone, statusZone;
-
-    // ── Animation state ───────────────────────────────────────────────────────
-    float animH          { (float) kStripH };   ///< Current animated height (px)
-    bool  expandedTarget { false };              ///< True when panel should be open
 
     // ── Drag state for volume / transpose knobs ───────────────────────────────
     enum class ActiveKnob { None, Volume, Transpose };

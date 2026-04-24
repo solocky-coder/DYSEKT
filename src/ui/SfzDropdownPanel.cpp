@@ -1,16 +1,11 @@
 // =============================================================================
-//  SfzDropdownPanel.cpp  —  Kontakt-style collapsible SFZ / SF2 strip
+//  SfzDropdownPanel.cpp  —  SFZ / SF2 instrument strip
 // =============================================================================
 #include "SfzDropdownPanel.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 
-// ── Animation constants ───────────────────────────────────────────────────────
-static constexpr float kAnimLerp  = 0.28f;   // per-frame lerp toward target
-static constexpr float kAnimSnap  = 1.5f;    // snap-to-target threshold (px)
-
 // ── Layout constants (header strip) ──────────────────────────────────────────
-static constexpr int kChevW   = 28;
 static constexpr int kLoadW   = 64;
 static constexpr int kLoadH   = 22;
 static constexpr int kKnobW   = 52;
@@ -43,14 +38,13 @@ void SfzDropdownPanel::resized()
     const int h = getHeight();
 
     // The header strip always sits at the BOTTOM of our bounds.
-    // When expanded the keyboard panel fills everything above the strip.
+    // The keyboard panel fills everything above the strip.
     const int stripY = h - kStripH;
 
     // ── Header strip zones ─────────────────────────────────────────────────
     auto strip = juce::Rectangle<int> (0, stripY, w, kStripH).reduced (kPad, 0);
 
-    chevronZone = strip.removeFromLeft (kChevW);
-    strip.removeFromLeft (4);
+    strip.removeFromLeft (4);   // left margin (no chevron)
 
     loadBtnZone = strip.removeFromLeft (kLoadW).withSizeKeepingCentre (kLoadW, kLoadH);
     strip.removeFromLeft (kPad);
@@ -72,17 +66,12 @@ void SfzDropdownPanel::resized()
     nameZone   = strip;   // remainder
 
     // ── Keyboard panel: fills the area above the strip ─────────────────────
-    const bool showKeys = (animH > (float) kStripH + 4.0f);
-    keysPanel.setVisible (showKeys);
-    if (showKeys)
-    {
-        const int kbH = juce::jmax (60, stripY - kPad);
+    const int kbH = juce::jmax (60, stripY - kPad);
+    keysPanel.setVisible (kbH > 0);
+    if (kbH > 0)
         keysPanel.setBounds (kPad, kPad, w - kPad * 2, kbH);
-    }
     else
-    {
         keysPanel.setBounds ({});
-    }
 }
 
 // =============================================================================
@@ -105,7 +94,6 @@ void SfzDropdownPanel::paint (juce::Graphics& g)
         g.fillRoundedRectangle (bounds, 4.0f);
 
         // Separator line between keyboard area and strip
-        if (animH > (float) kStripH + 4.0f)
         {
             const int sepY = h - kStripH;
             g.setColour (theme.accent.withAlpha (0.18f));
@@ -128,33 +116,6 @@ void SfzDropdownPanel::paint (juce::Graphics& g)
 void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
 {
     const auto& theme = getTheme();
-
-    // ── Chevron ───────────────────────────────────────────────────────────────
-    {
-        const float cx = (float) chevronZone.getCentreX();
-        const float cy = (float) chevronZone.getCentreY();
-        const float r  = 6.0f;
-
-        juce::Path arrow;
-        if (expandedTarget)
-        {
-            // Down-pointing chevron (panel is expanded → click to collapse)
-            arrow.startNewSubPath (cx - r, cy - r * 0.4f);
-            arrow.lineTo (cx, cy + r * 0.6f);
-            arrow.lineTo (cx + r, cy - r * 0.4f);
-        }
-        else
-        {
-            // Right-pointing chevron (collapsed → click to expand)
-            arrow.startNewSubPath (cx - r * 0.4f, cy - r);
-            arrow.lineTo (cx + r * 0.6f, cy);
-            arrow.lineTo (cx - r * 0.4f, cy + r);
-        }
-        g.setColour (theme.accent.withAlpha (0.75f));
-        g.strokePath (arrow, juce::PathStrokeType (1.8f,
-                       juce::PathStrokeType::curved,
-                       juce::PathStrokeType::rounded));
-    }
 
     // ── Instrument name ───────────────────────────────────────────────────────
     {
@@ -347,24 +308,6 @@ void SfzDropdownPanel::timerCallback()
     meterL = newL;
     meterR = newR;
 
-    // ── Height animation ──────────────────────────────────────────────────────
-    const float targetH = expandedTarget ? (float) kExpandedH : (float) kStripH;
-    const float diff    = targetH - animH;
-
-    if (std::abs (diff) > kAnimSnap)
-    {
-        animH += diff * kAnimLerp;
-        // Tell the editor to reposition us
-        if (auto* parent = getParentComponent())
-            parent->resized();
-    }
-    else if (animH != targetH)
-    {
-        animH = targetH;
-        if (auto* parent = getParentComponent())
-            parent->resized();
-    }
-
     repaint();
 }
 
@@ -375,14 +318,6 @@ void SfzDropdownPanel::timerCallback()
 void SfzDropdownPanel::mouseDown (const juce::MouseEvent& e)
 {
     const auto pos = e.getPosition();
-
-    // Chevron — toggle expand / collapse
-    if (chevronZone.contains (pos))
-    {
-        expandedTarget = ! expandedTarget;
-        repaint();
-        return;
-    }
 
     // Load button
     if (loadBtnZone.contains (pos))
@@ -536,6 +471,7 @@ void SfzDropdownPanel::panelDidShow()
 {
     if (processor.sfzPlayer.isLoaded())
         reloadZones (processor.sfzPlayer.getLoadedFile());
+    resized();
     repaint();
 }
 
