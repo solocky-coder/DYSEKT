@@ -1,15 +1,23 @@
 #pragma once
 // =============================================================================
-//  SfzDropdownPanel.h  —  SFZ / SF2 instrument strip
+//  SfzDropdownPanel.h  —  SF2 instrument strip (FluidSynth backend)
 // =============================================================================
-//  Occupies the full slot area assigned by the editor (same pattern as the
-//  mixer panel).  Always shows the 36-px header strip at the bottom and the
-//  KeysPanel filling the space above it.  No window-expansion or animation.
+//  Occupies the full slot area assigned by the editor.  Always shows the
+//  36-px header strip at the bottom with the KeysPanel filling the space
+//  above it.
+//
+//  Header strip layout (left → right):
+//    [LOAD] [< B:n  Preset Name >] [VOL] [TRN] [CH] … [STATUS] [METER]
+//
+//  The preset picker in the nameZone lets the user scroll through every preset
+//  in the loaded SF2.  Bank and preset number are shown as a small label above
+//  the preset name.  Left arrow = prev preset, right arrow = next preset.
 // =============================================================================
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "KeysPanel.h"
+#include "../audio/SfzPlayer.h"
 
 class DysektProcessor;
 
@@ -35,9 +43,9 @@ public:
     void panelDidShow();
 
     // ── Layout constants ──────────────────────────────────────────────────────
-    static constexpr int kStripH    = 36;   ///< Height of the header strip
+    static constexpr int kStripH = 36;   ///< Height of the header strip
 
-    // ── Keyboard sub-component (public so editor can query if needed) ─────────
+    // ── Keyboard sub-component ────────────────────────────────────────────────
     KeysPanel keysPanel;
 
 private:
@@ -47,11 +55,15 @@ private:
                    float normalised, const juce::String& label,
                    const juce::String& valueStr) const;
     void drawMeter (juce::Graphics& g) const;
+    void drawPresetPicker (juce::Graphics& g) const;
 
     // ── Layout zones (computed in resized) ────────────────────────────────────
     juce::Rectangle<int> nameZone, loadBtnZone,
                           volZone, transZone, chZone,
                           meterZone, statusZone;
+
+    // Sub-zones inside nameZone for the preset picker
+    juce::Rectangle<int> presetDecBtn, presetLabel, presetIncBtn;
 
     // ── Drag state for volume / transpose knobs ───────────────────────────────
     enum class ActiveKnob { None, Volume, Transpose };
@@ -64,17 +76,23 @@ private:
     float holdL  { 0.f }, holdR  { 0.f };
     static constexpr float kHoldDecay = 0.93f;
 
+    // ── Cached preset list (refreshed from SfzPlayer every timer tick) ────────
+    std::vector<Sf2PresetInfo> presetList;
+
     // ── File chooser ──────────────────────────────────────────────────────────
     void openFileChooser();
     std::unique_ptr<juce::FileChooser> chooser;
 
     // ── Value mapping helpers ─────────────────────────────────────────────────
-    float volToNorm   (float linear) const;  ///< linear 0..2  → 0..1
-    float normToVol   (float n)      const;  ///< 0..1          → linear 0..2
-    float transToNorm (int semi)     const;  ///< semitones -24..24 → 0..1
-    int   normToTrans (float n)      const;  ///< 0..1          → -24..24
+    float volToNorm   (float linear) const;
+    float normToVol   (float n)      const;
+    float transToNorm (int semi)     const;
+    int   normToTrans (float n)      const;
 
-    // ── Zone parsers ──────────────────────────────────────────────────────────
+    // ── Preset navigation ─────────────────────────────────────────────────────
+    void selectPreset (int delta);   ///< +1 = next, -1 = prev
+
+    // ── Zone parsers (for the KeysPanel highlight visualisation) ─────────────
     static std::vector<KeysPanel::Keyzone> parseSfzZones (const juce::File& f);
     static std::vector<KeysPanel::Keyzone> parseSf2Zones (const juce::File& f);
     void reloadZones (const juce::File& f);
