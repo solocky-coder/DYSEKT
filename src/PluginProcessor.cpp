@@ -2224,6 +2224,49 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             midi.addEvent (juce::MidiMessage::noteOff (1, noteOff, (juce::uint8) 0),   0);
     }
 
+    // ── SF2/SFZ keyboard UI note injection (routed on sf2Ch, skipped by slicer) ──
+    {
+        const int sf2Ch   = sfzPlayer.getMidiChannel();
+        const int ch      = (sf2Ch > 0 && sf2Ch <= 16) ? sf2Ch : 16;
+        const int noteOn  = sfzUiNoteOnRequest .exchange (-1, std::memory_order_relaxed);
+        const int noteOff = sfzUiNoteOffRequest.exchange (-1, std::memory_order_relaxed);
+        if (noteOn  >= 0 && noteOn  <= 127)
+        {
+            midi.addEvent (juce::MidiMessage::noteOn  (ch, noteOn,  (juce::uint8) 100), 0);
+            const int w = noteOn < 64 ? 0 : 1;
+            const int b = noteOn < 64 ? noteOn : noteOn - 64;
+            sfzActiveNotes[w].fetch_or ((uint64_t)1 << b, std::memory_order_relaxed);
+        }
+        if (noteOff >= 0 && noteOff <= 127)
+        {
+            midi.addEvent (juce::MidiMessage::noteOff (ch, noteOff, (juce::uint8) 0),   0);
+            const int w = noteOff < 64 ? 0 : 1;
+            const int b = noteOff < 64 ? noteOff : noteOff - 64;
+            sfzActiveNotes[w].fetch_and (~((uint64_t)1 << b), std::memory_order_relaxed);
+        }
+    }
+
+    // ── Snoop sf2Ch messages from DAW/hardware to update active-note bitmask ──
+    {
+        const int sf2Ch = sfzPlayer.getMidiChannel();
+        if (sf2Ch > 0)
+        {
+            for (const auto metadata : midi)
+            {
+                const auto msg = metadata.getMessage();
+                if (msg.getChannel() != sf2Ch) continue;
+                const int n = msg.getNoteNumber();
+                if (n < 0 || n > 127) continue;
+                const int w = n < 64 ? 0 : 1;
+                const int b = n < 64 ? n : n - 64;
+                if (msg.isNoteOn())
+                    sfzActiveNotes[w].fetch_or  ((uint64_t)1 << b, std::memory_order_relaxed);
+                else if (msg.isNoteOff())
+                    sfzActiveNotes[w].fetch_and (~((uint64_t)1 << b), std::memory_order_relaxed);
+            }
+        }
+    }
+
     processMidi (midi);
 
     // ── Step CC smoothers ─────────────────────────────────────────────────────

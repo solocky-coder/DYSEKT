@@ -129,11 +129,23 @@ void KeysPanel::paint (juce::Graphics& g)
 
     for (const auto& kr : keyRects)
         if (! kr.isBlack)
-            drawKey (g, kr, slicedNotes.count (kr.note) > 0, kr.note == hoveredNote, kr.note == lastActiveNote);
+        {
+            const int n = kr.note;
+            const bool midiActive = (n >= 0 && n < 128)
+                ? ((n < 64 ? (sfzActiveSnap[0] >> n) : (sfzActiveSnap[1] >> (n - 64))) & 1) != 0
+                : false;
+            drawKey (g, kr, slicedNotes.count (n) > 0, n == hoveredNote, n == lastActiveNote || midiActive);
+        }
 
     for (const auto& kr : keyRects)
         if (kr.isBlack)
-            drawKey (g, kr, slicedNotes.count (kr.note) > 0, kr.note == hoveredNote, kr.note == lastActiveNote);
+        {
+            const int n = kr.note;
+            const bool midiActive = (n >= 0 && n < 128)
+                ? ((n < 64 ? (sfzActiveSnap[0] >> n) : (sfzActiveSnap[1] >> (n - 64))) & 1) != 0
+                : false;
+            drawKey (g, kr, slicedNotes.count (n) > 0, n == hoveredNote, n == lastActiveNote || midiActive);
+        }
 }
 
 void KeysPanel::drawKey (juce::Graphics& g, const KeyRect& kr,
@@ -347,7 +359,7 @@ void KeysPanel::mouseDown (const juce::MouseEvent& e)
         if (it->isBlack && it->bounds.contains (e.getPosition()))
         {
             lastActiveNote = it->note;
-            processor.uiNoteOnRequest.store (lastActiveNote, std::memory_order_relaxed);
+            processor.sfzUiNoteOnRequest.store (lastActiveNote, std::memory_order_relaxed);
             repaint();
             return;
         }
@@ -357,7 +369,7 @@ void KeysPanel::mouseDown (const juce::MouseEvent& e)
         if (! kr.isBlack && kr.bounds.contains (e.getPosition()))
         {
             lastActiveNote = kr.note;
-            processor.uiNoteOnRequest.store (lastActiveNote, std::memory_order_relaxed);
+            processor.sfzUiNoteOnRequest.store (lastActiveNote, std::memory_order_relaxed);
             repaint();
             return;
         }
@@ -368,7 +380,7 @@ void KeysPanel::mouseUp (const juce::MouseEvent&)
 {
     if (lastActiveNote >= 0)
     {
-        processor.uiNoteOffRequest.store (lastActiveNote, std::memory_order_relaxed);
+        processor.sfzUiNoteOffRequest.store (lastActiveNote, std::memory_order_relaxed);
         lastActiveNote = -1;
         repaint();
     }
@@ -387,4 +399,15 @@ void KeysPanel::mouseExit (const juce::MouseEvent&)
     if (hoveredNote != -1) { hoveredNote = -1; repaint(); }
 }
 
-void KeysPanel::timerCallback() { repaint(); }
+void KeysPanel::timerCallback()
+{
+    // Snapshot the SF2 active-note bitmask from the audio thread.
+    const uint64_t lo = processor.sfzActiveNotes[0].load (std::memory_order_relaxed);
+    const uint64_t hi = processor.sfzActiveNotes[1].load (std::memory_order_relaxed);
+    if (lo != sfzActiveSnap[0] || hi != sfzActiveSnap[1])
+    {
+        sfzActiveSnap[0] = lo;
+        sfzActiveSnap[1] = hi;
+    }
+    repaint();
+}

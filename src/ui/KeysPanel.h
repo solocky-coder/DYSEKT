@@ -42,6 +42,10 @@ private:
     int  lastActiveNote = -1;
     int  hoveredNote  = -1;
 
+    // 128-bit bitmask snapshot updated from processor every timer tick.
+    // Bit N of word 0 = MIDI note N; bit N of word 1 = MIDI note N+64.
+    uint64_t sfzActiveSnap[2] = { 0, 0 };
+
     juce::TextButton transposeDownBtn { "<" };
     juce::TextButton transposeUpBtn   { ">" };
 

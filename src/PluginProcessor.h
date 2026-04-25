@@ -325,6 +325,16 @@ public:
     std::atomic<int> uiNoteOnRequest  { -1 };
     std::atomic<int> uiNoteOffRequest { -1 };
 
+    // SF2 / SFZ keyboard UI note injection — routed on the sfz channel (ch16)
+    // so processMidi() skips them and only sfzPlayer receives them.
+    std::atomic<int> sfzUiNoteOnRequest  { -1 };
+    std::atomic<int> sfzUiNoteOffRequest { -1 };
+
+    // 128-bit active-note bitmask for the SF2/SFZ player (updated on audio thread,
+    // read on UI thread for KeysPanel highlighting — display-only, torn reads OK).
+    // Bit N of word 0 = note N (0-63); bit N of word 1 = note N+64 (64-127).
+    std::atomic<uint64_t> sfzActiveNotes[2] {}; // [0]=notes 0-63, [1]=notes 64-127
+
     // Trim region markers (stored in samples)
     std::atomic<int>  trimRegionStart  { 0 };
     std::atomic<int>  trimRegionEnd    { 0 };

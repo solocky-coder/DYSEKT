@@ -660,12 +660,13 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
     const size_t numRecs = igenData.getSize() / 4;
     const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
 
-    int  loKey = 0, hiKey = 127;
-    bool hasKey = false;
     int  colIdx = 0;
     // Track seen ranges so each unique keyRange appears exactly once.
     // SF2 IGEN has one entry per sample in a zone (velocity layers etc.)
     // so the same lo/hi pair repeats many times — we want one zone per range.
+    // IMPORTANT: In the SF2 spec the only oper==0 record is the terminal sentinel
+    // for the entire igen array — NOT a per-zone delimiter.  We must emit zones
+    // as soon as we see each new keyRange (oper==43) record.
     std::set<std::pair<int,int>> seen;
 
     for (size_t i = 0; i < numRecs; ++i)
@@ -674,27 +675,21 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
         const uint8_t  lo   = data[i*4 + 2];
         const uint8_t  hi   = data[i*4 + 3];
 
-        if (oper == 43)  // keyRange
+        if (oper == 43)  // keyRange — emit zone immediately if not yet seen
         {
-            loKey  = lo;
-            hiKey  = hi;
-            hasKey = true;
-        }
-        else if (oper == 0)  // endOper — end of instrument zone
-        {
-            if (hasKey && hiKey >= loKey)
+            if ((int)hi >= (int)lo)
             {
-                auto key = std::make_pair (loKey, hiKey);
+                auto key = std::make_pair ((int)lo, (int)hi);
                 if (seen.find (key) == seen.end())
                 {
                     seen.insert (key);
-                    zones.push_back ({ loKey, hiKey, zoneColour (colIdx),
+                    zones.push_back ({ (int)lo, (int)hi, zoneColour (colIdx),
                                        "Zone " + juce::String (colIdx + 1) });
                     ++colIdx;
                 }
             }
-            loKey  = 0; hiKey = 127; hasKey = false;
         }
+        // oper==0 is the terminal sentinel for the entire igen array — skip it.
     }
 
     // Sort by loKey for display
