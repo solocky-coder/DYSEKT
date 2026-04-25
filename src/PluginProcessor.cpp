@@ -134,7 +134,8 @@ DysektProcessor::DysektProcessor()
                           .withOutput ("Out 13", juce::AudioChannelSet::stereo(), false)
                           .withOutput ("Out 14", juce::AudioChannelSet::stereo(), false)
                           .withOutput ("Out 15", juce::AudioChannelSet::stereo(), false)
-                          .withOutput ("Out 16", juce::AudioChannelSet::stereo(), false)),
+                          .withOutput ("Out 16", juce::AudioChannelSet::stereo(), false)
+                          .withOutput ("SF2 Player", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, nullptr, "PARAMETERS", ParamLayout::createLayout())
 {
     masterVolParam = apvts.getRawParameterValue (ParamIds::masterVolume);
@@ -2345,7 +2346,7 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 
     // Collect write pointers for all enabled output buses
-    static constexpr int kMaxBuses = 16;
+    static constexpr int kMaxBuses = 17;
     float* busL[kMaxBuses] = {};
     float* busR[kMaxBuses] = {};
     int numActiveBuses = 0;
@@ -2462,21 +2463,43 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     masterPeakL.store(masterL, std::memory_order_relaxed);
     masterPeakR.store(masterR, std::memory_order_relaxed);
 
-    // ── SFZ live player — mixed into bus 0 after slice engine ────────────────
-    if (buffer.getNumChannels() >= 2 && buffer.getNumSamples() > 0)
+    // ── SF2 live player — dedicated bus 16 ("SF2 Player"), also summed to main ──
+    if (buffer.getNumSamples() > 0)
     {
-        float* sfzL = buffer.getWritePointer (0);
-        float* sfzR = buffer.getWritePointer (1);
-        sfzPlayer.process (midi, sfzL, sfzR, buffer.getNumSamples());
+        const int numSamples = buffer.getNumSamples();
 
-        // Update SFZ peak meters for UI
+        // Render into a clean temp buffer — never overwrite main directly
+        juce::AudioBuffer<float> sfzBuf (2, numSamples);
+        sfzBuf.clear();
+        float* sfzL = sfzBuf.getWritePointer (0);
+        float* sfzR = sfzBuf.getWritePointer (1);
+        sfzPlayer.process (midi, sfzL, sfzR, numSamples);
+
+        // Always sum into main bus (bus 0) — same as slice behaviour
+        if (busL[0])
+            for (int i = 0; i < numSamples; ++i)
+                busL[0][i] += sfzL[i];
+        if (busR[0])
+            for (int i = 0; i < numSamples; ++i)
+                busR[0][i] += sfzR[i];
+
+        // Also write to dedicated SF2 bus 16 if active in DAW
+        constexpr int kSf2Bus = 16;
+        if (kSf2Bus < numActiveBuses && busL[kSf2Bus] != nullptr)
+        {
+            for (int i = 0; i < numSamples; ++i)
+                busL[kSf2Bus][i] += sfzL[i];
+            for (int i = 0; i < numSamples; ++i)
+                busR[kSf2Bus][i] += sfzR[i];
+        }
+
+        // Update SF2 peak meters for UI
         float pkL = 0.f, pkR = 0.f;
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        for (int i = 0; i < numSamples; ++i)
         {
             pkL = std::max (pkL, std::abs (sfzL[i]));
             pkR = std::max (pkR, std::abs (sfzR[i]));
         }
-        // Decay toward new peak (fast attack, slow release)
         const float decaySFZ = 0.85f;
         sfzPeakL.store (std::max (sfzPeakL.load (std::memory_order_relaxed) * decaySFZ, pkL),
                         std::memory_order_relaxed);
