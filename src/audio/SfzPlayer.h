@@ -112,7 +112,7 @@ private:
     // ── Shared params (atomic, UI-writable) ───────────────────────────────────
     std::atomic<float> volume      { 1.0f };
     std::atomic<int>   transpose   { 0 };
-    std::atomic<int>   midiChannel { 0 };    // 0 = omni
+    std::atomic<int>   midiChannel { 16 };   // 0 = omni, default 16 = DYFONT dedicated channel
     std::atomic<int>   presetIndex { 0 };    // index into cachedPresets
     std::atomic<bool>  loaded      { false };
 

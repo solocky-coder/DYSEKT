@@ -78,7 +78,7 @@ void SfzModulePanel::paint (juce::Graphics& g)
         auto lbl = nameZone.reduced (4, 0);
         g.setFont (DysektLookAndFeel::makeFont (10.0f));
         g.setColour (theme.foreground.withAlpha (0.40f));
-        g.drawText ("SFZ / SF2", lbl, juce::Justification::topLeft, false);
+        g.drawText ("DYFONT", lbl, juce::Justification::topLeft, false);
 
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
         const bool isLoaded = processor.sfzPlayer.isLoaded();
@@ -140,7 +140,7 @@ void SfzModulePanel::paint (juce::Graphics& g)
         auto chArea = chZone;
         g.setFont (DysektLookAndFeel::makeFont (10.0f));
         g.setColour (theme.foreground.withAlpha (0.40f));
-        g.drawText ("MIDI CH", chArea.removeFromTop (14), juce::Justification::centred, false);
+        g.drawText ("DYFONT CH", chArea.removeFromTop (14), juce::Justification::centred, false);
 
         auto chBtns = chArea;
         const int btnW = chBtns.getWidth() / 3;

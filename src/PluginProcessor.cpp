@@ -119,6 +119,8 @@ static bool isCriticalCommand (DysektProcessor::CommandType type)
 
 DysektProcessor::DysektProcessor()
     : AudioProcessor (BusesProperties()
+                          .withInput  ("DYSEKT",  juce::AudioChannelSet::disabled(), true)
+                          .withInput  ("DYFONT",  juce::AudioChannelSet::disabled(), false)
                           .withOutput ("Main", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Out 2", juce::AudioChannelSet::stereo(), false)
                           .withOutput ("Out 3", juce::AudioChannelSet::stereo(), false)
@@ -192,6 +194,14 @@ bool DysektProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
             && layouts.outputBuses[i] != juce::AudioChannelSet::stereo())
             return false;
     }
+
+    // Input buses: only disabled (MIDI-only) buses are accepted
+    for (int i = 0; i < layouts.inputBuses.size(); ++i)
+    {
+        if (! layouts.inputBuses[i].isDisabled())
+            return false;
+    }
+
     return true;
 }
 
@@ -1282,9 +1292,18 @@ void DysektProcessor::handleCommand (const Command& cmd)
 
 void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
 {
+    // If the SF2 player is locked to a specific MIDI channel, exclude those
+    // messages from the slicer so the DYFONT port acts as a dedicated input.
+    const int sf2Ch = sfzPlayer.getMidiChannel();  // 0 = omni, 1-16 = dedicated
+
     for (const auto metadata : midi)
     {
         const auto msg = metadata.getMessage();
+
+        // Skip messages on the SF2 player's dedicated channel — they belong
+        // exclusively to DYFONT and should not trigger slices or MIDI learn.
+        if (sf2Ch != 0 && msg.getChannel() == sf2Ch)
+            continue;
 
         // ── MIDI Learn CC dispatch ────────────────────────────────────
         if (msg.isController())
@@ -2473,6 +2492,10 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         sfzBuf.clear();
         float* sfzL = sfzBuf.getWritePointer (0);
         float* sfzR = sfzBuf.getWritePointer (1);
+        // MIDI routing: two named ports, split by channel.
+        //   DYSEKT port  — ch 1-15 (default) → slicer only (processMidi skips sf2Ch)
+        //   DYFONT port  — ch 16  (default)  → sfzPlayer only (filters internally)
+        // sfzPlayer.process() already filters to midiChannel; slicer already skips it.
         sfzPlayer.process (midi, sfzL, sfzR, numSamples);
 
         // Always sum into main bus (bus 0) — same as slice behaviour
