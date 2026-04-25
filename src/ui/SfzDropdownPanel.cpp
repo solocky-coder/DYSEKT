@@ -694,27 +694,28 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
 
     const size_t numRecs = igenData.getSize() / 4;
     const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
-    int loKey = 0, hiKey = 127;
-    bool hasKey = false;
     int  colIdx = 0;
     std::set<std::pair<int,int>> seen;
 
+    // Emit a zone immediately on each unique keyRange (oper==43) record.
+    // SF2 spec: oper==0 is the terminal sentinel for the entire igen array,
+    // NOT a per-zone delimiter — zone boundaries come from ibag, not from igen.
     for (size_t i = 0; i < numRecs; ++i)
     {
         const uint16_t oper = (uint16_t)(data[i*4] | (data[i*4+1] << 8));
-        if (oper == 43) { loKey = data[i*4+2]; hiKey = data[i*4+3]; hasKey = true; }
-        else if (oper == 0)
+        if (oper == 43)
         {
-            if (hasKey && hiKey >= loKey)
+            const int lo = data[i*4+2];
+            const int hi = data[i*4+3];
+            if (hi >= lo)
             {
-                auto key = std::make_pair (loKey, hiKey);
+                auto key = std::make_pair (lo, hi);
                 if (seen.find (key) == seen.end())
                 {
                     seen.insert (key);
-                    zones.push_back ({ loKey, hiKey, zoneColourDP (colIdx++) });
+                    zones.push_back ({ lo, hi, zoneColourDP (colIdx++) });
                 }
             }
-            loKey = 0; hiKey = 127; hasKey = false;
         }
     }
 
