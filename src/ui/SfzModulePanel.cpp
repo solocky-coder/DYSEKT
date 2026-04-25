@@ -420,7 +420,7 @@ bool SfzModulePanel::isInterestedInFileDrag (const juce::StringArray& files)
     for (auto& f : files)
     {
         const auto ext = juce::File (f).getFileExtension().toLowerCase();
-        if (ext == ".sf2" || ext == ".sfz") return true;
+        if (ext == ".sf2") return true;
     }
     return false;
 }
@@ -430,7 +430,7 @@ void SfzModulePanel::filesDropped (const juce::StringArray& files, int, int)
     for (auto& f : files)
     {
         const auto ext = juce::File (f).getFileExtension().toLowerCase();
-        if (ext == ".sf2" || ext == ".sfz")
+        if (ext == ".sf2")
         {
             juce::File file (f);
             processor.sfzPlayer.loadFile (file);
@@ -446,9 +446,9 @@ void SfzModulePanel::filesDropped (const juce::StringArray& files, int, int)
 void SfzModulePanel::openFileChooser()
 {
     chooser = std::make_unique<juce::FileChooser> (
-        "Load SF2 or SFZ Instrument",
+        "Load SF2 Instrument",
         juce::File::getSpecialLocation (juce::File::userMusicDirectory),
-        "*.sf2;*.sfz");
+        "*.sf2");
 
     chooser->launchAsync (juce::FileBrowserComponent::openMode
                         | juce::FileBrowserComponent::canSelectFiles,
@@ -498,99 +498,6 @@ static juce::Colour zoneColour (int index)
         juce::Colour (0xFF7F3C0A),  // dark rich orange
     };
     return palette[index % 8];
-}
-
-std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File& f)
-{
-    std::vector<KeysPanel::Keyzone> zones;
-    const auto text = f.loadFileAsString();
-    const auto lines = juce::StringArray::fromLines (text);
-
-    int loKey = 0, hiKey = 127;
-    bool inRegion = false;
-    int  colIdx   = 0;
-    juce::String sampleName;
-
-    auto flush = [&]
-    {
-        if (inRegion && hiKey >= loKey)
-        {
-            zones.push_back ({ loKey, hiKey, zoneColour (colIdx++), sampleName });
-            loKey = 0; hiKey = 127; sampleName = {};
-        }
-        inRegion = false;
-    };
-
-    for (auto line : lines)
-    {
-        line = line.trim().toLowerCase();
-        if (line.startsWith ("<region>")) { flush(); inRegion = true; loKey = 0; hiKey = 127; }
-        else if (line.startsWith ("<group>") || line.startsWith ("<global>")) flush();
-
-        if (inRegion)
-        {
-            auto get = [&] (const juce::String& key) -> int
-            {
-                int pos = line.indexOf (key + "=");
-                if (pos < 0) return -999;
-                auto val = line.substring (pos + key.length() + 1)
-                               .trimStart()
-                               .upToFirstOccurrenceOf (" ", false, false)
-                               .upToFirstOccurrenceOf ("	", false, false);
-                return val.getIntValue();
-            };
-            // lokey / hikey (numeric or note name both supported)
-            auto loRaw = line.indexOf ("lokey=");
-            if (loRaw >= 0)
-            {
-                auto s = line.substring (loRaw + 6)
-                             .upToFirstOccurrenceOf (" ", false, false)
-                             .trim();
-                loKey = s.containsAnyOf ("abcdefg") ? juce::MidiMessage::getMidiNoteInHertz(0) >= 0
-                        ? juce::jlimit (0, 127, (int) s.getIntValue()) : s.getIntValue()
-                        : s.getIntValue();
-                // Best-effort: just parse integer; SFZ note names handled below
-                loKey = juce::jlimit (0, 127, s.getIntValue());
-            }
-            auto hiRaw = line.indexOf ("hikey=");
-            if (hiRaw >= 0)
-            {
-                auto s = line.substring (hiRaw + 6)
-                             .upToFirstOccurrenceOf (" ", false, false)
-                             .trim();
-                hiKey = juce::jlimit (0, 127, s.getIntValue());
-            }
-            auto kRaw = line.indexOf ("key=");
-            if (kRaw >= 0 && line.indexOf ("lokey=") < 0)
-            {
-                auto s = line.substring (kRaw + 4)
-                             .upToFirstOccurrenceOf (" ", false, false)
-                             .trim();
-                const int k = juce::jlimit (0, 127, s.getIntValue());
-                loKey = hiKey = k;
-            }
-            (void) get;
-
-            // Extract sample name as zone label
-            {
-                int smpPos = line.indexOf ("sample=");
-                if (smpPos >= 0)
-                {
-                    auto s = line.substring (smpPos + 7)
-                                 .upToFirstOccurrenceOf (" ", false, false)
-                                 .trim();
-                    sampleName = s.fromLastOccurrenceOf ("/",  false, false)
-                                  .fromLastOccurrenceOf ("\\", false, false)
-                                  .upToLastOccurrenceOf (".",  false, false)
-                                  .trim();
-                    if (sampleName.isEmpty())
-                        sampleName = "Zone " + juce::String (colIdx + 1);
-                }
-            }
-        }
-    }
-    flush();
-    return zones;
 }
 
 std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File& f)
@@ -710,9 +617,7 @@ void SfzModulePanel::reloadZones (const juce::File& f)
     const auto ext = f.getFileExtension().toLowerCase();
     std::vector<KeysPanel::Keyzone> zones;
 
-    if (ext == ".sfz")
-        zones = parseSfzZones (f);
-    else if (ext == ".sf2")
+    if (ext == ".sf2")
         zones = parseSf2Zones (f);
 
     keysPanel.setKeyzones (zones);

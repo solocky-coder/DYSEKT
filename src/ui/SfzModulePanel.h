@@ -79,7 +79,6 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
 
     // Zone parsers
-    static std::vector<KeysPanel::Keyzone> parseSfzZones  (const juce::File& f);
     static std::vector<KeysPanel::Keyzone> parseSf2Zones  (const juce::File& f);
     void reloadZones (const juce::File& f);
 
