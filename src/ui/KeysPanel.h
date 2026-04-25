@@ -66,6 +66,7 @@ private:
     // helpers
     void drawKey        (juce::Graphics&, const KeyRect&, bool hasSlice, bool hovered, bool active) const;
     void drawZoneView   (juce::Graphics&, int kbX, int zoneY, int zoneH, int kbW) const;
-    float noteToX       (int note, int kbX) const;   ///< midi note → pixel x within keyboard
+    float noteToX       (int note, int kbX) const;   ///< midi note → pixel x (left edge of key)
+    float noteKeyWidth  (int note)          const;   ///< visual width of the key for that note
     juce::Colour zoneColourForNote (int note) const;
 };

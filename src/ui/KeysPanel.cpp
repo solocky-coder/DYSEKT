@@ -221,16 +221,64 @@ void KeysPanel::drawKey (juce::Graphics& g, const KeyRect& kr,
 }
 
 // =============================================================================
-//  noteToX — shared helper: maps a MIDI note to a pixel X within the keyboard
+//  noteToX — maps a MIDI note to the LEFT EDGE pixel of its key on screen.
+//  Black keys have their own visual position (centered between white keys);
+//  they no longer collapse to the preceding white key's X.
 // =============================================================================
 
 float KeysPanel::noteToX (int note, int kbX) const
 {
-    static const int whiteCount[] = { 0,0,1,1,2,3,3,4,4,5,5,6,7 };
-    const int rel     = note - baseOctave * 12;
-    const int octaves = rel / 12;
-    const int semi    = juce::jlimit (0, 12, rel % 12);
-    return (float) kbX + (float)(octaves * 7 + whiteCount[semi]) * (float) kWhiteKeyW;
+    // Per-semitone table: for white keys, number of white keys to the left within
+    // the octave.  For black keys, encoded as -(afterWhite+1) so we can detect them.
+    // afterWhite = the white key they sit to the right of (0-based within octave):
+    //   C#=0, D#=1, F#=3, G#=4, A#=5
+    static const int semitoneToWhiteOrBlack[12] =
+    {
+        /*C */ 0,
+        /*C#*/ -(0+1),   // black, afterWhite=0
+        /*D */ 1,
+        /*D#*/ -(1+1),   // black, afterWhite=1
+        /*E */ 2,
+        /*F */ 3,
+        /*F#*/ -(3+1),   // black, afterWhite=3
+        /*G */ 4,
+        /*G#*/ -(4+1),   // black, afterWhite=4
+        /*A */ 5,
+        /*A#*/ -(5+1),   // black, afterWhite=5
+        /*B */ 6,
+    };
+
+    const int rel    = note - baseOctave * 12;
+    const int octave = rel / 12;
+    const int semi   = juce::jlimit (0, 11, ((rel % 12) + 12) % 12);
+    const int enc    = semitoneToWhiteOrBlack[semi];
+
+    const float octaveX = (float) kbX + (float)(octave * 7) * (float) kWhiteKeyW;
+
+    if (enc >= 0)
+    {
+        // White key — left edge
+        return octaveX + (float)(enc) * (float) kWhiteKeyW;
+    }
+    else
+    {
+        // Black key — centered between its two flanking white keys
+        const int afterWhite = (-enc) - 1;   // recover afterWhite
+        return octaveX + (float)(afterWhite + 1) * (float) kWhiteKeyW
+               - (float) kBlackKeyW * 0.5f;
+    }
+}
+
+// =============================================================================
+//  noteKeyWidth — visual pixel width of the key for a given MIDI note.
+// =============================================================================
+
+float KeysPanel::noteKeyWidth (int note) const
+{
+    static const bool isBlack[12] =
+        { false, true, false, true, false, false, true, false, true, false, true, false };
+    const int semi = ((note % 12) + 12) % 12;
+    return isBlack[semi] ? (float) kBlackKeyW : (float) kWhiteKeyW;
 }
 
 // =============================================================================
@@ -279,11 +327,11 @@ void KeysPanel::drawZoneView (juce::Graphics& g,
         if (z.hiKey < loNote || z.loKey > hiNote) continue;
 
         const int lo = juce::jmax (loNote, z.loKey);
-        const int hi = juce::jmin (hiNote, z.hiKey + 1);
-        if (lo >= hi) continue;
+        const int hi = juce::jmin (hiNote, z.hiKey);
+        if (lo > hi) continue;
 
         const float x1   = noteToX (lo, kbX);
-        const float x2   = noteToX (hi, kbX);
+        const float x2   = noteToX (hi, kbX) + noteKeyWidth (hi);
         const float barW = x2 - x1 - 1.0f;   // 1 px gap between adjacent bars
         if (barW < 1.0f) continue;
 
