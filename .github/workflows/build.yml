@@ -52,14 +52,19 @@ jobs:
             git clone --depth 1 --recurse-submodules https://github.com/sfztools/sfizz.git sfizz
           }
 
-      - name: Install FluidSynth via vcpkg
+      - name: Install FluidSynth via vcpkg (static)
         shell: pwsh
         run: |
-          vcpkg install fluidsynth:x64-windows
-          # Add vcpkg bin to PATH so LoadLibraryW can find fluidsynth.dll during the
-          # JUCE post-build step that loads the VST3 to generate moduleinfo.json
-          $vcpkgBin = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin"
-          echo "$vcpkgBin" >> $env:GITHUB_PATH
+          # x64-windows-static-md links FluidSynth statically but keeps the
+          # MSVC runtime as a DLL (which every Windows machine already has).
+          # This means zero extra DLLs needed next to the VST3.
+          vcpkg install fluidsynth:x64-windows-static-md
+
+          # Still add to PATH so juce_vst3_helper can load the VST3 post-build
+          $vcpkgBin = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md\bin"
+          if (Test-Path $vcpkgBin) {
+            echo "$vcpkgBin" >> $env:GITHUB_PATH
+          }
           echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
 
       - name: Configure CMake
@@ -68,6 +73,7 @@ jobs:
           cmake -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static-md `
             -DJUCE_BUILD_EXTRAS=OFF `
             -DJUCE_BUILD_EXAMPLES=OFF
 
@@ -86,15 +92,8 @@ jobs:
             Copy-Item -Recurse -Force $d.FullName artifacts/
           }
 
-          # Copy FluidSynth and all its runtime DLLs inside the VST3 bundle
-          # so the plugin loads in DAWs without needing a system-wide install
-          $vcpkgBin = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin"
-          $vst3Contents = "artifacts\DYSEKT.vst3\Contents\x86_64-win"
-          if (Test-Path $vst3Contents) {
-            Get-ChildItem "$vcpkgBin\*.dll" | ForEach-Object {
-              Copy-Item $_.FullName $vst3Contents
-            }
-          }
+          # With static linking there are no extra DLLs to copy —
+          # FluidSynth is baked directly into DYSEKT.vst3
 
           Write-Host "Collected artifacts:"
           Get-ChildItem artifacts/ -Recurse
