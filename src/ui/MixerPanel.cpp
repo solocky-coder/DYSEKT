@@ -46,7 +46,7 @@ void MixerPanel::updateFromSnapshot()
                 scrollPixels = kHeaderH + snap.selectedSlice * kRowH - (visH - kRowH);
 
             // Clamp to valid scroll range
-            const int totalH  = snap.numSlices * kRowH + kMasterH;
+            const int totalH  = snap.numSlices * kRowH + kMasterH + kSf2RowH;
             const int maxScroll = juce::jmax (0, totalH - (getHeight() - kHeaderH));
             scrollPixels = juce::jlimit (0, maxScroll, scrollPixels);
         }
@@ -75,6 +75,12 @@ int MixerPanel::masterRowY() const
     return kHeaderH + snap.numSlices * kRowH - scrollPixels;
 }
 
+int MixerPanel::sf2RowY() const
+{
+    const auto& snap = processor.getUiSliceSnapshot();
+    return kHeaderH + snap.numSlices * kRowH + kMasterH - scrollPixels;
+}
+
 MixerPanel::Cell MixerPanel::hitTest (juce::Point<int> pos) const
 {
     Cell c;
@@ -99,6 +105,12 @@ MixerPanel::Cell MixerPanel::hitTest (juce::Point<int> pos) const
         c.row = -1;
         c.isMaster = true;
     }
+    else if (relY >= snap.numSlices * kRowH + kMasterH &&
+             relY <  snap.numSlices * kRowH + kMasterH + kSf2RowH)
+    {
+        c.row = -2;
+        c.isSf2 = true;
+    }
     else return c;  // below content
 
     // Which column?
@@ -108,9 +120,10 @@ MixerPanel::Cell MixerPanel::hitTest (juce::Point<int> pos) const
     if (colIdx < 0 || colIdx >= kNumCols) return c;
     c.col = (Col) colIdx;
 
-    const int rowTop  = c.isMaster ? (kHeaderH + snap.numSlices * kRowH - scrollPixels)
-                                   : rowY (c.row);
-    const int rowHt   = c.isMaster ? kMasterH : kRowH;
+    const int rowTop  = c.isSf2   ? sf2RowY()
+                        : c.isMaster ? masterRowY()
+                                     : rowY (c.row);
+    const int rowHt   = c.isSf2 ? kSf2RowH : c.isMaster ? kMasterH : kRowH;
     c.bounds = { kNameColW + colIdx * kKnobColW, rowTop, kKnobColW, rowHt };
     return c;
 }
@@ -693,6 +706,45 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  SF2 player row
+// ─────────────────────────────────────────────────────────────────────────────
+void MixerPanel::drawSf2Row (juce::Graphics& g, int ry) const
+{
+    const auto& theme = getTheme();
+
+    // Background — slightly different tint to distinguish from master
+    g.setColour (theme.accent.withAlpha (0.06f));
+    g.fillRect (0, ry, getWidth(), kSf2RowH);
+    g.setColour (theme.accent.withAlpha (0.18f));
+    g.drawHorizontalLine (ry, 0.f, (float) getWidth());
+
+    // Label
+    g.setFont (DysektLookAndFeel::makeFont (11.0f, true));
+    g.setColour (theme.accent.withAlpha (0.75f));
+    g.drawText ("SF2", 10, ry, kNameColW - 10, kSf2RowH, juce::Justification::centredLeft);
+
+    // Dash-fill all knob columns — SF2 row has no per-row controls here
+    g.setFont (DysektLookAndFeel::makeFont (11.0f));
+    g.setColour (theme.foreground.withAlpha (0.15f));
+    for (int i = 0; i < kNumCols; ++i)
+        g.drawText ("—", colX ((Col)i), ry, kKnobColW, kSf2RowH, juce::Justification::centred);
+
+    // Peak meter using sfzPeakL/R from processor
+    const int mx = colX (ColOut) + kKnobColW + 4;
+    const int mw = getWidth() - mx - 6;
+    if (mw > 20)
+    {
+        float pkL = processor.sfzPeakL.load (std::memory_order_relaxed);
+        float pkR = processor.sfzPeakR.load (std::memory_order_relaxed);
+        // Use a dedicated hold slot beyond the slice slots (index kMaxHoldSlices - 2)
+        constexpr int kSf2HoldSlot = kMaxHoldSlices - 2;
+        holdL[kSf2HoldSlot] = std::max (holdL[kSf2HoldSlot], pkL);
+        holdR[kSf2HoldSlot] = std::max (holdR[kSf2HoldSlot], pkR);
+        drawMeter (g, mx, ry + 4, mw, kSf2RowH - 8, pkL, pkR, theme.accent, kSf2HoldSlot);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  paint
 // ─────────────────────────────────────────────────────────────────────────────
 void MixerPanel::paint (juce::Graphics& g)
@@ -738,6 +790,7 @@ void MixerPanel::paint (juce::Graphics& g)
         drawSliceRow (g, rowY (i), i, i == snap.selectedSlice);
 
     drawMasterRow (g, masterRowY());
+    drawSf2Row    (g, sf2RowY());
 
     // Column dividers
     g.setColour (theme.accent.withAlpha (0.12f));

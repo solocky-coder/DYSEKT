@@ -23,6 +23,8 @@ public:
     static constexpr int kRowH        = 38;
     /** Height of the master row at the bottom. */
     static constexpr int kMasterH     = 42;
+    /** Height of the SF2 player row below master. */
+    static constexpr int kSf2RowH     = 38;
     /** Width of the slice name column. */
     static constexpr int kNameColW    = 88;
     /** Width of each knob column. */
@@ -72,12 +74,14 @@ private:
         Col col  { ColGain };
         juce::Rectangle<int> bounds;
         bool isMaster { false };
+        bool isSf2    { false };
     };
 
     // ── Drawing helpers ───────────────────────────────────────────────────
     void drawHeader    (juce::Graphics&) const;
     void drawSliceRow  (juce::Graphics&, int rowY, int sliceIdx, bool selected) const;
     void drawMasterRow (juce::Graphics&, int rowY) const;
+    void drawSf2Row    (juce::Graphics&, int rowY) const;
     void drawKnobInRow (juce::Graphics&, int cx, int cy, float norm,
                         bool locked, bool isMaster = false) const;
     void drawMuteBadge (juce::Graphics&, int cx, int cy,
@@ -104,12 +108,14 @@ private:
     int   colX        (Col col) const;
     int   rowY        (int sliceIdx) const;   // top Y of a slice row in the scroll area
     int   masterRowY  () const;
+    int   sf2RowY     () const;
     Cell  hitTest     (juce::Point<int> pos) const;
 
     // ── Drag state ────────────────────────────────────────────────────────
     struct DragState {
         bool   active    { false };
         bool   isMaster  { false };
+        bool   isSf2     { false };
         int    sliceIdx  { -1 };
         Col    col       { ColGain };
         int    startY    { 0 };

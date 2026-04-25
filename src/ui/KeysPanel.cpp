@@ -343,11 +343,35 @@ juce::Colour KeysPanel::zoneColourForNote (int note) const
 void KeysPanel::mouseDown (const juce::MouseEvent& e)
 {
     for (auto it = keyRects.rbegin(); it != keyRects.rend(); ++it)
+    {
         if (it->isBlack && it->bounds.contains (e.getPosition()))
-            { lastActiveNote = it->note; repaint(); return; }
+        {
+            lastActiveNote = it->note;
+            processor.uiNoteOnRequest.store (lastActiveNote, std::memory_order_relaxed);
+            repaint();
+            return;
+        }
+    }
     for (const auto& kr : keyRects)
+    {
         if (! kr.isBlack && kr.bounds.contains (e.getPosition()))
-            { lastActiveNote = kr.note; repaint(); return; }
+        {
+            lastActiveNote = kr.note;
+            processor.uiNoteOnRequest.store (lastActiveNote, std::memory_order_relaxed);
+            repaint();
+            return;
+        }
+    }
+}
+
+void KeysPanel::mouseUp (const juce::MouseEvent&)
+{
+    if (lastActiveNote >= 0)
+    {
+        processor.uiNoteOffRequest.store (lastActiveNote, std::memory_order_relaxed);
+        lastActiveNote = -1;
+        repaint();
+    }
 }
 
 void KeysPanel::mouseMove (const juce::MouseEvent& e)
