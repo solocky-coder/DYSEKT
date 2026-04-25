@@ -182,6 +182,13 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
         scratchL.assign ((size_t) numSamples, 0.0f);
         scratchR.assign ((size_t) numSamples, 0.0f);
     }
+    else
+    {
+        // fluid_synth_process ACCUMULATES — must zero before every call
+        // or stale audio from the previous block feeds back indefinitely.
+        std::fill (scratchL.begin(), scratchL.begin() + numSamples, 0.0f);
+        std::fill (scratchR.begin(), scratchR.begin() + numSamples, 0.0f);
+    }
 
     // FluidSynth writes directly into planar buffers passed as an array.
     float* planes[2] = { scratchL.data(), scratchR.data() };
