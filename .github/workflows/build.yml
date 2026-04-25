@@ -44,14 +44,6 @@ jobs:
             git clone --depth 1 https://github.com/Signalsmith-Audio/linear.git signalsmith-linear
           }
 
-      - name: Fetch sfizz
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "sfizz/CMakeLists.txt")) {
-            Remove-Item -Recurse -Force sfizz -ErrorAction SilentlyContinue
-            git clone --depth 1 --recurse-submodules https://github.com/sfztools/sfizz.git sfizz
-          }
-
       - name: Configure CMake
         shell: pwsh
         run: |
@@ -60,9 +52,29 @@ jobs:
             -DJUCE_BUILD_EXTRAS=OFF `
             -DJUCE_BUILD_EXAMPLES=OFF
 
+      - name: Copy FluidSynth DLLs next to VST3 (required before post-build step)
+        shell: pwsh
+        run: |
+          $vst3dir = "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3\Contents\x86_64-win"
+          New-Item -ItemType Directory -Force -Path $vst3dir | Out-Null
+          $src = "fluidsynth-prebuilt\bin"
+          Get-ChildItem "$src\*.dll" | ForEach-Object {
+            Copy-Item $_.FullName $vst3dir
+            Write-Host "Copied $($_.Name)"
+          }
+
       - name: Build
         shell: pwsh
         run: cmake --build build --config Release --parallel
+
+      - name: Bundle FluidSynth DLLs into artifact
+        shell: pwsh
+        run: |
+          $vst3dir = "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3\Contents\x86_64-win"
+          $src = "fluidsynth-prebuilt\bin"
+          Get-ChildItem "$src\*.dll" | ForEach-Object {
+            Copy-Item -Force $_.FullName $vst3dir
+          }
 
       - name: Collect VST3
         shell: pwsh
@@ -73,7 +85,7 @@ jobs:
             Copy-Item -Recurse -Force $d.FullName artifacts/
           }
           Write-Host "Collected VST3 bundles:"
-          Get-ChildItem artifacts/
+          Get-ChildItem artifacts/ -Recurse
 
       - name: Upload VST3
         uses: actions/upload-artifact@v4
