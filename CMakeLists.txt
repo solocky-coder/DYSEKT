@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 
 # --- sfizz (SF2 / SFZ slice-rendering engine — used by SoundFontLoader only) ---
-if(FALSE)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sfizz/CMakeLists.txt")
     set(SFIZZ_CLIENTS OFF CACHE BOOL "" FORCE)
     set(SFIZZ_SHARED  OFF CACHE BOOL "" FORCE)
     set(SFIZZ_JACK    OFF CACHE BOOL "" FORCE)
