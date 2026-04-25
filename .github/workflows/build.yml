@@ -54,6 +54,18 @@ jobs:
             git clone --depth 1 https://github.com/Signalsmith-Audio/linear.git signalsmith-linear
           }
 
+      - name: Remove any static moduleinfo.json from source tree
+        shell: pwsh
+        run: |
+          # A hand-committed moduleinfo.json overrides the JUCE-generated one.
+          # Delete any copy outside the build folder so the build always generates a fresh one.
+          Get-ChildItem -Recurse -Filter "moduleinfo.json" -Path "." |
+            Where-Object { $_.FullName -notlike "*\build\*" } |
+            ForEach-Object {
+              Write-Host "Removing static moduleinfo: $($_.FullName)"
+              Remove-Item -Force $_.FullName
+            }
+
       - name: Configure CMake
         shell: pwsh
         run: |
@@ -83,6 +95,40 @@ jobs:
           # juce_vst3_helper.exe tries to load the VST3 to generate moduleinfo.json
           $env:PATH = "${{ github.workspace }}\fluidsynth-prebuilt\bin;" + $env:PATH
           cmake --build build --config Release --target Dysekt_VST3 --parallel
+
+      - name: Fix and validate moduleinfo.json
+        shell: python
+        run: |
+          import re, json, pathlib, sys
+
+          # Find the generated moduleinfo in the build tree
+          matches = list(pathlib.Path("build").rglob("moduleinfo.json"))
+          if not matches:
+              sys.exit("ERROR: moduleinfo.json not found in build output!")
+          p = matches[0]
+          print("Found moduleinfo:", p)
+
+          # Strip trailing commas (SMTG SDK bug in older versions)
+          text = p.read_text(encoding="utf-8")
+          clean = re.sub(r',(\s*[}\]])', r'\1', text)
+
+          # Parse and validate
+          try:
+              parsed = json.loads(clean)
+          except json.JSONDecodeError as e:
+              sys.exit(f"ERROR: moduleinfo.json is not valid JSON after cleanup: {e}")
+
+          # Fail the build if placeholder CIDs are still present
+          bad = [c["CID"] for c in parsed["Classes"] if c["CID"].upper().startswith("ABCDEF")]
+          if bad:
+              sys.exit(f"ERROR: Placeholder CIDs detected — PLUGIN_CODE not generating real UIDs:\n  " + "\n  ".join(bad))
+
+          for cls in parsed["Classes"]:
+              print(f"  OK  {cls['CID']}  {cls['Category']}")
+
+          # Write back the cleaned JSON
+          p.write_text(json.dumps(parsed, indent=2), encoding="utf-8")
+          print("moduleinfo.json is clean and valid.")
 
       - name: Bundle FluidSynth DLLs into VST3
         shell: pwsh
