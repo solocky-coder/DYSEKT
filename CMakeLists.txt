@@ -93,7 +93,7 @@ endif()
 juce_add_plugin(Dysekt
     COMPANY_NAME "DunSoft"
     PLUGIN_MANUFACTURER_CODE Dnst
-    PLUGIN_CODE Dysk
+    PLUGIN_CODE DySK
     FORMATS VST3
     PRODUCT_NAME "DYSEKT"
     IS_SYNTH TRUE
