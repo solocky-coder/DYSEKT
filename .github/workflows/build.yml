@@ -78,7 +78,11 @@ jobs:
 
       - name: Build VST3 final link + moduleinfo
         shell: pwsh
-        run: cmake --build build --config Release --target Dysekt_VST3 --parallel
+        run: |
+          # Add FluidSynth DLLs to PATH so LoadLibraryW can find them when
+          # juce_vst3_helper.exe tries to load the VST3 to generate moduleinfo.json
+          $env:PATH = "${{ github.workspace }}\fluidsynth-prebuilt\bin;" + $env:PATH
+          cmake --build build --config Release --target Dysekt_VST3 --parallel
 
       - name: Bundle FluidSynth DLLs into VST3
         shell: pwsh
