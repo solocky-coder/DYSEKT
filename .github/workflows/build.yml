@@ -52,11 +52,18 @@ jobs:
             git clone --depth 1 --recurse-submodules https://github.com/sfztools/sfizz.git sfizz
           }
 
+      - name: Install FluidSynth via vcpkg
+        shell: pwsh
+        run: |
+          vcpkg install fluidsynth:x64-windows
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
       - name: Configure CMake
         shell: pwsh
         run: |
           cmake -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DJUCE_BUILD_EXTRAS=OFF `
             -DJUCE_BUILD_EXAMPLES=OFF
 
@@ -71,6 +78,11 @@ jobs:
           $dirs = Get-ChildItem -Recurse -Filter "*.vst3" build/ | Where-Object { $_.PSIsContainer }
           foreach ($d in $dirs) {
             Copy-Item -Recurse -Force $d.FullName artifacts/
+          }
+          # Copy FluidSynth runtime DLLs so the plugin loads in DAWs
+          $fluidsynthDlls = Get-ChildItem -Recurse "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin" -Filter "fluidsynth*.dll"
+          foreach ($dll in $fluidsynthDlls) {
+            Copy-Item $dll.FullName artifacts/
           }
           Write-Host "Collected VST3 bundles:"
           Get-ChildItem artifacts/
