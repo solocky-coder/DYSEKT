@@ -136,7 +136,7 @@ void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
         g.drawRoundedRectangle (btn.reduced (0.5f), 3.0f, 1.0f);
         g.setFont (DysektLookAndFeel::makeFont (10.5f));
         g.setColour (theme.accent);
-        g.drawText ("LOAD DYFONT", loadBtnZone, juce::Justification::centred, false);
+        g.drawText ("LOAD SF2", loadBtnZone, juce::Justification::centred, false);
     }
 
     // ── VOL knob ─────────────────────────────────────────────────────────────
@@ -243,7 +243,7 @@ void SfzDropdownPanel::drawPresetPicker (juce::Graphics& g) const
         {
             g.setFont (DysektLookAndFeel::makeFont (10.5f));
             g.setColour (theme.foreground.withAlpha (0.28f));
-            g.drawText ("No DYFONT loaded", lbl, juce::Justification::centred, false);
+            g.drawText ("No SF2 loaded", lbl, juce::Justification::centred, false);
         }
         else if (presetList.empty())
         {

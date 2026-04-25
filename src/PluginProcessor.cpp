@@ -119,8 +119,6 @@ static bool isCriticalCommand (DysektProcessor::CommandType type)
 
 DysektProcessor::DysektProcessor()
     : AudioProcessor (BusesProperties()
-                          .withInput  ("DYSEKT",  juce::AudioChannelSet::disabled(), true)
-                          .withInput  ("DYFONT",  juce::AudioChannelSet::disabled(), false)
                           .withOutput ("Main", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Out 2", juce::AudioChannelSet::stereo(), false)
                           .withOutput ("Out 3", juce::AudioChannelSet::stereo(), false)
@@ -192,13 +190,6 @@ bool DysektProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
     {
         if (! layouts.outputBuses[i].isDisabled()
             && layouts.outputBuses[i] != juce::AudioChannelSet::stereo())
-            return false;
-    }
-
-    // Input buses: only disabled (MIDI-only) buses are accepted
-    for (int i = 0; i < layouts.inputBuses.size(); ++i)
-    {
-        if (! layouts.inputBuses[i].isDisabled())
             return false;
     }
 
