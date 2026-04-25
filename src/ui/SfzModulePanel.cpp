@@ -4,6 +4,7 @@
 #include "SfzModulePanel.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include <set>
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 static constexpr int kKnobW    = 60;
@@ -662,6 +663,10 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
     int  loKey = 0, hiKey = 127;
     bool hasKey = false;
     int  colIdx = 0;
+    // Track seen ranges so each unique keyRange appears exactly once.
+    // SF2 IGEN has one entry per sample in a zone (velocity layers etc.)
+    // so the same lo/hi pair repeats many times — we want one zone per range.
+    std::set<std::pair<int,int>> seen;
 
     for (size_t i = 0; i < numRecs; ++i)
     {
@@ -675,31 +680,32 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
             hiKey  = hi;
             hasKey = true;
         }
-        else if (oper == 0)  // endOper — end of zone
+        else if (oper == 0)  // endOper — end of instrument zone
         {
             if (hasKey && hiKey >= loKey)
             {
-                zones.push_back ({ loKey, hiKey, zoneColour (colIdx),
-                                   "Zone " + juce::String (colIdx + 1) });
-                ++colIdx;
+                auto key = std::make_pair (loKey, hiKey);
+                if (seen.find (key) == seen.end())
+                {
+                    seen.insert (key);
+                    zones.push_back ({ loKey, hiKey, zoneColour (colIdx),
+                                       "Zone " + juce::String (colIdx + 1) });
+                    ++colIdx;
+                }
             }
             loKey  = 0; hiKey = 127; hasKey = false;
         }
     }
 
-    // Deduplicate identical ranges (SF2 files often repeat per-preset)
+    // Sort by loKey for display
     std::sort (zones.begin(), zones.end(),
                [] (auto& a, auto& b) { return a.loKey < b.loKey; });
-    zones.erase (std::unique (zones.begin(), zones.end(),
-                               [] (auto& a, auto& b) { return a.loKey == b.loKey && a.hiKey == b.hiKey; }),
-                 zones.end());
 
-    // Re-assign colours after dedup
+    // Re-assign colours after sort
     for (size_t i = 0; i < zones.size(); ++i)
     {
         zones[i].colour = zoneColour ((int) i);
-        if (zones[i].name.isEmpty())
-            zones[i].name = "Zone " + juce::String ((int) i + 1);
+        zones[i].name   = "Zone " + juce::String ((int) i + 1);
     }
 
     return zones;

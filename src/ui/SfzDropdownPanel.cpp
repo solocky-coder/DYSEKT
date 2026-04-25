@@ -4,6 +4,7 @@
 #include "SfzDropdownPanel.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include <set>
 
 // ── Layout constants (header strip) ──────────────────────────────────────────
 static constexpr int kLoadW        = 64;
@@ -696,6 +697,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
     int loKey = 0, hiKey = 127;
     bool hasKey = false;
     int  colIdx = 0;
+    std::set<std::pair<int,int>> seen;
 
     for (size_t i = 0; i < numRecs; ++i)
     {
@@ -704,15 +706,19 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
         else if (oper == 0)
         {
             if (hasKey && hiKey >= loKey)
-                zones.push_back ({ loKey, hiKey, zoneColourDP (colIdx++) });
+            {
+                auto key = std::make_pair (loKey, hiKey);
+                if (seen.find (key) == seen.end())
+                {
+                    seen.insert (key);
+                    zones.push_back ({ loKey, hiKey, zoneColourDP (colIdx++) });
+                }
+            }
             loKey = 0; hiKey = 127; hasKey = false;
         }
     }
 
     std::sort (zones.begin(), zones.end(), [] (auto& a, auto& b) { return a.loKey < b.loKey; });
-    zones.erase (std::unique (zones.begin(), zones.end(),
-                               [] (auto& a, auto& b) { return a.loKey == b.loKey && a.hiKey == b.hiKey; }),
-                 zones.end());
     for (size_t i = 0; i < zones.size(); ++i)
         zones[i].colour = zoneColourDP ((int) i);
 
