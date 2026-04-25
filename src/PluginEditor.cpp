@@ -178,7 +178,7 @@ void DysektEditor::setUiMode (int mode)
  // Keep the EDIT|SFZ tab in sync
  headerBar.dualFrame().setPadGridActive (uiMode == 1);
 
- // Hide waveform overview immediately when switching to SF2 mode
+ // Hide waveform overview immediately when switching to SFZ mode
  waveformOverview.setVisible (uiMode == 0);
 
  // Show/hide sfzDropdown panel based on mode
@@ -237,7 +237,7 @@ void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
  return;
  }
  auto ext = file.getFileExtension().toLowerCase();
- if (ext == ".sf2") {
+ if (ext == ".sf2" || ext == ".sfz") {
  processor.loadSoundFontAsync (file);
  return;
  }
@@ -445,7 +445,7 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  g.drawRoundedRectangle (screenF.expanded (0.5f * sf), 2.0f * sf, 1.0f * sf);
  }
 
- // SF2 player frame border — identical recipe and width as the waveform frame
+ // SFZ player frame border — identical recipe and width as the waveform frame
  const bool sfzVisible = sfzDropdown.isVisible() && sfzDropdown.getHeight() > 0;
  if (sfzVisible)
  {
@@ -663,7 +663,7 @@ void DysektEditor::resized()
  }
  else
  {
- // SF2 player layout
+ // SFZ player layout
  sfzDropdown.setVisible (true);
  sfzDropdown.setBounds (juce::Rectangle<int> (screenX, y, screenW, waveH));
 
@@ -938,7 +938,7 @@ void DysektEditor::timerCallback()
  if (waveformNeedsRepaint) waveformView.repaint();
  if (laneNeedsRepaint) sliceLane.repaint();
 
- // SF2 player refresh
+ // SFZ player refresh
  if (uiMode == 1 && (uiChanged || playbackActive))
      sfzDropdown.repaint();
 
@@ -1140,7 +1140,7 @@ bool DysektEditor::isInterestedInFileDrag (const juce::StringArray& files)
  auto ext = juce::File (f).getFileExtension().toLowerCase();
  if (ext == ".wav" || ext == ".aif" || ext == ".aiff" ||
  ext == ".ogg" || ext == ".flac" || ext == ".mp3" ||
- ext == ".sf2")
+ ext == ".sf2" || ext == ".sfz")
  return true;
  }
  return false;

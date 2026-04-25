@@ -89,7 +89,7 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         g.drawLine (cx, bY + bH, cx, bY + bH + 3.5f, 1.5f);
         g.fillEllipse (cx - 2.0f, bY + bH + 3.0f, 4.0f, 3.0f);
     }
-    else if (type == 4) // SF2 instrument — mini piano keys
+    else if (type == 4) // SFZ / SF2 instrument — mini piano keys
     {
         const float keyW  = 5.0f;
         const float keyH  = 11.0f;
@@ -208,7 +208,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         };
 
         drawTab (editTabArea, "EDIT", ! padGridActive);
-        drawTab (padTabArea,  "SF2",  padGridActive);
+        drawTab (padTabArea,  "SFZ",  padGridActive);
     }
 
     // ── Top row: four icons evenly spread across full width ──────────────────

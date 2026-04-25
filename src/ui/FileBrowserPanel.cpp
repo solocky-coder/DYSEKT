@@ -89,7 +89,7 @@ void FileBrowserPanel::ArchiveListModel::listBoxItemDoubleClicked (int row, cons
 
 FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     : processor (p),
-      fileFilter ("*.wav;*.aif;*.aiff;*.ogg;*.flac;*.mp3;*.sf2", "*", "Audio & SoundFont Files"),
+      fileFilter ("*.wav;*.aif;*.aiff;*.ogg;*.flac;*.mp3;*.sf2;*.sfz", "*", "Audio & SoundFont Files"),
       dirList (&fileFilter, ioThread),
       browser (juce::FileBrowserComponent::openMode
                | juce::FileBrowserComponent::canSelectFiles,
@@ -424,7 +424,7 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
 
     auto ext = f.getFileExtension().toLowerCase();
 
-    if (ext == ".sf2")
+    if (ext == ".sf2" || ext == ".sfz")
     {
         processor.loadSoundFontAsync (f);
         if (onFileLoaded) onFileLoaded();

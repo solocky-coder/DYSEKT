@@ -6,20 +6,36 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 
+# --- sfizz (SF2 / SFZ slice-rendering engine — used by SoundFontLoader only) ---
+if(FALSE)
+    set(SFIZZ_CLIENTS OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_SHARED  OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_JACK    OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_LV2     OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_VST     OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_BENCHMARKS OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_TESTS   OFF CACHE BOOL "" FORCE)
+    add_subdirectory(sfizz EXCLUDE_FROM_ALL)
+    set(DYSEKT_HAS_SFIZZ TRUE)
+    message(STATUS "sfizz found — SF2/SFZ slice-render support enabled")
+else()
+    set(DYSEKT_HAS_SFIZZ FALSE)
+    message(STATUS "sfizz NOT found at ./sfizz — SF2/SFZ slice-render support disabled.")
+endif()
+
 # --- FluidSynth (SF2 live-playback engine — used by SfzPlayer) ---
 #
-# Resolution order:
-#   1. find_package  — picks up a vcpkg / system install automatically
-#   2. Bundled prebuilt zip — extract fluidsynth-2.3.4-win10-x64.zip into
-#      the repo root so the tree looks like:
-#        fluidsynth-prebuilt/
-#          include/fluidsynth.h
-#          include/fluidsynth/
-#          lib/libfluidsynth.dll.a
-#          bin/libfluidsynth-3.dll   ← copy this next to your VST3
-#   3. Bundled source tree — clone FluidSynth into ./fluidsynth and it
-#      will be compiled from source (slow, but works everywhere).
+# Preferred: install FluidSynth system-wide, then CMake's find_package picks it up.
 #
+#   Windows:  vcpkg install fluidsynth:x64-windows
+#             Pass -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
+#
+#   macOS:    brew install fluid-synth
+#
+#   Linux:    sudo apt install libfluidsynth-dev
+#
+# Alternatively, place a fluidsynth source tree at ./fluidsynth and the
+# add_subdirectory fallback below will build it from source.
 # ---------------------------------------------------------------------------
 
 find_package(FluidSynth CONFIG QUIET)
@@ -28,44 +44,8 @@ if(FluidSynth_FOUND)
     set(DYSEKT_HAS_FLUIDSYNTH TRUE)
     message(STATUS "FluidSynth ${FluidSynth_VERSION} found via find_package — SF2 live playback enabled")
 else()
-    # --- Fallback 1: prebuilt zip extracted at ./fluidsynth-prebuilt ----------
-    set(FLUIDSYNTH_PREBUILT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/fluidsynth-prebuilt")
-    if(EXISTS "${FLUIDSYNTH_PREBUILT_DIR}/include/fluidsynth.h" AND
-       EXISTS "${FLUIDSYNTH_PREBUILT_DIR}/lib/libfluidsynth.dll.a")
-
-        message(STATUS "FluidSynth prebuilt found at ./fluidsynth-prebuilt — SF2 live playback enabled")
-        set(DYSEKT_HAS_FLUIDSYNTH TRUE)
-
-        # Create an imported target that looks identical to the find_package one
-        add_library(FluidSynth::libfluidsynth SHARED IMPORTED)
-        set_target_properties(FluidSynth::libfluidsynth PROPERTIES
-            IMPORTED_LOCATION             "${FLUIDSYNTH_PREBUILT_DIR}/bin/libfluidsynth-3.dll"
-            IMPORTED_IMPLIB               "${FLUIDSYNTH_PREBUILT_DIR}/lib/libfluidsynth.dll.a"
-            INTERFACE_INCLUDE_DIRECTORIES "${FLUIDSYNTH_PREBUILT_DIR}/include"
-        )
-
-        # Copy the DLL (and its deps) next to the built VST3 automatically
-        set(FLUIDSYNTH_RUNTIME_DLLS
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libfluidsynth-3.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libglib-2.0-0.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libgobject-2.0-0.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libgthread-2.0-0.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libintl-8.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libsndfile-1.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libinstpatch-2.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libgcc_s_sjlj-1.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libstdc++-6.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libwinpthread-1.dll"
-            "${FLUIDSYNTH_PREBUILT_DIR}/bin/libgomp-1.dll"
-        )
-        foreach(_dll ${FLUIDSYNTH_RUNTIME_DLLS})
-            if(EXISTS "${_dll}")
-                install(FILES "${_dll}" DESTINATION ".")
-            endif()
-        endforeach()
-
-    # --- Fallback 2: build from source at ./fluidsynth ----------------------
-    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/fluidsynth/CMakeLists.txt")
+    # Fallback: try a bundled source tree
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/fluidsynth/CMakeLists.txt")
         set(FLUIDSYNTH_BUILD_TESTS     OFF CACHE BOOL "" FORCE)
         set(FLUIDSYNTH_BUILD_DOCS      OFF CACHE BOOL "" FORCE)
         set(enable-dbus                OFF CACHE BOOL "" FORCE)
@@ -78,14 +58,11 @@ else()
         add_subdirectory(fluidsynth EXCLUDE_FROM_ALL)
         set(DYSEKT_HAS_FLUIDSYNTH TRUE)
         message(STATUS "FluidSynth found at ./fluidsynth — building from source")
-
     else()
         set(DYSEKT_HAS_FLUIDSYNTH FALSE)
         message(WARNING
             "FluidSynth NOT found — SF2 live playback will be disabled.\n"
-            "  Option A: extract fluidsynth-2.3.4-win10-x64.zip into ./fluidsynth-prebuilt/\n"
-            "  Option B: vcpkg install fluidsynth:x64-windows\n"
-            "  Option C: clone FluidSynth source into ./fluidsynth/")
+            "  Install via vcpkg / homebrew / apt, or clone FluidSynth into ./fluidsynth.")
     endif()
 endif()
 
@@ -93,7 +70,7 @@ endif()
 juce_add_plugin(Dysekt
     COMPANY_NAME "DunSoft"
     PLUGIN_MANUFACTURER_CODE Dnst
-    PLUGIN_CODE DySK
+    PLUGIN_CODE Dysk
     FORMATS VST3
     PRODUCT_NAME "DYSEKT"
     IS_SYNTH TRUE
@@ -162,6 +139,7 @@ target_compile_definitions(Dysekt PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
+    DYSEKT_HAS_SFIZZ=$<BOOL:${DYSEKT_HAS_SFIZZ}>
     DYSEKT_HAS_FLUIDSYNTH=$<BOOL:${DYSEKT_HAS_FLUIDSYNTH}>
 )
 
@@ -170,8 +148,11 @@ target_link_libraries(Dysekt
         juce::juce_audio_utils
         juce::juce_dsp
         DysektFonts
+        # sfizz — slice-render pipeline (SoundFontLoader)
+        $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:sfizz::sfizz>
         # FluidSynth — live SF2 playback (SfzPlayer)
         $<$<BOOL:${DYSEKT_HAS_FLUIDSYNTH}>:FluidSynth::libfluidsynth>
+        $<$<PLATFORM_ID:Linux>:asound>
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

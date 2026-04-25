@@ -9,85 +9,112 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Fetch JUCE
-        shell: pwsh
-        run: |
-          Remove-Item -Recurse -Force JUCE -ErrorAction SilentlyContinue
-          git clone --depth 1 --branch 8.0.4 https://github.com/juce-framework/JUCE.git JUCE
-
-      - name: Fetch bungee
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "bungee/src")) {
-            Remove-Item -Recurse -Force bungee -ErrorAction SilentlyContinue
-            git clone --depth 1 --recurse-submodules https://github.com/kupix/bungee.git bungee
-          }
-
-      - name: Fetch signalsmith-stretch
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "signalsmith-stretch/signalsmith-stretch.h")) {
-            Remove-Item -Recurse -Force signalsmith-stretch -ErrorAction SilentlyContinue
-            git clone --depth 1 https://github.com/Signalsmith-Audio/signalsmith-stretch.git signalsmith-stretch
-          }
-
-      - name: Fetch signalsmith-linear
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "signalsmith-linear")) {
-            Remove-Item -Recurse -Force signalsmith-linear -ErrorAction SilentlyContinue
-            git clone --depth 1 https://github.com/Signalsmith-Audio/linear.git signalsmith-linear
-          }
-
-      - name: Configure CMake
-        shell: pwsh
-        run: |
-          cmake -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DJUCE_BUILD_EXTRAS=OFF `
-            -DJUCE_BUILD_EXAMPLES=OFF
-
-      - name: Copy FluidSynth DLLs next to VST3 (required before post-build step)
-        shell: pwsh
-        run: |
-          $vst3dir = "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3\Contents\x86_64-win"
-          New-Item -ItemType Directory -Force -Path $vst3dir | Out-Null
-          $src = "fluidsynth-prebuilt\bin"
-          Get-ChildItem "$src\*.dll" | ForEach-Object {
-            Copy-Item $_.FullName $vst3dir
-            Write-Host "Copied $($_.Name)"
-          }
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        shell: pwsh
-        run: cmake --build build --config Release --parallel
-
-      - name: Bundle FluidSynth DLLs into artifact
-        shell: pwsh
-        run: |
-          $vst3dir = "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3\Contents\x86_64-win"
-          $src = "fluidsynth-prebuilt\bin"
-          Get-ChildItem "$src\*.dll" | ForEach-Object {
-            Copy-Item -Force $_.FullName $vst3dir
-          }
+        run: cmake --build build --config Release
 
       - name: Package
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path staging | Out-Null
-          Copy-Item -Recurse -Force "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3" staging\
-          Compress-Archive -Path staging\* -DestinationPath "DYSEKT-${{ github.ref_name }}-Windows-x64.zip"
+          mkdir staging
+          cp -r build/Intersect_artefacts/Release/VST3/INTERSECT.vst3 staging/
+          cp build/Intersect_artefacts/Release/Standalone/INTERSECT.exe staging/
+          cd staging && 7z a ../INTERSECT-${{ github.ref_name }}-Windows-x64.zip *
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DYSEKT-Windows-x64
-          path: DYSEKT-${{ github.ref_name }}-Windows-x64.zip
+          name: INTERSECT-Windows-x64
+          path: INTERSECT-${{ github.ref_name }}-Windows-x64.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfreetype-dev libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          cp -r build/Intersect_artefacts/Release/VST3/INTERSECT.vst3 staging/
+          cp build/Intersect_artefacts/Release/Standalone/INTERSECT staging/
+          cd staging && zip -r ../INTERSECT-${{ github.ref_name }}-Linux-x64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-Linux-x64
+          path: INTERSECT-${{ github.ref_name }}-Linux-x64.zip
+
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          cp -r build/Intersect_artefacts/Release/VST3/INTERSECT.vst3 staging/
+          cp -r build/Intersect_artefacts/Release/Standalone/INTERSECT.app staging/
+          cp -r build/Intersect_artefacts/Release/AU/INTERSECT.component staging/
+          cd staging && zip -r ../INTERSECT-${{ github.ref_name }}-macOS-arm64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-macOS-arm64
+          path: INTERSECT-${{ github.ref_name }}-macOS-arm64.zip
+
+  build-macos-x64:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir staging
+          cp -r build/Intersect_artefacts/Release/VST3/INTERSECT.vst3 staging/
+          cp -r build/Intersect_artefacts/Release/Standalone/INTERSECT.app staging/
+          cp -r build/Intersect_artefacts/Release/AU/INTERSECT.component staging/
+          cd staging && zip -r ../INTERSECT-${{ github.ref_name }}-macOS-x64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: INTERSECT-macOS-x64
+          path: INTERSECT-${{ github.ref_name }}-macOS-x64.zip
 
   release:
-    needs: [build-windows]
+    needs: [build-windows, build-linux, build-macos-arm64, build-macos-x64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -100,4 +127,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/DYSEKT-Windows-x64/DYSEKT-${{ github.ref_name }}-Windows-x64.zip
+            artifacts/INTERSECT-Windows-x64/INTERSECT-${{ github.ref_name }}-Windows-x64.zip
+            artifacts/INTERSECT-Linux-x64/INTERSECT-${{ github.ref_name }}-Linux-x64.zip
+            artifacts/INTERSECT-macOS-arm64/INTERSECT-${{ github.ref_name }}-macOS-arm64.zip
+            artifacts/INTERSECT-macOS-x64/INTERSECT-${{ github.ref_name }}-macOS-x64.zip

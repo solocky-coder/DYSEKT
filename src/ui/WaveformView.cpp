@@ -1370,7 +1370,7 @@ bool WaveformView::isInterestedInFileDrag (const juce::StringArray& files)
         auto ext = juce::File (f).getFileExtension().toLowerCase();
         if (ext == ".wav"  || ext == ".ogg"  || ext == ".aif" ||
             ext == ".aiff" || ext == ".flac" || ext == ".mp3" ||
-            ext == ".sf2")
+            ext == ".sf2"  || ext == ".sfz")
             return true;
     }
     return false;
@@ -1384,7 +1384,7 @@ void WaveformView::filesDropped (const juce::StringArray& files, int, int)
     processor.zoom.store (1.0f);
     processor.scroll.store (0.0f);
     prevCacheKey = {};
-    if (ext == ".sf2")
+    if (ext == ".sf2" || ext == ".sfz")
         processor.loadSoundFontAsync (f);
     else
         processor.loadFileAsync (f);

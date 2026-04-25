@@ -308,10 +308,15 @@ void DysektProcessor::applyTrimToCurrentSample (int trimStart, int trimEnd)
 
 void DysektProcessor::loadSoundFontAsync (const juce::File& file)
 {
-    // SF2 files are played back in real-time via SfzPlayer (FluidSynth backend).
-    // This function is a no-op for SF2 — loading is triggered separately via
-    // sfzPlayer.loadFile(). Post a benign failure so the waveform engine
-    // stays in its unloaded state and does not interfere.
+#if DYSEKT_HAS_SFIZZ
+    // Delegate to SoundFontLoader which uses sfizz to render all active notes
+    // into a single stereo buffer and posts the result back via completedLoadData.
+    SoundFontLoader loader (*this);
+    loader.load (file);
+#else
+    // sfizz is not linked — SF2/SFZ files cannot be decoded.
+    // Post a failure result so the UI shows the normal "failed to load" state
+    // rather than silently doing nothing.
     const int token = nextLoadToken.fetch_add (1, std::memory_order_relaxed) + 1;
     latestLoadToken.store (token, std::memory_order_release);
     latestLoadKind.store  ((int) LoadKindReplace, std::memory_order_release);
@@ -324,6 +329,7 @@ void DysektProcessor::loadSoundFontAsync (const juce::File& file)
     payload->kind  = LoadKindReplace;
     payload->file  = file;
     delete completedLoadFailure.exchange (payload, std::memory_order_acq_rel);
+#endif
 }
 
 void DysektProcessor::relinkFileAsync (const juce::File& file)

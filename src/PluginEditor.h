@@ -55,7 +55,7 @@ public:
     void showTrimMode   (const juce::File& file);
 
     /// Switch between interface modes.
-    /// 0 = Waveform View (original), 1 = SF2 Player.
+    /// 0 = Waveform View (original), 1 = SFZ Player.
     void setUiMode (int mode);
 
 private:
@@ -88,7 +88,7 @@ private:
 
     /// Current interface layout mode.
     /// 0 = Waveform View (original UI — never overwritten).
-    /// 1 = SF2 Player.
+    /// 1 = SFZ Player.
     int uiMode = 0;
     bool hasSampleLoaded = false;   // true once a sample with audio is loaded
 

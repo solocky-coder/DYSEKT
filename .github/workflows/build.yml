@@ -14,16 +14,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify fluidsynth-prebuilt is present
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "fluidsynth-prebuilt\bin\libfluidsynth-3.dll")) {
-            Write-Error "fluidsynth-prebuilt\bin\libfluidsynth-3.dll NOT FOUND. Check that fluidsynth-prebuilt is committed to the repo and not in .gitignore."
-            exit 1
-          }
-          Write-Host "FluidSynth DLLs found:"
-          Get-ChildItem "fluidsynth-prebuilt\bin\*.dll" | Select-Object Name
-
       - name: Fetch JUCE
         shell: pwsh
         run: |
@@ -54,15 +44,13 @@ jobs:
             git clone --depth 1 https://github.com/Signalsmith-Audio/linear.git signalsmith-linear
           }
 
-      - name: Remove any static moduleinfo.json from source tree
+      - name: Fetch sfizz
         shell: pwsh
         run: |
-          Get-ChildItem -Recurse -Filter "moduleinfo.json" -Path "." |
-            Where-Object { $_.FullName -notlike "*\build\*" } |
-            ForEach-Object {
-              Write-Host "Removing static moduleinfo: $($_.FullName)"
-              Remove-Item -Force $_.FullName
-            }
+          if (-not (Test-Path "sfizz/CMakeLists.txt")) {
+            Remove-Item -Recurse -Force sfizz -ErrorAction SilentlyContinue
+            git clone --depth 1 --recurse-submodules https://github.com/sfztools/sfizz.git sfizz
+          }
 
       - name: Configure CMake
         shell: pwsh
@@ -72,94 +60,9 @@ jobs:
             -DJUCE_BUILD_EXTRAS=OFF `
             -DJUCE_BUILD_EXAMPLES=OFF
 
-      - name: Build shared code only
+      - name: Build
         shell: pwsh
-        run: cmake --build build --config Release --target Dysekt --parallel
-
-      - name: Copy FluidSynth DLLs next to VST3 before final link step
-        shell: pwsh
-        run: |
-          # DLLs go ONLY into x86_64-win so the linker/helper can find them.
-          # They will be MOVED out to the bundle root after the link step.
-          $vst3dir = "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3\Contents\x86_64-win"
-          New-Item -ItemType Directory -Force -Path $vst3dir | Out-Null
-          Get-ChildItem "fluidsynth-prebuilt\bin\*.dll" | ForEach-Object {
-            Copy-Item -Force $_.FullName $vst3dir
-            Write-Host "Copied: $($_.Name) -> $vst3dir"
-          }
-
-      - name: Build VST3 final link + moduleinfo
-        shell: pwsh
-        run: |
-          # FluidSynth DLLs must be on PATH so juce_vst3_helper.exe can
-          # load the VST3 DLL to introspect it and write moduleinfo.json
-          $env:PATH = "${{ github.workspace }}\fluidsynth-prebuilt\bin;" + $env:PATH
-          cmake --build build --config Release --target Dysekt_VST3 --parallel
-
-      - name: Fix and validate moduleinfo.json
-        shell: python
-        run: |
-          import re, json, pathlib, sys
-
-          matches = list(pathlib.Path("build").rglob("moduleinfo.json"))
-          if not matches:
-              sys.exit("ERROR: moduleinfo.json not found in build output!")
-          p = matches[0]
-          print("Found moduleinfo:", p)
-
-          text = p.read_text(encoding="utf-8")
-          clean = re.sub(r',(\s*[}\]])', r'\1', text)
-
-          try:
-              parsed = json.loads(clean)
-          except json.JSONDecodeError as e:
-              sys.exit(f"ERROR: moduleinfo.json is not valid JSON after cleanup: {e}")
-
-          # Warn but don't fail on ABCDEF prefix — JUCE 8 uses this as its
-          # internal hashing seed; the last 8 chars (manufacturer+plugin code)
-          # are what actually distinguish plugins.
-          for cls in parsed["Classes"]:
-              cid = cls["CID"]
-              tail = cid[-8:]
-              print(f"  CID: {cid}  tail={tail}  {cls['Category']}")
-              if tail == "44797363" or tail.upper() == "4479736B".upper():
-                  sys.exit(f"ERROR: CID still uses old PLUGIN_CODE 'Dysk' — CMakeLists change did not take effect")
-
-          p.write_text(json.dumps(parsed, indent=2), encoding="utf-8")
-          print("moduleinfo.json is clean and valid.")
-
-      - name: Move FluidSynth DLLs to bundle root (out of x86_64-win)
-        shell: pwsh
-        run: |
-          # Cubase's VST3 scanner expects x86_64-win to contain ONLY the
-          # plugin DLL. Extra DLLs alongside it can cause the bundle to be
-          # skipped silently. Move them to the bundle root instead — Windows
-          # will find them there via normal DLL search order when the plugin
-          # DLL is loaded.
-          $x86dir    = "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3\Contents\x86_64-win"
-          $bundleRoot = "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3"
-
-          Get-ChildItem "$x86dir\lib*.dll" | ForEach-Object {
-            Move-Item -Force $_.FullName $bundleRoot
-            Write-Host "Moved: $($_.Name) -> bundle root"
-          }
-
-          Write-Host ""
-          Write-Host "=== x86_64-win (should contain only DYSEKT.vst3) ==="
-          Get-ChildItem $x86dir | Select-Object Name
-
-          Write-Host ""
-          Write-Host "=== Bundle root ==="
-          Get-ChildItem $bundleRoot | Select-Object Name
-
-      - name: Unblock all files in bundle (remove Zone.Identifier)
-        shell: pwsh
-        run: |
-          # Files downloaded/built in CI may carry a Zone.Identifier ADS
-          # that causes Windows to block them silently when a DAW loads them.
-          Get-ChildItem -Recurse "build\Dysekt_artefacts\Release\VST3\DYSEKT.vst3" |
-            ForEach-Object { Unblock-File -Path $_.FullName -ErrorAction SilentlyContinue }
-          Write-Host "All files unblocked."
+        run: cmake --build build --config Release --parallel
 
       - name: Collect VST3
         shell: pwsh
@@ -170,7 +73,7 @@ jobs:
             Copy-Item -Recurse -Force $d.FullName artifacts/
           }
           Write-Host "Collected VST3 bundles:"
-          Get-ChildItem artifacts/ -Recurse | Select-Object FullName
+          Get-ChildItem artifacts/
 
       - name: Upload VST3
         uses: actions/upload-artifact@v4

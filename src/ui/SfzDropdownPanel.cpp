@@ -602,6 +602,53 @@ static juce::Colour zoneColourDP (int index)
     return palette[index % 8];
 }
 
+std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::File& f)
+{
+    std::vector<KeysPanel::Keyzone> zones;
+    const auto lines = juce::StringArray::fromLines (f.loadFileAsString());
+
+    int  loKey = 0, hiKey = 127;
+    bool inRegion = false;
+    int  colIdx   = 0;
+
+    auto flush = [&]
+    {
+        if (inRegion && hiKey >= loKey)
+        {
+            zones.push_back ({ loKey, hiKey, zoneColourDP (colIdx++) });
+            loKey = 0; hiKey = 127;
+        }
+        inRegion = false;
+    };
+
+    for (auto line : lines)
+    {
+        line = line.trim().toLowerCase();
+        if (line.startsWith ("<region>")) { flush(); inRegion = true; loKey = 0; hiKey = 127; }
+        else if (line.startsWith ("<group>") || line.startsWith ("<global>")) flush();
+
+        if (inRegion)
+        {
+            auto loRaw = line.indexOf ("lokey=");
+            if (loRaw >= 0)
+                loKey = juce::jlimit (0, 127,
+                    line.substring (loRaw + 6).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
+            auto hiRaw = line.indexOf ("hikey=");
+            if (hiRaw >= 0)
+                hiKey = juce::jlimit (0, 127,
+                    line.substring (hiRaw + 6).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
+            auto kRaw = line.indexOf ("key=");
+            if (kRaw >= 0 && line.indexOf ("lokey=") < 0)
+            {
+                const int k = juce::jlimit (0, 127,
+                    line.substring (kRaw + 4).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
+                loKey = hiKey = k;
+            }
+        }
+    }
+    flush();
+    return zones;
+}
 
 std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::File& f)
 {
@@ -675,7 +722,9 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
 void SfzDropdownPanel::reloadZones (const juce::File& f)
 {
     const auto ext = f.getFileExtension().toLowerCase();
-    auto zones = (ext == ".sf2") ? parseSf2Zones (f)
+    // Only SF2 for this panel; sfz kept for compatibility in case zones are needed.
+    auto zones = (ext == ".sfz") ? parseSfzZones (f)
+               : (ext == ".sf2") ? parseSf2Zones (f)
                : std::vector<KeysPanel::Keyzone>{};
     keysPanel.setKeyzones (zones);
     if (! zones.empty())

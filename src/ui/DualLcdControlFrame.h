@@ -28,7 +28,7 @@ public:
     std::function<void()>    onWaveToggle;
     std::function<void()>    onMidiFollowToggle;
     std::function<void()>    onBodeToggle;
-    std::function<void(int)> onUiModeChanged;   // 0 = Edit, 1 = SF2 Player
+    std::function<void(int)> onUiModeChanged;   // 0 = Edit, 1 = SFZ Player
 
     void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
 
