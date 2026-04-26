@@ -254,18 +254,17 @@ void FileBrowserPanel::timerCallback()
 
 void FileBrowserPanel::resized()
 {
-    auto bounds = getLocalBounds();
+    // All layout happens inside the inner screen area (4 px inset on all sides).
+    auto inner = getLocalBounds().reduced (4);
 
-    // Preview bar at the bottom
+    // ── Preview bar at the BOTTOM of the inner area ───────────────────────────
     if (previewVisible)
     {
-        auto bar = bounds.removeFromBottom (kBarH);
-        playStopBtn.setBounds  (bar.removeFromLeft (kBarH).reduced (4));
-        volumeSlider.setBounds (bar.removeFromRight (90).reduced (4, 8));
+        auto bar = inner.removeFromBottom (kBarH);
+        playStopBtn  .setBounds (bar.removeFromLeft (kBarH).reduced (4));
+        volumeSlider .setBounds (bar.removeFromRight (90).reduced (4, 8));
         fileNameLabel.setBounds (bar.reduced (6, 4));
     }
-
-    auto inner = bounds.reduced (4);
 
     // ── Bookmark bar row 1: local folders ────────────────────────────────────
     {
@@ -305,8 +304,7 @@ void FileBrowserPanel::resized()
                                  archBar.getY() + 4, addW, archBar.getHeight() - 8);
     }
 
-    // Main content area: archive list or local browser
-    auto contentBounds = inner.withBottom (inner.getBottom() + 28);
+    // ── Main content area: archive list or local browser ──────────────────────
     if (archiveViewActive)
     {
         archiveList.setVisible (true);
@@ -317,55 +315,70 @@ void FileBrowserPanel::resized()
     {
         archiveList.setVisible (false);
         browser.setVisible (true);
-        browser.setBounds (contentBounds);
+        browser.setBounds (inner);
     }
 }
 
 void FileBrowserPanel::paint (juce::Graphics& g)
 {
-    auto bounds = getLocalBounds();
-    const auto& T = getTheme();
+    // Paint the LCD frame over the FULL component bounds (including the preview
+    // bar).  The preview bar is drawn inside the frame, not outside it.
+    const auto& T  = getTheme();
+    const auto  ac = T.accent;
+    const auto  b  = getLocalBounds();
 
-    if (previewVisible)
-    {
-        auto bar = bounds.removeFromBottom (kBarH);
-        g.setColour (T.darkBar.darker (0.6f));
-        g.fillRect (bar);
-        g.setColour (T.accent.withAlpha (0.25f));
-        g.drawLine ((float) bar.getX(), (float) bar.getY(),
-                    (float) bar.getRight(), (float) bar.getY(), 1.0f);
-    }
-
-    const auto ac = T.accent;
-    auto b = bounds;
-
+    // ── Outer rounded shell ───────────────────────────────────────────────────
     juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, 0,
                                     juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
     g.setGradientFill (outerGrad);
-    g.fillRect (b);
+    g.fillRoundedRectangle (b.toFloat(), 4.0f);
 
     g.setColour (ac.withAlpha (0.65f));
-    g.drawRect (b.toFloat(), 1.0f);
+    g.drawRoundedRectangle (b.toFloat().reduced (0.5f), 4.0f, 1.0f);
 
-    auto screen = b.reduced (4);
+    // ── Inner screen area (inset 4 px all around) ────────────────────────────
+    const auto screen = b.reduced (4);
+
     g.setColour (T.darkBar.darker (0.55f));
-    g.fillRect (screen);
+    g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
+    // Scanlines
     g.setColour (juce::Colours::black.withAlpha (0.18f));
-    for (int y = screen.getY(); y < screen.getBottom(); y += 2)
-        g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
+    {
+        juce::Graphics::ScopedSaveState ss (g);
+        g.reduceClipRegion (screen);
+        for (int y = screen.getY(); y < screen.getBottom(); y += 2)
+            g.drawHorizontalLine (y, (float) screen.getX(), (float) screen.getRight());
+    }
 
+    // Top glow
     juce::ColourGradient glow (ac.withAlpha (0.06f), 0, (float) screen.getY(),
-                                juce::Colours::transparentBlack, 0, (float) (screen.getY() + 20), false);
+                                juce::Colours::transparentBlack, 0,
+                                (float)(screen.getY() + 20), false);
     g.setGradientFill (glow);
-    g.fillRect (screen);
+    g.fillRoundedRectangle (screen.toFloat(), 2.0f);
 
     g.setColour (ac.withAlpha (0.12f));
-    g.drawRect (screen.expanded (0), 1.0f);
+    g.drawRoundedRectangle (screen.toFloat().expanded (0.5f), 2.0f, 1.0f);
 
-    // Bookmark bar row 1 background
+    // ── Preview bar (bottom, inside frame) ────────────────────────────────────
+    if (previewVisible)
     {
-        auto bmRect = screen.removeFromTop (kBmH).toFloat();
+        const auto bar = screen.removeFromBottom (kBarH);     // visual only — doesn't mutate screen
+        // Use a local copy so we can removeFromBottom without side-effects
+        auto screenCopy = screen;
+        const auto barRect = b.reduced (4).withTop (b.getBottom() - 4 - kBarH);
+
+        g.setColour (T.darkBar.darker (0.6f));
+        g.fillRect (barRect);
+        g.setColour (ac.withAlpha (0.25f));
+        g.drawLine ((float) barRect.getX(), (float) barRect.getY(),
+                    (float) barRect.getRight(), (float) barRect.getY(), 1.0f);
+    }
+
+    // ── Bookmark bar row 1 background ────────────────────────────────────────
+    {
+        const auto bmRect = b.reduced (4).withHeight (kBmH).toFloat();
         juce::ColourGradient bmGrad (T.darkBar.darker (0.5f), 0, bmRect.getY(),
                                      T.darkBar.darker (0.3f), 0, bmRect.getBottom(), false);
         g.setGradientFill (bmGrad);
@@ -375,9 +388,10 @@ void FileBrowserPanel::paint (juce::Graphics& g)
                     bmRect.getRight(), bmRect.getBottom(), 1.0f);
     }
 
-    // Bookmark bar row 2 background (archive)
+    // ── Bookmark bar row 2 background (archive) ───────────────────────────────
     {
-        auto archRect = screen.removeFromTop (kBmH).toFloat();
+        const auto archRect = b.reduced (4).withTop (b.getY() + 4 + kBmH)
+                                           .withHeight (kBmH).toFloat();
         juce::ColourGradient bmGrad (T.darkBar.darker (0.45f), 0, archRect.getY(),
                                      T.darkBar.darker (0.25f), 0, archRect.getBottom(), false);
         g.setGradientFill (bmGrad);
@@ -386,12 +400,12 @@ void FileBrowserPanel::paint (juce::Graphics& g)
         g.drawLine (archRect.getX(), archRect.getBottom(),
                     archRect.getRight(), archRect.getBottom(), 1.0f);
 
-        // If archive view is active, draw title
         if (archiveViewActive && archiveListTitle.isNotEmpty())
         {
             g.setColour (T.accent.withAlpha (0.6f));
             g.setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
-            g.drawText (archiveListTitle, archRect.reduced (4, 0), juce::Justification::centredRight);
+            g.drawText (archiveListTitle, archRect.reduced (4, 0).toNearestInt(),
+                        juce::Justification::centredRight);
         }
     }
 }

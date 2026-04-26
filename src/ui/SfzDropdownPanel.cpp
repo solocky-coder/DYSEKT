@@ -616,7 +616,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
     {
         if (inRegion && hiKey >= loKey)
         {
-            zones.push_back ({ loKey, hiKey, zoneColourDP (colIdx++) });
+            zones.push_back ({ loKey, hiKey, 0, 127, -1, false, zoneColourDP (colIdx++) });
             loKey = 0; hiKey = 127;
         }
         inRegion = false;
@@ -713,7 +713,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
                 if (seen.find (key) == seen.end())
                 {
                     seen.insert (key);
-                    zones.push_back ({ lo, hi, zoneColourDP (colIdx++) });
+                    zones.push_back ({ lo, hi, 0, 127, -1, false, zoneColourDP (colIdx++) });
                 }
             }
         }
