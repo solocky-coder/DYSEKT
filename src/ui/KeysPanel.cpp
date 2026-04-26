@@ -362,7 +362,8 @@ void KeysPanel::autoScrollToZones()
 
 void KeysPanel::rebuildZoneMatrix()
 {
-    const int vpW = getWidth();
+    // Use the viewport's actual width (which is inset from the frame border).
+    const int vpW = zoneViewport.isVisible() ? zoneViewport.getWidth() : getWidth();
     zoneMatrix.rebuild (keyzones, 0, vpW, 0, kWhiteKeyW, kBlackKeyW, vpW);
 }
 
@@ -381,7 +382,8 @@ void KeysPanel::resized()
     // Allow up to 50px tall, minimum 32px.
     kKeyH = juce::jlimit (32, 50, h / 3);
 
-    kZoneViewH = juce::jmax (0, h - kKeyH);
+    constexpr int kMatrixKeyGap = 4;   // px gap between zone matrix frame and keyboard
+    kZoneViewH = juce::jmax (0, h - kKeyH - kMatrixKeyGap);
 
     // Full keyboard: 75 white keys spanning the full component width.
     kNumWhite = kTotalWhite;   // 75
@@ -452,7 +454,13 @@ void KeysPanel::resized()
     // ── Zone viewport ─────────────────────────────────────────────────────────
     if (kZoneViewH > 0)
     {
-        zoneViewport.setBounds (0, 0, w, kZoneViewH);
+        // Inset by the LCD frame border (1px outer stroke + 2px inner screen offset = 3px).
+        // This ensures rows are clipped inside the visible frame regardless of
+        // whether a scrollbar is present — fixing the bleed-outside bug.
+        constexpr int kFrameInset = 3;
+        zoneViewport.setBounds (kFrameInset, kFrameInset,
+                                w - kFrameInset * 2,
+                                kZoneViewH - kFrameInset * 2);
         zoneViewport.setVisible (true);
         rebuildZoneMatrix();
     }
