@@ -5,26 +5,46 @@
 // 2 octaves: semitone offsets for each white key
 const int KeysPanel::whiteOffsets[14] = {
     0,2,4,5,7,9,11,      // octave 0
-    12,14,16,17,19,21,23  // octave 1
+    12,14,16,17,19,21,23 // octave 1
 };
 
 const KeysPanel::BlackDef KeysPanel::blackDefs[10] = {
-    {0,1},{1,3},{3,6},{4,8},{5,10},       // octave 0
-    {7,13},{8,15},{10,18},{11,20},{12,22}  // octave 1
+    {0,1},{1,3},{3,6},{4,8},{5,10},    // octave 0
+    {7,13},{8,15},{10,18},{11,20},{12,22} // octave 1
 };
 
 // =============================================================================
-//  ZoneMatrixContent
+// ZoneMatrixContent helpers
+// =============================================================================
+
+float KeysPanel::ZoneMatrixContent::noteToBarX (int note) const
+{
+    // The bar area runs from kNameColW to (contentW_ - kVelBadgeW).
+    // We map the visible 2-octave range (baseOctave_*12 .. baseOctave_*12+24)
+    // proportionally across that width.
+    const int loNote = baseOctave_ * 12;
+    const int hiNote = loNote + 24;
+    const float barAreaX = (float) kNameColW;
+    const float barAreaW = (float)(contentW_ - kNameColW - kVelBadgeW);
+
+    const float t = (float)(note - loNote) / (float)(hiNote - loNote);
+    return barAreaX + t * barAreaW;
+}
+
+// =============================================================================
+// ZoneMatrixContent::rebuild
 // =============================================================================
 
 void KeysPanel::ZoneMatrixContent::rebuild (const std::vector<Keyzone>& zones,
                                              int kbX, int kbW,
                                              int baseOctave,
-                                             int whiteKeyW, int blackKeyW)
+                                             int whiteKeyW, int blackKeyW,
+                                             int componentWidth)
 {
-    kbX_        = kbX;
-    kbW_        = kbW;
+    kbX_       = kbX;
+    kbW_       = kbW;
     baseOctave_ = baseOctave;
+    contentW_  = componentWidth;
 
     rows.clear();
     rows.reserve (zones.size());
@@ -33,26 +53,23 @@ void KeysPanel::ZoneMatrixContent::rebuild (const std::vector<Keyzone>& zones,
     {
         Row r;
         r.zone = z;
-
-        // Compute pixel X range on the keyboard axis.
-        // We delegate to the owner's noteToX / noteKeyWidth helpers.
-        const float x1 = owner.noteToX (z.loKey, kbX);
-        const float x2 = owner.noteToX (z.hiKey, kbX) + owner.noteKeyWidth (z.hiKey);
-        r.barX = x1;
-        r.barW = juce::jmax (2.0f, x2 - x1);
+        r.barX = noteToBarX (z.loKey);
+        r.barW = juce::jmax (2.0f, noteToBarX (z.hiKey + 1) - r.barX);
         rows.push_back (r);
     }
 
-    // Total height = one row per zone (minimum fills the viewport)
     const int totalH = juce::jmax (1, (int) rows.size()) * kRowH;
-    setSize (kbW, totalH);
+    setSize (componentWidth, totalH);
 
-    // If selected row went out of range, reset it
     if (selectedRow >= (int) rows.size())
         selectedRow = -1;
 
     repaint();
 }
+
+// =============================================================================
+// ZoneMatrixContent::paint   — mixer-style row rendering
+// =============================================================================
 
 void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
 {
@@ -72,93 +89,144 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         return;
     }
 
-    // ── Alternating row backgrounds ───────────────────────────────────────────
     for (int i = 0; i < (int) rows.size(); ++i)
     {
-        const int rowY = i * kRowH;
-        const bool isSelected = (i == selectedRow);
+        const auto& r   = rows[(size_t) i];
+        const int   ry  = i * kRowH;
+        const bool  sel = (i == selectedRow);
 
-        if (isSelected)
-            g.setColour (theme.accent.withAlpha (0.18f));
-        else if (i % 2 == 0)
-            g.setColour (theme.darkBar.darker (0.4f));
-        else
-            g.setColour (theme.darkBar.darker (0.55f));
+        // ── Row background ────────────────────────────────────────────────────
+        // Alternating subtle tint (mirrors drawSliceRow)
+        if (i % 2 == 1)
+        {
+            g.setColour (juce::Colour (0xFF000000).withAlpha (0.12f));
+            g.fillRect (0, ry, w, kRowH);
+        }
 
-        g.fillRect (0, rowY, w, kRowH);
-    }
+        // Selected row accent wash + left bar
+        if (sel)
+        {
+            g.setColour (theme.accent.withAlpha (0.06f));
+            g.fillRect (2, ry, w - 2, kRowH);
+            g.setColour (theme.accent.withAlpha (0.55f));
+            g.fillRect (0, ry, 2, kRowH);
+        }
 
-    // ── Subtle vertical octave grid lines ─────────────────────────────────────
-    const int loNote = baseOctave_ * 12;
-    const int hiNote = loNote + 24;
-    g.setColour (theme.accent.withAlpha (0.07f));
-    for (int note = loNote; note <= hiNote; note += 12)
-    {
-        const float x = owner.noteToX (note, kbX_) - kbX_;
-        g.fillRect (x, 0.0f, 1.0f, (float) h);
-    }
+        const juce::Colour zc = r.zone.colour;
 
-    // ── Zone bars ─────────────────────────────────────────────────────────────
-    for (int i = 0; i < (int) rows.size(); ++i)
-    {
-        const auto& r    = rows[(size_t) i];
-        const float rowY = (float)(i * kRowH);
-        const float pad  = 2.0f;
-        const float barY = rowY + pad;
-        const float barH = (float) kRowH - pad * 2.0f;
+        // ── 3px solid colour bar on left edge ─────────────────────────────────
+        g.setColour (zc.withAlpha (0.85f));
+        g.fillRect (0, ry, 3, kRowH);
 
-        // Bar X is relative to keyboard, but content is already positioned at kbX=0
-        // because the Viewport is placed at kbX in KeysPanel.
-        const float bx = r.barX - (float) kbX_;
-        const float bw = r.barW;
+        // ── Name column colour tint ────────────────────────────────────────────
+        g.setColour (zc.withAlpha (0.13f));
+        g.fillRect (3, ry, kNameColW - 4, kRowH);
 
-        if (bw < 1.0f) continue;
-
-        // Fill
-        juce::ColourGradient grad (
-            r.zone.colour.brighter (0.15f), bx, barY,
-            r.zone.colour.darker   (0.25f), bx, barY + barH, false);
-        g.setGradientFill (grad);
-        g.fillRoundedRectangle (bx, barY, bw, barH, 2.0f);
-
-        // Gloss strip
-        g.setColour (juce::Colours::white.withAlpha (0.18f));
-        g.fillRoundedRectangle (bx + 1.0f, barY + 0.5f,
-                                bw - 2.0f, juce::jmin (2.5f, barH * 0.3f), 1.0f);
-
-        // Border
-        const bool sel = (i == selectedRow);
-        g.setColour (sel ? theme.accent.brighter (0.5f) : r.zone.colour.brighter (0.4f).withAlpha (0.7f));
-        g.drawRoundedRectangle (bx + 0.5f, barY + 0.5f, bw - 1.0f, barH - 1.0f, 2.0f, sel ? 1.2f : 0.8f);
-
-        // Label — left-aligned inside the bar, clipped to bar width
-        if (bw >= 16.0f && barH >= 7.0f)
+        // ── Zone name text ─────────────────────────────────────────────────────
         {
             const juce::String label = r.zone.name.isNotEmpty()
-                ? r.zone.name
-                : (juce::MidiMessage::getMidiNoteName (r.zone.loKey, true, true, 3)
-                   + (r.zone.loKey != r.zone.hiKey
-                        ? "-" + juce::MidiMessage::getMidiNoteName (r.zone.hiKey, true, true, 3)
-                        : juce::String()));
+                ? r.zone.name.toUpperCase().substring (0, 9)
+                : (juce::MidiMessage::getMidiNoteName (r.zone.loKey,  true, true, 3)
+                   + "-"
+                   + juce::MidiMessage::getMidiNoteName (r.zone.hiKey, true, true, 3));
 
-            g.setFont (DysektLookAndFeel::makeFont (juce::jmin (8.5f, barH - 1.0f), true));
-            g.setColour (r.zone.colour.brighter (1.0f).withAlpha (0.95f));
-
-            // Clip to the bar
-            g.saveState();
-            g.reduceClipRegion (juce::Rectangle<float> (bx + 3.0f, barY, bw - 6.0f, barH).toNearestInt());
-            g.drawText (label,
-                        juce::Rectangle<float> (bx + 3.0f, barY, bw - 6.0f, barH),
-                        juce::Justification::centredLeft, true);
-            g.restoreState();
+            g.setFont  (DysektLookAndFeel::makeFont (12.0f));
+            g.setColour (zc.withAlpha (sel ? 0.95f : 0.65f));
+            g.drawText  (label, 5, ry, kNameColW - 8, kRowH, juce::Justification::centredLeft);
         }
+
+        // ── Bar area: subtle zone colour wash ─────────────────────────────────
+        g.setColour (zc.withAlpha (sel ? 0.16f : 0.10f));
+        g.fillRect  (kNameColW, ry, w - kNameColW - kVelBadgeW, kRowH);
+
+        // ── Key-range bar ─────────────────────────────────────────────────────
+        {
+            const float bx = r.barX;
+            const float bw = r.barW;
+            const float pad = 3.0f;
+
+            if (bw >= 2.0f)
+            {
+                juce::ColourGradient grad (
+                    zc.brighter (0.15f), bx, (float) ry,
+                    zc.darker   (0.25f), bx, (float)(ry + kRowH), false);
+                g.setGradientFill (grad);
+                g.fillRoundedRectangle (bx, (float) ry + pad,
+                                        bw, (float) kRowH - pad * 2.0f, 3.0f);
+
+                // Gloss strip
+                g.setColour (juce::Colours::white.withAlpha (0.18f));
+                g.fillRoundedRectangle (bx + 1.0f, (float) ry + pad + 0.5f,
+                                        bw - 2.0f, juce::jmin (2.5f, (float) kRowH * 0.25f), 1.0f);
+
+                // Border
+                g.setColour (sel ? theme.accent.brighter (0.5f)
+                                 : zc.brighter (0.4f).withAlpha (0.7f));
+                g.drawRoundedRectangle (bx + 0.5f, (float) ry + pad + 0.5f,
+                                        bw - 1.0f, (float) kRowH - pad * 2.0f - 1.0f,
+                                        3.0f, sel ? 1.2f : 0.8f);
+            }
+        }
+
+        // ── Velocity badge (right edge) — matches drawMuteBadge style ─────────
+        {
+            const bool isFull = (r.zone.loVel == 0 && r.zone.hiVel == 127);
+            juce::String velStr = "v" + juce::String (r.zone.loVel)
+                                  + "-" + juce::String (r.zone.hiVel);
+            if (r.zone.isLooped)
+                velStr += " \xe2\x86\xba";   // UTF-8 ↺
+
+            const int badgeX = w - kVelBadgeW;
+
+            // Badge background tint
+            g.setColour (isFull ? theme.foreground.withAlpha (0.06f)
+                                : theme.accent.withAlpha (0.10f));
+            g.fillRect  (badgeX, ry + 4, kVelBadgeW - 4, kRowH - 8);
+
+            // Badge border (only for non-full layers — they're interesting)
+            if (! isFull)
+            {
+                g.setColour (theme.accent.withAlpha (0.35f));
+                g.drawRoundedRectangle ((float) badgeX, (float)(ry + 4),
+                                        (float)(kVelBadgeW - 4), (float)(kRowH - 8),
+                                        2.5f, 0.8f);
+            }
+
+            g.setFont   (DysektLookAndFeel::makeFont (9.0f));
+            g.setColour (isFull ? theme.foreground.withAlpha (0.22f)
+                                : theme.accent.withAlpha (0.75f));
+            g.drawText  (velStr, badgeX, ry, kVelBadgeW - 2, kRowH,
+                         juce::Justification::centredRight);
+        }
+
+        // ── Row divider ───────────────────────────────────────────────────────
+        g.setColour (theme.separator.withAlpha (0.35f));
+        g.drawHorizontalLine (ry + kRowH - 1,
+                              (float) kNameColW * 0.3f, (float) w);
     }
 
-    // ── Row separator lines ───────────────────────────────────────────────────
-    g.setColour (theme.darkBar.darker (0.2f).withAlpha (0.5f));
-    for (int i = 1; i < (int) rows.size(); ++i)
-        g.fillRect (0, i * kRowH, w, 1);
+    // ── Column separator: name | bar area ─────────────────────────────────────
+    g.setColour (theme.accent.withAlpha (0.12f));
+    g.drawVerticalLine (kNameColW - 1, 0.f, (float) h);
+
+    // ── Subtle octave grid lines across bar area ───────────────────────────────
+    {
+        const float barAreaW = (float)(contentW_ - kNameColW - kVelBadgeW);
+        if (barAreaW > 0.f)
+        {
+            g.setColour (theme.accent.withAlpha (0.08f));
+            for (int oct = 0; oct <= 2; ++oct)
+            {
+                const float x = noteToBarX (baseOctave_ * 12 + oct * 12);
+                g.fillRect (x, 0.f, 1.f, (float) h);
+            }
+        }
+    }
 }
+
+// =============================================================================
+// ZoneMatrixContent::mouseDown
+// =============================================================================
 
 void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
 {
@@ -176,7 +244,7 @@ void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
 }
 
 // =============================================================================
-//  KeysPanel
+// KeysPanel
 // =============================================================================
 
 KeysPanel::KeysPanel (DysektProcessor& p) : processor (p)
@@ -192,8 +260,7 @@ KeysPanel::KeysPanel (DysektProcessor& p) : processor (p)
     transposeDownBtn.onClick = [this] { if (baseOctave > 0) { --baseOctave; resized(); repaint(); } };
     transposeUpBtn  .onClick = [this] { if (baseOctave < 8) { ++baseOctave; resized(); repaint(); } };
 
-    // Set up the zone viewport
-    zoneViewport.setScrollBarsShown (true, false);   // vertical scroll only
+    zoneViewport.setScrollBarsShown (true, false);
     zoneViewport.setViewedComponent (&zoneMatrix, false);
     zoneViewport.setScrollBarThickness (6);
     addAndMakeVisible (zoneViewport);
@@ -202,6 +269,8 @@ KeysPanel::KeysPanel (DysektProcessor& p) : processor (p)
 }
 
 KeysPanel::~KeysPanel() { stopTimer(); }
+
+// =============================================================================
 
 void KeysPanel::setKeyzones (std::vector<Keyzone> zones)
 {
@@ -234,8 +303,16 @@ void KeysPanel::rebuildZoneMatrix()
     const int kbX = keyRects.front().bounds.getX();
     const int kbW = kWhiteKeyW * kNumWhite;
 
-    zoneMatrix.rebuild (keyzones, kbX, kbW, baseOctave, kWhiteKeyW, kBlackKeyW);
+    // Viewport spans full panel width for the name column to sit cleanly left
+    const int vpW = getWidth();
+
+    zoneMatrix.rebuild (keyzones, kbX, kbW, baseOctave,
+                        kWhiteKeyW, kBlackKeyW, vpW);
 }
+
+// =============================================================================
+// resized
+// =============================================================================
 
 void KeysPanel::resized()
 {
@@ -265,25 +342,25 @@ void KeysPanel::resized()
     for (int i = 0; i < kNumWhite; ++i)
     {
         KeyRect kr;
-        kr.bounds  = { keyboardX + i * kWhiteKeyW, keyboardY, kWhiteKeyW - 1, kKeyH };
-        kr.note    = baseOctave * 12 + whiteOffsets[i];
+        kr.bounds = { keyboardX + i * kWhiteKeyW, keyboardY, kWhiteKeyW - 1, kKeyH };
+        kr.note   = baseOctave * 12 + whiteOffsets[i];
         kr.isBlack = false;
         keyRects.push_back (kr);
     }
     for (int i = 0; i < kNumBlack; ++i)
     {
         KeyRect kr;
-        int bx     = keyboardX + (blackDefs[i].afterWhite + 1) * kWhiteKeyW - kBlackKeyW / 2;
+        int bx = keyboardX + (blackDefs[i].afterWhite + 1) * kWhiteKeyW - kBlackKeyW / 2;
         kr.bounds  = { bx, keyboardY, kBlackKeyW, kBlackKeyH };
         kr.note    = baseOctave * 12 + blackDefs[i].offset;
         kr.isBlack = true;
         keyRects.push_back (kr);
     }
 
-    // ── Position the zone viewport ────────────────────────────────────────────
+    // ── Position the zone viewport — full width, below transpose row ──────────
     if (kZoneViewH > 0)
     {
-        zoneViewport.setBounds (keyboardX, kTransposeRowH, kbW, kZoneViewH);
+        zoneViewport.setBounds (0, kTransposeRowH, w, kZoneViewH);
         zoneViewport.setVisible (true);
         rebuildZoneMatrix();
     }
@@ -293,54 +370,152 @@ void KeysPanel::resized()
     }
 }
 
+// =============================================================================
+// paint
+// =============================================================================
+
 void KeysPanel::paint (juce::Graphics& g)
 {
     const auto& theme  = getTheme();
     const auto  accent = theme.accent;
 
+    // ── Outer panel background ────────────────────────────────────────────────
     g.setColour (theme.darkBar.darker (0.35f));
     g.fillRoundedRectangle (getLocalBounds().toFloat(), 3.0f);
 
+    // ── Button colours ────────────────────────────────────────────────────────
     for (auto* btn : { &transposeDownBtn, &transposeUpBtn })
     {
-        btn->setColour (juce::TextButton::buttonColourId,   theme.darkBar.brighter (0.08f));
-        btn->setColour (juce::TextButton::textColourOffId,  accent.withAlpha (0.80f));
+        btn->setColour (juce::TextButton::buttonColourId,  theme.darkBar.brighter (0.08f));
+        btn->setColour (juce::TextButton::textColourOffId, accent.withAlpha (0.80f));
         btn->setColour (juce::TextButton::buttonOnColourId, accent.withAlpha (0.2f));
     }
 
+    // ── Transpose / info strip ────────────────────────────────────────────────
     {
-        const juce::String label = "C" + juce::String (baseOctave)
-                                 + "  \xe2\x80\x93  C" + juce::String (baseOctave + 2);
-        g.setFont (DysektLookAndFeel::makeFont (9.0f, true));
+        // If a zone row is selected, show that zone's info; otherwise show octave range
+        juce::String label;
+        const int selRow = zoneMatrix.selectedRow;
+
+        if (selRow >= 0 && selRow < (int) keyzones.size())
+        {
+            const auto& z = keyzones[(size_t) selRow];
+            label = z.name.isNotEmpty() ? z.name.toUpperCase() : "ZONE";
+
+            if (z.rootPitch >= 0)
+                label += "  root:" + juce::MidiMessage::getMidiNoteName (z.rootPitch, true, true, 3);
+
+            label += "  v" + juce::String (z.loVel) + "-" + juce::String (z.hiVel);
+
+            if (z.isLooped) label += "  \xe2\x86\xba";
+        }
+        else
+        {
+            label = "C" + juce::String (baseOctave)
+                    + " \xe2\x80\x93 C" + juce::String (baseOctave + 2);
+        }
+
+        g.setFont   (DysektLookAndFeel::makeFont (9.0f, true));
         g.setColour (accent.withAlpha (0.50f));
-        g.drawText (label, 0, 2, getWidth(), kTransposeRowH - 2, juce::Justification::centred);
+        g.drawText  (label, 0, 2, getWidth(), kTransposeRowH - 2, juce::Justification::centred);
     }
 
+    // ── LCD-style frame around zone viewport ─────────────────────────────────
+    if (kZoneViewH > 0)
+    {
+        const juce::Rectangle<float> frameRect (
+            0.f, (float) kTransposeRowH, (float) getWidth(), (float) kZoneViewH);
+
+        // Outer gradient fill
+        juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0, (float) kTransposeRowH,
+                                        juce::Colour (0xFF0E0E0E), 0,
+                                        (float)(kTransposeRowH + kZoneViewH), false);
+        g.setGradientFill (outerGrad);
+        g.fillRoundedRectangle (frameRect, 2.0f);
+
+        // Accent border
+        g.setColour (accent.withAlpha (0.35f));
+        g.drawRoundedRectangle (frameRect.reduced (0.5f), 2.0f, 1.0f);
+
+        // Inner screen area
+        const auto screen = frameRect.reduced (2.f);
+        g.setColour (theme.darkBar.darker (0.55f));
+        g.fillRoundedRectangle (screen, 1.5f);
+
+        // Scanlines
+        g.setColour (juce::Colours::black.withAlpha (0.10f));
+        for (int y = (int) screen.getY(); y < (int) screen.getBottom(); y += 2)
+            g.drawHorizontalLine (y, screen.getX(), screen.getRight());
+
+        // Top glow
+        juce::ColourGradient glow (accent.withAlpha (0.05f), 0, screen.getY(),
+                                   juce::Colours::transparentBlack, 0,
+                                   screen.getY() + 16.f, false);
+        g.setGradientFill (glow);
+        g.fillRoundedRectangle (screen, 1.5f);
+
+        // Inner border
+        g.setColour (accent.withAlpha (0.10f));
+        g.drawRoundedRectangle (screen.expanded (0.5f), 1.5f, 1.0f);
+    }
+
+    // ── Keyboard ──────────────────────────────────────────────────────────────
     const auto& ui = processor.getUiSliceSnapshot();
     std::set<int> slicedNotes;
     for (int s = 0; s < ui.numSlices; ++s)
         slicedNotes.insert (ui.slices[(size_t) s].midiNote);
 
+    // White keys first
     for (const auto& kr : keyRects)
-        if (! kr.isBlack)
-        {
-            const int n = kr.note;
-            const bool midiActive = (n >= 0 && n < 128)
-                ? ((n < 64 ? (sfzActiveSnap[0] >> n) : (sfzActiveSnap[1] >> (n - 64))) & 1) != 0
-                : false;
-            drawKey (g, kr, slicedNotes.count (n) > 0, n == hoveredNote, n == lastActiveNote || midiActive);
-        }
+    {
+        if (kr.isBlack) continue;
+        const int n = kr.note;
+        const bool midiActive = (n >= 0 && n < 128)
+            ? ((n < 64 ? (sfzActiveSnap[0] >> n) : (sfzActiveSnap[1] >> (n - 64))) & 1) != 0
+            : false;
+        drawKey (g, kr, slicedNotes.count (n) > 0, n == hoveredNote, n == lastActiveNote || midiActive);
+    }
+    // Black keys on top
+    for (const auto& kr : keyRects)
+    {
+        if (! kr.isBlack) continue;
+        const int n = kr.note;
+        const bool midiActive = (n >= 0 && n < 128)
+            ? ((n < 64 ? (sfzActiveSnap[0] >> n) : (sfzActiveSnap[1] >> (n - 64))) & 1) != 0
+            : false;
+        drawKey (g, kr, slicedNotes.count (n) > 0, n == hoveredNote, n == lastActiveNote || midiActive);
+    }
 
-    for (const auto& kr : keyRects)
-        if (kr.isBlack)
-        {
-            const int n = kr.note;
-            const bool midiActive = (n >= 0 && n < 128)
-                ? ((n < 64 ? (sfzActiveSnap[0] >> n) : (sfzActiveSnap[1] >> (n - 64))) & 1) != 0
-                : false;
-            drawKey (g, kr, slicedNotes.count (n) > 0, n == hoveredNote, n == lastActiveNote || midiActive);
-        }
+    // ── Root-pitch dots on keyboard ───────────────────────────────────────────
+    // One small coloured ellipse per zone at its root note
+    for (const auto& z : keyzones)
+    {
+        if (z.rootPitch < 0) continue;
+
+        const int n = z.rootPitch;
+        if (n < baseOctave * 12 || n >= (baseOctave + 2) * 12) continue;
+
+        const int kbX = keyRects.empty() ? 0 : keyRects.front().bounds.getX();
+        const float rx = noteToX (n, kbX);
+        const int   keyboardY = getHeight() - kKeyH;
+
+        static const bool isBlackSemi[12] =
+            { false,true,false,true,false,false,true,false,true,false,true,false };
+        const bool bk = isBlackSemi[((n % 12) + 12) % 12];
+
+        const float dotY = bk ? (float)(keyboardY + kBlackKeyH - 7)
+                               : (float)(keyboardY + kKeyH    - 9);
+
+        g.setColour (z.colour.brighter (0.6f).withAlpha (0.90f));
+        g.fillEllipse (rx + 2.0f, dotY, 5.0f, 5.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.40f));
+        g.drawEllipse (rx + 2.0f, dotY, 5.0f, 5.0f, 0.8f);
+    }
 }
+
+// =============================================================================
+// drawKey — unchanged from original
+// =============================================================================
 
 void KeysPanel::drawKey (juce::Graphics& g, const KeyRect& kr,
                           bool hasSlice, bool hovered, bool active) const
@@ -352,21 +527,22 @@ void KeysPanel::drawKey (juce::Graphics& g, const KeyRect& kr,
     if (! kr.isBlack)
     {
         const juce::Colour topCol = active  ? accent.withBrightness (0.92f).withAlpha (0.9f)
-                                  : hovered ? juce::Colour (0xFFF4F4F4)
-                                            : juce::Colour (0xFFECECEC);
+                                   : hovered ? juce::Colour (0xFFF4F4F4)
+                                             : juce::Colour (0xFFECECEC);
         const juce::Colour botCol = active  ? accent.withBrightness (0.75f).withAlpha (0.7f)
-                                  : hovered ? juce::Colour (0xFFDCDCDC)
-                                            : juce::Colour (0xFFD0D0D0);
+                                   : hovered ? juce::Colour (0xFFDCDCDC)
+                                             : juce::Colour (0xFFD0D0D0);
 
         juce::ColourGradient grad (topCol, 0.f, b.getY(), botCol, 0.f, b.getBottom(), false);
         g.setGradientFill (grad);
         g.fillRoundedRectangle (b.reduced (0.5f, 0.f).withTrimmedBottom (-4.f), 3.0f);
 
         g.setColour (juce::Colour (0xFF707070).withAlpha (0.40f));
-        g.fillRect (b.getRight() - 1.0f, b.getY() + 4.0f, 1.0f, b.getHeight() - 8.0f);
+        g.fillRect  (b.getRight() - 1.0f, b.getY() + 4.0f, 1.0f, b.getHeight() - 8.0f);
 
         g.setColour (juce::Colours::white.withAlpha (active ? 0.55f : 0.18f));
-        g.fillRoundedRectangle (b.getX() + 2.0f, b.getBottom() - 10.0f, b.getWidth() - 4.0f, 7.0f, 2.0f);
+        g.fillRoundedRectangle (b.getX() + 2.0f, b.getBottom() - 10.0f,
+                                b.getWidth() - 4.0f, 7.0f, 2.0f);
 
         if (hasSlice)
         {
@@ -376,21 +552,21 @@ void KeysPanel::drawKey (juce::Graphics& g, const KeyRect& kr,
 
         if ((kr.note % 12) == 0)
         {
-            g.setFont (DysektLookAndFeel::makeFont (6.5f));
+            g.setFont   (DysektLookAndFeel::makeFont (6.5f));
             g.setColour (hasSlice ? accent.withAlpha (0.9f) : juce::Colour (0xFF999999));
-            g.drawText (juce::MidiMessage::getMidiNoteName (kr.note, true, true, 3),
-                        kr.bounds.getX(), kr.bounds.getBottom() - 12,
-                        kr.bounds.getWidth(), 11, juce::Justification::centred);
+            g.drawText  (juce::MidiMessage::getMidiNoteName (kr.note, true, true, 3),
+                         kr.bounds.getX(), kr.bounds.getBottom() - 12,
+                         kr.bounds.getWidth(), 11, juce::Justification::centred);
         }
     }
     else
     {
         const juce::Colour topCol = active  ? accent.darker (0.1f)
-                                  : hovered ? juce::Colour (0xFF383838)
-                                            : juce::Colour (0xFF222222);
+                                   : hovered ? juce::Colour (0xFF383838)
+                                             : juce::Colour (0xFF222222);
         const juce::Colour botCol = active  ? accent.darker (0.5f)
-                                  : hovered ? juce::Colour (0xFF181818)
-                                            : juce::Colour (0xFF0A0A0A);
+                                   : hovered ? juce::Colour (0xFF181818)
+                                             : juce::Colour (0xFF0A0A0A);
 
         juce::ColourGradient grad (topCol, 0.f, b.getY(), botCol, 0.f, b.getBottom(), false);
         g.setGradientFill (grad);
@@ -410,22 +586,26 @@ void KeysPanel::drawKey (juce::Graphics& g, const KeyRect& kr,
     }
 }
 
+// =============================================================================
+// noteToX — unchanged
+// =============================================================================
+
 float KeysPanel::noteToX (int note, int kbX) const
 {
     static const int semitoneToWhiteOrBlack[12] =
     {
-        /*C */ 0,
-        /*C#*/ -(0+1),
-        /*D */ 1,
-        /*D#*/ -(1+1),
-        /*E */ 2,
-        /*F */ 3,
-        /*F#*/ -(3+1),
-        /*G */ 4,
-        /*G#*/ -(4+1),
-        /*A */ 5,
-        /*A#*/ -(5+1),
-        /*B */ 6,
+        /* C  */  0,
+        /* C# */ -(0+1),
+        /* D  */  1,
+        /* D# */ -(1+1),
+        /* E  */  2,
+        /* F  */  3,
+        /* F# */ -(3+1),
+        /* G  */  4,
+        /* G# */ -(4+1),
+        /* A  */  5,
+        /* A# */ -(5+1),
+        /* B  */  6,
     };
 
     const int rel    = note - baseOctave * 12;
@@ -460,6 +640,10 @@ juce::Colour KeysPanel::zoneColourForNote (int note) const
             return z.colour;
     return juce::Colour (0);
 }
+
+// =============================================================================
+// Mouse
+// =============================================================================
 
 void KeysPanel::mouseDown (const juce::MouseEvent& e)
 {
@@ -512,6 +696,10 @@ void KeysPanel::mouseExit (const juce::MouseEvent&)
 {
     if (hoveredNote != -1) { hoveredNote = -1; repaint(); }
 }
+
+// =============================================================================
+// timerCallback
+// =============================================================================
 
 void KeysPanel::timerCallback()
 {

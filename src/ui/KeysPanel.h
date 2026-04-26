@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_audio_basics/juce_audio_basics.h>
 
 class DysektProcessor;
 
@@ -10,42 +11,57 @@ public:
     explicit KeysPanel (DysektProcessor& p);
     ~KeysPanel() override;
 
-    void paint      (juce::Graphics& g) override;
-    void resized    () override;
-    void mouseDown  (const juce::MouseEvent& e) override;
-    void mouseUp    (const juce::MouseEvent& e) override;
-    void mouseMove  (const juce::MouseEvent& e) override;
-    void mouseExit  (const juce::MouseEvent& e) override;
+    void paint    (juce::Graphics& g) override;
+    void resized  () override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseUp   (const juce::MouseEvent& e) override;
+    void mouseMove (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
 
     // ── Keyzone overlay ───────────────────────────────────────────────────────
-    struct Keyzone { int loKey{0}; int hiKey{127}; juce::Colour colour; juce::String name; };
-    void setKeyzones (std::vector<Keyzone> zones);
-    void clearKeyzones();
+    struct Keyzone
+    {
+        int loKey    { 0 };
+        int hiKey    { 127 };
+        int loVel    { 0 };          // velocity range low  (0–127)
+        int hiVel    { 127 };        // velocity range high (0–127)
+        int rootPitch{ -1 };         // root note MIDI number (-1 = none)
+        bool isLooped{ false };      // loop flag
+        juce::Colour colour;
+        juce::String name;
+    };
+
+    void setKeyzones      (std::vector<Keyzone> zones);
+    void clearKeyzones    ();
     void autoScrollToZones();
 
 private:
     // =========================================================================
-    //  ZoneMatrixContent — the scrollable inner component drawn inside the
-    //  Viewport.  Each zone gets its own fixed-height row; a horizontal bar
-    //  spans loKey → hiKey on the keyboard X-axis.
+    // ZoneMatrixContent — scrollable inner component.
+    // Rows are styled to match MixerPanel's slice-row look:
+    //   [3px colour bar] [name col, colour-tinted bg] [key-range bar] [vel badge]
     // =========================================================================
     class ZoneMatrixContent : public juce::Component
     {
     public:
-        static constexpr int kRowH = 14;   // fixed row height (px)
+        // Row and column layout — mirrors MixerPanel constants
+        static constexpr int kRowH     = 24;   // row height (px) — taller than old 14
+        static constexpr int kNameColW = 88;   // name column width
+        static constexpr int kVelBadgeW= 52;   // velocity badge column width
 
         ZoneMatrixContent (KeysPanel& owner) : owner (owner) {}
 
-        // Call whenever zone list or keyboard geometry changes.
+        /** Call whenever zone list or keyboard geometry changes. */
         void rebuild (const std::vector<Keyzone>& zones,
                       int kbX, int kbW,
                       int baseOctave,
-                      int whiteKeyW, int blackKeyW);
+                      int whiteKeyW, int blackKeyW,
+                      int componentWidth);
 
-        void paint (juce::Graphics& g) override;
+        void paint     (juce::Graphics& g) override;
         void mouseDown (const juce::MouseEvent& e) override;
 
-        int selectedRow = -1;
+        int  selectedRow = -1;
 
     private:
         KeysPanel& owner;
@@ -53,14 +69,21 @@ private:
         struct Row
         {
             Keyzone zone;
-            float   barX  = 0.f;
-            float   barW  = 0.f;
+            // Bar geometry — relative to content's left edge
+            float barX = 0.f;
+            float barW = 0.f;
         };
         std::vector<Row> rows;
 
-        int  kbX_   = 0;
-        int  kbW_   = 0;
-        int  baseOctave_ = 3;
+        // Stored geometry for painting
+        int kbX_      = 0;
+        int kbW_      = 0;
+        int baseOctave_ = 3;
+        int contentW_   = 0;
+
+        // Map a MIDI note to an X pixel within this content component.
+        // Uses proportional mapping from loNote..hiNote across the bar area.
+        float noteToBarX (int note) const;
     };
 
     // =========================================================================
@@ -68,18 +91,18 @@ private:
     void buildKeys();
     int  midiNoteForPos (juce::Point<int> pos) const;
 
-    int whiteNote (int i) const;
-    int blackNote (int i) const;
+    int  whiteNote (int i) const;
+    int  blackNote (int i) const;
 
     struct KeyRect { juce::Rectangle<int> bounds; int note; bool isBlack; };
-    std::vector<KeyRect> keyRects;
-    std::vector<Keyzone> keyzones;
+    std::vector<KeyRect>  keyRects;
+    std::vector<Keyzone>  keyzones;
 
     DysektProcessor& processor;
 
-    int  baseOctave   = 3;
-    int  lastActiveNote = -1;
-    int  hoveredNote  = -1;
+    int baseOctave    = 3;
+    int lastActiveNote = -1;
+    int hoveredNote    = -1;
 
     uint64_t sfzActiveSnap[2] = { 0, 0 };
 
@@ -87,8 +110,8 @@ private:
     juce::TextButton transposeUpBtn   { ">" };
 
     // ── Zone matrix Viewport ──────────────────────────────────────────────────
-    juce::Viewport        zoneViewport;
-    ZoneMatrixContent     zoneMatrix  { *this };
+    juce::Viewport    zoneViewport;
+    ZoneMatrixContent zoneMatrix { *this };
 
     // Layout constants — computed dynamically from component size
     int kTransposeRowH = 24;
@@ -100,16 +123,18 @@ private:
     int kNumWhite      = 14;
     int kNumBlack      = 10;
 
-    static const int whiteOffsets[14];
+    static const int    whiteOffsets[14];
     struct BlackDef { int afterWhite; int offset; };
     static const BlackDef blackDefs[10];
 
     // helpers
-    void drawKey        (juce::Graphics&, const KeyRect&, bool hasSlice, bool hovered, bool active) const;
-    float noteToX       (int note, int kbX) const;
-    float noteKeyWidth  (int note)          const;
+    void drawKey         (juce::Graphics&, const KeyRect&,
+                          bool hasSlice, bool hovered, bool active) const;
+    float noteToX        (int note, int kbX) const;
+    float noteKeyWidth   (int note) const;
     juce::Colour zoneColourForNote (int note) const;
 
-    // Rebuild the ZoneMatrixContent whenever zones or geometry changes
     void rebuildZoneMatrix();
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KeysPanel)
 };
