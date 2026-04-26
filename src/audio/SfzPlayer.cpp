@@ -1,5 +1,7 @@
 // =============================================================================
-//  SfzPlayer.cpp  —  Real-time SF2 playback engine (FluidSynth backend)
+//  SfzPlayer.cpp  —  Real-time SF2/SFZ playback engine
+//                    SF2 → FluidSynth backend
+//                    SFZ → sfizz backend
 // =============================================================================
 #include "SfzPlayer.h"
 
@@ -28,6 +30,10 @@ SfzPlayer::~SfzPlayer()
 #if DYSEKT_HAS_FLUIDSYNTH
     if (synth    != nullptr) { delete_fluid_synth    (synth);    synth    = nullptr; }
     if (settings != nullptr) { delete_fluid_settings (settings); settings = nullptr; }
+#endif
+
+#if DYSEKT_HAS_SFIZZ
+    if (sfizzSynth != nullptr) { sfizz_free (sfizzSynth); sfizzSynth = nullptr; }
 #endif
 }
 
@@ -58,12 +64,20 @@ void SfzPlayer::setPan (float p)
 {
     pan.store (juce::jlimit (-1.0f, 1.0f, p), std::memory_order_relaxed);
 #if DYSEKT_HAS_FLUIDSYNTH
-    if (synth != nullptr)
+    if (synth != nullptr && !isSfzFile)
     {
         // CC10 pan: 0 = hard L, 64 = centre, 127 = hard R
         const int cc10 = juce::jlimit (0, 127,
             juce::roundToInt ((p + 1.0f) * 0.5f * 127.0f));
         fluid_synth_cc (synth, 0, 10, cc10);
+    }
+#endif
+#if DYSEKT_HAS_SFIZZ
+    if (sfizzSynth != nullptr && isSfzFile)
+    {
+        const int cc10 = juce::jlimit (0, 127,
+            juce::roundToInt ((p + 1.0f) * 0.5f * 127.0f));
+        sfizz_send_cc (sfizzSynth, 0, 10, cc10);
     }
 #endif
 }
@@ -72,29 +86,31 @@ void SfzPlayer::setFineTune (float cents)
 {
     fineTune.store (juce::jlimit (-100.0f, 100.0f, cents), std::memory_order_relaxed);
 #if DYSEKT_HAS_FLUIDSYNTH
-    if (synth != nullptr)
+    if (synth != nullptr && !isSfzFile)
         fluid_synth_set_gen (synth, 0, GEN_FINETUNE, cents);
 #endif
+    // sfizz fine-tune is applied via pitch-bend offset on next note — no direct API
 }
 
 void SfzPlayer::setReverb (float level)
 {
     reverb.store (juce::jlimit (0.0f, 1.0f, level), std::memory_order_relaxed);
 #if DYSEKT_HAS_FLUIDSYNTH
-    if (synth != nullptr)
+    if (synth != nullptr && !isSfzFile)
         fluid_synth_set_reverb (synth,
             0.6,           // room size  (0.0–1.0)
             0.5,           // damping    (0.0–1.0)
             0.5,           // width      (0.0–100.0)
             (double) level); // level    (0.0–1.0)
 #endif
+    // sfizz: no reverb API — SFZ files define reverb via opcodes internally
 }
 
 void SfzPlayer::setChorus (float level)
 {
     chorus.store (juce::jlimit (0.0f, 1.0f, level), std::memory_order_relaxed);
 #if DYSEKT_HAS_FLUIDSYNTH
-    if (synth != nullptr)
+    if (synth != nullptr && !isSfzFile)
         fluid_synth_set_chorus (synth,
             3,                        // voice count (1–99)
             (double) level * 10.0,    // level       (0.0–10.0)
@@ -102,6 +118,7 @@ void SfzPlayer::setChorus (float level)
             8.0,                      // depth ms    (0.0–21.0)
             FLUID_CHORUS_MOD_SINE);
 #endif
+    // sfizz: no chorus API
 }
 
 void SfzPlayer::setPresetByIndex (int idx)
@@ -145,6 +162,14 @@ void SfzPlayer::prepare (double sampleRate, int maxBlockSize)
     if (synth != nullptr)
         fluid_synth_set_sample_rate (synth, (float) sampleRate);
 #endif
+
+#if DYSEKT_HAS_SFIZZ
+    if (sfizzSynth != nullptr)
+    {
+        sfizz_set_sample_rate       (sfizzSynth, (float) sampleRate);
+        sfizz_set_samples_per_block (sfizzSynth, maxBlockSize);
+    }
+#endif
 }
 
 void SfzPlayer::process (const juce::MidiBuffer& midiIn,
@@ -152,20 +177,96 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
 {
     applyPendingLoad();
 
+    if (! loaded.load (std::memory_order_relaxed))
+        return;
+
+    const int filterCh = midiChannel.load (std::memory_order_relaxed);
+    const int trans    = transpose.load   (std::memory_order_relaxed);
+    const float vol    = volume.load      (std::memory_order_relaxed);
+
+    // Ensure scratch buffers are large enough
+    if ((int) scratchL.size() < numSamples)
+    {
+        scratchL.assign ((size_t) numSamples, 0.0f);
+        scratchR.assign ((size_t) numSamples, 0.0f);
+    }
+
+#if DYSEKT_HAS_SFIZZ
+    if (isSfzFile && sfizzSynth != nullptr)
+    {
+        // ── Forward MIDI to sfizz ─────────────────────────────────────────────
+        for (const auto meta : midiIn)
+        {
+            const auto msg = meta.getMessage();
+            const int  ch  = msg.getChannel();   // 1-16
+
+            if (filterCh != 0 && ch != filterCh)
+                continue;
+
+            if (msg.isNoteOn())
+            {
+                const int note = juce::jlimit (0, 127, msg.getNoteNumber() + trans);
+                sfizz_send_note_on (sfizzSynth, meta.samplePosition, note, msg.getVelocity());
+            }
+            else if (msg.isNoteOff())
+            {
+                const int note = juce::jlimit (0, 127, msg.getNoteNumber() + trans);
+                sfizz_send_note_off (sfizzSynth, meta.samplePosition, note, msg.getVelocity());
+            }
+            else if (msg.isController())
+            {
+                sfizz_send_cc (sfizzSynth, meta.samplePosition,
+                               msg.getControllerNumber(),
+                               msg.getControllerValue());
+            }
+            else if (msg.isPitchWheel())
+            {
+                // sfizz expects -8192..+8191; JUCE provides 0..16383
+                sfizz_send_pitch_wheel (sfizzSynth, meta.samplePosition,
+                                        msg.getPitchWheelValue() - 8192);
+            }
+            else if (msg.isChannelPressure())
+            {
+                sfizz_send_channel_aftertouch (sfizzSynth, meta.samplePosition,
+                                               msg.getChannelPressureValue());
+            }
+            else if (msg.isAftertouch())
+            {
+                sfizz_send_poly_aftertouch (sfizzSynth, meta.samplePosition,
+                                            msg.getNoteNumber(),
+                                            msg.getAfterTouchValue());
+            }
+            else if (msg.isAllNotesOff() || msg.isAllSoundOff())
+            {
+                sfizz_all_sound_off (sfizzSynth);
+            }
+        }
+
+        // ── Render sfizz ──────────────────────────────────────────────────────
+        std::fill (scratchL.begin(), scratchL.begin() + numSamples, 0.0f);
+        std::fill (scratchR.begin(), scratchR.begin() + numSamples, 0.0f);
+
+        float* planes[2] = { scratchL.data(), scratchR.data() };
+        sfizz_render_block (sfizzSynth, planes, 2, numSamples);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            outL[i] += scratchL[(size_t) i] * vol;
+            outR[i] += scratchR[(size_t) i] * vol;
+        }
+        return;
+    }
+#endif
+
 #if DYSEKT_HAS_FLUIDSYNTH
-    if (synth == nullptr || ! loaded.load (std::memory_order_relaxed))
+    if (synth == nullptr)
         return;
 
     // Apply any pending program-change first.
     if (programChangePending.load (std::memory_order_acquire))
         applyProgramChange();
 
-    // ── Forward MIDI ──────────────────────────────────────────────────────────
-    const int filterCh = midiChannel.load (std::memory_order_relaxed);
-    const int trans    = transpose.load   (std::memory_order_relaxed);
-
-    // FluidSynth always operates on channel 0 internally; we use it as a
-    // mono channel and filter / forward incoming MIDI accordingly.
+    // ── Forward MIDI to FluidSynth ────────────────────────────────────────────
     constexpr int kFluidCh = 0;
 
     for (const auto meta : midiIn)
@@ -194,7 +295,6 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
         }
         else if (msg.isPitchWheel())
         {
-            // FluidSynth expects 0..16383; JUCE provides 0..16383 directly.
             fluid_synth_pitch_bend (synth, kFluidCh, msg.getPitchWheelValue());
         }
         else if (msg.isChannelPressure())
@@ -226,26 +326,14 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
         }
     }
 
-    // ── Render ────────────────────────────────────────────────────────────────
-    if ((int) scratchL.size() < numSamples)
-    {
-        scratchL.assign ((size_t) numSamples, 0.0f);
-        scratchR.assign ((size_t) numSamples, 0.0f);
-    }
-    else
-    {
-        // fluid_synth_process ACCUMULATES — must zero before every call
-        // or stale audio from the previous block feeds back indefinitely.
-        std::fill (scratchL.begin(), scratchL.begin() + numSamples, 0.0f);
-        std::fill (scratchR.begin(), scratchR.begin() + numSamples, 0.0f);
-    }
+    // ── Render FluidSynth ─────────────────────────────────────────────────────
+    // fluid_synth_process ACCUMULATES — must zero before every call.
+    std::fill (scratchL.begin(), scratchL.begin() + numSamples, 0.0f);
+    std::fill (scratchR.begin(), scratchR.begin() + numSamples, 0.0f);
 
-    // FluidSynth writes directly into planar buffers passed as an array.
     float* planes[2] = { scratchL.data(), scratchR.data() };
     fluid_synth_process (synth, numSamples, 0, nullptr, 2, planes);
 
-    // Mix into output with volume scaling.
-    const float vol = volume.load (std::memory_order_relaxed);
     for (int i = 0; i < numSamples; ++i)
     {
         outL[i] += scratchL[(size_t) i] * vol;
@@ -268,8 +356,12 @@ void SfzPlayer::applyPendingLoad()
 
     std::unique_ptr<PendingLoad> owner (pkg);
 
+    // ── Tear down whatever is currently loaded ────────────────────────────────
+    loaded.store (false, std::memory_order_release);
+    activeFile = juce::File();
+    isSfzFile  = false;
+
 #if DYSEKT_HAS_FLUIDSYNTH
-    // ── Tear down existing synth ──────────────────────────────────────────────
     if (synth != nullptr)
     {
         fluid_synth_all_notes_off (synth, 0);
@@ -280,8 +372,16 @@ void SfzPlayer::applyPendingLoad()
         delete_fluid_settings (settings); settings = nullptr;
     }
     sfontId = -1;
-    loaded.store (false, std::memory_order_release);
-    activeFile = juce::File();
+#endif
+
+#if DYSEKT_HAS_SFIZZ
+    if (sfizzSynth != nullptr)
+    {
+        sfizz_all_sound_off (sfizzSynth);
+        sfizz_free (sfizzSynth);
+        sfizzSynth = nullptr;
+    }
+#endif
 
     // Post an empty preset list so the UI clears.
     delete freshPresets.exchange (new std::vector<Sf2PresetInfo>(),
@@ -290,7 +390,42 @@ void SfzPlayer::applyPendingLoad()
     if (owner->shouldUnload)
         return;
 
-    // ── Create new synth ──────────────────────────────────────────────────────
+    const auto ext = owner->file.getFileExtension().toLowerCase();
+
+    // ── SFZ path (sfizz) ─────────────────────────────────────────────────────
+#if DYSEKT_HAS_SFIZZ
+    if (ext == ".sfz")
+    {
+        isSfzFile  = true;
+        sfizzSynth = sfizz_create();
+        sfizz_set_sample_rate       (sfizzSynth, (float) currentSR);
+        sfizz_set_samples_per_block (sfizzSynth, currentBlock);
+
+        if (! sfizz_load_file (sfizzSynth, owner->file.getFullPathName().toRawUTF8()))
+        {
+            sfizz_free (sfizzSynth);
+            sfizzSynth = nullptr;
+            isSfzFile  = false;
+            return;
+        }
+
+        activeFile = owner->file;
+        loaded.store (true, std::memory_order_release);
+
+        // Re-apply pan (sfizz responds to CC10)
+        setPan (pan.load (std::memory_order_relaxed));
+
+        // Post a single dummy preset entry so the UI shows "loaded"
+        auto* list = new std::vector<Sf2PresetInfo>();
+        list->push_back ({ 0, 0, owner->file.getFileNameWithoutExtension() });
+        delete freshPresets.exchange (list, std::memory_order_acq_rel);
+
+        return;
+    }
+#endif
+
+    // ── SF2 path (FluidSynth) ─────────────────────────────────────────────────
+#if DYSEKT_HAS_FLUIDSYNTH
     settings = new_fluid_settings();
 
 #if JUCE_DEBUG
@@ -302,11 +437,8 @@ void SfzPlayer::applyPendingLoad()
 
     synth = new_fluid_synth (settings);
     fluid_synth_set_sample_rate (synth, (float) currentSR);
+    fluid_synth_set_gain        (synth, 2.0f);
 
-    // Boost gain — FluidSynth defaults are quiet.
-    fluid_synth_set_gain (synth, 2.0f);
-
-    // ── Load the soundfont ────────────────────────────────────────────────────
     sfontId = fluid_synth_sfload (synth,
                   owner->file.getFullPathName().toRawUTF8(), 1);
 
@@ -326,14 +458,11 @@ void SfzPlayer::applyPendingLoad()
     setReverb   (reverb.load   (std::memory_order_relaxed));
     setChorus   (chorus.load   (std::memory_order_relaxed));
 
-    // Reset program-change index to first preset.
     presetIndex.store (0, std::memory_order_relaxed);
-
-    // Build and post the preset list before applying the initial selection.
     postPresetList();
     applyProgramChange();
 
-#else  // DYSEKT_HAS_FLUIDSYNTH not defined
+#else
     juce::ignoreUnused (owner);
 #endif
 }

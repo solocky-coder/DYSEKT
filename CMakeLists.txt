@@ -6,8 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 
-# --- sfizz (SF2 / SFZ slice-rendering engine — used by SoundFontLoader only) ---
-if(FALSE)
+# --- sfizz (SFZ/SF2 engine — SoundFontLoader slice-render + SfzPlayer live SFZ playback) ---
+if(TRUE)
     set(SFIZZ_CLIENTS OFF CACHE BOOL "" FORCE)
     set(SFIZZ_SHARED  OFF CACHE BOOL "" FORCE)
     set(SFIZZ_JACK    OFF CACHE BOOL "" FORCE)
@@ -148,7 +148,7 @@ target_link_libraries(Dysekt
         juce::juce_audio_utils
         juce::juce_dsp
         DysektFonts
-        # sfizz — slice-render pipeline (SoundFontLoader)
+        # sfizz — slice-render pipeline (SoundFontLoader) + live SFZ playback (SfzPlayer)
         $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:sfizz::sfizz>
         # FluidSynth — live SF2 playback (SfzPlayer)
         $<$<BOOL:${DYSEKT_HAS_FLUIDSYNTH}>:FluidSynth::libfluidsynth>

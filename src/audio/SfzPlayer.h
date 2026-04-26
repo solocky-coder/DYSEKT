@@ -1,6 +1,8 @@
 #pragma once
 // =============================================================================
-//  SfzPlayer.h  —  Real-time SF2 playback engine (FluidSynth backend)
+//  SfzPlayer.h  —  Real-time SF2/SFZ playback engine
+//                  SF2 → FluidSynth backend
+//                  SFZ → sfizz backend
 // =============================================================================
 //  Owned by DysektProcessor.  prepareToPlay / processBlock / loadFile are
 //  called from the audio thread (processBlock) or UI thread (load/param set).
@@ -25,6 +27,10 @@
 
 #if DYSEKT_HAS_FLUIDSYNTH
   #include <fluidsynth.h>
+#endif
+
+#if DYSEKT_HAS_SFIZZ
+  #include <sfizz.h>
 #endif
 
 // -----------------------------------------------------------------------------
@@ -107,12 +113,19 @@ private:
     mutable std::atomic<std::vector<Sf2PresetInfo>*> freshPresets { nullptr };
     mutable std::vector<Sf2PresetInfo>               cachedPresets;
 
-    // ── Audio-thread FluidSynth state ─────────────────────────────────────────
+    // ── Audio-thread FluidSynth state (SF2) ───────────────────────────────────
 #if DYSEKT_HAS_FLUIDSYNTH
     fluid_settings_t* settings { nullptr };
     fluid_synth_t*    synth    { nullptr };
     int               sfontId  { -1 };
 #endif
+
+    // ── Audio-thread sfizz state (SFZ) ────────────────────────────────────────
+#if DYSEKT_HAS_SFIZZ
+    sfizz_synth_t*    sfizzSynth { nullptr };
+#endif
+
+    bool isSfzFile { false };   ///< true when the loaded file is .sfz
     double   currentSR    { 44100.0 };
     int      currentBlock { 256 };
     juce::File activeFile;
