@@ -83,19 +83,22 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     const int   w     = getWidth();
     const int   h     = getHeight();
 
-    // ── Column geometry (mirrors MixerPanel name / data split) ────────────────
-    constexpr int kStripeW  = 4;     // left colour bar  (mixer uses 3–4 px)
-    constexpr int kNameColW = 94;    // colour-tinted name column
-    constexpr int kNameX    = kStripeW + 2;
-    constexpr int kNameW    = kNameColW - kStripeW - 4;
-    // Right of name column: KEY | ROOT | VEL | LP
-    constexpr int kKeyX     = kNameColW + 4;
-    constexpr int kKeyW     = 66;
-    constexpr int kRootX    = kKeyX + kKeyW + 2;
-    constexpr int kRootW    = 34;
-    constexpr int kVelX     = kRootX + kRootW + 2;
+    // ── Column geometry — right cols are fixed width, NAME expands to fill ──────
+    constexpr int kStripeW  = 4;     // left colour bar
+    // Right-side fixed columns anchored from the right edge: KEY | ROOT | VEL | LP
+    constexpr int kLoopW    = 24;
     constexpr int kVelW     = 54;
-    constexpr int kLoopX    = kVelX + kVelW + 4;
+    constexpr int kRootW    = 34;
+    constexpr int kKeyW     = 66;
+    constexpr int kColGap   = 2;
+    const     int kLoopX    = w - kLoopW;
+    const     int kVelX     = kLoopX - kColGap - kVelW;
+    const     int kRootX    = kVelX  - kColGap - kRootW;
+    const     int kKeyX     = kRootX - kColGap - kKeyW;
+    // NAME column fills everything left of KEY
+    const     int kNameColW = kKeyX - kColGap;
+    const     int kNameX    = kStripeW + 2;
+    const     int kNameW    = kNameColW - kStripeW - 4;
 
     // ── Background ────────────────────────────────────────────────────────────
     g.setColour (theme.darkBar.darker (0.55f));
@@ -131,8 +134,7 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         hdr ("KEY",   kKeyX,        kKeyW,   juce::Justification::centredLeft);
         hdr ("ROOT",  kRootX,       kRootW,  juce::Justification::centred);
         hdr ("VEL",   kVelX,        kVelW,   juce::Justification::centred);
-        if (w > kLoopX + 8)
-            hdr ("LP", kLoopX, w - kLoopX,   juce::Justification::centred);
+        hdr ("LP",    kLoopX,       kLoopW,  juce::Justification::centred);
 
         g.setColour (theme.separator.withAlpha (0.45f));
         g.drawHorizontalLine (kHeaderH - 1, 0.f, (float) w);
@@ -223,9 +225,9 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         }
 
         // ── Loop indicator ────────────────────────────────────────────────────
-        if (w > kLoopX + 8 && r.zone.isLooped)
+        if (r.zone.isLooped)
         {
-            const int cx = kLoopX + (w - kLoopX) / 2;
+            const int cx = kLoopX + kLoopW / 2;
             const int cy = ry + kRowH / 2;
             g.setColour (theme.accent.withAlpha (0.70f));
             g.fillEllipse ((float) cx - 3.f, (float) cy - 3.f, 6.f, 6.f);
@@ -238,9 +240,9 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
 
     // ── Column separator lines ────────────────────────────────────────────────
     g.setColour (theme.separator.withAlpha (0.18f));
-    for (int cx : { kNameColW - 1, kKeyX + kKeyW, kRootX + kRootW, kVelX + kVelW })
-        if (cx < w)
-            g.drawVerticalLine (cx, (float) kHeaderH, (float) h);
+    const int sepLines[] = { kNameColW - 1, kKeyX + kKeyW, kRootX + kRootW, kVelX + kVelW, kLoopX - 1 };
+    for (int cx : sepLines)
+        g.drawVerticalLine (cx, (float) kHeaderH, (float) h);
 }
 
 void KeysPanel::ZoneMatrixContent::highlightNote (int note)

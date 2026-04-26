@@ -82,7 +82,11 @@ void SfzPlayer::setReverb (float level)
     reverb.store (juce::jlimit (0.0f, 1.0f, level), std::memory_order_relaxed);
 #if DYSEKT_HAS_FLUIDSYNTH
     if (synth != nullptr)
-        fluid_synth_set_reverb_level (synth, (double) level);
+        fluid_synth_set_reverb (synth,
+            0.6,           // room size  (0.0–1.0)
+            0.5,           // damping    (0.0–1.0)
+            0.5,           // width      (0.0–100.0)
+            (double) level); // level    (0.0–1.0)
 #endif
 }
 
@@ -91,7 +95,12 @@ void SfzPlayer::setChorus (float level)
     chorus.store (juce::jlimit (0.0f, 1.0f, level), std::memory_order_relaxed);
 #if DYSEKT_HAS_FLUIDSYNTH
     if (synth != nullptr)
-        fluid_synth_set_chorus_level (synth, (double) level);
+        fluid_synth_set_chorus (synth,
+            3,                        // voice count (1–99)
+            (double) level * 10.0,    // level       (0.0–10.0)
+            0.3,                      // speed Hz    (0.29–5.0)
+            8.0,                      // depth ms    (0.0–21.0)
+            FLUID_CHORUS_MOD_SINE);
 #endif
 }
 
@@ -287,6 +296,9 @@ void SfzPlayer::applyPendingLoad()
 #if JUCE_DEBUG
     fluid_settings_setint (settings, "synth.verbose", 0);
 #endif
+
+    fluid_settings_setint (settings, "synth.reverb.active", 1);
+    fluid_settings_setint (settings, "synth.chorus.active", 1);
 
     synth = new_fluid_synth (settings);
     fluid_synth_set_sample_rate (synth, (float) currentSR);
