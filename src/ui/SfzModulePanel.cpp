@@ -33,31 +33,37 @@ void SfzModulePanel::resized()
 {
     auto area = getLocalBounds().reduced (kPad);
 
-    // Bottom portion — keyboard
+    // Bottom portion — keyboard (zone table + piano)
     const int kbH = juce::jmax (90, (area.getHeight() * 3) / 5);
     auto kbArea = area.removeFromBottom (kbH);
     keysPanel.setBounds (kbArea);
     area.removeFromBottom (4); // gap
 
-    // Left-to-right: name | load btn | VOL knob | TRANS knob | CH | meter | status
+    // Top control strip — left to right:
+    //   [LOAD] [VOL knob] [TRANS knob] [name label ... ] [meter] [status]
+
+    // LOAD button — leftmost
     loadBtnZone = area.removeFromLeft (kLoadBtnW).withSizeKeepingCentre (kLoadBtnW, kLoadBtnH);
     area.removeFromLeft (kPad);
 
-    volZone   = area.removeFromLeft (kKnobW);
+    // VOL knob — narrower (48px instead of 60)
+    constexpr int kKnobWNarrow = 48;
+    volZone   = area.removeFromLeft (kKnobWNarrow);
     area.removeFromLeft (4);
-    transZone = area.removeFromLeft (kKnobW);
+    transZone = area.removeFromLeft (kKnobWNarrow);
     area.removeFromLeft (kPad);
 
-    chZone    = area.removeFromLeft (kChBtnW * 3 + 4);
-    area.removeFromLeft (kPad);
-
-    meterZone = area.removeFromRight (kMeterW);
-    area.removeFromRight (kPad);
-
+    // Status pill — rightmost
     statusZone = area.removeFromRight (60);
     area.removeFromRight (4);
 
-    nameZone = area;  // remainder = file name label
+    // VU meter — second from right
+    meterZone = area.removeFromRight (kMeterW);
+    area.removeFromRight (kPad);
+
+    // CH selector removed — nameZone gets the remainder (center expands)
+    chZone   = {};      // unused
+    nameZone = area;
 }
 
 // ── Paint ─────────────────────────────────────────────────────────────────────
@@ -130,45 +136,6 @@ void SfzModulePanel::paint (juce::Graphics& g)
         const auto  str  = (semi == 0) ? juce::String ("0 st")
                                        : (semi > 0 ? "+" : "") + juce::String (semi) + " st";
         drawKnob (g, transZone, norm, "TRANS", str);
-    }
-
-    // ── MIDI channel selector ─────────────────────────────────────────────────
-    {
-        const int ch = processor.sfzPlayer.getMidiChannel();
-        const int btnH = chZone.getHeight() / 2 - 2;
-
-        // "OMNI" and "CH" label strip
-        auto chArea = chZone;
-        g.setFont (DysektLookAndFeel::makeFont (10.0f));
-        g.setColour (theme.foreground.withAlpha (0.40f));
-        g.drawText ("MIDI CH", chArea.removeFromTop (14), juce::Justification::centred, false);
-
-        auto chBtns = chArea;
-        const int btnW = chBtns.getWidth() / 3;
-
-        // Decrement arrow
-        auto decBtn = chBtns.removeFromLeft (btnW).withSizeKeepingCentre (btnW - 2, btnH);
-        g.setColour (theme.darkBar.brighter (0.08f));
-        g.fillRoundedRectangle (decBtn.toFloat(), 2.0f);
-        g.setColour (theme.accent.withAlpha (0.7f));
-        g.drawRoundedRectangle (decBtn.toFloat().reduced (0.5f), 2.0f, 1.0f);
-        g.drawText ("<", decBtn, juce::Justification::centred, false);
-
-        // Channel display
-        auto chDisp = chBtns.removeFromLeft (btnW);
-        g.setColour (theme.darkBar.darker (0.15f));
-        g.fillRoundedRectangle (chDisp.toFloat(), 2.0f);
-        g.setFont (DysektLookAndFeel::makeFont (12.0f));
-        g.setColour (theme.foreground);
-        g.drawText (ch == 0 ? "ALL" : juce::String (ch), chDisp, juce::Justification::centred, false);
-
-        // Increment arrow
-        auto incBtn = chBtns.withSizeKeepingCentre (btnW - 2, btnH);
-        g.setColour (theme.darkBar.brighter (0.08f));
-        g.fillRoundedRectangle (incBtn.toFloat(), 2.0f);
-        g.setColour (theme.accent.withAlpha (0.7f));
-        g.drawRoundedRectangle (incBtn.toFloat().reduced (0.5f), 2.0f, 1.0f);
-        g.drawText (">", incBtn, juce::Justification::centred, false);
     }
 
     // ── Status pill ───────────────────────────────────────────────────────────
@@ -317,27 +284,6 @@ void SfzModulePanel::mouseDown (const juce::MouseEvent& e)
     {
         openFileChooser();
         return;
-    }
-
-    // CH decrement / increment
-    {
-        auto chArea = chZone;
-        chArea.removeFromTop (14);
-        const int btnW = chArea.getWidth() / 3;
-        auto decBtn = juce::Rectangle<int> (chArea.getX(), chArea.getY(), btnW, chArea.getHeight());
-        auto incBtn = juce::Rectangle<int> (chArea.getX() + 2 * btnW, chArea.getY(), btnW, chArea.getHeight());
-        if (decBtn.contains (pos))
-        {
-            int ch = processor.sfzPlayer.getMidiChannel();
-            processor.sfzPlayer.setMidiChannel (juce::jmax (0, ch - 1));
-            repaint(); return;
-        }
-        if (incBtn.contains (pos))
-        {
-            int ch = processor.sfzPlayer.getMidiChannel();
-            processor.sfzPlayer.setMidiChannel (juce::jmin (16, ch + 1));
-            repaint(); return;
-        }
     }
 
     // Knob drag start
