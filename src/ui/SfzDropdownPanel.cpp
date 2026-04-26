@@ -39,11 +39,9 @@ void SfzDropdownPanel::resized()
     const int w = getWidth();
     const int h = getHeight();
 
-    // Header strip always at the BOTTOM; keyboard fills everything above.
-    const int stripY = h - kStripH;
-
+    // Header strip at the TOP; keyboard (zone matrix + piano) fills below.
     // ── Header strip zones ──────────────────────────────────────────────────
-    auto strip = juce::Rectangle<int> (0, stripY, w, kStripH).reduced (kPad, 0);
+    auto strip = juce::Rectangle<int> (0, 0, w, kStripH).reduced (kPad, 0);
 
     strip.removeFromLeft (4);   // left margin
 
@@ -74,11 +72,12 @@ void SfzDropdownPanel::resized()
         presetLabel   = z;
     }
 
-    // ── Keyboard panel: fills the area above the strip ──────────────────────
-    const int kbH = juce::jmax (60, stripY - kPad);
+    // ── Keyboard panel: fills the area below the strip ──────────────────────
+    const int kbY = kStripH + kPad;
+    const int kbH = juce::jmax (60, h - kbY - kPad);
     keysPanel.setVisible (kbH > 0);
     if (kbH > 0)
-        keysPanel.setBounds (kPad, kPad, w - kPad * 2, kbH);
+        keysPanel.setBounds (kPad, kbY, w - kPad * 2, kbH);
     else
         keysPanel.setBounds ({});
 }
@@ -101,8 +100,8 @@ void SfzDropdownPanel::paint (juce::Graphics& g)
         g.setGradientFill (bg);
         g.fillRoundedRectangle (bounds, 4.0f);
 
-        // Separator between keyboard and strip
-        const int sepY = h - kStripH;
+        // Separator between strip and keyboard
+        const int sepY = kStripH;
         g.setColour (theme.accent.withAlpha (0.18f));
         g.fillRect (kPad, sepY, w - kPad * 2, 1);
     }
