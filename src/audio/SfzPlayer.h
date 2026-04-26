@@ -30,10 +30,7 @@
 #endif
 
 #if DYSEKT_HAS_SFIZZ
-  // Forward-declare the sfizz opaque type so we don't need sfizz.h in the
-  // header.  The full definition is included in SfzPlayer.cpp where it is used.
-  struct sfizz_synth_t;
-  using sfizz_t = sfizz_synth_t;
+  #include "../../sfizz/src/sfizz.h"
 #endif
 
 // -----------------------------------------------------------------------------

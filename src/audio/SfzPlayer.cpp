@@ -6,7 +6,9 @@
 #include "SfzPlayer.h"
 
 #if DYSEKT_HAS_SFIZZ
-  #include <sfizz.h>
+  // Include sfizz C API via path relative to the project root.
+  // This avoids relying on target_include_directories propagation.
+  #include "../../sfizz/src/sfizz.h"
 #endif
 
 // =============================================================================
