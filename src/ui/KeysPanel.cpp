@@ -155,7 +155,93 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         const juce::Colour zc = r.zone.colour;
 
         // ── Row base: alternating dark tint ───────────────────────────────────
-        if (i %
+        if (i % 2 == 1)
+        {
+            g.setColour (juce::Colour (0xFF000000).withAlpha (0.10f));
+            g.fillRect (0, ry, w, kRowH);
+        }
+
+        // ── Selection highlight ───────────────────────────────────────────────
+        if (sel)
+        {
+            g.setColour (theme.accent.withAlpha (0.08f));
+            g.fillRect (kStripeW, ry, w - kStripeW, kRowH);
+        }
+
+        // ── Left colour stripe ────────────────────────────────────────────────
+        g.setColour (zc);
+        g.fillRect (0, ry, kStripeW, kRowH);
+
+        // ── Name column: tinted background ───────────────────────────────────
+        g.setColour (zc.withAlpha (0.08f));
+        g.fillRect (kStripeW, ry, kNameColW - kStripeW, kRowH);
+
+        // ── Name text ─────────────────────────────────────────────────────────
+        g.setFont (fMain);
+        g.setColour (sel ? theme.foreground : theme.foreground.withAlpha (0.82f));
+        g.drawText (r.zone.name, kNameX, ry, kNameW, kRowH,
+                    juce::Justification::centredLeft, true);
+
+        // ── Key range column ──────────────────────────────────────────────────
+        auto noteName = [](int note) -> juce::String
+        {
+            static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+            return juce::String (names[note % 12]) + juce::String (note / 12 - 1);
+        };
+
+        const juce::String keyRange = noteName (r.zone.loKey) + "-" + noteName (r.zone.hiKey);
+        g.setFont (fSmall);
+        g.setColour (theme.foreground.withAlpha (0.75f));
+        g.drawText (keyRange, kKeyX, ry, kKeyW, kRowH,
+                    juce::Justification::centredLeft, false);
+
+        // ── Root note column ──────────────────────────────────────────────────
+        const juce::String rootTxt = (r.zone.rootPitch >= 0)
+                                     ? noteName (r.zone.rootPitch)
+                                     : juce::String ("--");
+        g.setFont (fSmall);
+        g.setColour (theme.foreground.withAlpha (0.65f));
+        g.drawText (rootTxt, kRootX, ry, kRootW, kRowH,
+                    juce::Justification::centred, false);
+
+        // ── Velocity badge ────────────────────────────────────────────────────
+        {
+            const juce::String velTxt = juce::String (r.zone.loVel) + "-"
+                                        + juce::String (r.zone.hiVel);
+            const int bx = kVelX + 1;
+            const int by = ry + 3;
+            const int bh = kRowH - 6;
+            const int bw = juce::jmin (kVelW - 2,
+                           juce::roundToInt (fTiny.getStringWidthFloat (velTxt)) + 8);
+
+            g.setColour (theme.darkBar.withAlpha (0.45f));
+            g.fillRoundedRectangle ((float) bx, (float) by, (float) bw, (float) bh, 2.f);
+
+            g.setFont (fTiny);
+            g.setColour (theme.foreground.withAlpha (0.70f));
+            g.drawText (velTxt, bx, by, bw, bh, juce::Justification::centred, false);
+        }
+
+        // ── Loop indicator ────────────────────────────────────────────────────
+        if (w > kLoopX + 8 && r.zone.isLooped)
+        {
+            const int cx = kLoopX + (w - kLoopX) / 2;
+            const int cy = ry + kRowH / 2;
+            g.setColour (theme.accent.withAlpha (0.70f));
+            g.fillEllipse ((float) cx - 3.f, (float) cy - 3.f, 6.f, 6.f);
+        }
+
+        // ── Row separator ─────────────────────────────────────────────────────
+        g.setColour (theme.separator.withAlpha (0.12f));
+        g.drawHorizontalLine (ry + kRowH - 1, 0.f, (float) w);
+    }
+
+    // ── Column separator lines ────────────────────────────────────────────────
+    g.setColour (theme.separator.withAlpha (0.18f));
+    for (int cx : { kNameColW - 1, kKeyX + kKeyW, kRootX + kRootW, kVelX + kVelW })
+        if (cx < w)
+            g.drawVerticalLine (cx, (float) kHeaderH, (float) h);
+}
 
 void KeysPanel::ZoneMatrixContent::highlightNote (int note)
 {
