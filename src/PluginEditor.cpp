@@ -203,31 +203,39 @@ void DysektEditor::setUiMode (int mode)
 // ─────────────────────────────────────────────────────────────────────────────
 void DysektEditor::toggleBrowserPanel()
 {
- // If the init browser is showing, promote it to a normal browser toggle
- // (keeps the panel open but switches from full-frame to slot mode).
- if (initBrowserOpen)
- {
- initBrowserOpen = false;
- activeSlot = SlotContent::Browser; // keep panel visible, now in slot position
- resized(); repaint(); resized(); repaint();
- return;
- }
+    // If the init browser is open, the first browser-button press simply
+    // closes it — exactly like a normal close — so the view behind
+    // (waveform or SFZ player) becomes immediately visible.
+    if (initBrowserOpen)
+    {
+        initBrowserOpen = false;
+        browserPanel.setVisible (false);
+        headerBar.setBrowserActive (false);
+        resized();
+        repaint();
+        return;
+    }
 
- if (activeSlot == SlotContent::Browser) {
- activeSlot = SlotContent::None;
- browserPanel.setVisible (false);
- headerBar.setBrowserActive (false);
- } else {
- if (activeSlot == SlotContent::Mixer) {
- activeSlot = SlotContent::None;
- mixerPanel.setVisible (false);
- headerBar.setBodeActive (false);
- }
- activeSlot = SlotContent::Browser;
- browserPanel.setVisible (true);
- headerBar.setBrowserActive (true);
- }
- resized(); repaint(); resized(); repaint();
+    if (activeSlot == SlotContent::Browser)
+    {
+        activeSlot = SlotContent::None;
+        browserPanel.setVisible (false);
+        headerBar.setBrowserActive (false);
+    }
+    else
+    {
+        if (activeSlot == SlotContent::Mixer)
+        {
+            activeSlot = SlotContent::None;
+            mixerPanel.setVisible (false);
+            headerBar.setBodeActive (false);
+        }
+        activeSlot = SlotContent::Browser;
+        browserPanel.setVisible (true);
+        headerBar.setBrowserActive (true);
+    }
+    resized();
+    repaint();
 }
 
 void DysektEditor::showTrimDialog (const juce::File& file, bool isRelink)
