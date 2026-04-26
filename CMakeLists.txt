@@ -8,13 +8,16 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 
 # --- sfizz (SFZ/SF2 engine — SoundFontLoader slice-render + SfzPlayer live SFZ playback) ---
 if(TRUE)
-    set(SFIZZ_CLIENTS OFF CACHE BOOL "" FORCE)
-    set(SFIZZ_SHARED  OFF CACHE BOOL "" FORCE)
-    set(SFIZZ_JACK    OFF CACHE BOOL "" FORCE)
-    set(SFIZZ_LV2     OFF CACHE BOOL "" FORCE)
-    set(SFIZZ_VST     OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_CLIENTS    OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_SHARED     OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_JACK       OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_LV2        OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_VST        OFF CACHE BOOL "" FORCE)
     set(SFIZZ_BENCHMARKS OFF CACHE BOOL "" FORCE)
-    set(SFIZZ_TESTS   OFF CACHE BOOL "" FORCE)
+    set(SFIZZ_TESTS      OFF CACHE BOOL "" FORCE)
+    # Disable sfizz_render CLI tool — it pulls in cxxopts which collides
+    # with vcpkg's pre-registered cxxopts alias target on Windows CI.
+    set(SFIZZ_RENDER     OFF CACHE BOOL "" FORCE)
     add_subdirectory(sfizz EXCLUDE_FROM_ALL)
     set(DYSEKT_HAS_SFIZZ TRUE)
     message(STATUS "sfizz found — SF2/SFZ slice-render support enabled")
