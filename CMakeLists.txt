@@ -135,6 +135,8 @@ target_include_directories(Dysekt PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/signalsmith-stretch
     ${CMAKE_CURRENT_SOURCE_DIR}/signalsmith-linear
+    # sfizz C API header (sfizz.h) — needed by SoundFontLoader.cpp and SfzPlayer.cpp
+    $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:${CMAKE_CURRENT_SOURCE_DIR}/sfizz/src/sfizz>
 )
 
 target_compile_definitions(Dysekt PUBLIC
