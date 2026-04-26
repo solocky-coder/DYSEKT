@@ -122,7 +122,7 @@ private:
 
     // ── Audio-thread sfizz state (SFZ) ────────────────────────────────────────
 #if DYSEKT_HAS_SFIZZ
-    sfizz_synth_t*    sfizzSynth { nullptr };
+    sfizz_t*          sfizzSynth { nullptr };
 #endif
 
     bool isSfzFile { false };   ///< true when the loaded file is .sfz
