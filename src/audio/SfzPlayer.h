@@ -30,7 +30,10 @@
 #endif
 
 #if DYSEKT_HAS_SFIZZ
-  #include <sfizz.h>
+  // Forward-declare the sfizz opaque type so we don't need sfizz.h in the
+  // header.  The full definition is included in SfzPlayer.cpp where it is used.
+  struct sfizz_synth_t;
+  using sfizz_t = sfizz_synth_t;
 #endif
 
 // -----------------------------------------------------------------------------
@@ -122,7 +125,7 @@ private:
 
     // ── Audio-thread sfizz state (SFZ) ────────────────────────────────────────
 #if DYSEKT_HAS_SFIZZ
-    sfizz_t*          sfizzSynth { nullptr };
+    sfizz_synth_t*    sfizzSynth { nullptr };
 #endif
 
     bool isSfzFile { false };   ///< true when the loaded file is .sfz

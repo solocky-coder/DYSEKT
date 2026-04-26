@@ -28,7 +28,9 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 #if DYSEKT_HAS_SFIZZ
-  #include <sfizz.h>     // sfizz C API
+  // Forward-declare the sfizz opaque type — full header included in .cpp only
+  struct sfizz_synth_t;
+  using sfizz_t = sfizz_synth_t;
 #endif
 
 // Forward declaration — full definition is in PluginProcessor.h

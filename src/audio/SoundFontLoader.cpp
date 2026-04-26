@@ -3,6 +3,10 @@
 // =============================================================================
 #include "SoundFontLoader.h"
 #include "../PluginProcessor.h"
+
+#if DYSEKT_HAS_SFIZZ
+  #include <sfizz.h>
+#endif
 #include <cmath>
 #include <algorithm>
 
