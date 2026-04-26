@@ -52,6 +52,17 @@ jobs:
             git clone --depth 1 --recurse-submodules https://github.com/sfztools/sfizz.git sfizz
           }
 
+      - name: Patch sfizz cxxopts alias collision
+        shell: pwsh
+        run: |
+          $file = "sfizz/cmake/SfizzDeps.cmake"
+          $content = Get-Content $file -Raw
+          $content = $content -replace `
+            'add_library\(sfizz::cxxopts ALIAS (\S+)\)', `
+            "if(NOT TARGET sfizz::cxxopts)`n  add_library(sfizz::cxxopts ALIAS `$1)`nendif()"
+          Set-Content $file $content
+          Write-Host "Patched sfizz::cxxopts alias guard applied."
+
       - name: Install FluidSynth via vcpkg (static)
         shell: pwsh
         run: |
