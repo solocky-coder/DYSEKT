@@ -59,14 +59,16 @@ private:
 
     // ── Layout zones (computed in resized) ────────────────────────────────────
     juce::Rectangle<int> nameZone, loadBtnZone,
-                          volZone, transZone, chZone,
-                          meterZone, statusZone;
+                          volZone, transZone,
+                          panZone, fineZone,
+                          reverbZone, chorusZone,
+                          meterZone;
 
     // Sub-zones inside nameZone for the preset picker
     juce::Rectangle<int> presetDecBtn, presetLabel, presetIncBtn;
 
     // ── Drag state for volume / transpose knobs ───────────────────────────────
-    enum class ActiveKnob { None, Volume, Transpose };
+    enum class ActiveKnob { None, Volume, Transpose, Pan, FineTune, Reverb, Chorus };
     ActiveKnob activeKnob  { ActiveKnob::None };
     int        dragStartY  { 0 };
     float      dragStartVal{ 0.f };
@@ -84,10 +86,15 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
 
     // ── Value mapping helpers ─────────────────────────────────────────────────
-    float volToNorm   (float linear) const;
-    float normToVol   (float n)      const;
-    float transToNorm (int semi)     const;
-    int   normToTrans (float n)      const;
+    float volToNorm    (float linear) const;
+    float normToVol    (float n)      const;
+    float transToNorm  (int semi)     const;
+    int   normToTrans  (float n)      const;
+    float panToNorm    (float p)      const;   // -1..+1 → 0..1
+    float normToPan    (float n)      const;   // 0..1 → -1..+1
+    float fineToNorm   (float cents)  const;   // -100..+100 → 0..1
+    float normToFine   (float n)      const;   // 0..1 → -100..+100 cents
+    // reverb/chorus are already 0..1; no mapping needed
 
     // ── Preset navigation ─────────────────────────────────────────────────────
     void selectPreset (int delta);   ///< +1 = next, -1 = prev

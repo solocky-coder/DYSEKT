@@ -55,6 +55,10 @@ public:
     void setVolume      (float gainLinear);   ///< 0..2
     void setTranspose   (int semitones);      ///< -24..+24
     void setMidiChannel (int ch);             ///< 0 = omni, 1-16 = specific
+    void setPan         (float centred);      ///< -1.0 (L) .. 0.0 (C) .. +1.0 (R)
+    void setFineTune    (float cents);        ///< -100 .. +100 cents
+    void setReverb      (float level);        ///< 0..1 wet level
+    void setChorus      (float level);        ///< 0..1 wet level
 
     /** Select a preset by its index in the list returned by getPresetList(). */
     void setPresetByIndex (int idx);
@@ -62,6 +66,10 @@ public:
     float      getVolume()      const noexcept { return volume.load(); }
     int        getTranspose()   const noexcept { return transpose.load(); }
     int        getMidiChannel() const noexcept { return midiChannel.load(); }
+    float      getPan()         const noexcept { return pan.load(); }
+    float      getFineTune()    const noexcept { return fineTune.load(); }
+    float      getReverb()      const noexcept { return reverb.load(); }
+    float      getChorus()      const noexcept { return chorus.load(); }
     int        getCurrentPresetIndex() const noexcept { return presetIndex.load(); }
     juce::File getLoadedFile()  const;
     bool       isLoaded()       const noexcept { return loaded.load(); }
@@ -113,6 +121,10 @@ private:
     std::atomic<float> volume      { 1.0f };
     std::atomic<int>   transpose   { 0 };
     std::atomic<int>   midiChannel { 16 };   // 0 = omni, default 16 = DYFONT dedicated channel
+    std::atomic<float> pan         { 0.0f }; // -1..+1
+    std::atomic<float> fineTune    { 0.0f }; // cents -100..+100
+    std::atomic<float> reverb      { 0.4f }; // 0..1
+    std::atomic<float> chorus      { 0.2f }; // 0..1
     std::atomic<int>   presetIndex { 0 };    // index into cachedPresets
     std::atomic<bool>  loaded      { false };
 

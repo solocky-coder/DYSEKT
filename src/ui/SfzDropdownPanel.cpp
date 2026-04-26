@@ -10,11 +10,11 @@
 static constexpr int kLoadW        = 64;
 static constexpr int kLoadH        = 22;
 static constexpr int kKnobW        = 52;
-static constexpr int kChBtnW       = 36;
+static constexpr int kPickerW      = 260;
 static constexpr int kMeterW       = 60;
-static constexpr int kStatusW      = 52;
 static constexpr int kPresetArrowW = 18;
 static constexpr int kPad          = 6;
+static constexpr int kKnobGap      = 4;
 
 // =============================================================================
 //  Constructor / destructor
@@ -39,37 +39,41 @@ void SfzDropdownPanel::resized()
     const int w = getWidth();
     const int h = getHeight();
 
-    // Header strip at the TOP; keyboard (zone matrix + piano) fills below.
-    // ── Header strip zones ──────────────────────────────────────────────────
+    // New strip order (left → right):
+    // [LOAD] [picker 260] [gap] [TRN] [FINE] [REV] [CHO] [PAN] [VOL] [METER]
     auto strip = juce::Rectangle<int> (0, 0, w, kStripH).reduced (kPad, 0);
-
     strip.removeFromLeft (4);   // left margin
 
     loadBtnZone = strip.removeFromLeft (kLoadW).withSizeKeepingCentre (kLoadW, kLoadH);
     strip.removeFromLeft (kPad);
 
-    volZone   = strip.removeFromLeft (kKnobW);
-    strip.removeFromLeft (4);
-    transZone = strip.removeFromLeft (kKnobW);
-    strip.removeFromLeft (kPad);
+    nameZone = strip.removeFromLeft (kPickerW);
+    strip.removeFromLeft (kPad * 2);   // breathing room before knobs
 
-    chZone = strip.removeFromLeft (kChBtnW * 3 + 4);
-    strip.removeFromLeft (kPad);
-
-    meterZone  = strip.removeFromRight (kMeterW);
+    // Right-side knobs in pairs: TRN FINE | REV CHO | PAN VOL | METER
+    meterZone   = strip.removeFromRight (kMeterW);
     strip.removeFromRight (kPad);
 
-    statusZone = strip.removeFromRight (kStatusW);
-    strip.removeFromRight (4);
+    volZone    = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kKnobGap);
+    panZone    = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kPad);   // pair separator
 
-    nameZone = strip;   // remainder → preset picker
+    chorusZone = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kKnobGap);
+    reverbZone = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kPad);   // pair separator
+
+    fineZone   = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kKnobGap);
+    transZone  = strip.removeFromRight (kKnobW);
 
     // Sub-divide nameZone into  [< arrow] [label] [> arrow]
     {
         auto z = nameZone;
-        presetDecBtn  = z.removeFromLeft  (kPresetArrowW);
-        presetIncBtn  = z.removeFromRight (kPresetArrowW);
-        presetLabel   = z;
+        presetDecBtn = z.removeFromLeft  (kPresetArrowW);
+        presetIncBtn = z.removeFromRight (kPresetArrowW);
+        presetLabel  = z;
     }
 
     // ── Keyboard panel: fills the area below the strip ──────────────────────
@@ -139,6 +143,42 @@ void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
         g.drawText ("LOAD SF2", loadBtnZone, juce::Justification::centred, false);
     }
 
+    // ── TRN knob ──────────────────────────────────────────────────────────────
+    drawKnob (g, transZone, transToNorm (processor.sfzPlayer.getTranspose()),
+              "TRN",
+              [&]() -> juce::String {
+                  const int s = processor.sfzPlayer.getTranspose();
+                  return s == 0 ? "0st" : (s > 0 ? "+" : "") + juce::String (s) + "st";
+              }());
+
+    // ── FINE knob ─────────────────────────────────────────────────────────────
+    drawKnob (g, fineZone, fineToNorm (processor.sfzPlayer.getFineTune()),
+              "FINE",
+              [&]() -> juce::String {
+                  const float c = processor.sfzPlayer.getFineTune();
+                  return (c >= 0 ? "+" : "") + juce::String (c, 0) + "c";
+              }());
+
+    // ── REV knob ──────────────────────────────────────────────────────────────
+    drawKnob (g, reverbZone, processor.sfzPlayer.getReverb(),
+              "REV",
+              juce::String (juce::roundToInt (processor.sfzPlayer.getReverb() * 100)) + "%");
+
+    // ── CHO knob ──────────────────────────────────────────────────────────────
+    drawKnob (g, chorusZone, processor.sfzPlayer.getChorus(),
+              "CHO",
+              juce::String (juce::roundToInt (processor.sfzPlayer.getChorus() * 100)) + "%");
+
+    // ── PAN knob (bipolar — draw centre tick) ─────────────────────────────────
+    drawKnob (g, panZone, panToNorm (processor.sfzPlayer.getPan()),
+              "PAN",
+              [&]() -> juce::String {
+                  const float p = processor.sfzPlayer.getPan();
+                  if (std::abs (p) < 0.01f) return "C";
+                  const int pct = juce::roundToInt (std::abs (p) * 100);
+                  return (p < 0 ? "L" : "R") + juce::String (pct);
+              }());
+
     // ── VOL knob ─────────────────────────────────────────────────────────────
     drawKnob (g, volZone, volToNorm (processor.sfzPlayer.getVolume()),
               "VOL",
@@ -146,58 +186,6 @@ void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
                   const float db = juce::Decibels::gainToDecibels (processor.sfzPlayer.getVolume());
                   return db <= -95.f ? "-inf" : juce::String (db, 1) + "dB";
               }());
-
-    // ── TRANS knob ────────────────────────────────────────────────────────────
-    drawKnob (g, transZone, transToNorm (processor.sfzPlayer.getTranspose()),
-              "TRN",
-              [&]() -> juce::String {
-                  const int s = processor.sfzPlayer.getTranspose();
-                  return s == 0 ? "0" : (s > 0 ? "+" : "") + juce::String (s);
-              }());
-
-    // ── MIDI channel selector ─────────────────────────────────────────────────
-    {
-        const int ch   = processor.sfzPlayer.getMidiChannel();
-        auto      area = chZone;
-        const int btnH = area.getHeight() - 4;
-        const int btnW = area.getWidth() / 3;
-
-        auto decBtn = juce::Rectangle<int> (area.getX(), area.getY() + 2, btnW - 1, btnH);
-        auto chDisp = juce::Rectangle<int> (area.getX() + btnW, area.getY() + 2, btnW, btnH);
-        auto incBtn = juce::Rectangle<int> (area.getX() + 2*btnW + 1, area.getY() + 2, btnW - 1, btnH);
-
-        g.setColour (theme.darkBar.brighter (0.08f));
-        g.fillRoundedRectangle (decBtn.toFloat(), 2.0f);
-        g.fillRoundedRectangle (incBtn.toFloat(), 2.0f);
-        g.setColour (theme.darkBar.darker (0.1f));
-        g.fillRoundedRectangle (chDisp.toFloat(), 2.0f);
-
-        g.setColour (theme.accent.withAlpha (0.60f));
-        g.drawRoundedRectangle (decBtn.toFloat().reduced (0.5f), 2.0f, 1.0f);
-        g.drawRoundedRectangle (incBtn.toFloat().reduced (0.5f), 2.0f, 1.0f);
-
-        g.setFont (DysektLookAndFeel::makeFont (11.0f));
-        g.setColour (theme.accent);
-        g.drawText ("<", decBtn, juce::Justification::centred, false);
-        g.drawText (">", incBtn, juce::Justification::centred, false);
-        g.setColour (theme.foreground);
-        g.drawText (ch == 0 ? "ALL" : juce::String (ch), chDisp,
-                    juce::Justification::centred, false);
-    }
-
-    // ── Status pill ───────────────────────────────────────────────────────────
-    {
-        const bool isLoaded = processor.sfzPlayer.isLoaded();
-        auto pill = statusZone.withSizeKeepingCentre (48, 16).toFloat();
-        g.setColour (isLoaded ? theme.accent.withAlpha (0.18f)
-                              : theme.foreground.withAlpha (0.07f));
-        g.fillRoundedRectangle (pill, 8.0f);
-        g.setColour (isLoaded ? theme.accent : theme.foreground.withAlpha (0.28f));
-        g.drawRoundedRectangle (pill.reduced (0.5f), 8.0f, 1.0f);
-        g.setFont (DysektLookAndFeel::makeFont (9.5f));
-        g.drawText (isLoaded ? "READY" : "EMPTY", pill.toNearestInt(),
-                    juce::Justification::centred, false);
-    }
 
     // ── VU meter ──────────────────────────────────────────────────────────────
     drawMeter (g);
@@ -423,40 +411,26 @@ void SfzDropdownPanel::mouseDown (const juce::MouseEvent& e)
     if (presetDecBtn.contains (pos)) { selectPreset (-1); return; }
     if (presetIncBtn.contains (pos)) { selectPreset (+1); return; }
 
-    // CH decrement / increment
+    // Knob drag start — all six knobs
+    struct { juce::Rectangle<int>& zone; ActiveKnob id; float val; } knobs[] =
     {
-        auto area  = chZone;
-        const int btnH = area.getHeight() - 4;
-        const int btnW = area.getWidth() / 3;
-        auto decBtn = juce::Rectangle<int> (area.getX(), area.getY() + 2, btnW - 1, btnH);
-        auto incBtn = juce::Rectangle<int> (area.getX() + 2*btnW + 1, area.getY() + 2, btnW - 1, btnH);
+        { volZone,    ActiveKnob::Volume,    volToNorm  (processor.sfzPlayer.getVolume()) },
+        { transZone,  ActiveKnob::Transpose, transToNorm (processor.sfzPlayer.getTranspose()) },
+        { panZone,    ActiveKnob::Pan,       panToNorm  (processor.sfzPlayer.getPan()) },
+        { fineZone,   ActiveKnob::FineTune,  fineToNorm (processor.sfzPlayer.getFineTune()) },
+        { reverbZone, ActiveKnob::Reverb,    processor.sfzPlayer.getReverb() },
+        { chorusZone, ActiveKnob::Chorus,    processor.sfzPlayer.getChorus() },
+    };
 
-        if (decBtn.contains (pos))
-        {
-            processor.sfzPlayer.setMidiChannel (juce::jmax (0, processor.sfzPlayer.getMidiChannel() - 1));
-            repaint(); return;
-        }
-        if (incBtn.contains (pos))
-        {
-            processor.sfzPlayer.setMidiChannel (juce::jmin (16, processor.sfzPlayer.getMidiChannel() + 1));
-            repaint(); return;
-        }
-    }
-
-    // Knob drag start
-    if (volZone.contains (pos))
+    for (auto& k : knobs)
     {
-        activeKnob   = ActiveKnob::Volume;
-        dragStartY   = pos.y;
-        dragStartVal = volToNorm (processor.sfzPlayer.getVolume());
-        return;
-    }
-    if (transZone.contains (pos))
-    {
-        activeKnob   = ActiveKnob::Transpose;
-        dragStartY   = pos.y;
-        dragStartVal = transToNorm (processor.sfzPlayer.getTranspose());
-        return;
+        if (k.zone.contains (pos))
+        {
+            activeKnob   = k.id;
+            dragStartY   = pos.y;
+            dragStartVal = k.val;
+            return;
+        }
     }
 }
 
@@ -466,10 +440,16 @@ void SfzDropdownPanel::mouseDrag (const juce::MouseEvent& e)
     const float delta   = (float)(dragStartY - e.getPosition().y) / 120.0f;
     const float newNorm = juce::jlimit (0.f, 1.f, dragStartVal + delta);
 
-    if (activeKnob == ActiveKnob::Volume)
-        processor.sfzPlayer.setVolume (normToVol (newNorm));
-    else
-        processor.sfzPlayer.setTranspose (normToTrans (newNorm));
+    switch (activeKnob)
+    {
+        case ActiveKnob::Volume:    processor.sfzPlayer.setVolume    (normToVol   (newNorm)); break;
+        case ActiveKnob::Transpose: processor.sfzPlayer.setTranspose (normToTrans (newNorm)); break;
+        case ActiveKnob::Pan:       processor.sfzPlayer.setPan       (normToPan   (newNorm)); break;
+        case ActiveKnob::FineTune:  processor.sfzPlayer.setFineTune  (normToFine  (newNorm)); break;
+        case ActiveKnob::Reverb:    processor.sfzPlayer.setReverb    (newNorm);               break;
+        case ActiveKnob::Chorus:    processor.sfzPlayer.setChorus    (newNorm);               break;
+        default: break;
+    }
     repaint();
 }
 
@@ -481,8 +461,12 @@ void SfzDropdownPanel::mouseUp (const juce::MouseEvent&)
 void SfzDropdownPanel::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const auto pos = e.getPosition();
-    if (volZone.contains   (pos)) { processor.sfzPlayer.setVolume (1.0f); repaint(); }
-    if (transZone.contains (pos)) { processor.sfzPlayer.setTranspose (0); repaint(); }
+    if (volZone.contains    (pos)) { processor.sfzPlayer.setVolume   (1.0f);  repaint(); }
+    if (transZone.contains  (pos)) { processor.sfzPlayer.setTranspose (0);    repaint(); }
+    if (panZone.contains    (pos)) { processor.sfzPlayer.setPan      (0.0f);  repaint(); }
+    if (fineZone.contains   (pos)) { processor.sfzPlayer.setFineTune (0.0f);  repaint(); }
+    if (reverbZone.contains (pos)) { processor.sfzPlayer.setReverb   (0.4f);  repaint(); }
+    if (chorusZone.contains (pos)) { processor.sfzPlayer.setChorus   (0.2f);  repaint(); }
 }
 
 void SfzDropdownPanel::mouseWheelMove (const juce::MouseEvent& e,
@@ -493,24 +477,41 @@ void SfzDropdownPanel::mouseWheelMove (const juce::MouseEvent& e,
 
     if (nameZone.contains (pos) || presetLabel.contains (pos))
     {
-        // Scroll wheel on preset picker → cycle presets
         if (w.deltaY > 0.05f)       selectPreset (+1);
         else if (w.deltaY < -0.05f) selectPreset (-1);
         return;
     }
 
+    auto adjustNorm = [&] (float current, float s) {
+        return juce::jlimit (0.f, 1.f, current + s);
+    };
+
     if (volZone.contains (pos))
     {
-        const float n = juce::jlimit (0.f, 1.f, volToNorm (processor.sfzPlayer.getVolume()) + step);
-        processor.sfzPlayer.setVolume (normToVol (n));
-        repaint();
+        processor.sfzPlayer.setVolume (normToVol (adjustNorm (volToNorm (processor.sfzPlayer.getVolume()), step)));
     }
     else if (transZone.contains (pos))
     {
-        const float n = juce::jlimit (0.f, 1.f, transToNorm (processor.sfzPlayer.getTranspose()) + step);
-        processor.sfzPlayer.setTranspose (normToTrans (n));
-        repaint();
+        processor.sfzPlayer.setTranspose (normToTrans (adjustNorm (transToNorm (processor.sfzPlayer.getTranspose()), step)));
     }
+    else if (panZone.contains (pos))
+    {
+        processor.sfzPlayer.setPan (normToPan (adjustNorm (panToNorm (processor.sfzPlayer.getPan()), step)));
+    }
+    else if (fineZone.contains (pos))
+    {
+        processor.sfzPlayer.setFineTune (normToFine (adjustNorm (fineToNorm (processor.sfzPlayer.getFineTune()), step)));
+    }
+    else if (reverbZone.contains (pos))
+    {
+        processor.sfzPlayer.setReverb (adjustNorm (processor.sfzPlayer.getReverb(), step));
+    }
+    else if (chorusZone.contains (pos))
+    {
+        processor.sfzPlayer.setChorus (adjustNorm (processor.sfzPlayer.getChorus(), step));
+    }
+
+    repaint();
 }
 
 // =============================================================================
@@ -587,6 +588,10 @@ float SfzDropdownPanel::volToNorm   (float linear) const { return juce::jlimit (
 float SfzDropdownPanel::normToVol   (float n)       const { return n * 2.0f; }
 float SfzDropdownPanel::transToNorm (int semi)       const { return ((float) semi + 24.0f) / 48.0f; }
 int   SfzDropdownPanel::normToTrans (float n)        const { return juce::roundToInt (n * 48.0f - 24.0f); }
+float SfzDropdownPanel::panToNorm   (float p)        const { return (p + 1.0f) * 0.5f; }
+float SfzDropdownPanel::normToPan   (float n)        const { return n * 2.0f - 1.0f; }
+float SfzDropdownPanel::fineToNorm  (float cents)    const { return (cents + 100.0f) / 200.0f; }
+float SfzDropdownPanel::normToFine  (float n)        const { return n * 200.0f - 100.0f; }
 
 // =============================================================================
 //  Zone parsers (KeysPanel highlight visualisation)

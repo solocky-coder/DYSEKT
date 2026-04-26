@@ -54,6 +54,47 @@ void SfzPlayer::setVolume      (float g) { volume.store (g, std::memory_order_re
 void SfzPlayer::setTranspose   (int s)   { transpose.store (s, std::memory_order_relaxed); }
 void SfzPlayer::setMidiChannel (int c)   { midiChannel.store (c, std::memory_order_relaxed); }
 
+void SfzPlayer::setPan (float p)
+{
+    pan.store (juce::jlimit (-1.0f, 1.0f, p), std::memory_order_relaxed);
+#if DYSEKT_HAS_FLUIDSYNTH
+    if (synth != nullptr)
+    {
+        // CC10 pan: 0 = hard L, 64 = centre, 127 = hard R
+        const int cc10 = juce::jlimit (0, 127,
+            juce::roundToInt ((p + 1.0f) * 0.5f * 127.0f));
+        fluid_synth_cc (synth, 0, 10, cc10);
+    }
+#endif
+}
+
+void SfzPlayer::setFineTune (float cents)
+{
+    fineTune.store (juce::jlimit (-100.0f, 100.0f, cents), std::memory_order_relaxed);
+#if DYSEKT_HAS_FLUIDSYNTH
+    if (synth != nullptr)
+        fluid_synth_set_gen (synth, 0, GEN_FINETUNE, cents);
+#endif
+}
+
+void SfzPlayer::setReverb (float level)
+{
+    reverb.store (juce::jlimit (0.0f, 1.0f, level), std::memory_order_relaxed);
+#if DYSEKT_HAS_FLUIDSYNTH
+    if (synth != nullptr)
+        fluid_synth_set_reverb_level (synth, (double) level);
+#endif
+}
+
+void SfzPlayer::setChorus (float level)
+{
+    chorus.store (juce::jlimit (0.0f, 1.0f, level), std::memory_order_relaxed);
+#if DYSEKT_HAS_FLUIDSYNTH
+    if (synth != nullptr)
+        fluid_synth_set_chorus_level (synth, (double) level);
+#endif
+}
+
 void SfzPlayer::setPresetByIndex (int idx)
 {
     presetIndex.store (idx, std::memory_order_relaxed);
@@ -266,6 +307,12 @@ void SfzPlayer::applyPendingLoad()
 
     activeFile = owner->file;
     loaded.store (true, std::memory_order_release);
+
+    // Re-apply user params that FluidSynth loses when synth is recreated.
+    setPan      (pan.load      (std::memory_order_relaxed));
+    setFineTune (fineTune.load (std::memory_order_relaxed));
+    setReverb   (reverb.load   (std::memory_order_relaxed));
+    setChorus   (chorus.load   (std::memory_order_relaxed));
 
     // Reset program-change index to first preset.
     presetIndex.store (0, std::memory_order_relaxed);
