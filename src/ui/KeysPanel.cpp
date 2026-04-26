@@ -71,10 +71,10 @@ void KeysPanel::ZoneMatrixContent::rebuild (const std::vector<Keyzone>& zones,
 }
 
 // =============================================================================
-// ZoneMatrixContent::paint   — HALion-style text-column table
+// ZoneMatrixContent::paint   — Mixer-channel row style
 //
 // Column layout (left → right):
-//   [3px colour stripe] [#  ] [Name       ] [KeyRange ] [Root ] [Vel    ] [Lp]
+//   [4px colour bar] [Name col, colour-tinted bg] | [Key range] [Root] [Vel badge] [Lp]
 // =============================================================================
 
 void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
@@ -83,13 +83,19 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     const int   w     = getWidth();
     const int   h     = getHeight();
 
-    constexpr int kStripeW  = 3;
-    constexpr int kIdxX     = 3;   constexpr int kIdxW  = 16;
-    constexpr int kNameX    = 19;  constexpr int kNameW = 75;
-    constexpr int kKeyX     = 95;  constexpr int kKeyW  = 75;
-    constexpr int kRootX    = 171; constexpr int kRootW = 35;
-    constexpr int kVelX     = 207; constexpr int kVelW  = 55;
-    constexpr int kLoopX    = 263;
+    // ── Column geometry (mirrors MixerPanel name / data split) ────────────────
+    constexpr int kStripeW  = 4;     // left colour bar  (mixer uses 3–4 px)
+    constexpr int kNameColW = 94;    // colour-tinted name column
+    constexpr int kNameX    = kStripeW + 2;
+    constexpr int kNameW    = kNameColW - kStripeW - 4;
+    // Right of name column: KEY | ROOT | VEL | LP
+    constexpr int kKeyX     = kNameColW + 4;
+    constexpr int kKeyW     = 66;
+    constexpr int kRootX    = kKeyX + kKeyW + 2;
+    constexpr int kRootW    = 34;
+    constexpr int kVelX     = kRootX + kRootW + 2;
+    constexpr int kVelW     = 54;
+    constexpr int kLoopX    = kVelX + kVelW + 4;
 
     // ── Background ────────────────────────────────────────────────────────────
     g.setColour (theme.darkBar.darker (0.55f));
@@ -105,127 +111,89 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
 
     // ── Column header ─────────────────────────────────────────────────────────
     {
-        const int hy = 0;
-        g.setColour (theme.darkBar.darker (0.15f));
-        g.fillRect (0, hy, w, kHeaderH);
+        g.setColour (theme.darkBar.darker (0.25f));
+        g.fillRect (0, 0, w, kHeaderH);
 
-        g.setFont (DysektLookAndFeel::makeFont (8.0f, true));
-        g.setColour (theme.foreground.withAlpha (0.28f));
+        // Subtle tint on name column header to match rows below
+        g.setColour (juce::Colours::white.withAlpha (0.02f));
+        g.fillRect (0, 0, kNameColW, kHeaderH);
 
-        auto hdr = [&](const char* txt, int x, int cw, juce::Justification j = juce::Justification::centredLeft)
+        g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
+        g.setColour (theme.foreground.withAlpha (0.30f));
+
+        auto hdr = [&](const char* txt, int x, int cw,
+                       juce::Justification j = juce::Justification::centredLeft)
         {
-            g.drawText (txt, x + 2, hy, cw - 4, kHeaderH, j, false);
+            g.drawText (txt, x, 0, cw, kHeaderH, j, false);
         };
 
-        hdr ("#",     kIdxX,  kIdxW,  juce::Justification::centred);
-        hdr ("NAME",  kNameX, kNameW);
-        hdr ("KEY",   kKeyX,  kKeyW);
-        hdr ("ROOT",  kRootX, kRootW);
-        hdr ("VEL",   kVelX,  kVelW);
-        if (w > kLoopX + 10)
-            hdr ("LP", kLoopX, w - kLoopX);
+        hdr ("NAME",  kNameX,       kNameW,  juce::Justification::centredLeft);
+        hdr ("KEY",   kKeyX,        kKeyW,   juce::Justification::centredLeft);
+        hdr ("ROOT",  kRootX,       kRootW,  juce::Justification::centred);
+        hdr ("VEL",   kVelX,        kVelW,   juce::Justification::centred);
+        if (w > kLoopX + 8)
+            hdr ("LP", kLoopX, w - kLoopX,   juce::Justification::centred);
 
-        g.setColour (theme.separator.withAlpha (0.50f));
+        g.setColour (theme.separator.withAlpha (0.45f));
         g.drawHorizontalLine (kHeaderH - 1, 0.f, (float) w);
+
+        // Vertical divider between name col and data cols in header
+        g.setColour (theme.separator.withAlpha (0.20f));
+        g.drawVerticalLine (kNameColW - 1, 0.f, (float) kHeaderH);
     }
 
     // ── Rows ──────────────────────────────────────────────────────────────────
-    const juce::Font fMain  = DysektLookAndFeel::makeFont (10.0f);
+    const juce::Font fMain  = DysektLookAndFeel::makeFont (10.5f);
     const juce::Font fSmall = DysektLookAndFeel::makeFont (9.0f);
+    const juce::Font fTiny  = DysektLookAndFeel::makeFont (8.0f);
 
     for (int i = 0; i < (int) rows.size(); ++i)
     {
-        const auto& r  = rows[(size_t) i];
-        const int   ry = kHeaderH + i * kRowH;
+        const auto& r   = rows[(size_t) i];
+        const int   ry  = kHeaderH + i * kRowH;
         const bool  sel = (i == selectedRow);
         const juce::Colour zc = r.zone.colour;
 
-        if (i % 2 == 1)
+        // ── Row base: alternating dark tint ───────────────────────────────────
+        if (i %
+
+void KeysPanel::ZoneMatrixContent::highlightNote (int note)
+{
+    if (note < 0)
+        return;   // don't clear selection on note-off — keep last highlighted
+
+    // Find first row whose key range covers this note.
+    for (int i = 0; i < (int) rows.size(); ++i)
+    {
+        const auto& z = rows[(size_t) i].zone;
+        if (note >= z.loKey && note <= z.hiKey)
         {
-            g.setColour (juce::Colour (0xFF000000).withAlpha (0.10f));
-            g.fillRect (0, ry, w, kRowH);
+            if (selectedRow == i) return;   // already there — skip scroll + repaint
+            selectedRow = i;
+
+            // Ask the parent Viewport to reveal this row.
+            // ZoneMatrixContent is the viewedComponent; the viewport is its parent.
+            if (auto* vp = findParentComponentOfClass<juce::Viewport>())
+            {
+                const int rowY = kHeaderH + i * kRowH;
+                vp->setViewPosition (0, juce::jmax (0, rowY - vp->getHeight() / 2));
+            }
+            repaint();
+            return;
         }
-        if (sel)
-        {
-            g.setColour (theme.accent.withAlpha (0.08f));
-            g.fillRect (kStripeW, ry, w - kStripeW, kRowH);
-        }
-
-        g.setColour (zc.withAlpha (sel ? 1.0f : 0.80f));
-        g.fillRect (0, ry, kStripeW, kRowH);
-
-        auto cell = [&](const juce::String& txt, int cx, int cw,
-                        juce::Colour col,
-                        juce::Justification just = juce::Justification::centredLeft)
-        {
-            g.setColour (col);
-            g.drawText (txt, cx + 2, ry, cw - 4, kRowH, just, false);
-        };
-
-        g.setFont (fSmall);
-        cell (juce::String (i + 1), kIdxX, kIdxW,
-              theme.foreground.withAlpha (0.25f), juce::Justification::centred);
-
-        {
-            const juce::String name = r.zone.name.isNotEmpty()
-                ? r.zone.name.toUpperCase().substring (0, 10)
-                : ("ZN" + juce::String (i + 1));
-            g.setFont (fMain);
-            cell (name, kNameX, kNameW, zc.withAlpha (sel ? 0.95f : 0.70f));
-        }
-
-        {
-            const juce::String keyStr =
-                juce::MidiMessage::getMidiNoteName (r.zone.loKey,  true, true, 3)
-                + "-"
-                + juce::MidiMessage::getMidiNoteName (r.zone.hiKey, true, true, 3);
-            g.setFont (fSmall);
-            cell (keyStr, kKeyX, kKeyW,
-                  theme.foreground.withAlpha (sel ? 0.85f : 0.55f));
-        }
-
-        {
-            const juce::String rootStr = (r.zone.rootPitch >= 0)
-                ? juce::MidiMessage::getMidiNoteName (r.zone.rootPitch, true, true, 3)
-                : "-";
-            g.setFont (fSmall);
-            cell (rootStr, kRootX, kRootW,
-                  theme.foreground.withAlpha (sel ? 0.80f : 0.45f),
-                  juce::Justification::centred);
-        }
-
-        {
-            const bool isFull = (r.zone.loVel == 0 && r.zone.hiVel == 127);
-            const juce::String velStr = "v" + juce::String (r.zone.loVel)
-                                        + "-" + juce::String (r.zone.hiVel);
-            g.setFont (fSmall);
-            cell (velStr, kVelX, kVelW,
-                  isFull ? theme.foreground.withAlpha (0.28f)
-                         : theme.accent.withAlpha (sel ? 0.90f : 0.65f),
-                  juce::Justification::centred);
-        }
-
-        if (w > kLoopX + 10 && r.zone.isLooped)
-        {
-            g.setFont (fSmall);
-            cell ("\xe2\x86\xba", kLoopX, w - kLoopX,
-                  theme.accent.withAlpha (0.60f),
-                  juce::Justification::centred);
-        }
-
-        g.setColour (theme.separator.withAlpha (0.20f));
-        g.drawHorizontalLine (ry + kRowH - 1, (float) kStripeW, (float) w);
     }
-
-    g.setColour (theme.separator.withAlpha (0.18f));
-    for (int cx : { kKeyX - 1, kRootX - 1, kVelX - 1 })
-        if (cx < w)
-            g.drawVerticalLine (cx, (float) kHeaderH, (float) h);
 }
 
 // =============================================================================
-// ZoneMatrixContent::mouseDown
+// KeysPanel::highlightNoteInMatrix
 // =============================================================================
+
+void KeysPanel::highlightNoteInMatrix (int note)
+{
+    zoneMatrix.highlightNote (note);
+}
+
+
 
 void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
 {
@@ -721,7 +689,24 @@ void KeysPanel::timerCallback()
     {
         sfzActiveSnap[0] = lo;
         sfzActiveSnap[1] = hi;
+
+        // Find the lowest active note and scroll the zone matrix to it.
+        for (int n = 0; n < 128; ++n)
+        {
+            const uint64_t word = (n < 64) ? lo : hi;
+            const int      bit  = (n < 64) ? n  : (n - 64);
+            if ((word >> bit) & 1)
+            {
+                highlightNoteInMatrix (n);
+                break;
+            }
+        }
     }
+
+    // Also track UI mouse-pressed key
+    if (lastActiveNote >= 0)
+        highlightNoteInMatrix (lastActiveNote);
+
     repaint();
 }
 

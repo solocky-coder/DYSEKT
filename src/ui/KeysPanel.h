@@ -36,6 +36,9 @@ public:
     void clearKeyzones    ();
     void autoScrollToZones();
 
+    /** Scroll the zone matrix to highlight the row covering 'note'. */
+    void highlightNoteInMatrix (int note);
+
     // Called by ZoneMatrixContent to schedule a deferred note-off
     void scheduleNoteOff (int note);
 
@@ -56,6 +59,9 @@ private:
                       int baseOctave,
                       int whiteKeyW, int blackKeyW,
                       int componentWidth);
+
+        /** Select and scroll to the first row that covers 'note'. -1 = clear. */
+        void highlightNote (int note);
 
         void paint     (juce::Graphics& g) override;
         void mouseDown (const juce::MouseEvent& e) override;

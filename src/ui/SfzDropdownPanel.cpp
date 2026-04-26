@@ -47,8 +47,10 @@ void SfzDropdownPanel::resized()
     loadBtnZone = strip.removeFromLeft (kLoadW).withSizeKeepingCentre (kLoadW, kLoadH);
     strip.removeFromLeft (kPad);
 
-    nameZone = strip.removeFromLeft (kPickerW);
-    strip.removeFromLeft (kPad * 2);   // breathing room before knobs
+    // Preset picker: same height as LOAD button, vertically centred in strip
+    auto pickerSlot = strip.removeFromLeft (kPickerW);
+    nameZone = pickerSlot.withSizeKeepingCentre (kPickerW, kLoadH);
+    strip.removeFromLeft (kPad * 2);
 
     // Right-side knobs in pairs: TRN FINE | REV CHO | PAN VOL | METER
     meterZone   = strip.removeFromRight (kMeterW);
@@ -76,9 +78,9 @@ void SfzDropdownPanel::resized()
         presetLabel  = z;
     }
 
-    // ── Keyboard panel: fills the area below the strip ──────────────────────
-    const int kbY = kStripH + kPad;
-    const int kbH = juce::jmax (60, h - kbY - kPad);
+    // ── Keyboard panel: sits directly below the strip, no gap ──────────────────
+    const int kbY = kStripH;
+    const int kbH = juce::jmax (60, h - kbY);
     keysPanel.setVisible (kbH > 0);
     if (kbH > 0)
         keysPanel.setBounds (kPad, kbY, w - kPad * 2, kbH);
@@ -274,37 +276,44 @@ void SfzDropdownPanel::drawKnob (juce::Graphics& g, juce::Rectangle<int> bounds,
                                    float normalised, const juce::String& label,
                                    const juce::String& valueStr) const
 {
+    // Compact horizontal layout: [arc | label/value stacked right]
+    // Fits entirely within kStripH (36px) with no overflow.
     const auto& theme = getTheme();
-    const int   cx    = bounds.getCentreX();
-    const int   dia   = juce::jmin (bounds.getWidth() - 4, bounds.getHeight() - 10, 24);
-    const int   cy    = bounds.getY() + 4 + dia / 2;
-    const float r     = (float) dia * 0.5f;
+
+    const int dia  = juce::jmin (bounds.getHeight() - 6, 26);
+    const int cy   = bounds.getCentreY();
+    const int cx   = bounds.getX() + 3 + dia / 2;
+    const float r  = (float) dia * 0.5f;
 
     const float startA = juce::MathConstants<float>::pi * 1.25f;
     const float endA   = juce::MathConstants<float>::pi * 2.75f;
     const float angle  = startA + normalised * (endA - startA);
 
     juce::Path track;
-    track.addCentredArc ((float) cx, (float) cy, r - 1, r - 1, 0.f, startA, endA, true);
-    g.setColour (theme.darkBar.brighter (0.12f));
-    g.strokePath (track, juce::PathStrokeType (2.2f));
+    track.addCentredArc ((float) cx, (float) cy, r - 1.f, r - 1.f, 0.f, startA, endA, true);
+    g.setColour (theme.darkBar.brighter (0.15f));
+    g.strokePath (track, juce::PathStrokeType (2.0f));
 
     juce::Path fill;
-    fill.addCentredArc ((float) cx, (float) cy, r - 1, r - 1, 0.f, startA, angle, true);
+    fill.addCentredArc ((float) cx, (float) cy, r - 1.f, r - 1.f, 0.f, startA, angle, true);
     g.setColour (theme.accent);
-    g.strokePath (fill, juce::PathStrokeType (2.2f));
+    g.strokePath (fill, juce::PathStrokeType (2.0f));
 
-    const float tx = (float) cx + (r - 4) * std::cos (angle - juce::MathConstants<float>::halfPi);
-    const float ty = (float) cy + (r - 4) * std::sin (angle - juce::MathConstants<float>::halfPi);
-    g.setColour (theme.accent.brighter (0.25f));
-    g.fillEllipse (tx - 2.5f, ty - 2.5f, 5.0f, 5.0f);
+    const float tx = (float) cx + (r - 4.f) * std::cos (angle - juce::MathConstants<float>::halfPi);
+    const float ty = (float) cy + (r - 4.f) * std::sin (angle - juce::MathConstants<float>::halfPi);
+    g.setColour (theme.accent.brighter (0.3f));
+    g.fillEllipse (tx - 2.f, ty - 2.f, 4.f, 4.f);
 
-    const int labelY = cy + (int) r + 2;
+    const int textX = cx + (int) r + 5;
+    const int textW = bounds.getRight() - textX;
+
+    g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
+    g.setColour (theme.foreground.withAlpha (0.38f));
+    g.drawText (label,    textX, cy - 10, textW, 10, juce::Justification::centredLeft, false);
+
     g.setFont (DysektLookAndFeel::makeFont (8.5f));
-    g.setColour (theme.foreground.withAlpha (0.40f));
-    g.drawText (label,    bounds.withY (labelY).withHeight (10), juce::Justification::centredTop, false);
-    g.setColour (theme.foreground.withAlpha (0.75f));
-    g.drawText (valueStr, bounds.withY (labelY + 10).withHeight (10), juce::Justification::centredTop, false);
+    g.setColour (theme.foreground.withAlpha (0.82f));
+    g.drawText (valueStr, textX, cy,      textW, 10, juce::Justification::centredLeft, false);
 }
 
 // =============================================================================
