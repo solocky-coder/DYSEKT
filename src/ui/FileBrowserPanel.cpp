@@ -364,9 +364,6 @@ void FileBrowserPanel::paint (juce::Graphics& g)
     // ── Preview bar (bottom, inside frame) ────────────────────────────────────
     if (previewVisible)
     {
-        const auto bar = screen.removeFromBottom (kBarH);     // visual only — doesn't mutate screen
-        // Use a local copy so we can removeFromBottom without side-effects
-        auto screenCopy = screen;
         const auto barRect = b.reduced (4).withTop (b.getBottom() - 4 - kBarH);
 
         g.setColour (T.darkBar.darker (0.6f));
