@@ -27,27 +27,12 @@ else()
 endif()
 
 # --- FluidSynth (SF2 live-playback engine — used by SfzPlayer) ---
-#
-# Preferred: install FluidSynth system-wide, then CMake's find_package picks it up.
-#
-#   Windows:  vcpkg install fluidsynth:x64-windows
-#             Pass -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
-#
-#   macOS:    brew install fluid-synth
-#
-#   Linux:    sudo apt install libfluidsynth-dev
-#
-# Alternatively, place a fluidsynth source tree at ./fluidsynth and the
-# add_subdirectory fallback below will build it from source.
-# ---------------------------------------------------------------------------
-
 find_package(FluidSynth CONFIG QUIET)
 
 if(FluidSynth_FOUND)
     set(DYSEKT_HAS_FLUIDSYNTH TRUE)
     message(STATUS "FluidSynth ${FluidSynth_VERSION} found via find_package — SF2 live playback enabled")
 else()
-    # Fallback: try a bundled source tree
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/fluidsynth/CMakeLists.txt")
         set(FLUIDSYNTH_BUILD_TESTS     OFF CACHE BOOL "" FORCE)
         set(FLUIDSYNTH_BUILD_DOCS      OFF CACHE BOOL "" FORCE)
@@ -67,6 +52,21 @@ else()
             "FluidSynth NOT found — SF2 live playback will be disabled.\n"
             "  Install via vcpkg / homebrew / apt, or clone FluidSynth into ./fluidsynth.")
     endif()
+endif()
+
+# Resolve the sfizz C API include directory.
+# sfizz.h (C API) lives at sfizz/src/sfizz.h in the sfizz source tree.
+# The sfizz::sfizz CMake target only exposes C++ headers, so we add it manually.
+if(DYSEKT_HAS_SFIZZ)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sfizz/src/sfizz.h")
+        set(SFIZZ_C_API_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/sfizz/src")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sfizz/src/sfizz/sfizz.h")
+        set(SFIZZ_C_API_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/sfizz/src/sfizz")
+    else()
+        message(WARNING "sfizz.h not found — SoundFontLoader/SfzPlayer may fail to compile")
+        set(SFIZZ_C_API_INCLUDE "")
+    endif()
+    message(STATUS "sfizz C API include: ${SFIZZ_C_API_INCLUDE}")
 endif()
 
 # Define the target
@@ -136,7 +136,7 @@ target_include_directories(Dysekt PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/signalsmith-stretch
     ${CMAKE_CURRENT_SOURCE_DIR}/signalsmith-linear
     # sfizz C API header (sfizz.h) — needed by SoundFontLoader.cpp and SfzPlayer.cpp
-    $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:${CMAKE_CURRENT_SOURCE_DIR}/sfizz/src/sfizz>
+    $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:${SFIZZ_C_API_INCLUDE}>
 )
 
 target_compile_definitions(Dysekt PUBLIC
