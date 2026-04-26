@@ -317,49 +317,45 @@ void KeysPanel::drawZoneView (juce::Graphics& g,
     }
 
     const float barTopPad = 2.0f;
-    const float barBotPad = 2.0f;
-    const float barH      = (float) zoneH - barTopPad - barBotPad;
+    const float barH      = (float) zoneH - barTopPad - 2.0f;
     const float cornerR   = 2.5f;
 
-    for (size_t i = 0; i < keyzones.size(); ++i)
+    // Black semitone lookup
+    static const bool semitoneIsBlack[12] =
+        { false,true,false,true,false,false,true,false,true,false,true,false };
+
+    auto isBlackNote = [] (int n) -> bool
     {
-        const auto& z = keyzones[i];
-        if (z.hiKey < loNote || z.loKey > hiNote) continue;
+        return semitoneIsBlack[((n % 12) + 12) % 12];
+    };
 
-        const int lo = juce::jmax (loNote, z.loKey);
-        const int hi = juce::jmin (hiNote, z.hiKey);
-        if (lo > hi) continue;
+    // ── Draw one zone bar ─────────────────────────────────────────────────────
+    auto drawBar = [&] (const Keyzone& z, float barX, float barW, bool blackKey)
+    {
+        if (barW < 1.0f) return;
 
-        const float x1   = noteToX (lo, kbX);
-        const float x2   = noteToX (hi, kbX) + noteKeyWidth (hi);
-        const float barW = x2 - x1 - 1.0f;   // 1 px gap between adjacent bars
-        if (barW < 1.0f) continue;
+        const float barY  = (float) zoneY + barTopPad;
+        // Black-key bars are shorter (like real black keys), visually sitting on top.
+        const float bH    = blackKey ? barH * 0.72f : barH;
+        const float cx    = barX + barW * 0.5f;
+        const float cy    = barY + bH  * 0.5f;
 
-        const float barX = x1;
-        const float barY = (float) zoneY + barTopPad;
-        const float cx   = barX + barW * 0.5f;
-        const float cy   = barY + barH * 0.5f;
-
-        // ── Fill: vertical gradient, lighter at top ───────────────────────────
         juce::ColourGradient grad (
             z.colour.brighter (0.18f), barX, barY,
-            z.colour.darker   (0.30f), barX, barY + barH,
+            z.colour.darker   (0.30f), barX, barY + bH,
             false);
         g.setGradientFill (grad);
-        g.fillRoundedRectangle (barX, barY, barW, barH, cornerR);
+        g.fillRoundedRectangle (barX, barY, barW, bH, cornerR);
 
-        // ── Gloss stripe at top ───────────────────────────────────────────────
         g.setColour (z.colour.brighter (0.55f).withAlpha (0.40f));
         g.fillRoundedRectangle (barX + 1.0f, barY + 1.0f,
-                                barW - 2.0f, juce::jmin (4.0f, barH * 0.15f), 1.0f);
+                                barW - 2.0f, juce::jmin (4.0f, bH * 0.15f), 1.0f);
 
-        // ── Border ────────────────────────────────────────────────────────────
         g.setColour (z.colour.brighter (0.35f).withAlpha (0.80f));
         g.drawRoundedRectangle (barX + 0.5f, barY + 0.5f,
-                                barW - 1.0f, barH - 1.0f, cornerR, 1.0f);
+                                barW - 1.0f, bH - 1.0f, cornerR, 1.0f);
 
-        // ── Vertical label (rotated -90 deg, reads bottom-to-top) ────────────
-        if (barW >= 6.0f && barH >= 14.0f)
+        if (barW >= 6.0f && bH >= 14.0f)
         {
             const juce::String label = z.name.isNotEmpty()
                 ? z.name
@@ -372,19 +368,41 @@ void KeysPanel::drawZoneView (juce::Graphics& g,
             g.setFont (DysektLookAndFeel::makeFont (fontSize, true));
             g.setColour (z.colour.brighter (0.95f).withAlpha (0.95f));
 
-            // Rotate -90 deg around bar centre so text reads bottom to top
             g.saveState();
             g.addTransform (juce::AffineTransform::rotation (
                 -juce::MathConstants<float>::halfPi, cx, cy));
-
-            // In rotated space: width = barH, height = barW
             g.drawText (label,
-                        juce::Rectangle<float> (cx - barH * 0.5f,
-                                                cy - barW * 0.5f,
-                                                barH, barW),
+                        juce::Rectangle<float> (cx - bH * 0.5f, cy - barW * 0.5f, bH, barW),
                         juce::Justification::centred, true);
             g.restoreState();
         }
+    };
+
+    // ── Pass 1: white-key zones and multi-note zones ──────────────────────────
+    // A zone is "single-black-key" only when lo==hi and that note is a black key.
+    // Everything else (white single-note zones, and all multi-note zones) draws here.
+    for (const auto& z : keyzones)
+    {
+        if (z.hiKey < loNote || z.loKey > hiNote) continue;
+        const int lo = juce::jmax (loNote, z.loKey);
+        const int hi = juce::jmin (hiNote, z.hiKey);
+        if (lo > hi) continue;
+        if (lo == hi && isBlackNote (lo)) continue;  // deferred to pass 2
+
+        const float x1 = noteToX (lo, kbX);
+        const float x2 = noteToX (hi, kbX) + noteKeyWidth (hi);
+        drawBar (z, x1, x2 - x1, false);
+    }
+
+    // ── Pass 2: single-black-key zones drawn on top (like black piano keys) ───
+    for (const auto& z : keyzones)
+    {
+        if (z.hiKey < loNote || z.loKey > hiNote) continue;
+        const int lo = juce::jmax (loNote, z.loKey);
+        const int hi = juce::jmin (hiNote, z.hiKey);
+        if (lo != hi || ! isBlackNote (lo)) continue;
+
+        drawBar (z, noteToX (lo, kbX), noteKeyWidth (lo), true);
     }
 
     // ── Bottom separator line ─────────────────────────────────────────────────
