@@ -44,10 +44,9 @@ private:
     class ZoneMatrixContent : public juce::Component
     {
     public:
-        // Row and column layout — mirrors MixerPanel constants
-        static constexpr int kRowH     = 24;   // row height (px) — taller than old 14
-        static constexpr int kNameColW = 88;   // name column width
-        static constexpr int kVelBadgeW= 52;   // velocity badge column width
+        // Row and column layout constants
+        static constexpr int kRowH    = 20;   // row height (px)
+        static constexpr int kHeaderH = 14;   // header row height
 
         ZoneMatrixContent (KeysPanel& owner) : owner (owner) {}
 
@@ -69,9 +68,6 @@ private:
         struct Row
         {
             Keyzone zone;
-            // Bar geometry — relative to content's left edge
-            float barX = 0.f;
-            float barW = 0.f;
         };
         std::vector<Row> rows;
 
@@ -81,9 +77,7 @@ private:
         int baseOctave_ = 3;
         int contentW_   = 0;
 
-        // Map a MIDI note to an X pixel within this content component.
-        // Uses proportional mapping from loNote..hiNote across the bar area.
-        float noteToBarX (int note) const;
+        // No helper needed — table uses text columns only
     };
 
     // =========================================================================
