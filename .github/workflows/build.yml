@@ -67,11 +67,12 @@ jobs:
         run: |
           $file = "sfizz/cmake/SfizzConfig.cmake"
           $content = Get-Content $file -Raw
+          # Remove the line that hardcodes /MT — the parent CMake's
+          # -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL cache flag takes over.
           $content = $content -replace `
-            'set\(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded\$<\$<CONFIG:Debug>:Debug>"\)', `
-            'set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")'
+            'set\(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded\$<\$<CONFIG:Debug>:Debug>"\)\r?\n?', ''
           Set-Content $file $content
-          Write-Host "Patched sfizz MSVC runtime library to MD (DLL)."
+          Write-Host "Patched sfizz MSVC runtime: removed hardcoded MT override."
 
 
       - name: Install FluidSynth via vcpkg (static)
