@@ -27,7 +27,7 @@
  *  armedSlot — std::atomic<int>. UI thread writes; audio thread reads.
  */
 
-static constexpr int kMidiLearnNumSlots = 32;  // slots 0-27 (params) + 28 (TrimOut) + 29 (Hold) + 30 (Zoom) + 31 (Scroll)
+static constexpr int kMidiLearnNumSlots = 36;  // slots 0-31 (existing) + 32-35 (SfzPlayer ADSR)
 
 class MidiLearnManager
 {

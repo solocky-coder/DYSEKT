@@ -66,6 +66,60 @@ void SfzPlayer::setVolume      (float g) { volume.store (g, std::memory_order_re
 void SfzPlayer::setTranspose   (int s)   { transpose.store (s, std::memory_order_relaxed); }
 void SfzPlayer::setMidiChannel (int c)   { midiChannel.store (c, std::memory_order_relaxed); }
 
+// ── SFZ ADSR setters ──────────────────────────────────────────────────────────
+
+void SfzPlayer::setSfzAttack  (float s) noexcept
+{
+    sfzAttackSec .store (juce::jlimit (0.0f,  30.0f, s), std::memory_order_relaxed);
+    sfzAdsrDirty .store (true, std::memory_order_release);
+}
+void SfzPlayer::setSfzDecay   (float s) noexcept
+{
+    sfzDecaySec  .store (juce::jlimit (0.0f,  30.0f, s), std::memory_order_relaxed);
+    sfzAdsrDirty .store (true, std::memory_order_release);
+}
+void SfzPlayer::setSfzSustain (float p) noexcept
+{
+    sfzSustainPct.store (juce::jlimit (0.0f, 100.0f, p), std::memory_order_relaxed);
+    sfzAdsrDirty .store (true, std::memory_order_release);
+}
+void SfzPlayer::setSfzRelease (float s) noexcept
+{
+    sfzReleaseSec.store (juce::jlimit (0.0f,  60.0f, s), std::memory_order_relaxed);
+    sfzAdsrDirty .store (true, std::memory_order_release);
+}
+
+void SfzPlayer::sendAdsrToSfizz()
+{
+#if DYSEKT_HAS_SFIZZ
+    if (sfizzSynth == nullptr) return;
+    const int numRegions = sfizz_get_num_regions (sfizzSynth);
+    if (numRegions <= 0) return;
+
+    const float attack  = sfzAttackSec .load (std::memory_order_relaxed);
+    const float decay   = sfzDecaySec  .load (std::memory_order_relaxed);
+    const float sustain = sfzSustainPct.load (std::memory_order_relaxed);
+    const float release = sfzReleaseSec.load (std::memory_order_relaxed);
+
+    auto sendFloat = [&] (int region, const char* opcode, float value)
+    {
+        char path[64];
+        snprintf (path, sizeof (path), "/region%d/%s", region, opcode);
+        sfizz_arg_t arg;
+        arg.f = value;
+        sfizz_send_message (sfizzSynth, nullptr, 0, path, "f", &arg);
+    };
+
+    for (int i = 0; i < numRegions; ++i)
+    {
+        sendFloat (i, "ampeg_attack",  attack);
+        sendFloat (i, "ampeg_decay",   decay);
+        sendFloat (i, "ampeg_sustain", sustain);
+        sendFloat (i, "ampeg_release", release);
+    }
+#endif
+}
+
 void SfzPlayer::setPan (float p)
 {
     pan.store (juce::jlimit (-1.0f, 1.0f, p), std::memory_order_relaxed);
@@ -200,6 +254,10 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
 #if DYSEKT_HAS_SFIZZ
     if (isSfzFile && sfizzSynth != nullptr)
     {
+        // ── Flush pending ADSR changes via sfizz OSC messages ────────────────
+        if (sfzAdsrDirty.exchange (false, std::memory_order_acquire))
+            sendAdsrToSfizz();
+
         // ── Forward MIDI to sfizz ─────────────────────────────────────────────
         for (const auto meta : midiIn)
         {

@@ -4,6 +4,7 @@
 #include "SfzModulePanel.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include "../PluginEditor.h"
 #include <set>
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -39,6 +40,20 @@ void SfzModulePanel::resized()
     keysPanel.setBounds (kbArea);
     area.removeFromBottom (4); // gap
 
+    // ADSR row — sits between top strip and keyboard
+    constexpr int kAdsrRowH  = 68;
+    constexpr int kAdsrKnobW = 52;
+    auto adsrArea = area.removeFromBottom (kAdsrRowH);
+    area.removeFromBottom (4); // gap above ADSR row
+
+    // Centre the four knobs in the ADSR row
+    const int totalKnobW = kAdsrKnobW * 4 + kPad * 3;
+    const int adsrX = adsrArea.getX() + (adsrArea.getWidth() - totalKnobW) / 2;
+    atkZone = juce::Rectangle<int> (adsrX,                               adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
+    decZone = juce::Rectangle<int> (adsrX + (kAdsrKnobW + kPad),        adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
+    susZone = juce::Rectangle<int> (adsrX + (kAdsrKnobW + kPad) * 2,   adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
+    relZone = juce::Rectangle<int> (adsrX + (kAdsrKnobW + kPad) * 3,   adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
+
     // Top control strip — left to right:
     //   [LOAD] [VOL knob] [TRANS knob] [name label ... ] [meter] [status]
 
@@ -46,7 +61,7 @@ void SfzModulePanel::resized()
     loadBtnZone = area.removeFromLeft (kLoadBtnW).withSizeKeepingCentre (kLoadBtnW, kLoadBtnH);
     area.removeFromLeft (kPad);
 
-    // VOL knob — narrower (48px instead of 60)
+    // VOL knob
     constexpr int kKnobWNarrow = 48;
     volZone   = area.removeFromLeft (kKnobWNarrow);
     area.removeFromLeft (4);
@@ -61,8 +76,7 @@ void SfzModulePanel::resized()
     meterZone = area.removeFromRight (kMeterW);
     area.removeFromRight (kPad);
 
-    // CH selector removed — nameZone gets the remainder (center expands)
-    chZone   = {};      // unused
+    chZone   = {};
     nameZone = area;
 }
 
@@ -153,6 +167,60 @@ void SfzModulePanel::paint (juce::Graphics& g)
 
     // ── VU meter ─────────────────────────────────────────────────────────────
     drawMeter (g);
+
+    // ── ADSR row background ───────────────────────────────────────────────────
+    {
+        // Span all four knob zones
+        auto rowBounds = atkZone.getUnion (relZone).expanded (kPad / 2, 2).toFloat();
+        g.setColour (theme.darkBar.brighter (0.04f));
+        g.fillRoundedRectangle (rowBounds, 3.0f);
+        g.setColour (theme.foreground.withAlpha (0.07f));
+        g.drawRoundedRectangle (rowBounds.reduced (0.5f), 3.0f, 1.0f);
+    }
+
+    // ── ADSR knobs ───────────────────────────────────────────────────────────
+    {
+        const bool sfzLoaded = processor.sfzPlayer.isLoaded();
+        const float alpha    = sfzLoaded ? 1.0f : 0.35f;
+
+        auto fmtTime = [] (float sec) -> juce::String
+        {
+            if (sec < 1.0f) return juce::String (juce::roundToInt (sec * 1000.0f)) + " ms";
+            return juce::String (sec, 2) + " s";
+        };
+
+        // Normalise to 0-1 for drawKnob arc
+        const float atkNorm = processor.sfzPlayer.getSfzAttack()  / 30.0f;
+        const float decNorm = processor.sfzPlayer.getSfzDecay()   / 30.0f;
+        const float susNorm = processor.sfzPlayer.getSfzSustain() / 100.0f;
+        const float relNorm = processor.sfzPlayer.getSfzRelease() / 60.0f;
+
+        // Draw each knob — highlight if MIDI-learned
+        auto drawAdsrKnob = [&] (juce::Rectangle<int> zone, float norm,
+                                  const juce::String& label, const juce::String& valStr,
+                                  int fieldId)
+        {
+            const bool learned = processor.midiLearn.isMapped (fieldId);
+            const bool armed   = processor.midiLearn.getArmedSlot() == fieldId;
+            g.saveState();
+            g.setOpacity (alpha);
+            drawKnob (g, zone, norm, label, valStr);
+            g.restoreState();
+            // Accent ring if learned or armed
+            if (learned || armed)
+            {
+                const auto& th = getTheme();
+                const auto  rc = zone.toFloat().reduced (2.0f);
+                g.setColour ((armed ? th.accent.brighter (0.4f) : th.accent).withAlpha (0.55f));
+                g.drawRoundedRectangle (rc, 3.0f, 1.5f);
+            }
+        };
+
+        drawAdsrKnob (atkZone, atkNorm, "ATK", fmtTime (processor.sfzPlayer.getSfzAttack()),  FieldSfzAttack);
+        drawAdsrKnob (decZone, decNorm, "DEC", fmtTime (processor.sfzPlayer.getSfzDecay()),   FieldSfzDecay);
+        drawAdsrKnob (susZone, susNorm, "SUS", juce::String (juce::roundToInt (processor.sfzPlayer.getSfzSustain())) + "%", FieldSfzSustain);
+        drawAdsrKnob (relZone, relNorm, "REL", fmtTime (processor.sfzPlayer.getSfzRelease()), FieldSfzRelease);
+    }
 
     // ── Drop-target hint when dragging over ───────────────────────────────────
     if (isCurrentlyBlockedByAnotherModalComponent())
@@ -273,6 +341,37 @@ void SfzModulePanel::timerCallback()
     repaint();
 }
 
+// ── MIDI Learn context menu ───────────────────────────────────────────────────
+
+void SfzModulePanel::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos)
+{
+    const bool mapped = processor.midiLearn.isMapped (fieldId);
+    juce::PopupMenu menu;
+    menu.addItem (1, "Learn MIDI CC");
+    if (mapped)
+        menu.addItem (2, "Clear (" + processor.midiLearn.getLabelText (fieldId) + ")");
+    menu.addSeparator();
+    menu.addItem (1000, "Open MIDI Learn Dialog...");
+
+    auto* topLvl = getTopLevelComponent();
+    float ms = DysektLookAndFeel::getMenuScale();
+    menu.showMenuAsync (
+        juce::PopupMenu::Options()
+            .withTargetScreenArea (juce::Rectangle<int> (screenPos.x, screenPos.y, 1, 1))
+            .withParentComponent (topLvl)
+            .withStandardItemHeight ((int)(24 * ms)),
+        [this, fieldId] (int result)
+        {
+            if (result == 1)       { processor.midiLearn.armLearn (fieldId);     repaint(); }
+            else if (result == 2)  { processor.midiLearn.clearMapping (fieldId); repaint(); }
+            else if (result == 1000)
+            {
+                if (auto* editor = findParentComponentOfClass<DysektEditor>())
+                    editor->keyPressed (juce::KeyPress ('M', juce::ModifierKeys(), 0));
+            }
+        });
+}
+
 // ── Mouse events ─────────────────────────────────────────────────────────────
 
 void SfzModulePanel::mouseDown (const juce::MouseEvent& e)
@@ -284,6 +383,15 @@ void SfzModulePanel::mouseDown (const juce::MouseEvent& e)
     {
         openFileChooser();
         return;
+    }
+
+    // Right-click on ADSR knobs → MIDI Learn menu
+    if (e.mods.isRightButtonDown())
+    {
+        if (atkZone.contains (pos)) { showMidiLearnMenu (FieldSfzAttack,  e.getScreenPosition()); return; }
+        if (decZone.contains (pos)) { showMidiLearnMenu (FieldSfzDecay,   e.getScreenPosition()); return; }
+        if (susZone.contains (pos)) { showMidiLearnMenu (FieldSfzSustain, e.getScreenPosition()); return; }
+        if (relZone.contains (pos)) { showMidiLearnMenu (FieldSfzRelease, e.getScreenPosition()); return; }
     }
 
     // Knob drag start
@@ -301,6 +409,34 @@ void SfzModulePanel::mouseDown (const juce::MouseEvent& e)
         dragStartVal = transToNorm (processor.sfzPlayer.getTranspose());
         return;
     }
+    if (atkZone.contains (pos))
+    {
+        activeKnob   = ActiveKnob::Attack;
+        dragStartY   = pos.y;
+        dragStartVal = processor.sfzPlayer.getSfzAttack() / 30.0f;
+        return;
+    }
+    if (decZone.contains (pos))
+    {
+        activeKnob   = ActiveKnob::Decay;
+        dragStartY   = pos.y;
+        dragStartVal = processor.sfzPlayer.getSfzDecay() / 30.0f;
+        return;
+    }
+    if (susZone.contains (pos))
+    {
+        activeKnob   = ActiveKnob::Sustain;
+        dragStartY   = pos.y;
+        dragStartVal = processor.sfzPlayer.getSfzSustain() / 100.0f;
+        return;
+    }
+    if (relZone.contains (pos))
+    {
+        activeKnob   = ActiveKnob::Release;
+        dragStartY   = pos.y;
+        dragStartVal = processor.sfzPlayer.getSfzRelease() / 60.0f;
+        return;
+    }
 }
 
 void SfzModulePanel::mouseDrag (const juce::MouseEvent& e)
@@ -310,11 +446,22 @@ void SfzModulePanel::mouseDrag (const juce::MouseEvent& e)
     const float delta = (float)(dragStartY - e.getPosition().y) / 150.0f;
     const float newNorm = juce::jlimit (0.0f, 1.0f, dragStartVal + delta);
 
-    if (activeKnob == ActiveKnob::Volume)
-        processor.sfzPlayer.setVolume (normToVol (newNorm));
-    else
-        processor.sfzPlayer.setTranspose (normToTrans (newNorm));
-
+    switch (activeKnob)
+    {
+        case ActiveKnob::Volume:
+            processor.sfzPlayer.setVolume (normToVol (newNorm));    break;
+        case ActiveKnob::Transpose:
+            processor.sfzPlayer.setTranspose (normToTrans (newNorm)); break;
+        case ActiveKnob::Attack:
+            processor.sfzPlayer.setSfzAttack  (newNorm * 30.0f);   break;
+        case ActiveKnob::Decay:
+            processor.sfzPlayer.setSfzDecay   (newNorm * 30.0f);   break;
+        case ActiveKnob::Sustain:
+            processor.sfzPlayer.setSfzSustain (newNorm * 100.0f);  break;
+        case ActiveKnob::Release:
+            processor.sfzPlayer.setSfzRelease (newNorm * 60.0f);   break;
+        default: break;
+    }
     repaint();
 }
 
@@ -326,18 +473,12 @@ void SfzModulePanel::mouseUp (const juce::MouseEvent&)
 void SfzModulePanel::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const auto pos = e.getPosition();
-    // Reset volume to unity on double-click
-    if (volZone.contains (pos))
-    {
-        processor.sfzPlayer.setVolume (1.0f);
-        repaint();
-    }
-    // Reset transpose to 0 on double-click
-    if (transZone.contains (pos))
-    {
-        processor.sfzPlayer.setTranspose (0);
-        repaint();
-    }
+    if (volZone.contains (pos))   { processor.sfzPlayer.setVolume (1.0f);         repaint(); }
+    if (transZone.contains (pos)) { processor.sfzPlayer.setTranspose (0);          repaint(); }
+    if (atkZone.contains (pos))   { processor.sfzPlayer.setSfzAttack  (0.005f);   repaint(); }
+    if (decZone.contains (pos))   { processor.sfzPlayer.setSfzDecay   (0.1f);     repaint(); }
+    if (susZone.contains (pos))   { processor.sfzPlayer.setSfzSustain (100.0f);   repaint(); }
+    if (relZone.contains (pos))   { processor.sfzPlayer.setSfzRelease (0.05f);    repaint(); }
 }
 
 void SfzModulePanel::mouseWheelMove (const juce::MouseEvent& e,
@@ -356,6 +497,30 @@ void SfzModulePanel::mouseWheelMove (const juce::MouseEvent& e,
     {
         const float n = juce::jlimit (0.0f, 1.0f, transToNorm (processor.sfzPlayer.getTranspose()) + step);
         processor.sfzPlayer.setTranspose (normToTrans (n));
+        repaint();
+    }
+    else if (atkZone.contains (pos))
+    {
+        const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getSfzAttack() / 30.0f + step);
+        processor.sfzPlayer.setSfzAttack (n * 30.0f);
+        repaint();
+    }
+    else if (decZone.contains (pos))
+    {
+        const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getSfzDecay() / 30.0f + step);
+        processor.sfzPlayer.setSfzDecay (n * 30.0f);
+        repaint();
+    }
+    else if (susZone.contains (pos))
+    {
+        const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getSfzSustain() / 100.0f + step);
+        processor.sfzPlayer.setSfzSustain (n * 100.0f);
+        repaint();
+    }
+    else if (relZone.contains (pos))
+    {
+        const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getSfzRelease() / 60.0f + step);
+        processor.sfzPlayer.setSfzRelease (n * 60.0f);
         repaint();
     }
 }

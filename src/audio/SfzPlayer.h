@@ -80,6 +80,19 @@ public:
     juce::File getLoadedFile()  const;
     bool       isLoaded()       const noexcept { return loaded.load(); }
 
+    // ── SFZ ADSR (applied via sfizz OSC messages per region) ──────────────────
+    //  Values are stored as atomics and flushed to sfizz at the start of each
+    //  processBlock() call when dirty.  Call from any thread; sfizz update is RT.
+    void  setSfzAttack  (float sec)  noexcept;   ///< 0-30 s
+    void  setSfzDecay   (float sec)  noexcept;   ///< 0-30 s
+    void  setSfzSustain (float pct)  noexcept;   ///< 0-100 %
+    void  setSfzRelease (float sec)  noexcept;   ///< 0-60 s
+
+    float getSfzAttack()  const noexcept { return sfzAttackSec .load (std::memory_order_relaxed); }
+    float getSfzDecay()   const noexcept { return sfzDecaySec  .load (std::memory_order_relaxed); }
+    float getSfzSustain() const noexcept { return sfzSustainPct.load (std::memory_order_relaxed); }
+    float getSfzRelease() const noexcept { return sfzReleaseSec.load (std::memory_order_relaxed); }
+
     /**
      * Returns the cached preset list for the currently loaded SF2.
      * If the audio thread has posted new data since the last call,
@@ -141,6 +154,13 @@ private:
     std::atomic<int>   presetIndex { 0 };    // index into cachedPresets
     std::atomic<bool>  loaded      { false };
 
+    // ── SFZ ADSR atomics (written from any thread, read on audio thread) ──────
+    std::atomic<float> sfzAttackSec   { 0.005f };  ///< seconds (SFZ default ~0)
+    std::atomic<float> sfzDecaySec    { 0.1f   };  ///< seconds
+    std::atomic<float> sfzSustainPct  { 100.0f };  ///< percent 0-100
+    std::atomic<float> sfzReleaseSec  { 0.05f  };  ///< seconds (SFZ default ~0)
+    std::atomic<bool>  sfzAdsrDirty   { false  };  ///< set by setters, cleared in processBlock
+
     /** Set when presetIndex changes; audio thread picks it up in process(). */
     std::atomic<bool>  programChangePending { false };
 
@@ -150,6 +170,9 @@ private:
     // ── Private helpers ───────────────────────────────────────────────────────
     void applyPendingLoad();      ///< called at top of process()
     void applyProgramChange();    ///< called at top of process() when flag set
+
+    /** Send current ADSR atomics to sfizz via OSC messages (audio thread only). */
+    void sendAdsrToSfizz();
 
     /** Build and post a fresh preset list after a successful sfont load.
      *  Called from the audio thread — no locks needed on write side. */

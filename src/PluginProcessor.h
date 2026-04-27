@@ -63,6 +63,11 @@ public:
         FieldZoom   = 30,      // 30 - waveform zoom level
         FieldScroll = 31,      // 31 - waveform scroll position
         FieldGlobalMono = 30,  // 30 - global Poly/Mono switch (bool)
+        // SfzPlayer ADSR — slots 32-35
+        FieldSfzAttack  = 32,  // 32 - sfizz ampeg_attack  (seconds, 0-30)
+        FieldSfzDecay   = 33,  // 33 - sfizz ampeg_decay   (seconds, 0-30)
+        FieldSfzSustain = 34,  // 34 - sfizz ampeg_sustain (percent, 0-100)
+        FieldSfzRelease = 35,  // 35 - sfizz ampeg_release (seconds, 0-60)
     };
 
     // ── Command types ────────────────────────────────────────────────────────

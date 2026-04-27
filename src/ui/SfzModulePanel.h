@@ -42,10 +42,11 @@ public:
 private:
     // ── Layout zones (computed in resized) ────────────────────────────────────
     juce::Rectangle<int> nameZone, loadBtnZone, volZone, transZone,
-                          chZone, meterZone, statusZone;
+                          chZone, meterZone, statusZone,
+                          atkZone, decZone, susZone, relZone;  ///< ADSR knobs
 
-    // ── Drag state for volume / transpose knobs ───────────────────────────────
-    enum class ActiveKnob { None, Volume, Transpose };
+    // ── Drag state for knobs ──────────────────────────────────────────────────
+    enum class ActiveKnob { None, Volume, Transpose, Attack, Decay, Sustain, Release };
     ActiveKnob activeKnob { ActiveKnob::None };
     int        dragStartY  { 0 };
     float      dragStartVal { 0.f };
@@ -68,6 +69,8 @@ private:
     int   normToTrans  (float n)      const;  ///< 0..1 → -24..24
 
     juce::Rectangle<int> loadBtnHitbox() const;
+
+    void showMidiLearnMenu (int fieldId, juce::Point<int> screenPos);
 
     void mouseDown        (const juce::MouseEvent&) override;
     void mouseDrag        (const juce::MouseEvent&) override;

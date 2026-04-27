@@ -1408,7 +1408,68 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     continue;
                 }
 
-                // ── Intra-buffer slice-switch guard ───────────────────────────
+                // ── SFZ ADSR CC — global to SfzPlayer, no slice context needed ──
+                if (outFieldId == FieldSfzAttack  || outFieldId == FieldSfzDecay  ||
+                    outFieldId == FieldSfzSustain || outFieldId == FieldSfzRelease)
+                {
+                    auto getCurSfz = [&] (int fid) -> float
+                    {
+                        switch (fid)
+                        {
+                            case FieldSfzAttack:  return sfzPlayer.getSfzAttack();
+                            case FieldSfzDecay:   return sfzPlayer.getSfzDecay();
+                            case FieldSfzSustain: return sfzPlayer.getSfzSustain();
+                            case FieldSfzRelease: return sfzPlayer.getSfzRelease();
+                            default:              return 0.0f;
+                        }
+                    };
+
+                    float val;
+                    if (outIsRelative)
+                    {
+                        const float cur = getCurSfz (outFieldId);
+                        float sens;
+                        switch (outFieldId)
+                        {
+                            case FieldSfzAttack:  sens = 0.02f; break;  // 20 ms/click
+                            case FieldSfzDecay:   sens = 0.02f; break;  // 20 ms/click
+                            case FieldSfzSustain: sens = 1.0f;  break;  //  1 %/click
+                            case FieldSfzRelease: sens = 0.02f; break;  // 20 ms/click
+                            default:              sens = 0.01f; break;
+                        }
+                        const float raw = cur + outNorm * sens;
+                        switch (outFieldId)
+                        {
+                            case FieldSfzAttack:  val = juce::jlimit (0.0f,  30.0f, raw); break;
+                            case FieldSfzDecay:   val = juce::jlimit (0.0f,  30.0f, raw); break;
+                            case FieldSfzSustain: val = juce::jlimit (0.0f, 100.0f, raw); break;
+                            case FieldSfzRelease: val = juce::jlimit (0.0f,  60.0f, raw); break;
+                            default:              val = raw;                               break;
+                        }
+                    }
+                    else
+                    {
+                        switch (outFieldId)
+                        {
+                            case FieldSfzAttack:  val = outNorm * 30.0f;  break;
+                            case FieldSfzDecay:   val = outNorm * 30.0f;  break;
+                            case FieldSfzSustain: val = outNorm * 100.0f; break;
+                            case FieldSfzRelease: val = outNorm * 60.0f;  break;
+                            default:              val = outNorm;           break;
+                        }
+                    }
+
+                    switch (outFieldId)
+                    {
+                        case FieldSfzAttack:  sfzPlayer.setSfzAttack  (val); break;
+                        case FieldSfzDecay:   sfzPlayer.setSfzDecay   (val); break;
+                        case FieldSfzSustain: sfzPlayer.setSfzSustain (val); break;
+                        case FieldSfzRelease: sfzPlayer.setSfzRelease (val); break;
+                        default: break;
+                    }
+                    uiSnapshotDirty.store (true, std::memory_order_release);
+                    continue;
+                }
                 // A note-on and a CC can land in the same MidiBuffer.  If the
                 // selected slice changed since the last CC in this buffer, the
                 // ccPickedUp[] flags from the previous slice are stale for every
