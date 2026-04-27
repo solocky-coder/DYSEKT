@@ -976,6 +976,72 @@ void SliceControlBar::paint (juce::Graphics& g)
  x += cw + si (4);
  }
 
+ // ── relMaxSec (needed by REL in row 1) ────────────────────────────
+ float relMaxSec = 5.0f;
+ {
+     const int total = processor.sampleData.getNumFrames();
+     if (total > 0)
+     {
+         const int sliceEnd = processor.sliceManager.getEndForSlice (idx, total);
+         const int sliceLen = sliceEnd - s.startSample;
+         const float sr = (float) processor.voicePool.getSampleRate();
+         if (sliceLen > 0 && sr > 0.0f)
+             relMaxSec = juce::jmax (0.001f, (float) sliceLen / sr);
+     }
+ }
+
+ // ADSR — moved to row 1 (after MARKER, before GAIN/PAN/OUT)
+ {
+ g.setColour (getTheme().separator.withAlpha (0.5f));
+ g.drawVerticalLine (x + 2, (float) row1y + 4, (float) row1y + 28);
+ x += 8;
+
+ // ATK
+ {
+ bool locked = (s.lockMask & kLockAttack) != 0;
+ float atk = effAttack;
+ drawKnobCell (g, x, row1y, "ATK",
+ juce::String ((int) (atk * 1000.f)) + "ms",
+ toNorm (F::FieldAttack, atk),
+ locked, kLockAttack, F::FieldAttack, 0.f, 1.f, 0.001f, cw);
+ x += cw + si (4);
+ }
+
+ // DEC
+ {
+ bool locked = (s.lockMask & kLockDecay) != 0;
+ float dec = effDecay;
+ drawKnobCell (g, x, row1y, "DEC",
+ juce::String ((int) (dec * 1000.f)) + "ms",
+ toNorm (F::FieldDecay, dec),
+ locked, kLockDecay, F::FieldDecay, 0.f, 5.f, 0.001f, cw);
+ x += cw + si (4);
+ }
+
+ // SUS
+ {
+ bool locked = (s.lockMask & kLockSustain) != 0;
+ float sus = effSustain;
+ drawKnobCell (g, x, row1y, "SUS",
+ juce::String ((int) (sus * 100.f)) + "%",
+ toNorm (F::FieldSustain, sus),
+ locked, kLockSustain, F::FieldSustain, 0.f, 1.f, 0.01f, cw);
+ x += cw + si (4);
+ }
+
+ // REL
+ {
+ bool locked = (s.lockMask & kLockRelease) != 0;
+ float rel = effRelease;
+ const float relNorm = juce::jlimit (0.f, 1.f, rel / relMaxSec);
+ drawKnobCell (g, x, row1y, "REL",
+ juce::String ((int) (rel * 1000.f)) + "ms",
+ relNorm,
+ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
+ x += cw + si (4);
+ }
+ }
+
  // GAIN, PAN, OUT — mix group in row 1
  {
  g.setColour (getTheme().separator.withAlpha (0.5f));
@@ -1046,70 +1112,7 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  // ── Row 2 ─────────────────────────────────────────────────────────
  x = si (8);
- int adsrGroupX1 = x, adsrGroupX2 = x;
-float relMaxSec = 5.0f;
-{
-    const int total = processor.sampleData.getNumFrames();
-    if (total > 0)
-    {
-        const int sliceEnd = processor.sliceManager.getEndForSlice (idx, total);
-        const int sliceLen = sliceEnd - s.startSample;
-        const float sr = (float) processor.voicePool.getSampleRate();
-        if (sliceLen > 0 && sr > 0.0f)
-            relMaxSec = juce::jmax (0.001f, (float) sliceLen / sr);
-    }
-}
-
- // ATK — knob (stored seconds, display ms)
- {
- adsrGroupX1 = x;
- bool locked = (s.lockMask & kLockAttack) != 0;
- float atk = effAttack;
- drawKnobCell (g, x, row2y, "ATK",
- juce::String ((int) (atk * 1000.f)) + "ms",
- toNorm (F::FieldAttack, atk),
- locked, kLockAttack, F::FieldAttack, 0.f, 1.f, 0.001f, cw);
- x += cw + si (4);
- }
-
-
- // HLD removed
-
- // DEC — knob
- {
- bool locked = (s.lockMask & kLockDecay) != 0;
- float dec = effDecay;
- drawKnobCell (g, x, row2y, "DEC",
- juce::String ((int) (dec * 1000.f)) + "ms",
- toNorm (F::FieldDecay, dec),
- locked, kLockDecay, F::FieldDecay, 0.f, 5.f, 0.001f, cw);
- x += cw + si (4);
- }
-
- // SUS — knob (stored 0-1, display %)
- {
- bool locked = (s.lockMask & kLockSustain) != 0;
- float sus = effSustain;
- drawKnobCell (g, x, row2y, "SUS",
- juce::String ((int) (sus * 100.f)) + "%",
- toNorm (F::FieldSustain, sus),
- locked, kLockSustain, F::FieldSustain, 0.f, 1.f, 0.01f, cw);
- x += cw + si (4);
- }
-
- // REL — knob
- {
- bool locked = (s.lockMask & kLockRelease) != 0;
- float rel = effRelease;
-// REL spans the full selected-slice duration; matches SliceWaveformLcd mapping.
-const float relNorm = juce::jlimit (0.f, 1.f, rel / relMaxSec);
- drawKnobCell (g, x, row2y, "REL",
- juce::String ((int) (rel * 1000.f)) + "ms",
- relNorm,
-locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
- x += cw + si (4);
- adsrGroupX2 = x - 4;
- }
+ int adsrGroupX1 = x, adsrGroupX2 = x; // kept for group-label drawing
 
  // FCUT — filter cutoff knob (no lock — always per-slice)
  {
