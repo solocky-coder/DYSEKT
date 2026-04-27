@@ -216,10 +216,10 @@ void SfzModulePanel::paint (juce::Graphics& g)
             }
         };
 
-        drawAdsrKnob (atkZone, atkNorm, "ATK", fmtTime (processor.sfzPlayer.getSfzAttack()),  FieldSfzAttack);
-        drawAdsrKnob (decZone, decNorm, "DEC", fmtTime (processor.sfzPlayer.getSfzDecay()),   FieldSfzDecay);
-        drawAdsrKnob (susZone, susNorm, "SUS", juce::String (juce::roundToInt (processor.sfzPlayer.getSfzSustain())) + "%", FieldSfzSustain);
-        drawAdsrKnob (relZone, relNorm, "REL", fmtTime (processor.sfzPlayer.getSfzRelease()), FieldSfzRelease);
+        drawAdsrKnob (atkZone, atkNorm, "ATK", fmtTime (processor.sfzPlayer.getSfzAttack()),  DysektProcessor::FieldSfzAttack);
+        drawAdsrKnob (decZone, decNorm, "DEC", fmtTime (processor.sfzPlayer.getSfzDecay()),   DysektProcessor::FieldSfzDecay);
+        drawAdsrKnob (susZone, susNorm, "SUS", juce::String (juce::roundToInt (processor.sfzPlayer.getSfzSustain())) + "%", DysektProcessor::FieldSfzSustain);
+        drawAdsrKnob (relZone, relNorm, "REL", fmtTime (processor.sfzPlayer.getSfzRelease()), DysektProcessor::FieldSfzRelease);
     }
 
     // ── Drop-target hint when dragging over ───────────────────────────────────
@@ -388,10 +388,10 @@ void SfzModulePanel::mouseDown (const juce::MouseEvent& e)
     // Right-click on ADSR knobs → MIDI Learn menu
     if (e.mods.isRightButtonDown())
     {
-        if (atkZone.contains (pos)) { showMidiLearnMenu (FieldSfzAttack,  e.getScreenPosition()); return; }
-        if (decZone.contains (pos)) { showMidiLearnMenu (FieldSfzDecay,   e.getScreenPosition()); return; }
-        if (susZone.contains (pos)) { showMidiLearnMenu (FieldSfzSustain, e.getScreenPosition()); return; }
-        if (relZone.contains (pos)) { showMidiLearnMenu (FieldSfzRelease, e.getScreenPosition()); return; }
+        if (atkZone.contains (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzAttack,  e.getScreenPosition()); return; }
+        if (decZone.contains (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzDecay,   e.getScreenPosition()); return; }
+        if (susZone.contains (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzSustain, e.getScreenPosition()); return; }
+        if (relZone.contains (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzRelease, e.getScreenPosition()); return; }
     }
 
     // Knob drag start
