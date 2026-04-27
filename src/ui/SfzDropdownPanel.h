@@ -1,17 +1,22 @@
 #pragma once
 // =============================================================================
-//  SfzDropdownPanel.h  —  SF2 instrument strip (FluidSynth backend)
+//  SfzDropdownPanel.h  —  SF2 / SFZ instrument strip with inline file browser
 // =============================================================================
-//  Occupies the full slot area assigned by the editor.  Always shows the
-//  36-px header strip at the bottom with the KeysPanel filling the space
-//  above it.
-//
 //  Header strip layout (left → right):
-//    [LOAD] [< B:n  Preset Name >] [VOL] [TRN] [CH] … [STATUS] [METER]
+//    [< Preset Name  📁 >] [TRN] [FINE] [REV] [CHO] [PAN] [VOL] [METER]
 //
-//  The preset picker in the nameZone lets the user scroll through every preset
-//  in the loaded SF2.  Bank and preset number are shown as a small label above
-//  the preset name.  Left arrow = prev preset, right arrow = next preset.
+//  The preset picker doubles as the file browser entry-point:
+//    • When a file IS loaded   — scrolls through SF2 presets as before.
+//                                Small 📁 icon on right edge opens browser.
+//    • When NO file is loaded  — clicking anywhere on the picker opens the
+//                                inline browser.
+//    • Mouse-wheel on the picker scrolls presets (when loaded).
+//
+//  The inline browser is a full-panel overlay (below the header strip) with:
+//    • Breadcrumb path bar + ↑ up-button
+//    • Scrollable list: directories first, then .sfz / .sf2 files
+//    • Single-click selects; double-click enters directory or loads file
+//    • Pressing Escape / clicking the 📁 icon again closes the browser
 // =============================================================================
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -21,6 +26,72 @@
 
 class DysektProcessor;
 
+// =============================================================================
+//  SfzFileBrowser — self-contained inline directory browser component
+// =============================================================================
+class SfzFileBrowser : public juce::Component,
+                       public juce::ListBoxModel,
+                       private juce::Timer
+{
+public:
+    /** Called when the user double-clicks a .sfz or .sf2 file. */
+    std::function<void (const juce::File&)> onFileChosen;
+
+    /** Called when the user explicitly closes the browser (Esc / icon click). */
+    std::function<void()> onDismiss;
+
+    SfzFileBrowser();
+    ~SfzFileBrowser() override;
+
+    // juce::Component overrides
+    void paint   (juce::Graphics&) override;
+    void resized () override;
+    void mouseDown  (const juce::MouseEvent&) override;
+    void keyPressed (const juce::KeyPress&) override { /* handled via grabKeyboardFocus */ }
+
+    // Open to a specific root directory (call before making visible)
+    void setRootDirectory (const juce::File& dir);
+    juce::File getCurrentDirectory() const { return currentDir; }
+
+    // ── ListBoxModel ──────────────────────────────────────────────────────────
+    int  getNumRows()                                                  override;
+    void paintListBoxItem (int row, juce::Graphics& g,
+                           int w, int h, bool selected)               override;
+    void listBoxItemDoubleClicked (int row, const juce::MouseEvent&)  override;
+    void listBoxItemClicked       (int row, const juce::MouseEvent&)  override;
+    juce::String getTooltipForRow (int row)                           override;
+
+private:
+    void   navigateTo   (const juce::File& dir);
+    void   navigateUp   ();
+    void   loadRow      (int row);
+    juce::File fileForRow (int row) const;
+    bool   isDirectory  (int row) const;
+
+    // Async directory scanning
+    void timerCallback() override;
+    void rebuildList();
+
+    juce::File currentDir;
+
+    // Rows: sorted directories first, then matching files
+    juce::Array<juce::File> rows;
+
+    juce::ListBox list;
+
+    // Breadcrumb / up-button zone (computed in resized)
+    juce::Rectangle<int> breadcrumbZone;
+    juce::Rectangle<int> upBtnZone;
+
+    static constexpr int kBreadcrumbH = 22;
+    static constexpr int kRowH        = 18;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SfzFileBrowser)
+};
+
+// =============================================================================
+//  SfzDropdownPanel
+// =============================================================================
 class SfzDropdownPanel : public juce::Component,
                          public juce::Timer,
                          public juce::FileDragAndDropTarget
@@ -39,11 +110,10 @@ public:
     void filesDropped (const juce::StringArray& files, int x, int y) override;
 
     // ── Public API ────────────────────────────────────────────────────────────
-    /// Call when the panel first becomes visible so zones / state are refreshed.
     void panelDidShow();
 
     // ── Layout constants ──────────────────────────────────────────────────────
-    static constexpr int kStripH = 36;   ///< Height of the header strip
+    static constexpr int kStripH = 36;
 
     // ── Keyboard sub-component ────────────────────────────────────────────────
     KeysPanel keysPanel;
@@ -58,16 +128,16 @@ private:
     void drawPresetPicker (juce::Graphics& g) const;
 
     // ── Layout zones (computed in resized) ────────────────────────────────────
-    juce::Rectangle<int> nameZone, loadBtnZone,
+    juce::Rectangle<int> nameZone,
                           volZone, transZone,
                           panZone, fineZone,
                           reverbZone, chorusZone,
                           meterZone;
 
-    // Sub-zones inside nameZone for the preset picker
-    juce::Rectangle<int> presetDecBtn, presetLabel, presetIncBtn;
+    // Sub-zones inside nameZone
+    juce::Rectangle<int> presetDecBtn, presetLabel, presetIncBtn, folderIconZone;
 
-    // ── Drag state for volume / transpose knobs ───────────────────────────────
+    // ── Drag state for knobs ──────────────────────────────────────────────────
     enum class ActiveKnob { None, Volume, Transpose, Pan, FineTune, Reverb, Chorus };
     ActiveKnob activeKnob  { ActiveKnob::None };
     int        dragStartY  { 0 };
@@ -78,28 +148,31 @@ private:
     float holdL  { 0.f }, holdR  { 0.f };
     static constexpr float kHoldDecay = 0.93f;
 
-    // ── Cached preset list (refreshed from SfzPlayer every timer tick) ────────
+    // ── Cached preset list ────────────────────────────────────────────────────
     std::vector<Sf2PresetInfo> presetList;
 
-    // ── File chooser ──────────────────────────────────────────────────────────
-    void openFileChooser();
-    std::unique_ptr<juce::FileChooser> chooser;
+    // ── Inline file browser ───────────────────────────────────────────────────
+    SfzFileBrowser fileBrowser;
+    bool           browserOpen { false };
+
+    void openBrowser();
+    void closeBrowser();
+    void onFileChosen (const juce::File& f);
 
     // ── Value mapping helpers ─────────────────────────────────────────────────
     float volToNorm    (float linear) const;
     float normToVol    (float n)      const;
     float transToNorm  (int semi)     const;
     int   normToTrans  (float n)      const;
-    float panToNorm    (float p)      const;   // -1..+1 → 0..1
-    float normToPan    (float n)      const;   // 0..1 → -1..+1
-    float fineToNorm   (float cents)  const;   // -100..+100 → 0..1
-    float normToFine   (float n)      const;   // 0..1 → -100..+100 cents
-    // reverb/chorus are already 0..1; no mapping needed
+    float panToNorm    (float p)      const;
+    float normToPan    (float n)      const;
+    float fineToNorm   (float cents)  const;
+    float normToFine   (float n)      const;
 
     // ── Preset navigation ─────────────────────────────────────────────────────
-    void selectPreset (int delta);   ///< +1 = next, -1 = prev
+    void selectPreset (int delta);
 
-    // ── Zone parsers (for the KeysPanel highlight visualisation) ─────────────
+    // ── Zone parsers ──────────────────────────────────────────────────────────
     static std::vector<KeysPanel::Keyzone> parseSfzZones (const juce::File& f);
     static std::vector<KeysPanel::Keyzone> parseSf2Zones (const juce::File& f);
     void reloadZones (const juce::File& f);

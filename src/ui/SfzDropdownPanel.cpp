@@ -1,5 +1,5 @@
 // =============================================================================
-//  SfzDropdownPanel.cpp  —  SF2 instrument strip (FluidSynth backend)
+//  SfzDropdownPanel.cpp  —  SF2 / SFZ instrument strip with inline file browser
 // =============================================================================
 #include "SfzDropdownPanel.h"
 #include "DysektLookAndFeel.h"
@@ -7,17 +7,258 @@
 #include <set>
 
 // ── Layout constants (header strip) ──────────────────────────────────────────
-static constexpr int kLoadW        = 64;
-static constexpr int kLoadH        = 22;
+static constexpr int kPickerW      = 310;   // wider now that LOAD btn is gone
 static constexpr int kKnobW        = 52;
-static constexpr int kPickerW      = 260;
 static constexpr int kMeterW       = 60;
 static constexpr int kPresetArrowW = 18;
+static constexpr int kFolderIconW  = 20;
 static constexpr int kPad          = 6;
 static constexpr int kKnobGap      = 4;
 
 // =============================================================================
-//  Constructor / destructor
+//  SfzFileBrowser
+// =============================================================================
+
+SfzFileBrowser::SfzFileBrowser()
+{
+    list.setModel (this);
+    list.setRowHeight (kRowH);
+    list.setColour (juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
+    list.setColour (juce::ListBox::outlineColourId,    juce::Colours::transparentBlack);
+    addAndMakeVisible (list);
+
+    // Default to user's Music directory, falling back to home
+    auto startDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+    if (! startDir.isDirectory())
+        startDir = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
+
+    navigateTo (startDir);
+}
+
+SfzFileBrowser::~SfzFileBrowser()
+{
+    stopTimer();
+    list.setModel (nullptr);
+}
+
+// ── paint ────────────────────────────────────────────────────────────────────
+
+void SfzFileBrowser::paint (juce::Graphics& g)
+{
+    const auto& theme = getTheme();
+
+    // Background
+    g.setColour (theme.darkBar.darker (0.45f));
+    g.fillRoundedRectangle (getLocalBounds().toFloat(), 4.0f);
+
+    // Breadcrumb bar background
+    g.setColour (theme.darkBar.darker (0.20f));
+    g.fillRect (breadcrumbZone);
+
+    // Up-button
+    const bool upHover = upBtnZone.contains (getMouseXYRelative());
+    const bool canGoUp = currentDir.getParentDirectory() != currentDir;
+    if (upHover && canGoUp)
+    {
+        g.setColour (theme.accent.withAlpha (0.18f));
+        g.fillRoundedRectangle (upBtnZone.toFloat(), 2.0f);
+    }
+    g.setFont (DysektLookAndFeel::makeFont (11.0f));
+    g.setColour (canGoUp ? theme.accent.withAlpha (0.80f)
+                         : theme.foreground.withAlpha (0.20f));
+    g.drawText (u8"\u2191", upBtnZone, juce::Justification::centred, false);
+
+    // Current path text (truncated from left)
+    {
+        const auto pathArea = breadcrumbZone.withTrimmedLeft (upBtnZone.getWidth() + 4)
+                                            .withTrimmedRight (4);
+        g.setFont (DysektLookAndFeel::makeFont (9.5f));
+        g.setColour (theme.foreground.withAlpha (0.55f));
+
+        // Show last 2 path segments so it fits
+        const auto parts = juce::StringArray::fromTokens (
+            currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
+        juce::String display;
+        const int n = parts.size();
+        if      (n == 0) display = "/";
+        else if (n <= 2) display = currentDir.getFullPathName();
+        else             display = u8"\u2026" + juce::File::getSeparatorString()
+                                 + parts[n - 2] + juce::File::getSeparatorString()
+                                 + parts[n - 1];
+
+        g.drawText (display, pathArea, juce::Justification::centredLeft, true);
+    }
+
+    // Separator between breadcrumb and list
+    g.setColour (theme.accent.withAlpha (0.12f));
+    g.fillRect (0, breadcrumbZone.getBottom(), getWidth(), 1);
+}
+
+// ── resized ───────────────────────────────────────────────────────────────────
+
+void SfzFileBrowser::resized()
+{
+    constexpr int upW = 24;
+    breadcrumbZone = { 0, 0, getWidth(), kBreadcrumbH };
+    upBtnZone      = { 2, 1, upW, kBreadcrumbH - 2 };
+
+    list.setBounds (0, kBreadcrumbH + 1, getWidth(), getHeight() - kBreadcrumbH - 1);
+}
+
+// ── mouseDown ────────────────────────────────────────────────────────────────
+
+void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
+{
+    if (upBtnZone.contains (e.getPosition()))
+    {
+        navigateUp();
+        return;
+    }
+    // Clicks below the breadcrumb are handled by the ListBox itself
+}
+
+// ── navigation ───────────────────────────────────────────────────────────────
+
+void SfzFileBrowser::navigateTo (const juce::File& dir)
+{
+    if (! dir.isDirectory()) return;
+    currentDir = dir;
+    rebuildList();
+    repaint();
+}
+
+void SfzFileBrowser::navigateUp()
+{
+    const auto parent = currentDir.getParentDirectory();
+    if (parent != currentDir)
+        navigateTo (parent);
+}
+
+void SfzFileBrowser::rebuildList()
+{
+    rows.clear();
+
+    // Directories first (hidden files excluded)
+    auto dirs = currentDir.findChildFiles (
+        juce::File::findDirectories, false, "*");
+    dirs.removeIf ([] (const juce::File& f) { return f.isHidden(); });
+    dirs.sort();
+
+    // Matching files
+    auto files = currentDir.findChildFiles (
+        juce::File::findFiles, false, "*.sf2;*.sfz");
+    files.removeIf ([] (const juce::File& f) { return f.isHidden(); });
+    files.sort();
+
+    rows.addArray (dirs);
+    rows.addArray (files);
+
+    list.updateContent();
+    list.repaint();
+    repaint();   // breadcrumb path has changed
+}
+
+void SfzFileBrowser::setRootDirectory (const juce::File& dir)
+{
+    navigateTo (dir);
+}
+
+// ── ListBoxModel ──────────────────────────────────────────────────────────────
+
+int SfzFileBrowser::getNumRows() { return rows.size(); }
+
+bool SfzFileBrowser::isDirectory (int row) const
+{
+    if (row < 0 || row >= rows.size()) return false;
+    return rows[row].isDirectory();
+}
+
+juce::File SfzFileBrowser::fileForRow (int row) const
+{
+    if (row < 0 || row >= rows.size()) return {};
+    return rows[row];
+}
+
+void SfzFileBrowser::paintListBoxItem (int row, juce::Graphics& g,
+                                        int w, int h, bool selected)
+{
+    if (row < 0 || row >= rows.size()) return;
+
+    const auto& theme = getTheme();
+    const auto& f     = rows[row];
+    const bool  isDir = f.isDirectory();
+
+    if (selected)
+    {
+        g.setColour (theme.accent.withAlpha (0.14f));
+        g.fillAll();
+    }
+
+    g.setFont (DysektLookAndFeel::makeFont (10.5f));
+
+    if (isDir)
+    {
+        g.setColour (theme.accent.withAlpha (0.55f));
+        g.drawText (u8"\U0001F4C1", 3, 0, 16, h, juce::Justification::centredLeft, false);
+        g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.80f));
+        g.drawText (f.getFileName(), 22, 0, w - 26, h,
+                    juce::Justification::centredLeft, true);
+    }
+    else
+    {
+        // Extension badge
+        const auto ext = f.getFileExtension().toUpperCase().trimCharactersAtStart (".");
+        const int  badgeW = 30;
+        const auto badgeRect = juce::Rectangle<int> (w - badgeW - 4, (h - 12) / 2, badgeW, 12);
+        g.setColour (theme.accent.withAlpha (0.18f));
+        g.fillRoundedRectangle (badgeRect.toFloat(), 2.0f);
+        g.setFont (DysektLookAndFeel::makeFont (8.0f));
+        g.setColour (theme.accent.withAlpha (0.80f));
+        g.drawText (ext, badgeRect, juce::Justification::centred, false);
+
+        // Filename
+        g.setFont (DysektLookAndFeel::makeFont (10.5f));
+        g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.80f));
+        g.drawText (f.getFileNameWithoutExtension(), 6, 0, w - badgeW - 12, h,
+                    juce::Justification::centredLeft, true);
+    }
+}
+
+void SfzFileBrowser::listBoxItemClicked (int /*row*/, const juce::MouseEvent&)
+{
+    repaint();
+}
+
+void SfzFileBrowser::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
+{
+    loadRow (row);
+}
+
+juce::String SfzFileBrowser::getTooltipForRow (int row)
+{
+    if (row < 0 || row >= rows.size()) return {};
+    return rows[row].getFullPathName();
+}
+
+void SfzFileBrowser::loadRow (int row)
+{
+    if (row < 0 || row >= rows.size()) return;
+    const auto& f = rows[row];
+
+    if (f.isDirectory())
+    {
+        navigateTo (f);
+    }
+    else if (onFileChosen)
+    {
+        onFileChosen (f);
+    }
+}
+
+void SfzFileBrowser::timerCallback() {}
+
+// =============================================================================
+//  SfzDropdownPanel — constructor / destructor
 // =============================================================================
 
 SfzDropdownPanel::SfzDropdownPanel (DysektProcessor& p)
@@ -25,6 +266,12 @@ SfzDropdownPanel::SfzDropdownPanel (DysektProcessor& p)
       keysPanel (p)
 {
     addChildComponent (keysPanel);
+
+    // ── Inline file browser ───────────────────────────────────────────────────
+    fileBrowser.onFileChosen = [this] (const juce::File& f) { onFileChosen (f); };
+    fileBrowser.onDismiss    = [this] { closeBrowser(); };
+    addChildComponent (fileBrowser);
+
     startTimerHz (30);
 }
 
@@ -39,53 +286,98 @@ void SfzDropdownPanel::resized()
     const int w = getWidth();
     const int h = getHeight();
 
-    // New strip order (left → right):
-    // [LOAD] [picker 260] [gap] [TRN] [FINE] [REV] [CHO] [PAN] [VOL] [METER]
+    // Strip order (left → right):
+    // [picker 310] [gap] [TRN] [FINE] [REV] [CHO] [PAN] [VOL] [METER]
     auto strip = juce::Rectangle<int> (0, 0, w, kStripH).reduced (kPad, 0);
     strip.removeFromLeft (4);   // left margin
 
-    loadBtnZone = strip.removeFromLeft (kLoadW).withSizeKeepingCentre (kLoadW, kLoadH);
-    strip.removeFromLeft (kPad);
-
-    // Preset picker: same height as LOAD button, vertically centred in strip
+    // Preset picker (wider, no LOAD button)
     auto pickerSlot = strip.removeFromLeft (kPickerW);
-    nameZone = pickerSlot.withSizeKeepingCentre (kPickerW, kLoadH);
+    nameZone = pickerSlot.withSizeKeepingCentre (kPickerW, 22);
     strip.removeFromLeft (kPad * 2);
 
-    // Right-side knobs in pairs: TRN FINE | REV CHO | PAN VOL | METER
+    // Right-side knobs
     meterZone   = strip.removeFromRight (kMeterW);
     strip.removeFromRight (kPad);
 
     volZone    = strip.removeFromRight (kKnobW);
     strip.removeFromRight (kKnobGap);
     panZone    = strip.removeFromRight (kKnobW);
-    strip.removeFromRight (kPad);   // pair separator
+    strip.removeFromRight (kPad);
 
     chorusZone = strip.removeFromRight (kKnobW);
     strip.removeFromRight (kKnobGap);
     reverbZone = strip.removeFromRight (kKnobW);
-    strip.removeFromRight (kPad);   // pair separator
+    strip.removeFromRight (kPad);
 
     fineZone   = strip.removeFromRight (kKnobW);
     strip.removeFromRight (kKnobGap);
     transZone  = strip.removeFromRight (kKnobW);
 
-    // Sub-divide nameZone into  [< arrow] [label] [> arrow]
+    // Sub-divide nameZone:
+    //   [< arrow] [folder icon] [label] [> arrow]
     {
         auto z = nameZone;
-        presetDecBtn = z.removeFromLeft  (kPresetArrowW);
-        presetIncBtn = z.removeFromRight (kPresetArrowW);
-        presetLabel  = z;
+        presetDecBtn  = z.removeFromLeft  (kPresetArrowW);
+        presetIncBtn  = z.removeFromRight (kPresetArrowW);
+        folderIconZone = z.removeFromRight (kFolderIconW);
+        presetLabel   = z;
     }
 
-    // ── Keyboard panel: sits directly below the strip, no gap ──────────────────
+    // ── Keyboard panel ────────────────────────────────────────────────────────
     const int kbY = kStripH;
     const int kbH = juce::jmax (60, h - kbY);
-    keysPanel.setVisible (kbH > 0);
+    keysPanel.setVisible (kbH > 0 && ! browserOpen);
     if (kbH > 0)
         keysPanel.setBounds (kPad, kbY, w - kPad * 2, kbH);
     else
         keysPanel.setBounds ({});
+
+    // ── Inline browser overlay ────────────────────────────────────────────────
+    if (browserOpen)
+    {
+        fileBrowser.setBounds (kPad, kStripH + 1, w - kPad * 2, h - kStripH - 1);
+        fileBrowser.setVisible (true);
+    }
+    else
+    {
+        fileBrowser.setVisible (false);
+        fileBrowser.setBounds ({});
+    }
+}
+
+// =============================================================================
+//  Browser open / close
+// =============================================================================
+
+void SfzDropdownPanel::openBrowser()
+{
+    if (browserOpen) return;
+    browserOpen = true;
+
+    // Navigate to the directory of the currently loaded file if there is one
+    if (processor.sfzPlayer.isLoaded())
+        fileBrowser.setRootDirectory (
+            processor.sfzPlayer.getLoadedFile().getParentDirectory());
+
+    resized();
+    repaint();
+}
+
+void SfzDropdownPanel::closeBrowser()
+{
+    if (! browserOpen) return;
+    browserOpen = false;
+    resized();
+    repaint();
+}
+
+void SfzDropdownPanel::onFileChosen (const juce::File& f)
+{
+    processor.sfzPlayer.loadFile (f);
+    reloadZones (f);
+    closeBrowser();
+    repaint();
 }
 
 // =============================================================================
@@ -98,7 +390,7 @@ void SfzDropdownPanel::paint (juce::Graphics& g)
     const int   w     = getWidth();
     const int   h     = getHeight();
 
-    // ── Full background ───────────────────────────────────────────────────────
+    // Full background
     {
         const auto bounds = getLocalBounds().toFloat();
         juce::ColourGradient bg (theme.darkBar.darker (0.35f), 0.f, 0.f,
@@ -106,16 +398,13 @@ void SfzDropdownPanel::paint (juce::Graphics& g)
         g.setGradientFill (bg);
         g.fillRoundedRectangle (bounds, 4.0f);
 
-        // Separator between strip and keyboard
         const int sepY = kStripH;
         g.setColour (theme.accent.withAlpha (0.18f));
         g.fillRect (kPad, sepY, w - kPad * 2, 1);
     }
 
-    // ── Draw header strip ─────────────────────────────────────────────────────
     drawHeaderStrip (g);
 
-    // ── Top accent line ───────────────────────────────────────────────────────
     g.setColour (theme.accent.withAlpha (0.45f));
     g.fillRect (0, 0, w, 1);
 }
@@ -126,26 +415,8 @@ void SfzDropdownPanel::paint (juce::Graphics& g)
 
 void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
 {
-    const auto& theme = getTheme();
-
-    // ── Preset picker ─────────────────────────────────────────────────────────
     drawPresetPicker (g);
 
-    // ── Load button ───────────────────────────────────────────────────────────
-    {
-        const auto btn   = loadBtnZone.toFloat();
-        const bool hover = loadBtnZone.contains (getMouseXYRelative());
-        g.setColour (hover ? theme.accent.withAlpha (0.22f)
-                           : theme.darkBar.brighter (0.06f));
-        g.fillRoundedRectangle (btn, 3.0f);
-        g.setColour (theme.accent.withAlpha (hover ? 0.85f : 0.50f));
-        g.drawRoundedRectangle (btn.reduced (0.5f), 3.0f, 1.0f);
-        g.setFont (DysektLookAndFeel::makeFont (10.5f));
-        g.setColour (theme.accent);
-        g.drawText ("LOAD SF2", loadBtnZone, juce::Justification::centred, false);
-    }
-
-    // ── TRN knob ──────────────────────────────────────────────────────────────
     drawKnob (g, transZone, transToNorm (processor.sfzPlayer.getTranspose()),
               "TRN",
               [&]() -> juce::String {
@@ -153,7 +424,6 @@ void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
                   return s == 0 ? "0st" : (s > 0 ? "+" : "") + juce::String (s) + "st";
               }());
 
-    // ── FINE knob ─────────────────────────────────────────────────────────────
     drawKnob (g, fineZone, fineToNorm (processor.sfzPlayer.getFineTune()),
               "FINE",
               [&]() -> juce::String {
@@ -161,17 +431,14 @@ void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
                   return (c >= 0 ? "+" : "") + juce::String (c, 0) + "c";
               }());
 
-    // ── REV knob ──────────────────────────────────────────────────────────────
     drawKnob (g, reverbZone, processor.sfzPlayer.getReverb(),
               "REV",
               juce::String (juce::roundToInt (processor.sfzPlayer.getReverb() * 100)) + "%");
 
-    // ── CHO knob ──────────────────────────────────────────────────────────────
     drawKnob (g, chorusZone, processor.sfzPlayer.getChorus(),
               "CHO",
               juce::String (juce::roundToInt (processor.sfzPlayer.getChorus() * 100)) + "%");
 
-    // ── PAN knob (bipolar — draw centre tick) ─────────────────────────────────
     drawKnob (g, panZone, panToNorm (processor.sfzPlayer.getPan()),
               "PAN",
               [&]() -> juce::String {
@@ -181,7 +448,6 @@ void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
                   return (p < 0 ? "L" : "R") + juce::String (pct);
               }());
 
-    // ── VOL knob ─────────────────────────────────────────────────────────────
     drawKnob (g, volZone, volToNorm (processor.sfzPlayer.getVolume()),
               "VOL",
               [&]() -> juce::String {
@@ -189,7 +455,6 @@ void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
                   return db <= -95.f ? "-inf" : juce::String (db, 1) + "dB";
               }());
 
-    // ── VU meter ──────────────────────────────────────────────────────────────
     drawMeter (g);
 }
 
@@ -202,43 +467,66 @@ void SfzDropdownPanel::drawPresetPicker (juce::Graphics& g) const
     const auto& theme    = getTheme();
     const bool  isLoaded = processor.sfzPlayer.isLoaded();
 
-    // ── Background panel for the whole picker area ────────────────────────────
+    // Background
     {
         auto bg = nameZone.toFloat();
-        g.setColour (theme.darkBar.darker (0.12f));
+        g.setColour (browserOpen ? theme.accent.withAlpha (0.10f)
+                                 : theme.darkBar.darker (0.12f));
         g.fillRoundedRectangle (bg, 3.0f);
-        g.setColour (theme.accent.withAlpha (0.20f));
+        g.setColour (browserOpen ? theme.accent.withAlpha (0.55f)
+                                 : theme.accent.withAlpha (0.20f));
         g.drawRoundedRectangle (bg.reduced (0.5f), 3.0f, 1.0f);
     }
 
-    // ── Arrow buttons ─────────────────────────────────────────────────────────
+    // Folder icon (always visible — this is the open/close toggle)
+    {
+        const bool hover = folderIconZone.contains (getMouseXYRelative());
+        g.setFont (DysektLookAndFeel::makeFont (10.0f));
+        g.setColour (browserOpen
+                     ? theme.accent.withAlpha (0.90f)
+                     : hover ? theme.accent.withAlpha (0.70f)
+                             : theme.foreground.withAlpha (0.35f));
+        g.drawText (u8"\U0001F4C1", folderIconZone, juce::Justification::centred, false);
+    }
+
+    // Arrow buttons (only useful when loaded + presets exist)
     auto drawArrow = [&] (juce::Rectangle<int> zone, const juce::String& sym)
     {
-        const bool hover = zone.contains (getMouseXYRelative()) && isLoaded;
+        const bool active = isLoaded && ! presetList.empty() && ! browserOpen;
+        const bool hover  = zone.contains (getMouseXYRelative()) && active;
         g.setColour (hover ? theme.accent.withAlpha (0.30f) : juce::Colours::transparentBlack);
         g.fillRoundedRectangle (zone.toFloat(), 2.0f);
         g.setFont (DysektLookAndFeel::makeFont (11.0f));
-        g.setColour (isLoaded ? theme.accent.withAlpha (0.75f)
-                              : theme.foreground.withAlpha (0.20f));
+        g.setColour (active ? theme.accent.withAlpha (0.75f)
+                            : theme.foreground.withAlpha (0.20f));
         g.drawText (sym, zone, juce::Justification::centred, false);
     };
     drawArrow (presetDecBtn, "<");
     drawArrow (presetIncBtn, ">");
 
-    // ── Preset label (two rows: bank info + preset name) ──────────────────────
+    // Label area
     {
         auto lbl = presetLabel;
 
-        if (! isLoaded)
+        if (browserOpen)
+        {
+            // Browser is open — show a hint
+            g.setFont (DysektLookAndFeel::makeFont (10.0f));
+            g.setColour (theme.accent.withAlpha (0.70f));
+            g.drawText ("browsing files \u2014 double-click to load", lbl,
+                        juce::Justification::centred, true);
+        }
+        else if (! isLoaded)
         {
             g.setFont (DysektLookAndFeel::makeFont (10.5f));
-            g.setColour (theme.foreground.withAlpha (0.28f));
-            g.drawText ("No SF2 loaded", lbl, juce::Justification::centred, false);
+            g.setColour (theme.foreground.withAlpha (0.38f));
+            g.drawText ("click \U0001F4C1 or drop a file", lbl,
+                        juce::Justification::centred, false);
         }
         else if (presetList.empty())
         {
             g.setFont (DysektLookAndFeel::makeFont (10.5f));
-            g.setColour (theme.foreground.withAlpha (0.35f));
+            g.setColour (theme.foreground.withAlpha (0.75f));
             g.drawText (processor.sfzPlayer.getLoadedFile().getFileNameWithoutExtension(),
                         lbl, juce::Justification::centred, true);
         }
@@ -248,7 +536,7 @@ void SfzDropdownPanel::drawPresetPicker (juce::Graphics& g) const
                                           processor.sfzPlayer.getCurrentPresetIndex());
             const auto& info = presetList[(size_t) idx];
 
-            // Top mini-label: filename + bank/preset index
+            // Top mini-label
             {
                 auto topLine = lbl.removeFromTop (lbl.getHeight() / 2);
                 g.setFont (DysektLookAndFeel::makeFont (8.5f));
@@ -260,7 +548,7 @@ void SfzDropdownPanel::drawPresetPicker (juce::Graphics& g) const
                 g.drawText (caption, topLine, juce::Justification::centred, true);
             }
 
-            // Bottom: preset name
+            // Preset name
             g.setFont (DysektLookAndFeel::makeFont (11.0f));
             g.setColour (theme.foreground);
             g.drawText (info.name, lbl, juce::Justification::centred, true);
@@ -269,15 +557,13 @@ void SfzDropdownPanel::drawPresetPicker (juce::Graphics& g) const
 }
 
 // =============================================================================
-//  drawKnob — compact strip-height knob
+//  drawKnob
 // =============================================================================
 
 void SfzDropdownPanel::drawKnob (juce::Graphics& g, juce::Rectangle<int> bounds,
                                    float normalised, const juce::String& label,
                                    const juce::String& valueStr) const
 {
-    // Compact horizontal layout: [arc | label/value stacked right]
-    // Fits entirely within kStripH (36px) with no overflow.
     const auto& theme = getTheme();
 
     const int dia  = juce::jmin (bounds.getHeight() - 6, 26);
@@ -356,12 +642,11 @@ void SfzDropdownPanel::drawMeter (juce::Graphics& g) const
 }
 
 // =============================================================================
-//  Timer — meter + preset list refresh
+//  Timer
 // =============================================================================
 
 void SfzDropdownPanel::timerCallback()
 {
-    // ── VU meters ─────────────────────────────────────────────────────────────
     const float newL = processor.sfzPeakL.load (std::memory_order_relaxed);
     const float newR = processor.sfzPeakR.load (std::memory_order_relaxed);
     if (newL > holdL) holdL = newL;
@@ -371,8 +656,6 @@ void SfzDropdownPanel::timerCallback()
     meterL = newL;
     meterR = newR;
 
-    // ── Refresh preset list from audio thread ─────────────────────────────────
-    // getPresetList() swaps in any fresh data posted by the audio thread.
     presetList = processor.sfzPlayer.getPresetList();
 
     repaint();
@@ -386,14 +669,13 @@ void SfzDropdownPanel::selectPreset (int delta)
 {
     if (presetList.empty()) return;
 
-    const int cur = processor.sfzPlayer.getCurrentPresetIndex();
+    const int cur  = processor.sfzPlayer.getCurrentPresetIndex();
     const int next = juce::jlimit (0, (int) presetList.size() - 1, cur + delta);
 
     if (next != cur)
     {
         processor.sfzPlayer.setPresetByIndex (next);
 
-        // Reload key zones for the new preset if we have a loaded file.
         if (processor.sfzPlayer.isLoaded())
             reloadZones (processor.sfzPlayer.getLoadedFile());
 
@@ -409,24 +691,43 @@ void SfzDropdownPanel::mouseDown (const juce::MouseEvent& e)
 {
     const auto pos = e.getPosition();
 
-    // Load button
-    if (loadBtnZone.contains (pos))
+    // ── Folder icon — toggle browser ─────────────────────────────────────────
+    if (folderIconZone.contains (pos))
     {
-        openFileChooser();
+        if (browserOpen) closeBrowser();
+        else             openBrowser();
         return;
     }
 
-    // Preset arrows
-    if (presetDecBtn.contains (pos)) { selectPreset (-1); return; }
-    if (presetIncBtn.contains (pos)) { selectPreset (+1); return; }
+    // ── Clicking the label area when browser is closed and no file loaded ─────
+    if (presetLabel.contains (pos) && ! browserOpen
+        && ! processor.sfzPlayer.isLoaded())
+    {
+        openBrowser();
+        return;
+    }
 
-    // Knob drag start — all six knobs
+    // ── Clicking label when browser is open — close it ────────────────────────
+    if (nameZone.contains (pos) && browserOpen)
+    {
+        closeBrowser();
+        return;
+    }
+
+    // ── Preset arrows ─────────────────────────────────────────────────────────
+    if (! browserOpen)
+    {
+        if (presetDecBtn.contains (pos)) { selectPreset (-1); return; }
+        if (presetIncBtn.contains (pos)) { selectPreset (+1); return; }
+    }
+
+    // ── Knob drag start ───────────────────────────────────────────────────────
     struct { juce::Rectangle<int>& zone; ActiveKnob id; float val; } knobs[] =
     {
-        { volZone,    ActiveKnob::Volume,    volToNorm  (processor.sfzPlayer.getVolume()) },
+        { volZone,    ActiveKnob::Volume,    volToNorm   (processor.sfzPlayer.getVolume()) },
         { transZone,  ActiveKnob::Transpose, transToNorm (processor.sfzPlayer.getTranspose()) },
-        { panZone,    ActiveKnob::Pan,       panToNorm  (processor.sfzPlayer.getPan()) },
-        { fineZone,   ActiveKnob::FineTune,  fineToNorm (processor.sfzPlayer.getFineTune()) },
+        { panZone,    ActiveKnob::Pan,       panToNorm   (processor.sfzPlayer.getPan()) },
+        { fineZone,   ActiveKnob::FineTune,  fineToNorm  (processor.sfzPlayer.getFineTune()) },
         { reverbZone, ActiveKnob::Reverb,    processor.sfzPlayer.getReverb() },
         { chorusZone, ActiveKnob::Chorus,    processor.sfzPlayer.getChorus() },
     };
@@ -470,21 +771,23 @@ void SfzDropdownPanel::mouseUp (const juce::MouseEvent&)
 void SfzDropdownPanel::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const auto pos = e.getPosition();
-    if (volZone.contains    (pos)) { processor.sfzPlayer.setVolume   (1.0f);  repaint(); }
-    if (transZone.contains  (pos)) { processor.sfzPlayer.setTranspose (0);    repaint(); }
-    if (panZone.contains    (pos)) { processor.sfzPlayer.setPan      (0.0f);  repaint(); }
-    if (fineZone.contains   (pos)) { processor.sfzPlayer.setFineTune (0.0f);  repaint(); }
-    if (reverbZone.contains (pos)) { processor.sfzPlayer.setReverb   (0.4f);  repaint(); }
-    if (chorusZone.contains (pos)) { processor.sfzPlayer.setChorus   (0.2f);  repaint(); }
+    if (volZone.contains    (pos)) { processor.sfzPlayer.setVolume    (1.0f);  repaint(); }
+    if (transZone.contains  (pos)) { processor.sfzPlayer.setTranspose (0);     repaint(); }
+    if (panZone.contains    (pos)) { processor.sfzPlayer.setPan       (0.0f);  repaint(); }
+    if (fineZone.contains   (pos)) { processor.sfzPlayer.setFineTune  (0.0f);  repaint(); }
+    if (reverbZone.contains (pos)) { processor.sfzPlayer.setReverb    (0.4f);  repaint(); }
+    if (chorusZone.contains (pos)) { processor.sfzPlayer.setChorus    (0.2f);  repaint(); }
 }
 
 void SfzDropdownPanel::mouseWheelMove (const juce::MouseEvent& e,
                                         const juce::MouseWheelDetails& w)
 {
+    if (browserOpen) return;
+
     const auto  pos  = e.getPosition();
     const float step = w.deltaY * (e.mods.isShiftDown() ? 0.01f : 0.05f);
 
-    if (nameZone.contains (pos) || presetLabel.contains (pos))
+    if (nameZone.contains (pos))
     {
         if (w.deltaY > 0.05f)       selectPreset (+1);
         else if (w.deltaY < -0.05f) selectPreset (-1);
@@ -496,42 +799,33 @@ void SfzDropdownPanel::mouseWheelMove (const juce::MouseEvent& e,
     };
 
     if (volZone.contains (pos))
-    {
         processor.sfzPlayer.setVolume (normToVol (adjustNorm (volToNorm (processor.sfzPlayer.getVolume()), step)));
-    }
     else if (transZone.contains (pos))
-    {
         processor.sfzPlayer.setTranspose (normToTrans (adjustNorm (transToNorm (processor.sfzPlayer.getTranspose()), step)));
-    }
     else if (panZone.contains (pos))
-    {
         processor.sfzPlayer.setPan (normToPan (adjustNorm (panToNorm (processor.sfzPlayer.getPan()), step)));
-    }
     else if (fineZone.contains (pos))
-    {
         processor.sfzPlayer.setFineTune (normToFine (adjustNorm (fineToNorm (processor.sfzPlayer.getFineTune()), step)));
-    }
     else if (reverbZone.contains (pos))
-    {
         processor.sfzPlayer.setReverb (adjustNorm (processor.sfzPlayer.getReverb(), step));
-    }
     else if (chorusZone.contains (pos))
-    {
         processor.sfzPlayer.setChorus (adjustNorm (processor.sfzPlayer.getChorus(), step));
-    }
 
     repaint();
 }
 
 // =============================================================================
-//  File drag-and-drop — SF2 only
+//  File drag-and-drop
 // =============================================================================
 
 bool SfzDropdownPanel::isInterestedInFileDrag (const juce::StringArray& files)
 {
     for (auto& f : files)
-        if (juce::File (f).getFileExtension().toLowerCase() == ".sf2")
+    {
+        const auto ext = juce::File (f).getFileExtension().toLowerCase();
+        if (ext == ".sf2" || ext == ".sfz")
             return true;
+    }
     return false;
 }
 
@@ -539,40 +833,17 @@ void SfzDropdownPanel::filesDropped (const juce::StringArray& files, int, int)
 {
     for (auto& f : files)
     {
-        if (juce::File (f).getFileExtension().toLowerCase() == ".sf2")
+        const auto ext = juce::File (f).getFileExtension().toLowerCase();
+        if (ext == ".sf2" || ext == ".sfz")
         {
             juce::File file (f);
             processor.sfzPlayer.loadFile (file);
             reloadZones (file);
+            closeBrowser();
             repaint();
             return;
         }
     }
-}
-
-// =============================================================================
-//  File chooser — SF2 only
-// =============================================================================
-
-void SfzDropdownPanel::openFileChooser()
-{
-    chooser = std::make_unique<juce::FileChooser> (
-        "Load SF2 SoundFont",
-        juce::File::getSpecialLocation (juce::File::userMusicDirectory),
-        "*.sf2");
-
-    chooser->launchAsync (juce::FileBrowserComponent::openMode
-                        | juce::FileBrowserComponent::canSelectFiles,
-        [this] (const juce::FileChooser& fc)
-        {
-            auto result = fc.getResult();
-            if (result.existsAsFile())
-            {
-                processor.sfzPlayer.loadFile (result);
-                reloadZones (result);
-                repaint();
-            }
-        });
 }
 
 // =============================================================================
@@ -603,7 +874,7 @@ float SfzDropdownPanel::fineToNorm  (float cents)    const { return (cents + 100
 float SfzDropdownPanel::normToFine  (float n)        const { return n * 200.0f - 100.0f; }
 
 // =============================================================================
-//  Zone parsers (KeysPanel highlight visualisation)
+//  Zone parsers
 // =============================================================================
 
 static juce::Colour zoneColourDP (int index)
@@ -710,9 +981,6 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
     int  colIdx = 0;
     std::set<std::pair<int,int>> seen;
 
-    // Emit a zone immediately on each unique keyRange (oper==43) record.
-    // SF2 spec: oper==0 is the terminal sentinel for the entire igen array,
-    // NOT a per-zone delimiter — zone boundaries come from ibag, not from igen.
     for (size_t i = 0; i < numRecs; ++i)
     {
         const uint16_t oper = (uint16_t)(data[i*4] | (data[i*4+1] << 8));
@@ -742,7 +1010,6 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
 void SfzDropdownPanel::reloadZones (const juce::File& f)
 {
     const auto ext = f.getFileExtension().toLowerCase();
-    // Only SF2 for this panel; sfz kept for compatibility in case zones are needed.
     auto zones = (ext == ".sfz") ? parseSfzZones (f)
                : (ext == ".sf2") ? parseSf2Zones (f)
                : std::vector<KeysPanel::Keyzone>{};
