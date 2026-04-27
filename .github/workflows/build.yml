@@ -62,6 +62,17 @@ jobs:
             "if(NOT TARGET sfizz::cxxopts)`n  add_library(sfizz::cxxopts ALIAS `$1)`nendif()"
           Set-Content $file $content
           Write-Host "Patched sfizz::cxxopts alias guard applied."
+      - name: Patch sfizz MSVC runtime to MD
+        shell: pwsh
+        run: |
+          $file = "sfizz/cmake/SfizzConfig.cmake"
+          $content = Get-Content $file -Raw
+          $content = $content -replace `
+            'set\(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded\$<\$<CONFIG:Debug>:Debug>"\)', `
+            'set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")'
+          Set-Content $file $content
+          Write-Host "Patched sfizz MSVC runtime library to MD (DLL)."
+
 
       - name: Install FluidSynth via vcpkg (static)
         shell: pwsh
@@ -85,7 +96,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static-md `
-            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL `
             -DJUCE_BUILD_EXTRAS=OFF `
             -DJUCE_BUILD_EXAMPLES=OFF
 
