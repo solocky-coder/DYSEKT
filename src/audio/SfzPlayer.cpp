@@ -403,7 +403,7 @@ void SfzPlayer::applyPendingLoad()
     if (ext == ".sfz")
     {
         isSfzFile  = true;
-        sfizzSynth = sfizz_create();
+        sfizzSynth = sfizz_create_synth();
         sfizz_set_sample_rate       (sfizzSynth, (float) currentSR);
         sfizz_set_samples_per_block (sfizzSynth, currentBlock);
 

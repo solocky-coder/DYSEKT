@@ -47,7 +47,7 @@ public:
     {
         using namespace SfzConst;
 
-        sfizz_t* sfz = sfizz_create();
+        sfizz_synth_t* sfz = sfizz_create_synth();
         sfizz_set_sample_rate  (sfz, (float) sampleRate);
         sfizz_set_samples_per_block (sfz, kBlockSize);
 
@@ -190,7 +190,7 @@ public:
 private:
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    void renderPhase (sfizz_t* sfz, int numSamples,
+    void renderPhase (sfizz_synth_t* sfz, int numSamples,
                       std::vector<float>& blockL, std::vector<float>& blockR,
                       std::vector<float>& outL,   std::vector<float>& outR) const
     {
@@ -239,7 +239,7 @@ private:
     }
 
     // Fast pass to find which notes produce audio
-    static std::vector<int> discoverActiveNotes (sfizz_t* sfz)
+    static std::vector<int> discoverActiveNotes (sfizz_synth_t* sfz)
     {
         std::vector<int> found;
         std::vector<float> probeL (SfzConst::kProbeSize, 0.f);
