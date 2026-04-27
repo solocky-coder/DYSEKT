@@ -113,7 +113,8 @@ public:
     void panelDidShow();
 
     // ── Layout constants ──────────────────────────────────────────────────────
-    static constexpr int kStripH = 36;
+    static constexpr int kStripH  = 36;
+    static constexpr int kAdsrH   = 34;   ///< height of the ADSR knob row
 
     // ── Keyboard sub-component ────────────────────────────────────────────────
     KeysPanel keysPanel;
@@ -121,6 +122,7 @@ public:
 private:
     // ── Header-strip drawing ──────────────────────────────────────────────────
     void drawHeaderStrip (juce::Graphics& g) const;
+    void drawAdsrStrip   (juce::Graphics& g) const;
     void drawKnob (juce::Graphics& g, juce::Rectangle<int> bounds,
                    float normalised, const juce::String& label,
                    const juce::String& valueStr) const;
@@ -134,11 +136,15 @@ private:
                           reverbZone, chorusZone,
                           meterZone;
 
+    // ADSR knob zones (second row, below header strip)
+    juce::Rectangle<int> adsrAtkZone, adsrDecZone, adsrSusZone, adsrRelZone;
+
     // Sub-zones inside nameZone
     juce::Rectangle<int> presetDecBtn, presetLabel, presetIncBtn, folderIconZone;
 
     // ── Drag state for knobs ──────────────────────────────────────────────────
-    enum class ActiveKnob { None, Volume, Transpose, Pan, FineTune, Reverb, Chorus };
+    enum class ActiveKnob { None, Volume, Transpose, Pan, FineTune, Reverb, Chorus,
+                            AdsrAttack, AdsrDecay, AdsrSustain, AdsrRelease };
     ActiveKnob activeKnob  { ActiveKnob::None };
     int        dragStartY  { 0 };
     float      dragStartVal{ 0.f };

@@ -325,7 +325,7 @@ void SfzDropdownPanel::resized()
     }
 
     // ── Keyboard panel ────────────────────────────────────────────────────────
-    const int kbY = kStripH;
+    const int kbY = kStripH + kAdsrH;
     const int kbH = juce::jmax (60, h - kbY);
     keysPanel.setVisible (kbH > 0 && ! browserOpen);
     if (kbH > 0)
@@ -333,10 +333,25 @@ void SfzDropdownPanel::resized()
     else
         keysPanel.setBounds ({});
 
+    // ── ADSR knob row (below header strip) ───────────────────────────────────
+    {
+        const int adsrY = kStripH;
+        const int totalKnobW = 4 * kKnobW + 3 * kKnobGap;
+        const int adsrStartX = (w - totalKnobW) / 2;
+        auto adsrRow = juce::Rectangle<int> (adsrStartX, adsrY, totalKnobW, kAdsrH);
+        adsrAtkZone = adsrRow.removeFromLeft (kKnobW);
+        adsrRow.removeFromLeft (kKnobGap);
+        adsrDecZone = adsrRow.removeFromLeft (kKnobW);
+        adsrRow.removeFromLeft (kKnobGap);
+        adsrSusZone = adsrRow.removeFromLeft (kKnobW);
+        adsrRow.removeFromLeft (kKnobGap);
+        adsrRelZone = adsrRow.removeFromLeft (kKnobW);
+    }
+
     // ── Inline browser overlay ────────────────────────────────────────────────
     if (browserOpen)
     {
-        fileBrowser.setBounds (kPad, kStripH + 1, w - kPad * 2, h - kStripH - 1);
+        fileBrowser.setBounds (kPad, kStripH + kAdsrH + 1, w - kPad * 2, h - kStripH - kAdsrH - 1);
         fileBrowser.setVisible (true);
     }
     else
@@ -401,12 +416,49 @@ void SfzDropdownPanel::paint (juce::Graphics& g)
         const int sepY = kStripH;
         g.setColour (theme.accent.withAlpha (0.18f));
         g.fillRect (kPad, sepY, w - kPad * 2, 1);
+
+        // ADSR row separator
+        const int sepY2 = kStripH + kAdsrH;
+        g.setColour (theme.accent.withAlpha (0.13f));
+        g.fillRect (kPad, sepY2, w - kPad * 2, 1);
     }
 
     drawHeaderStrip (g);
+    drawAdsrStrip (g);
 
     g.setColour (theme.accent.withAlpha (0.45f));
     g.fillRect (0, 0, w, 1);
+}
+
+// =============================================================================
+//  drawAdsrStrip
+// =============================================================================
+
+void SfzDropdownPanel::drawAdsrStrip (juce::Graphics& g) const
+{
+    // Attack: 0-30 s, normalised
+    drawKnob (g, adsrAtkZone,
+              juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzAttack()  / 30.0f),
+              "ATK",
+              juce::String (processor.sfzPlayer.getSfzAttack(), 2) + "s");
+
+    // Decay: 0-30 s
+    drawKnob (g, adsrDecZone,
+              juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzDecay()   / 30.0f),
+              "DEC",
+              juce::String (processor.sfzPlayer.getSfzDecay(), 2) + "s");
+
+    // Sustain: 0-100 %
+    drawKnob (g, adsrSusZone,
+              juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzSustain() / 100.0f),
+              "SUS",
+              juce::String (juce::roundToInt (processor.sfzPlayer.getSfzSustain())) + "%");
+
+    // Release: 0-60 s
+    drawKnob (g, adsrRelZone,
+              juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzRelease() / 60.0f),
+              "REL",
+              juce::String (processor.sfzPlayer.getSfzRelease(), 2) + "s");
 }
 
 // =============================================================================
@@ -724,12 +776,16 @@ void SfzDropdownPanel::mouseDown (const juce::MouseEvent& e)
     // ── Knob drag start ───────────────────────────────────────────────────────
     struct { juce::Rectangle<int>& zone; ActiveKnob id; float val; } knobs[] =
     {
-        { volZone,    ActiveKnob::Volume,    volToNorm   (processor.sfzPlayer.getVolume()) },
-        { transZone,  ActiveKnob::Transpose, transToNorm (processor.sfzPlayer.getTranspose()) },
-        { panZone,    ActiveKnob::Pan,       panToNorm   (processor.sfzPlayer.getPan()) },
-        { fineZone,   ActiveKnob::FineTune,  fineToNorm  (processor.sfzPlayer.getFineTune()) },
-        { reverbZone, ActiveKnob::Reverb,    processor.sfzPlayer.getReverb() },
-        { chorusZone, ActiveKnob::Chorus,    processor.sfzPlayer.getChorus() },
+        { volZone,    ActiveKnob::Volume,      volToNorm   (processor.sfzPlayer.getVolume()) },
+        { transZone,  ActiveKnob::Transpose,   transToNorm (processor.sfzPlayer.getTranspose()) },
+        { panZone,    ActiveKnob::Pan,         panToNorm   (processor.sfzPlayer.getPan()) },
+        { fineZone,   ActiveKnob::FineTune,    fineToNorm  (processor.sfzPlayer.getFineTune()) },
+        { reverbZone, ActiveKnob::Reverb,      processor.sfzPlayer.getReverb() },
+        { chorusZone, ActiveKnob::Chorus,      processor.sfzPlayer.getChorus() },
+        { adsrAtkZone, ActiveKnob::AdsrAttack,  juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzAttack()  / 30.0f) },
+        { adsrDecZone, ActiveKnob::AdsrDecay,   juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzDecay()   / 30.0f) },
+        { adsrSusZone, ActiveKnob::AdsrSustain, juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzSustain() / 100.0f) },
+        { adsrRelZone, ActiveKnob::AdsrRelease, juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzRelease() / 60.0f) },
     };
 
     for (auto& k : knobs)
@@ -752,12 +808,16 @@ void SfzDropdownPanel::mouseDrag (const juce::MouseEvent& e)
 
     switch (activeKnob)
     {
-        case ActiveKnob::Volume:    processor.sfzPlayer.setVolume    (normToVol   (newNorm)); break;
-        case ActiveKnob::Transpose: processor.sfzPlayer.setTranspose (normToTrans (newNorm)); break;
-        case ActiveKnob::Pan:       processor.sfzPlayer.setPan       (normToPan   (newNorm)); break;
-        case ActiveKnob::FineTune:  processor.sfzPlayer.setFineTune  (normToFine  (newNorm)); break;
-        case ActiveKnob::Reverb:    processor.sfzPlayer.setReverb    (newNorm);               break;
-        case ActiveKnob::Chorus:    processor.sfzPlayer.setChorus    (newNorm);               break;
+        case ActiveKnob::Volume:      processor.sfzPlayer.setVolume    (normToVol   (newNorm)); break;
+        case ActiveKnob::Transpose:   processor.sfzPlayer.setTranspose (normToTrans (newNorm)); break;
+        case ActiveKnob::Pan:         processor.sfzPlayer.setPan       (normToPan   (newNorm)); break;
+        case ActiveKnob::FineTune:    processor.sfzPlayer.setFineTune  (normToFine  (newNorm)); break;
+        case ActiveKnob::Reverb:      processor.sfzPlayer.setReverb    (newNorm);               break;
+        case ActiveKnob::Chorus:      processor.sfzPlayer.setChorus    (newNorm);               break;
+        case ActiveKnob::AdsrAttack:  processor.sfzPlayer.setSfzAttack  (newNorm * 30.0f);      break;
+        case ActiveKnob::AdsrDecay:   processor.sfzPlayer.setSfzDecay   (newNorm * 30.0f);      break;
+        case ActiveKnob::AdsrSustain: processor.sfzPlayer.setSfzSustain (newNorm * 100.0f);     break;
+        case ActiveKnob::AdsrRelease: processor.sfzPlayer.setSfzRelease (newNorm * 60.0f);      break;
         default: break;
     }
     repaint();
@@ -777,6 +837,11 @@ void SfzDropdownPanel::mouseDoubleClick (const juce::MouseEvent& e)
     if (fineZone.contains   (pos)) { processor.sfzPlayer.setFineTune  (0.0f);  repaint(); }
     if (reverbZone.contains (pos)) { processor.sfzPlayer.setReverb    (0.4f);  repaint(); }
     if (chorusZone.contains (pos)) { processor.sfzPlayer.setChorus    (0.2f);  repaint(); }
+    // ADSR defaults
+    if (adsrAtkZone.contains (pos)) { processor.sfzPlayer.setSfzAttack  (0.005f);  repaint(); }
+    if (adsrDecZone.contains (pos)) { processor.sfzPlayer.setSfzDecay   (0.1f);    repaint(); }
+    if (adsrSusZone.contains (pos)) { processor.sfzPlayer.setSfzSustain (100.0f);  repaint(); }
+    if (adsrRelZone.contains (pos)) { processor.sfzPlayer.setSfzRelease (0.05f);   repaint(); }
 }
 
 void SfzDropdownPanel::mouseWheelMove (const juce::MouseEvent& e,
@@ -810,6 +875,14 @@ void SfzDropdownPanel::mouseWheelMove (const juce::MouseEvent& e,
         processor.sfzPlayer.setReverb (adjustNorm (processor.sfzPlayer.getReverb(), step));
     else if (chorusZone.contains (pos))
         processor.sfzPlayer.setChorus (adjustNorm (processor.sfzPlayer.getChorus(), step));
+    else if (adsrAtkZone.contains (pos))
+        processor.sfzPlayer.setSfzAttack  (juce::jlimit (0.f, 30.f,  adjustNorm (processor.sfzPlayer.getSfzAttack()  / 30.0f,  step) * 30.0f));
+    else if (adsrDecZone.contains (pos))
+        processor.sfzPlayer.setSfzDecay   (juce::jlimit (0.f, 30.f,  adjustNorm (processor.sfzPlayer.getSfzDecay()   / 30.0f,  step) * 30.0f));
+    else if (adsrSusZone.contains (pos))
+        processor.sfzPlayer.setSfzSustain (juce::jlimit (0.f, 100.f, adjustNorm (processor.sfzPlayer.getSfzSustain() / 100.0f, step) * 100.0f));
+    else if (adsrRelZone.contains (pos))
+        processor.sfzPlayer.setSfzRelease (juce::jlimit (0.f, 60.f,  adjustNorm (processor.sfzPlayer.getSfzRelease() / 60.0f,  step) * 60.0f));
 
     repaint();
 }
