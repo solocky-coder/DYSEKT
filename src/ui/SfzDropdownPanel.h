@@ -47,7 +47,7 @@ public:
     void paint   (juce::Graphics&) override;
     void resized () override;
     void mouseDown  (const juce::MouseEvent&) override;
-    void keyPressed (const juce::KeyPress&) override { /* handled via grabKeyboardFocus */ }
+    bool keyPressed (const juce::KeyPress&) override { return false; /* handled via grabKeyboardFocus */ }
 
     // Open to a specific root directory (call before making visible)
     void setRootDirectory (const juce::File& dir);
