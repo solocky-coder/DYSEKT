@@ -13,9 +13,12 @@ void LogoBar::paint (juce::Graphics& g)
     const int  w  = getWidth();
     const int  h  = getHeight();
     const int  cy = h / 2;
+    // Scale factor relative to the design-time height (kLogoH = 52px).
+    static constexpr float kBaseH = 52.0f;
+    const float sf = (float) h / kBaseH;
 
     // ── Measure wordmark so we can centre the whole block ─────────────────
-    const float wordmarkSize = 24.0f;
+    const float wordmarkSize = 24.0f * sf;
     auto wordmarkFont = DysektLookAndFeel::makeFont (wordmarkSize, true);
 
     const juce::String dy   = "DY";
@@ -25,11 +28,11 @@ void LogoBar::paint (juce::Graphics& g)
     const int wordW = dyW + sektW;
 
     // Icon: 5 bars
-    const int barW    = 3;
-    const int gap     = 2;
+    const int barW    = juce::roundToInt (3 * sf);
+    const int gap     = juce::roundToInt (2 * sf);
     const int barStep = barW + gap;
-    const int iconW   = 5 * barStep - gap;   // 19px
-    const int iconGap = 7;
+    const int iconW   = 5 * barStep - gap;
+    const int iconGap = juce::roundToInt (7 * sf);
 
     // Total block width → centre it
     const int blockW  = iconW + iconGap + wordW;

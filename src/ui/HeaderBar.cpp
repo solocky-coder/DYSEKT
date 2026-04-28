@@ -70,13 +70,16 @@ void HeaderBar::resized()
 {
     const int w   = getWidth();
     const int h   = getHeight();
-    const int pad = 3;   // inset from the rounded frame border
+    // Scale inset/gap relative to design-time height (kBtnBarH = 38px).
+    static constexpr float kBaseH = 38.0f;
+    const float sf    = (float) h / kBaseH;
+    const int   pad   = juce::roundToInt (3 * sf);  // inset from the rounded frame border
+    const int   gap   = juce::roundToInt (2 * sf);
 
     // Four equal-width buttons in a single horizontal row:
     // UNDO | REDO | PANIC | ⚙
     const int innerW = w - pad * 2;
     const int btnW   = innerW / 4;
-    const int gap    = 2;
 
     undoBtn     .setBounds (pad,               pad, btnW - gap, h - pad * 2);
     redoBtn     .setBounds (pad + btnW,        pad, btnW - gap, h - pad * 2);
