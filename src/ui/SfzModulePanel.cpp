@@ -40,22 +40,8 @@ void SfzModulePanel::resized()
     keysPanel.setBounds (kbArea);
     area.removeFromBottom (4); // gap
 
-    // ADSR row — sits between top strip and keyboard
-    constexpr int kAdsrRowH  = 68;
-    constexpr int kAdsrKnobW = 52;
-    auto adsrArea = area.removeFromBottom (kAdsrRowH);
-    area.removeFromBottom (4); // gap above ADSR row
-
-    // Centre the four knobs in the ADSR row
-    const int totalKnobW = kAdsrKnobW * 4 + kPad * 3;
-    const int adsrX = adsrArea.getX() + (adsrArea.getWidth() - totalKnobW) / 2;
-    atkZone = juce::Rectangle<int> (adsrX,                               adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
-    decZone = juce::Rectangle<int> (adsrX + (kAdsrKnobW + kPad),        adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
-    susZone = juce::Rectangle<int> (adsrX + (kAdsrKnobW + kPad) * 2,   adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
-    relZone = juce::Rectangle<int> (adsrX + (kAdsrKnobW + kPad) * 3,   adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
-
     // Top control strip — left to right:
-    //   [LOAD] [VOL knob] [TRANS knob] [name label ... ] [meter] [status]
+    //   [LOAD] [VOL knob] [TRANS knob] [ATK][DEC][SUS][REL] [name label ... ] [meter] [status]
 
     // LOAD button — leftmost
     loadBtnZone = area.removeFromLeft (kLoadBtnW).withSizeKeepingCentre (kLoadBtnW, kLoadBtnH);
@@ -66,6 +52,17 @@ void SfzModulePanel::resized()
     volZone   = area.removeFromLeft (kKnobWNarrow);
     area.removeFromLeft (4);
     transZone = area.removeFromLeft (kKnobWNarrow);
+    area.removeFromLeft (kPad);
+
+    // ADSR knobs — now in the top strip
+    constexpr int kAdsrKnobW = 52;
+    atkZone = area.removeFromLeft (kAdsrKnobW);
+    area.removeFromLeft (4);
+    decZone = area.removeFromLeft (kAdsrKnobW);
+    area.removeFromLeft (4);
+    susZone = area.removeFromLeft (kAdsrKnobW);
+    area.removeFromLeft (4);
+    relZone = area.removeFromLeft (kAdsrKnobW);
     area.removeFromLeft (kPad);
 
     // Status pill — rightmost
@@ -168,17 +165,7 @@ void SfzModulePanel::paint (juce::Graphics& g)
     // ── VU meter ─────────────────────────────────────────────────────────────
     drawMeter (g);
 
-    // ── ADSR row background ───────────────────────────────────────────────────
-    {
-        // Span all four knob zones
-        auto rowBounds = atkZone.getUnion (relZone).expanded (kPad / 2, 2).toFloat();
-        g.setColour (theme.darkBar.brighter (0.04f));
-        g.fillRoundedRectangle (rowBounds, 3.0f);
-        g.setColour (theme.foreground.withAlpha (0.07f));
-        g.drawRoundedRectangle (rowBounds.reduced (0.5f), 3.0f, 1.0f);
-    }
-
-    // ── ADSR knobs ───────────────────────────────────────────────────────────
+    // ── ADSR knobs (in top strip) ────────────────────────────────────────────
     {
         const bool sfzLoaded = processor.sfzPlayer.isLoaded();
         const float alpha    = sfzLoaded ? 1.0f : 0.35f;
