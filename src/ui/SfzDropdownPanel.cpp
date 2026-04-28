@@ -7,7 +7,7 @@
 #include <set>
 
 // ── Layout constants (header strip) ──────────────────────────────────────────
-static constexpr int kPickerW      = 310;   // wider now that LOAD btn is gone
+static constexpr int kPickerW      = 160;   // narrowed to fit ADSR knobs in strip
 static constexpr int kKnobW        = 52;
 static constexpr int kMeterW       = 60;
 static constexpr int kPresetArrowW = 18;
@@ -313,6 +313,16 @@ void SfzDropdownPanel::resized()
     fineZone   = strip.removeFromRight (kKnobW);
     strip.removeFromRight (kKnobGap);
     transZone  = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kPad);
+
+    // ADSR knobs — now in the top strip, after picker
+    adsrRelZone = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kKnobGap);
+    adsrSusZone = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kKnobGap);
+    adsrDecZone = strip.removeFromRight (kKnobW);
+    strip.removeFromRight (kKnobGap);
+    adsrAtkZone = strip.removeFromRight (kKnobW);
 
     // Sub-divide nameZone:
     //   [< arrow] [folder icon] [label] [> arrow]
@@ -325,7 +335,7 @@ void SfzDropdownPanel::resized()
     }
 
     // ── Keyboard panel ────────────────────────────────────────────────────────
-    const int kbY = kStripH + kAdsrH;
+    const int kbY = kStripH;  // ADSR is now in the top strip, no extra row
     const int kbH = juce::jmax (60, h - kbY);
     keysPanel.setVisible (kbH > 0 && ! browserOpen);
     if (kbH > 0)
@@ -333,25 +343,10 @@ void SfzDropdownPanel::resized()
     else
         keysPanel.setBounds ({});
 
-    // ── ADSR knob row (below header strip) ───────────────────────────────────
-    {
-        const int adsrY = kStripH;
-        const int totalKnobW = 4 * kKnobW + 3 * kKnobGap;
-        const int adsrStartX = (w - totalKnobW) / 2;
-        auto adsrRow = juce::Rectangle<int> (adsrStartX, adsrY, totalKnobW, kAdsrH);
-        adsrAtkZone = adsrRow.removeFromLeft (kKnobW);
-        adsrRow.removeFromLeft (kKnobGap);
-        adsrDecZone = adsrRow.removeFromLeft (kKnobW);
-        adsrRow.removeFromLeft (kKnobGap);
-        adsrSusZone = adsrRow.removeFromLeft (kKnobW);
-        adsrRow.removeFromLeft (kKnobGap);
-        adsrRelZone = adsrRow.removeFromLeft (kKnobW);
-    }
-
     // ── Inline browser overlay ────────────────────────────────────────────────
     if (browserOpen)
     {
-        fileBrowser.setBounds (kPad, kStripH + kAdsrH + 1, w - kPad * 2, h - kStripH - kAdsrH - 1);
+        fileBrowser.setBounds (kPad, kStripH + 1, w - kPad * 2, h - kStripH - 1);
         fileBrowser.setVisible (true);
     }
     else
@@ -416,11 +411,6 @@ void SfzDropdownPanel::paint (juce::Graphics& g)
         const int sepY = kStripH;
         g.setColour (theme.accent.withAlpha (0.18f));
         g.fillRect (kPad, sepY, w - kPad * 2, 1);
-
-        // ADSR row separator
-        const int sepY2 = kStripH + kAdsrH;
-        g.setColour (theme.accent.withAlpha (0.13f));
-        g.fillRect (kPad, sepY2, w - kPad * 2, 1);
     }
 
     drawHeaderStrip (g);
