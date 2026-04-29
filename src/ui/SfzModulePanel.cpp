@@ -6,6 +6,7 @@
 #include "../PluginProcessor.h"
 #include "../PluginEditor.h"
 #include <set>
+#include <cmath>
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 static constexpr int kKnobW    = 60;
@@ -618,18 +619,32 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
     const auto text = f.loadFileAsString();
     const auto lines = juce::StringArray::fromLines (text);
 
-    int loKey = 0, hiKey = 127;
-    bool inRegion = false;
-    int  colIdx   = 0;
+    int   loKey      = 0;
+    int   hiKey      = 127;
+    int   rootPitch  = -1;
+    float volDb      = -7.0f;
+    float releaseSec = 0.664f;
+    bool  inRegion   = false;
+    int   colIdx     = 0;
     juce::String sampleName;
 
     auto flush = [&]
     {
         if (inRegion && hiKey >= loKey)
         {
-            zones.push_back ({ loKey, hiKey, 0, 127, -1, false, zoneColour (colIdx++), sampleName });
-            loKey = 0; hiKey = 127; sampleName = {};
+            KeysPanel::Keyzone z;
+            z.loKey      = loKey;
+            z.hiKey      = hiKey;
+            z.rootPitch  = rootPitch;
+            z.volDb      = volDb;
+            z.releaseSec = releaseSec;
+            z.colour     = zoneColour (colIdx++);
+            z.name       = sampleName;
+            zones.push_back (z);
         }
+        loKey = 0; hiKey = 127; rootPitch = -1;
+        volDb = -7.0f; releaseSec = 0.664f;
+        sampleName = {};
         inRegion = false;
     };
 
@@ -641,60 +656,69 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
 
         if (inRegion)
         {
-            auto get = [&] (const juce::String& key) -> int
+            // Generic float extractor
+            auto getFloat = [&] (const juce::String& key) -> float
             {
                 int pos = line.indexOf (key + "=");
-                if (pos < 0) return -999;
-                auto val = line.substring (pos + key.length() + 1)
-                               .trimStart()
-                               .upToFirstOccurrenceOf (" ", false, false)
-                               .upToFirstOccurrenceOf ("	", false, false);
-                return val.getIntValue();
+                if (pos < 0) return -999999.f;
+                return line.substring (pos + key.length() + 1)
+                           .trimStart()
+                           .upToFirstOccurrenceOf (" ",  false, false)
+                           .upToFirstOccurrenceOf ("	", false, false)
+                           .getFloatValue();
             };
-            // lokey / hikey (numeric or note name both supported)
+
+            // lokey / hikey
             auto loRaw = line.indexOf ("lokey=");
             if (loRaw >= 0)
             {
                 auto s = line.substring (loRaw + 6)
-                             .upToFirstOccurrenceOf (" ", false, false)
-                             .trim();
-                loKey = s.containsAnyOf ("abcdefg") ? juce::MidiMessage::getMidiNoteInHertz(0) >= 0
-                        ? juce::jlimit (0, 127, (int) s.getIntValue()) : s.getIntValue()
-                        : s.getIntValue();
-                // Best-effort: just parse integer; SFZ note names handled below
+                             .upToFirstOccurrenceOf (" ", false, false).trim();
                 loKey = juce::jlimit (0, 127, s.getIntValue());
             }
             auto hiRaw = line.indexOf ("hikey=");
             if (hiRaw >= 0)
             {
                 auto s = line.substring (hiRaw + 6)
-                             .upToFirstOccurrenceOf (" ", false, false)
-                             .trim();
+                             .upToFirstOccurrenceOf (" ", false, false).trim();
                 hiKey = juce::jlimit (0, 127, s.getIntValue());
             }
+            // key= shorthand
             auto kRaw = line.indexOf ("key=");
             if (kRaw >= 0 && line.indexOf ("lokey=") < 0)
             {
                 auto s = line.substring (kRaw + 4)
-                             .upToFirstOccurrenceOf (" ", false, false)
-                             .trim();
-                const int k = juce::jlimit (0, 127, s.getIntValue());
-                loKey = hiKey = k;
+                             .upToFirstOccurrenceOf (" ", false, false).trim();
+                loKey = hiKey = juce::jlimit (0, 127, s.getIntValue());
             }
-            (void) get;
 
-            // Extract sample name as zone label
+            // pitch_keycenter -> rootPitch
+            auto pkRaw = line.indexOf ("pitch_keycenter=");
+            if (pkRaw >= 0)
+            {
+                auto s = line.substring (pkRaw + 16)
+                             .upToFirstOccurrenceOf (" ", false, false).trim();
+                rootPitch = juce::jlimit (0, 127, s.getIntValue());
+            }
+
+            // volume (dB in SFZ)
+            float v = getFloat ("volume");
+            if (v > -999998.f) volDb = v;
+
+            // ampeg_release (seconds)
+            float rel = getFloat ("ampeg_release");
+            if (rel > -999998.f) releaseSec = juce::jlimit (0.0f, 60.0f, rel);
+
+            // sample name
             {
                 int smpPos = line.indexOf ("sample=");
                 if (smpPos >= 0)
                 {
                     auto s = line.substring (smpPos + 7)
-                                 .upToFirstOccurrenceOf (" ", false, false)
-                                 .trim();
+                                 .upToFirstOccurrenceOf (" ", false, false).trim();
                     sampleName = s.fromLastOccurrenceOf ("/",  false, false)
                                   .fromLastOccurrenceOf ("\\", false, false)
-                                  .upToLastOccurrenceOf (".",  false, false)
-                                  .trim();
+                                  .upToLastOccurrenceOf (".",  false, false).trim();
                     if (sampleName.isEmpty())
                         sampleName = "Zone " + juce::String (colIdx + 1);
                 }
@@ -766,19 +790,50 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
 
     if (igenData.isEmpty()) return zones;
 
-    // Each IGEN record is 4 bytes: sfGenOper (uint16) + genAmount (union 2 bytes)
-    struct IgenRecord { uint16_t oper; uint8_t lo, hi; };
+    // Each IGEN record is 4 bytes: sfGenOper (uint16) + genAmount (lo, hi bytes)
+    // SF2 generator opcodes used:
+    //   43 = keyRange          (lo=loKey, hi=hiKey)
+    //   58 = overridingRootKey (lo=rootMidi, hi=unused)
+    //   48 = initialAttenuation (lo|hi as int16 centibels; dB = -val/10.0)
+    //   38 = releaseVolEnv      (lo|hi as int16 timecents; s = 2^(val/1200))
+    //
+    // Strategy: accumulate gens per zone; flush when a new keyRange (43) appears.
+    // Each instrument zone in SF2 ends implicitly when the next one begins — the
+    // ibag pointers encode boundaries, but we approximate with keyRange as delimiter.
     const size_t numRecs = igenData.getSize() / 4;
     const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
 
-    int  colIdx = 0;
-    // Track seen ranges so each unique keyRange appears exactly once.
-    // SF2 IGEN has one entry per sample in a zone (velocity layers etc.)
-    // so the same lo/hi pair repeats many times — we want one zone per range.
-    // IMPORTANT: In the SF2 spec the only oper==0 record is the terminal sentinel
-    // for the entire igen array — NOT a per-zone delimiter.  We must emit zones
-    // as soon as we see each new keyRange (oper==43) record.
+    // Current zone accumulator
+    int   zLoKey     = -1;
+    int   zHiKey     = -1;
+    int   zRootPitch = -1;
+    float zVolDb     = -7.0f;
+    float zRelSec    = 0.664f;
+
     std::set<std::pair<int,int>> seen;
+    int colIdx = 0;
+
+    auto flushZone = [&]
+    {
+        if (zLoKey < 0 || zHiKey < zLoKey) return;
+        auto key = std::make_pair (zLoKey, zHiKey);
+        if (seen.find (key) == seen.end())
+        {
+            seen.insert (key);
+            KeysPanel::Keyzone z;
+            z.loKey      = zLoKey;
+            z.hiKey      = zHiKey;
+            z.rootPitch  = zRootPitch;
+            z.volDb      = zVolDb;
+            z.releaseSec = zRelSec;
+            z.colour     = zoneColour (colIdx);
+            z.name       = "Zone " + juce::String (colIdx + 1);
+            zones.push_back (z);
+            ++colIdx;
+        }
+        zLoKey = -1; zHiKey = -1; zRootPitch = -1;
+        zVolDb = -7.0f; zRelSec = 0.664f;
+    };
 
     for (size_t i = 0; i < numRecs; ++i)
     {
@@ -786,33 +841,36 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
         const uint8_t  lo   = data[i*4 + 2];
         const uint8_t  hi   = data[i*4 + 3];
 
-        if (oper == 43)  // keyRange — emit zone immediately if not yet seen
+        if (oper == 43)  // keyRange — start new zone
         {
-            if ((int)hi >= (int)lo)
-            {
-                auto key = std::make_pair ((int)lo, (int)hi);
-                if (seen.find (key) == seen.end())
-                {
-                    seen.insert (key);
-                    zones.push_back ({ (int)lo, (int)hi, 0, 127, -1, false, zoneColour (colIdx),
-                                       "Zone " + juce::String (colIdx + 1) });
-                    ++colIdx;
-                }
-            }
+            flushZone();
+            zLoKey = (int) lo;
+            zHiKey = (int) hi;
         }
-        // oper==0 is the terminal sentinel for the entire igen array — skip it.
+        else if (oper == 58 && zLoKey >= 0)  // overridingRootKey
+        {
+            zRootPitch = juce::jlimit (0, 127, (int) lo);
+        }
+        else if (oper == 48 && zLoKey >= 0)  // initialAttenuation (centibels)
+        {
+            const int16_t cb = (int16_t)((uint16_t)(lo | (hi << 8)));
+            zVolDb = -(float) cb / 10.0f;   // centibels → dB (attenuation → negative gain)
+        }
+        else if (oper == 38 && zLoKey >= 0)  // releaseVolEnv (timecents)
+        {
+            const int16_t tc = (int16_t)((uint16_t)(lo | (hi << 8)));
+            zRelSec = juce::jlimit (0.0f, 60.0f,
+                          (float) std::pow (2.0, (double) tc / 1200.0));
+        }
     }
+    flushZone();
 
-    // Sort by loKey for display
+    // Sort by loKey for display and re-assign colours
     std::sort (zones.begin(), zones.end(),
                [] (auto& a, auto& b) { return a.loKey < b.loKey; });
 
-    // Re-assign colours after sort
     for (size_t i = 0; i < zones.size(); ++i)
-    {
         zones[i].colour = zoneColour ((int) i);
-        zones[i].name   = "Zone " + juce::String ((int) i + 1);
-    }
 
     return zones;
 }

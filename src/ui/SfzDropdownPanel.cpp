@@ -5,6 +5,7 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 #include <set>
+#include <cmath>
 
 // ── Layout constants (header strip) ──────────────────────────────────────────
 static constexpr int kPickerW      = 160;   // narrowed to fit ADSR knobs in strip
@@ -955,17 +956,32 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
     std::vector<KeysPanel::Keyzone> zones;
     const auto lines = juce::StringArray::fromLines (f.loadFileAsString());
 
-    int  loKey = 0, hiKey = 127;
-    bool inRegion = false;
-    int  colIdx   = 0;
+    int   loKey      = 0;
+    int   hiKey      = 127;
+    int   rootPitch  = -1;
+    float volDb      = -7.0f;
+    float releaseSec = 0.664f;
+    bool  inRegion   = false;
+    int   colIdx     = 0;
+    juce::String sampleName;
 
     auto flush = [&]
     {
         if (inRegion && hiKey >= loKey)
         {
-            zones.push_back ({ loKey, hiKey, 0, 127, -1, false, zoneColourDP (colIdx++) });
-            loKey = 0; hiKey = 127;
+            KeysPanel::Keyzone z;
+            z.loKey      = loKey;
+            z.hiKey      = hiKey;
+            z.rootPitch  = rootPitch;
+            z.volDb      = volDb;
+            z.releaseSec = releaseSec;
+            z.colour     = zoneColourDP (colIdx++);
+            z.name       = sampleName;
+            zones.push_back (z);
         }
+        loKey = 0; hiKey = 127; rootPitch = -1;
+        volDb = -7.0f; releaseSec = 0.664f;
+        sampleName = {};
         inRegion = false;
     };
 
@@ -977,6 +993,17 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
 
         if (inRegion)
         {
+            auto getFloat = [&] (const juce::String& key) -> float
+            {
+                int pos = line.indexOf (key + "=");
+                if (pos < 0) return -999999.f;
+                return line.substring (pos + key.length() + 1)
+                           .trimStart()
+                           .upToFirstOccurrenceOf (" ",  false, false)
+                           .upToFirstOccurrenceOf ("\t", false, false)
+                           .getFloatValue();
+            };
+
             auto loRaw = line.indexOf ("lokey=");
             if (loRaw >= 0)
                 loKey = juce::jlimit (0, 127,
@@ -991,6 +1018,28 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
                 const int k = juce::jlimit (0, 127,
                     line.substring (kRaw + 4).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
                 loKey = hiKey = k;
+            }
+            auto pkRaw = line.indexOf ("pitch_keycenter=");
+            if (pkRaw >= 0)
+                rootPitch = juce::jlimit (0, 127,
+                    line.substring (pkRaw + 16).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
+
+            float v = getFloat ("volume");
+            if (v > -999998.f) volDb = v;
+
+            float rel = getFloat ("ampeg_release");
+            if (rel > -999998.f) releaseSec = juce::jlimit (0.0f, 60.0f, rel);
+
+            int smpPos = line.indexOf ("sample=");
+            if (smpPos >= 0)
+            {
+                auto s = line.substring (smpPos + 7)
+                             .upToFirstOccurrenceOf (" ", false, false).trim();
+                sampleName = s.fromLastOccurrenceOf ("/",  false, false)
+                              .fromLastOccurrenceOf ("\\", false, false)
+                              .upToLastOccurrenceOf (".",  false, false).trim();
+                if (sampleName.isEmpty())
+                    sampleName = "Zone " + juce::String (colIdx + 1);
             }
         }
     }
@@ -1041,27 +1090,43 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
 
     const size_t numRecs = igenData.getSize() / 4;
     const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
-    int  colIdx = 0;
+
+    int   zLoKey = -1, zHiKey = -1, zRootPitch = -1;
+    float zVolDb = -7.0f, zRelSec = 0.664f;
+    int   colIdx = 0;
     std::set<std::pair<int,int>> seen;
+
+    auto flushZone = [&]
+    {
+        if (zLoKey < 0 || zHiKey < zLoKey) return;
+        auto key = std::make_pair (zLoKey, zHiKey);
+        if (seen.find (key) == seen.end())
+        {
+            seen.insert (key);
+            KeysPanel::Keyzone z;
+            z.loKey      = zLoKey; z.hiKey      = zHiKey;
+            z.rootPitch  = zRootPitch;
+            z.volDb      = zVolDb;  z.releaseSec = zRelSec;
+            z.colour     = zoneColourDP (colIdx++);
+            z.name       = "Zone " + juce::String (colIdx);
+            zones.push_back (z);
+        }
+        zLoKey = -1; zHiKey = -1; zRootPitch = -1;
+        zVolDb = -7.0f; zRelSec = 0.664f;
+    };
 
     for (size_t i = 0; i < numRecs; ++i)
     {
         const uint16_t oper = (uint16_t)(data[i*4] | (data[i*4+1] << 8));
-        if (oper == 43)
-        {
-            const int lo = data[i*4+2];
-            const int hi = data[i*4+3];
-            if (hi >= lo)
-            {
-                auto key = std::make_pair (lo, hi);
-                if (seen.find (key) == seen.end())
-                {
-                    seen.insert (key);
-                    zones.push_back ({ lo, hi, 0, 127, -1, false, zoneColourDP (colIdx++) });
-                }
-            }
-        }
+        const uint8_t  lo   = data[i*4+2];
+        const uint8_t  hi   = data[i*4+3];
+
+        if (oper == 43) { flushZone(); zLoKey = (int)lo; zHiKey = (int)hi; }
+        else if (oper == 58 && zLoKey >= 0) zRootPitch = juce::jlimit (0, 127, (int)lo);
+        else if (oper == 48 && zLoKey >= 0) { const int16_t cb = (int16_t)((uint16_t)(lo|(hi<<8))); zVolDb = -(float)cb/10.0f; }
+        else if (oper == 38 && zLoKey >= 0) { const int16_t tc = (int16_t)((uint16_t)(lo|(hi<<8))); zRelSec = juce::jlimit (0.0f, 60.0f, (float)std::pow(2.0,(double)tc/1200.0)); }
     }
+    flushZone();
 
     std::sort (zones.begin(), zones.end(), [] (auto& a, auto& b) { return a.loKey < b.loKey; });
     for (size_t i = 0; i < zones.size(); ++i)

@@ -22,14 +22,16 @@ public:
     // ── Keyzone overlay ───────────────────────────────────────────────────────
     struct Keyzone
     {
-        int loKey    { 0 };
-        int hiKey    { 127 };
-        int loVel    { 0 };
-        int hiVel    { 127 };
-        int rootPitch{ -1 };
-        bool isLooped{ false };
+        int loKey      { 0 };
+        int hiKey      { 127 };
+        int loVel      { 0 };
+        int hiVel      { 127 };
+        int rootPitch  { -1 };
+        bool isLooped  { false };
         juce::Colour colour;
         juce::String name;
+        float volDb      { -7.0f };   // per-zone volume in dB (SFZ: volume=, SF2: gen48 centibels)
+        float releaseSec { 0.664f };  // ampeg_release in seconds (SFZ: ampeg_release=, SF2: gen38 timecents)
     };
 
     void setKeyzones      (std::vector<Keyzone> zones);
