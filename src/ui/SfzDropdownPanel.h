@@ -73,6 +73,7 @@ private:
     void rebuildList();
 
     juce::File currentDir;
+    bool inDrivesView { false };   // ── FIX: true when showing all drive roots
 
     // Rows: sorted directories first, then matching files
     juce::Array<juce::File> rows;
