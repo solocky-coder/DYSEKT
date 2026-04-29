@@ -17,16 +17,12 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
     const auto accent = getTheme().accent;
     const auto fg     = getTheme().foreground;
 
-    // Derive a local scale factor from the actual button rect size vs the
-    // 32px base size all offsets below were originally designed for.
-    const float sf = b.getHeight() / 32.0f;
-
     if (active)
     {
         g.setColour (accent.withAlpha (0.22f));
-        g.fillRoundedRectangle (b.reduced (2.0f * sf), 4.0f * sf);
+        g.fillRoundedRectangle (b.reduced (2.0f), 4.0f);
         g.setColour (accent.withAlpha (0.70f));
-        g.drawRoundedRectangle (b.reduced (1.5f * sf), 4.0f * sf, 1.2f);
+        g.drawRoundedRectangle (b.reduced (1.5f), 4.0f, 1.2f);
     }
 
     float cx  = b.getCentreX();
@@ -36,8 +32,8 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
 
     if (type == 0) // Folder / Browser
     {
-        g.fillRoundedRectangle (cx - 8*sf, cy2 - 3*sf, 7*sf, 3*sf, 1.0f * sf);
-        g.fillRoundedRectangle (cx - 9*sf, cy2 - 2*sf, 18*sf, 11*sf, 1.5f * sf);
+        g.fillRoundedRectangle (cx - 8, cy2 - 3, 7, 3, 1.0f);
+        g.fillRoundedRectangle (cx - 9, cy2 - 2, 18, 11, 1.5f);
     }
     else if (type == 1) // Waveform
     {
@@ -45,20 +41,20 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         juce::Path p;
         for (int i = 0; i < 9; i++)
         {
-            float px = cx + pts[i*2] * sf, py = cy2 + pts[i*2+1] * sf;
+            float px = cx + pts[i*2], py = cy2 + pts[i*2+1];
             i == 0 ? p.startNewSubPath (px, py) : p.lineTo (px, py);
         }
-        g.strokePath (p, juce::PathStrokeType (1.5f * sf));
+        g.strokePath (p, juce::PathStrokeType (1.5f));
     }
     else if (type == 2) // MIDI Follow — 5-pin DIN connector
     {
         // Outer D-shell body (semicircle top, flat bottom)
-        const float bW = 16.0f * sf, bH = 10.0f * sf;
-        const float bX = cx - bW * 0.5f, bY = cy2 - 4.0f * sf;
+        const float bW = 16.0f, bH = 10.0f;
+        const float bX = cx - bW * 0.5f, bY = cy2 - 4.0f;
 
         // Body fill + stroke
         juce::Path body;
-        body.addRoundedRectangle (bX, bY, bW, bH, 2.5f * sf);
+        body.addRoundedRectangle (bX, bY, bW, bH, 2.5f);
         g.setColour (col.withAlpha (active ? 0.18f : 0.09f));
         g.fillPath (body);
         g.setColour (col.withAlpha (active ? 0.90f : 0.55f));
@@ -67,15 +63,15 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         // 5 pins arranged in a D-sub arc inside the body
         // Standard MIDI DIN layout: 3 on top row, 2 on bottom row
         struct Pin { float x, y; };
-        const float pr = 1.5f * sf;  // pin radius
+        const float pr = 1.5f;  // pin radius
         const float pc = active ? 0.95f : 0.60f;
 
         Pin pins[5] = {
-            { cx - 5.0f*sf, bY + 3.0f*sf },   // pin 1 (top-left)
-            { cx,           bY + 2.2f*sf },   // pin 2 (top-centre)
-            { cx + 5.0f*sf, bY + 3.0f*sf },   // pin 3 (top-right)
-            { cx - 2.8f*sf, bY + 6.5f*sf },   // pin 4 (bottom-left)
-            { cx + 2.8f*sf, bY + 6.5f*sf },   // pin 5 (bottom-right)
+            { cx - 5.0f, bY + 3.0f },   // pin 1 (top-left)
+            { cx,        bY + 2.2f },   // pin 2 (top-centre)
+            { cx + 5.0f, bY + 3.0f },   // pin 3 (top-right)
+            { cx - 2.8f, bY + 6.5f },   // pin 4 (bottom-left)
+            { cx + 2.8f, bY + 6.5f },   // pin 5 (bottom-right)
         };
 
         for (const auto& p : pins)
@@ -85,57 +81,57 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
             g.drawEllipse (p.x - pr, p.y - pr, pr * 2.0f, pr * 2.0f, 1.0f);
             // Pin centre dot
             g.setColour (col.withAlpha (active ? 0.70f : 0.30f));
-            g.fillEllipse (p.x - 0.7f*sf, p.y - 0.7f*sf, 1.4f*sf, 1.4f*sf);
+            g.fillEllipse (p.x - 0.7f, p.y - 0.7f, 1.4f, 1.4f);
         }
 
         // Small cable stub at bottom
         g.setColour (col.withAlpha (active ? 0.75f : 0.40f));
-        g.drawLine (cx, bY + bH, cx, bY + bH + 3.5f*sf, 1.5f);
-        g.fillEllipse (cx - 2.0f*sf, bY + bH + 3.0f*sf, 4.0f*sf, 3.0f*sf);
+        g.drawLine (cx, bY + bH, cx, bY + bH + 3.5f, 1.5f);
+        g.fillEllipse (cx - 2.0f, bY + bH + 3.0f, 4.0f, 3.0f);
     }
     else if (type == 4) // SFZ / SF2 instrument — mini piano keys
     {
-        const float keyW   = 5.0f * sf;
-        const float keyH   = 11.0f * sf;
-        const float startX = cx - keyW * 1.5f - 3.0f * sf;
-        const float keyY   = cy2 - keyH * 0.5f;
+        const float keyW  = 5.0f;
+        const float keyH  = 11.0f;
+        const float startX = cx - keyW * 1.5f - 3.0f;
+        const float keyY  = cy2 - keyH * 0.5f;
 
         // Three white keys
         for (int k = 0; k < 3; ++k)
         {
-            float kx = startX + k * (keyW + 1.0f * sf);
+            float kx = startX + k * (keyW + 1.0f);
             g.setColour (active ? accent.withAlpha (0.20f) : fg.withAlpha (0.08f));
-            g.fillRoundedRectangle (kx, keyY, keyW, keyH, 1.0f * sf);
+            g.fillRoundedRectangle (kx, keyY, keyW, keyH, 1.0f);
             g.setColour (col);
-            g.drawRoundedRectangle (kx, keyY, keyW, keyH, 1.0f * sf, 1.0f);
+            g.drawRoundedRectangle (kx, keyY, keyW, keyH, 1.0f, 1.0f);
         }
 
         // Two black keys between white keys
-        const float bkW = 3.5f * sf, bkH = 6.5f * sf;
+        const float bkW = 3.5f, bkH = 6.5f;
         g.setColour (col.withAlpha (active ? 0.95f : 0.70f));
-        g.fillRoundedRectangle (startX + keyW - bkW * 0.5f,                  keyY, bkW, bkH, 0.8f * sf);
-        g.fillRoundedRectangle (startX + keyW * 2.0f + 1.0f*sf - bkW * 0.5f, keyY, bkW, bkH, 0.8f * sf);
+        g.fillRoundedRectangle (startX + keyW - bkW * 0.5f,                 keyY, bkW, bkH, 0.8f);
+        g.fillRoundedRectangle (startX + keyW * 2.0f + 1.0f - bkW * 0.5f,  keyY, bkW, bkH, 0.8f);
     }
     else // type == 3: Mixer — three vertical faders at different positions
     {
         // Three fader grooves
-        const float grooveH = 12.0f * sf;
-        const float grooveW = 2.0f  * sf;
-        float gx[] = { cx - 7.0f*sf, cx, cx + 7.0f*sf };
+        const float grooveH = 12.0f;
+        const float grooveW = 2.0f;
+        float gx[] = { cx - 7.0f, cx, cx + 7.0f };
 
         for (float x : gx)
         {
             g.fillRoundedRectangle (x - grooveW / 2, cy2 - grooveH / 2,
-                                    grooveW, grooveH, 1.0f * sf);
+                                    grooveW, grooveH, 1.0f);
         }
 
         // Three thumbs at different heights (classic mixer look)
-        float thumbY[] = { cy2 - 3.0f*sf, cy2 + 1.0f*sf, cy2 - 6.0f*sf };
-        const float thumbW = 7.0f * sf, thumbH = 4.0f * sf;
+        float thumbY[] = { cy2 - 3.0f, cy2 + 1.0f, cy2 - 6.0f };
+        const float thumbW = 7.0f, thumbH = 4.0f;
 
         g.setColour (active ? accent.brighter (0.3f) : fg.withAlpha (0.90f));
         for (int i = 0; i < 3; ++i)
-            g.fillRoundedRectangle (gx[i] - thumbW / 2, thumbY[i], thumbW, thumbH, 1.5f * sf);
+            g.fillRoundedRectangle (gx[i] - thumbW / 2, thumbY[i], thumbW, thumbH, 1.5f);
     }
 }
 
@@ -148,11 +144,9 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
     const int   w      = getWidth();
     const int   h      = getHeight();
     const int   half   = h / 2;
-    // Scale factor relative to the design-time height (kCtrlFrameH ≈ 249px).
-    // All hardcoded pixel values below are multiplied by sf so the component
-    // scales correctly when the host resizes it via setTransform().
-    static constexpr float kBaseH = 249.0f;
-    const float sf = (float) h / kBaseH;
+    const float sf     = (float) w / 200.0f;   // scale relative to kCtrlFrameW=200
+    auto si = [sf](float v) -> int { return juce::roundToInt (v * sf); };
+    auto sf1 = [sf](float v) -> float { return v * sf; };
 
     // ── Background + border ───────────────────────────────────────────────────
     {
@@ -173,9 +167,9 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
     // ── EDIT | PAD mode tab strip (centred on divider) ────────────────────────
     {
-        const int tabH    = juce::roundToInt (15 * sf);
-        const int tabW    = juce::roundToInt (42 * sf);
-        const int tabGap  = juce::roundToInt ( 4 * sf);
+        const int tabH    = si (15);
+        const int tabW    = si (42);
+        const int tabGap  = si (4);
         const int totalTW = tabW * 2 + tabGap;
         const int tabX    = (w - totalTW) / 2;
         const int tabY    = half - tabH / 2;
@@ -212,7 +206,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
                 g.drawRoundedRectangle (rf.reduced (0.5f), 3.0f, 0.7f);
                 g.setColour (fg.withAlpha (0.50f));
             }
-            g.setFont (DysektLookAndFeel::makeFont (7.5f * sf, true));
+            g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
             g.drawText (label, r, juce::Justification::centred);
         };
 
@@ -222,7 +216,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
     // ── Top row: four icons evenly spread across full width ──────────────────
     {
-        const int btnSz  = juce::roundToInt (32 * sf);
+        const int btnSz  = si (32);
         const int btnY   = (half - btnSz) / 2;
         const int gap    = (w - 4 * btnSz) / 5;
 
@@ -244,12 +238,11 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             const juce::Rectangle<int>* areas[] = { &filIconArea, &waIconArea,
                                                      &midiFollowIconArea, &bodeIconArea };
             const auto& area = *areas[hoveredIcon];
-            const int labelH  = juce::roundToInt (9 * sf);
-            const int labelY  = area.getY() - labelH - juce::roundToInt (2 * sf);
-            g.setFont (DysektLookAndFeel::makeFont (7.0f * sf));
+            const int labelH  = si (9);
+            const int labelY  = area.getY() - labelH - 2;
+            g.setFont (DysektLookAndFeel::makeFont (sf1 (7.0f)));
             g.setColour (getTheme().accent.withAlpha (0.80f));
-            g.drawText (kLabels[hoveredIcon], area.getX() - juce::roundToInt (20 * sf), labelY,
-                        area.getWidth() + juce::roundToInt (40 * sf), labelH,
+            g.drawText (kLabels[hoveredIcon], area.getX() - si(20), labelY, area.getWidth() + si(40), labelH,
                         juce::Justification::centred);
         }
     }
@@ -269,11 +262,11 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         juce::String pitchStr = (gPitch >= 0.0f ? "+" : "") + juce::String ((int) std::round (gPitch));
         juce::String volStr   = (gVol >= 0.0f ? "+" : "") + juce::String (gVol, 1);
 
-        const int kr  = juce::roundToInt (12 * sf);
+        const int kr  = si (12);
         const float kStart = juce::MathConstants<float>::pi * 1.25f;
         const float kEnd   = juce::MathConstants<float>::pi * 2.75f;
 
-        int kcy  = half + (h - half) / 2 - juce::roundToInt (5 * sf);
+        int kcy  = half + (h - half) / 2 - si (5);
         int k1cx = w / 6;
         int k2cx = w / 2;
         int k3cx = w * 5 / 6;
@@ -292,28 +285,26 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             juce::Path track;
             track.addCentredArc ((float)k.cx,(float)kcy,(float)kr,(float)kr,0.f,kStart,kEnd,true);
             g.setColour (getTheme().darkBar.brighter (0.3f));
-            g.strokePath (track, juce::PathStrokeType (1.5f));
+            g.strokePath (track, juce::PathStrokeType (sf1 (1.5f)));
 
             juce::Path arc;
             arc.addCentredArc ((float)k.cx,(float)kcy,(float)kr,(float)kr,0.f,kStart,angle,true);
             g.setColour (accent);
-            g.strokePath (arc, juce::PathStrokeType (2.2f));
+            g.strokePath (arc, juce::PathStrokeType (sf1 (2.2f)));
 
             float lr = (float) kr - 2.0f;
             g.setColour (accent.brighter (0.3f));
             g.drawLine ((float)k.cx, (float)kcy,
                         (float)k.cx + lr * std::cos (angle),
-                        (float)kcy  + lr * std::sin (angle), 1.3f);
+                        (float)kcy  + lr * std::sin (angle), sf1 (1.3f));
 
-            g.setFont (DysektLookAndFeel::makeFont (7.5f * sf, true));
+            g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
             g.setColour (fg.withAlpha (0.45f));
-            g.drawText (k.lbl, k.cx - juce::roundToInt (16 * sf), kcy + kr + juce::roundToInt (2 * sf),
-                        juce::roundToInt (32 * sf), juce::roundToInt (9 * sf), juce::Justification::centred);
+            g.drawText (k.lbl, k.cx - si(16), kcy + kr + si(2), si(32), si(9), juce::Justification::centred);
 
-            g.setFont (DysektLookAndFeel::makeFont (8.0f * sf));
+            g.setFont (DysektLookAndFeel::makeFont (sf1 (8.0f)));
             g.setColour (accent.withAlpha (0.80f));
-            g.drawText (k.val, k.cx - juce::roundToInt (18 * sf), kcy + kr + juce::roundToInt (11 * sf),
-                        juce::roundToInt (36 * sf), juce::roundToInt (9 * sf), juce::Justification::centred);
+            g.drawText (k.val, k.cx - si(18), kcy + kr + si(11), si(36), si(9), juce::Justification::centred);
         }
 
         rootKnobArea  = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
@@ -468,9 +459,12 @@ void DualLcdControlFrame::mouseDoubleClick (const juce::MouseEvent& e)
     const auto& ui = processor.getUiSliceSnapshot();
     textEditor = std::make_unique<juce::TextEditor>();
     addAndMakeVisible (*textEditor);
-    textEditor->setBounds (rootKnobArea.getX(), rootKnobArea.getBottom() - 16,
-                           rootKnobArea.getWidth(), 16);
-    textEditor->setFont (DysektLookAndFeel::makeFont (12.0f));
+    {
+        const int edH = juce::roundToInt (16.0f * (float) getWidth() / 200.0f);
+        textEditor->setBounds (rootKnobArea.getX(), rootKnobArea.getBottom() - edH,
+                               rootKnobArea.getWidth(), edH);
+        textEditor->setFont (DysektLookAndFeel::makeFont (12.0f * (float) getWidth() / 200.0f));
+    }
     textEditor->setColour (juce::TextEditor::backgroundColourId,
                            getTheme().header.brighter (0.2f));
     textEditor->setColour (juce::TextEditor::textColourId,    juce::Colours::white);
