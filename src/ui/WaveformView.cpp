@@ -124,7 +124,7 @@ int WaveformView::pixelToSample (int px) const
 {
  if (paintViewStateActive && cachedPaintViewState.valid)
  return cachedPaintViewState.visibleStart
- \+ (int) ((float) px / (float) cachedPaintViewState.width * cachedPaintViewState.visibleLen);
+ + (int) ((float) px / (float) cachedPaintViewState.width * cachedPaintViewState.visibleLen);
  const auto state = buildViewState (processor.sampleData.getSnapshot());
  if (! state.valid) return 0;
  return state.visibleStart + (int) ((float) px / (float) state.width * state.visibleLen);
