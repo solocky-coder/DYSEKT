@@ -157,7 +157,9 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
  setWantsKeyboardFocus (true);
  setResizable (true, false);
- setResizeLimits (kBaseW, 650, 3840, 2160);
+ setResizeLimits (kBaseW / 2, kTotalH / 2, 3840, 2160);
+ if (auto* c = getConstrainer())
+     c->setFixedAspectRatio ((double) kBaseW / (double) kTotalH);
  setSize (kBaseW, kTotalH);
  lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
  startTimerHz (30);
