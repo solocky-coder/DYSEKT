@@ -623,6 +623,8 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
     int   hiKey      = 127;
     int   rootPitch  = -1;
     float volDb      = -7.0f;
+    float panVal     = 0.0f;
+    float tuneVal    = 0.0f;
     float releaseSec = 0.664f;
     bool  inRegion   = false;
     int   colIdx     = 0;
@@ -637,13 +639,16 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
             z.hiKey      = hiKey;
             z.rootPitch  = rootPitch;
             z.volDb      = volDb;
+            z.pan        = panVal;
+            z.tuneCents  = tuneVal;
             z.releaseSec = releaseSec;
             z.colour     = zoneColour (colIdx++);
             z.name       = sampleName;
+            z.isSfz      = true;   // SFZ zones are editable
             zones.push_back (z);
         }
         loKey = 0; hiKey = 127; rootPitch = -1;
-        volDb = -7.0f; releaseSec = 0.664f;
+        volDb = -7.0f; panVal = 0.0f; tuneVal = 0.0f; releaseSec = 0.664f;
         sampleName = {};
         inRegion = false;
     };
@@ -704,6 +709,14 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
             // volume (dB in SFZ)
             float v = getFloat ("volume");
             if (v > -999998.f) volDb = v;
+
+            // pan (-100..+100 in SFZ percent, stored as -1..+1)
+            float p = getFloat ("pan");
+            if (p > -999998.f) panVal = juce::jlimit (-1.0f, 1.0f, p / 100.0f);
+
+            // tune (cents, -100..+100 in SFZ)
+            float t = getFloat ("tune");
+            if (t > -999998.f) tuneVal = juce::jlimit (-100.0f, 100.0f, t);
 
             // ampeg_release (seconds)
             float rel = getFloat ("ampeg_release");
@@ -808,6 +821,8 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
     int   zHiKey     = -1;
     int   zRootPitch = -1;
     float zVolDb     = -7.0f;
+    float zPan       = 0.0f;
+    float zTune      = 0.0f;
     float zRelSec    = 0.664f;
 
     std::set<std::pair<int,int>> seen;
@@ -825,14 +840,17 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
             z.hiKey      = zHiKey;
             z.rootPitch  = zRootPitch;
             z.volDb      = zVolDb;
+            z.pan        = zPan;
+            z.tuneCents  = zTune;
             z.releaseSec = zRelSec;
             z.colour     = zoneColour (colIdx);
             z.name       = "Zone " + juce::String (colIdx + 1);
+            z.isSfz      = false;   // SF2 zones are read-only
             zones.push_back (z);
             ++colIdx;
         }
         zLoKey = -1; zHiKey = -1; zRootPitch = -1;
-        zVolDb = -7.0f; zRelSec = 0.664f;
+        zVolDb = -7.0f; zPan = 0.0f; zTune = 0.0f; zRelSec = 0.664f;
     };
 
     for (size_t i = 0; i < numRecs; ++i)
@@ -855,6 +873,16 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
         {
             const int16_t cb = (int16_t)((uint16_t)(lo | (hi << 8)));
             zVolDb = -(float) cb / 10.0f;   // centibels → dB (attenuation → negative gain)
+        }
+        else if (oper == 17 && zLoKey >= 0)  // pan (0.1% units: -500=L, 0=C, +500=R)
+        {
+            const int16_t raw = (int16_t)((uint16_t)(lo | (hi << 8)));
+            zPan = juce::jlimit (-1.0f, 1.0f, (float) raw / 500.0f);
+        }
+        else if (oper == 52 && zLoKey >= 0)  // fineTune (cents, -99..+99)
+        {
+            const int16_t raw = (int16_t)((uint16_t)(lo | (hi << 8)));
+            zTune = juce::jlimit (-100.0f, 100.0f, (float) raw);
         }
         else if (oper == 38 && zLoKey >= 0)  // releaseVolEnv (timecents)
         {
@@ -888,4 +916,12 @@ void SfzModulePanel::reloadZones (const juce::File& f)
     keysPanel.setKeyzones (zones);
     if (! zones.empty())
         keysPanel.autoScrollToZones();
+
+    // Wire zone-edit callback → SfzPlayer real-time OSC (SFZ only; SF2 is no-op)
+    keysPanel.onZoneChanged = [this] (int zoneIndex, float volDb, float pan, float tuneCents)
+    {
+        processor.sfzPlayer.setZoneVolume (zoneIndex, volDb);
+        processor.sfzPlayer.setZonePan    (zoneIndex, pan);
+        processor.sfzPlayer.setZoneTune   (zoneIndex, tuneCents);
+    };
 }

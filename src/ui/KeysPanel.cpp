@@ -84,19 +84,23 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     const int   h     = getHeight();
 
     // ── Column geometry (right-anchored, NAME fills remainder) ────────────────
-    //   [STRIPE] [NAME…fill] | [LOKEY] [HIKEY] [ROOT] [VOL] [RELEASE]
+    //   [STRIPE] [NAME…fill] | [LOKEY] [HIKEY] [ROOT] [PITCH] [PAN] [VOL] [RELEASE]
     constexpr int kStripeW  = 4;
     constexpr int kRelW     = 54;   // release(s)
     constexpr int kVolW     = 40;   // vol(dB)
+    constexpr int kPanW     = 40;   // pan
+    constexpr int kPitchW   = 40;   // pitch (cents)
     constexpr int kRootW    = 36;   // root note
     constexpr int kKeyW     = 44;   // loKey or hiKey (each)
     constexpr int kColGap   = 2;
 
-    const int kRelX     = w - kRelW;
-    const int kVolX     = kRelX  - kColGap - kVolW;
-    const int kRootX    = kVolX  - kColGap - kRootW;
-    const int kHiKeyX   = kRootX - kColGap - kKeyW;
-    const int kLoKeyX   = kHiKeyX - kColGap - kKeyW;
+    const int kRelX   = w - kRelW;
+    const int kVolX   = kRelX   - kColGap - kVolW;
+    const int kPanX   = kVolX   - kColGap - kPanW;
+    const int kPitchX = kPanX   - kColGap - kPitchW;
+    const int kRootX  = kPitchX - kColGap - kRootW;
+    const int kHiKeyX = kRootX  - kColGap - kKeyW;
+    const int kLoKeyX = kHiKeyX - kColGap - kKeyW;
     const int kNameColW = kLoKeyX - kColGap;
     const int kNameX    = kStripeW + 2;
     const int kNameW    = kNameColW - kStripeW - 4;
@@ -134,6 +138,8 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         hdr ("loKey",       kLoKeyX,  kKeyW);
         hdr ("hiKey",       kHiKeyX,  kKeyW);
         hdr ("root",        kRootX,   kRootW);
+        hdr ("pitch",       kPitchX,  kPitchW);
+        hdr ("pan",         kPanX,    kPanW);
         hdr ("vol (dB)",    kVolX,    kVolW);
         hdr ("release (s)", kRelX,    kRelW);
 
@@ -228,13 +234,92 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
                         juce::Justification::centred, false);
         }
 
-        // Vol (dB)
+        // Pitch (tune cents) — draggable for SFZ, read-only for SF2
         {
-            const juce::String volTxt = juce::String (juce::roundToInt (r.zone.volDb));
+            const bool editable = r.zone.isSfz;
+            const bool dragging = (dragCol == DragCol::Tune && dragRow == i);
+            if (dragging)
+            {
+                g.setColour (theme.accent.withAlpha (0.20f));
+                g.fillRect (kPitchX, ry, kPitchW, kRowH);
+            }
+            const float c = r.zone.tuneCents;
+            const juce::String pitchTxt = (c == 0.0f) ? juce::String ("0c")
+                                        : ((c > 0) ? "+" : "") + juce::String (juce::roundToInt (c)) + "c";
             g.setFont (fSmall);
-            g.setColour (theme.foreground.withAlpha (0.72f));
+            g.setColour (editable ? theme.foreground.withAlpha (0.72f)
+                                  : theme.foreground.withAlpha (0.28f));
+            g.drawText (pitchTxt, kPitchX, ry, kPitchW, kRowH,
+                        juce::Justification::centred, false);
+            if (! editable)
+            {
+                g.setFont (DysektLookAndFeel::makeFont (7.0f));
+                g.setColour (theme.foreground.withAlpha (0.18f));
+                g.drawText (u8"\U0001F512", kPitchX, ry, kPitchW, kRowH,
+                            juce::Justification::centredRight, false);
+            }
+        }
+
+        // Pan — draggable for SFZ, read-only (dimmed) for SF2
+        {
+            const bool editable = r.zone.isSfz;
+            const bool dragging = (dragCol == DragCol::Pan && dragRow == i);
+            if (dragging)
+            {
+                g.setColour (theme.accent.withAlpha (0.20f));
+                g.fillRect (kPanX, ry, kPanW, kRowH);
+            }
+            // Pan bar: thin horizontal indicator centred in cell
+            const float panNorm = (r.zone.pan + 1.0f) * 0.5f;  // 0..1
+            const int barMidX   = kPanX + kPanW / 2;
+            const int barY      = ry + kRowH / 2 - 1;
+            const int barEndX   = kPanX + juce::roundToInt (panNorm * kPanW);
+            g.setColour (editable ? theme.accent.withAlpha (0.35f)
+                                  : theme.foreground.withAlpha (0.12f));
+            g.fillRect (juce::jmin (barMidX, barEndX), barY,
+                        std::abs (barEndX - barMidX) + 1, 2);
+            // Numeric label
+            juce::String panTxt;
+            if      (r.zone.pan < -0.005f) panTxt = "L" + juce::String (juce::roundToInt (-r.zone.pan * 100));
+            else if (r.zone.pan >  0.005f) panTxt = "R" + juce::String (juce::roundToInt ( r.zone.pan * 100));
+            else                            panTxt = "C";
+            g.setFont (fSmall);
+            g.setColour (editable ? theme.foreground.withAlpha (0.72f)
+                                  : theme.foreground.withAlpha (0.28f));
+            g.drawText (panTxt, kPanX, ry, kPanW, kRowH,
+                        juce::Justification::centred, false);
+            // Lock icon for SF2
+            if (! editable)
+            {
+                g.setFont (DysektLookAndFeel::makeFont (7.0f));
+                g.setColour (theme.foreground.withAlpha (0.18f));
+                g.drawText (u8"\U0001F512", kPanX, ry, kPanW, kRowH,
+                            juce::Justification::centredRight, false);
+            }
+        }
+
+        // Vol (dB) — draggable for SFZ, read-only (dimmed) for SF2
+        {
+            const bool editable = r.zone.isSfz;
+            const bool dragging = (dragCol == DragCol::Vol && dragRow == i);
+            if (dragging)
+            {
+                g.setColour (theme.accent.withAlpha (0.20f));
+                g.fillRect (kVolX, ry, kVolW, kRowH);
+            }
+            const juce::String volTxt = juce::String (juce::roundToInt (r.zone.volDb)) + "dB";
+            g.setFont (fSmall);
+            g.setColour (editable ? theme.foreground.withAlpha (0.72f)
+                                  : theme.foreground.withAlpha (0.28f));
             g.drawText (volTxt, kVolX, ry, kVolW, kRowH,
                         juce::Justification::centred, false);
+            if (! editable)
+            {
+                g.setFont (DysektLookAndFeel::makeFont (7.0f));
+                g.setColour (theme.foreground.withAlpha (0.18f));
+                g.drawText (u8"\U0001F512", kVolX, ry, kVolW, kRowH,
+                            juce::Justification::centredRight, false);
+            }
         }
 
         // Release (s) — 3 decimal places
@@ -254,7 +339,7 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     // ── Column separator lines ────────────────────────────────────────────────
     g.setColour (theme.separator.withAlpha (0.18f));
     const int sepLines[] = { kNameColW - 1, kLoKeyX + kKeyW, kHiKeyX + kKeyW,
-                             kRootX + kRootW, kVolX + kVolW };
+                             kRootX + kRootW, kPitchX + kPitchW, kPanX + kPanW, kVolX + kVolW };
     for (int cx : sepLines)
         g.drawVerticalLine (cx, (float) kHeaderH, (float) h);
 }
@@ -297,26 +382,103 @@ void KeysPanel::highlightNoteInMatrix (int note)
 
 
 
+// ── ZoneMatrixContent column hit-test ─────────────────────────────────────────
+// Returns DragCol::Vol, DragCol::Pan, or DragCol::None based on x position.
+// We replicate the column geometry locally since paint() uses constexpr locals.
+
+int KeysPanel::ZoneMatrixContent::colHitTest (int x) const
+{
+    const int w = getWidth();
+    constexpr int kRelW   = 54;
+    constexpr int kVolW   = 40;
+    constexpr int kPanW   = 40;
+    constexpr int kPitchW = 40;
+    constexpr int kColGap = 2;
+
+    const int kRelX   = w - kRelW;
+    const int kVolX   = kRelX  - kColGap - kVolW;
+    const int kPanX   = kVolX  - kColGap - kPanW;
+    const int kPitchX = kPanX  - kColGap - kPitchW;
+
+    if (x >= kVolX   && x < kVolX   + kVolW)   return 1;  // Vol
+    if (x >= kPanX   && x < kPanX   + kPanW)   return 2;  // Pan
+    if (x >= kPitchX && x < kPitchX + kPitchW) return 3;  // Pitch
+    return 0;
+}
+
 void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
 {
     if (e.y < kHeaderH) return;
 
     const int clickedRow = (e.y - kHeaderH) / kRowH;
-    if (clickedRow >= 0 && clickedRow < (int) rows.size())
+    if (clickedRow < 0 || clickedRow >= (int) rows.size()) return;
+
+    const int col = colHitTest (e.x);
+    const bool editable = rows[(size_t) clickedRow].zone.isSfz;
+
+    if (col > 0 && editable)
     {
-        selectedRow = clickedRow;
+        // Start a vol, pan, or pitch drag
+        dragRow    = clickedRow;
+        dragCol    = (col == 1) ? DragCol::Vol
+                   : (col == 2) ? DragCol::Pan
+                                : DragCol::Tune;
+        dragStartY   = (float) e.y;
+        dragStartVal = (dragCol == DragCol::Vol)  ? rows[(size_t) dragRow].zone.volDb
+                     : (dragCol == DragCol::Pan)  ? rows[(size_t) dragRow].zone.pan
+                                                  : rows[(size_t) dragRow].zone.tuneCents;
+        selectedRow  = clickedRow;
         repaint();
-
-        // Audition: send note-on then immediately note-off after a short delay.
-        // We do NOT set owner.lastActiveNote here — that field is only for
-        // physical piano-key presses so that mouseUp can release correctly.
-        const int note = rows[(size_t) clickedRow].zone.loKey;
-        owner.processor.sfzUiNoteOnRequest.store (note, std::memory_order_relaxed);
-
-        // Schedule an automatic release so the note never sticks.
-        // Use a simple one-shot via the owner's timer mechanism:
-        owner.scheduleNoteOff (note);
+        return;
     }
+
+    // Non-vol/pan click — audition the zone as before
+    dragCol = DragCol::None;
+    dragRow = -1;
+    selectedRow = clickedRow;
+    repaint();
+
+    const int note = rows[(size_t) clickedRow].zone.loKey;
+    owner.processor.sfzUiNoteOnRequest.store (note, std::memory_order_relaxed);
+    owner.scheduleNoteOff (note);
+}
+
+void KeysPanel::ZoneMatrixContent::mouseDrag (const juce::MouseEvent& e)
+{
+    if (dragCol == DragCol::None || dragRow < 0) return;
+    if (dragRow >= (int) rows.size()) return;
+
+    auto& zone = rows[(size_t) dragRow].zone;
+    const float delta = (dragStartY - (float) e.y);  // drag up = increase
+
+    if (dragCol == DragCol::Vol)
+    {
+        // 1 pixel = 0.5 dB, range -60..+6
+        zone.volDb = juce::jlimit (-60.0f, 6.0f, dragStartVal + delta * 0.5f);
+    }
+    else if (dragCol == DragCol::Pan)
+    {
+        // 1 pixel = 0.01 pan unit, range -1..+1
+        zone.pan = juce::jlimit (-1.0f, 1.0f, dragStartVal + delta * 0.01f);
+    }
+    else if (dragCol == DragCol::Tune)
+    {
+        // 1 pixel = 1 cent, range -100..+100
+        zone.tuneCents = juce::jlimit (-100.0f, 100.0f, dragStartVal + delta);
+    }
+
+    repaint();
+
+    // Fire callback → SfzPlayer
+    if (owner.onZoneChanged)
+        owner.onZoneChanged (dragRow, zone.volDb, zone.pan, zone.tuneCents);
+}
+
+void KeysPanel::ZoneMatrixContent::mouseUp (const juce::MouseEvent&)
+{
+    dragCol = DragCol::None;
+    dragRow = -1;
+    repaint();
 }
 
 // =============================================================================

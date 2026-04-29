@@ -62,6 +62,73 @@ juce::File ArchiveIntegration::getCacheDir()
                .getChildFile ("DYSEKT/archive_cache");
 }
 
+juce::File ArchiveIntegration::getTempDir()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+               .getChildFile ("DYSEKT/archive_temp");
+}
+
+void ArchiveIntegration::clearTemp()
+{
+    auto dir = getTempDir();
+    if (! dir.isDirectory()) return;
+
+    auto files = dir.findChildFiles (juce::File::findFiles, false);
+    for (auto& f : files)
+        f.deleteFile();
+}
+
+void ArchiveIntegration::downloadTemp (const juce::String& downloadUrl,
+                                       std::function<void (bool ok, juce::File tempFile)> cb)
+{
+    auto filename = downloadUrl.fromLastOccurrenceOf ("/", false, false)
+                               .upToFirstOccurrenceOf ("?", false, false)
+                               .trim();
+    if (filename.isEmpty())
+        filename = juce::String (std::abs ((int) downloadUrl.hashCode())) + ".bin";
+
+    auto tempDir   = getTempDir();
+    auto tempFile  = tempDir.getChildFile (filename);
+
+    // Reuse existing temp file without re-downloading
+    if (tempFile.existsAsFile())
+    {
+        juce::MessageManager::callAsync ([cb, tempFile] { cb (true, tempFile); });
+        return;
+    }
+
+    pool().addJob ([downloadUrl, tempFile, cb]
+    {
+        tempFile.getParentDirectory().createDirectory();
+
+        auto stream = juce::URL (downloadUrl).createInputStream (
+            juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
+                .withConnectionTimeoutMs (30000)
+                .withExtraHeaders ("User-Agent: DYSEKT/1.0"));
+
+        if (stream == nullptr)
+        {
+            juce::MessageManager::callAsync ([cb] { cb (false, {}); });
+            return;
+        }
+
+        juce::FileOutputStream out (tempFile);
+        if (! out.openedOk())
+        {
+            juce::MessageManager::callAsync ([cb] { cb (false, {}); });
+            return;
+        }
+
+        out.writeFromInputStream (*stream, -1);
+        out.flush();
+
+        const bool ok = tempFile.existsAsFile() && tempFile.getSize() > 0;
+        if (! ok) tempFile.deleteFile();
+
+        juce::MessageManager::callAsync ([cb, ok, tempFile] { cb (ok, tempFile); });
+    });
+}
+
 juce::int64 ArchiveIntegration::getCacheSize()
 {
     auto dir = getCacheDir();

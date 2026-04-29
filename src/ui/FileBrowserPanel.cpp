@@ -66,7 +66,18 @@ void FileBrowserPanel::ArchiveListModel::paintListBoxItem (int row, juce::Graphi
     }
 }
 
-void FileBrowserPanel::ArchiveListModel::listBoxItemClicked (int /*row*/, const juce::MouseEvent&) {}
+void FileBrowserPanel::ArchiveListModel::listBoxItemClicked (int row, const juce::MouseEvent&)
+{
+    if (! owner) return;
+    if (row < 0 || row >= owner->archiveRows.size()) return;
+
+    const auto& R = owner->archiveRows[row];
+
+    // Single click on a file row = preview (same behaviour as local fileClicked)
+    // Single click on a folder row = do nothing (double-click drills in)
+    if (! R.isFolder && R.downloadUrl.isNotEmpty())
+        owner->loadArchiveFile (R);
+}
 
 void FileBrowserPanel::ArchiveListModel::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
 {
@@ -81,7 +92,22 @@ void FileBrowserPanel::ArchiveListModel::listBoxItemDoubleClicked (int row, cons
     }
     else
     {
-        owner->loadArchiveFile (R);
+        // Double-click = download then load into sampler (not just preview)
+        ArchiveIntegration::downloadFile (R.downloadUrl,
+            [this] (bool ok, juce::File localFile)
+            {
+                if (! ok) return;
+
+                auto ext = localFile.getFileExtension().toLowerCase();
+                if (ext == ".sf2" || ext == ".sfz")
+                    owner->processor.loadSoundFontAsync (localFile);
+                else if (owner->onLoadRequest)
+                    owner->onLoadRequest (localFile);
+                else
+                    owner->processor.loadFileAsync (localFile);
+
+                if (owner->onFileLoaded) owner->onFileLoaded();
+            });
     }
 }
 
@@ -239,6 +265,9 @@ FileBrowserPanel::~FileBrowserPanel()
         deviceManager.removeAudioCallback (&sourcePlayer);
     browser.removeListener (this);
     ioThread.stopThread (2000);
+
+    // ── Clean up temp preview downloads — these are never needed after session ends
+    ArchiveIntegration::clearTemp();
 }
 
 // ── Timer (spinner) ──────────────────────────────────────────────────────────
@@ -1027,6 +1056,13 @@ void FileBrowserPanel::loadArchiveFile (const ArchiveRow& row)
 {
     if (row.downloadUrl.isEmpty()) return;
 
+    // Stop any current preview and release the file handle before we might
+    // overwrite or delete the temp file for the next preview
+    stopPreview();
+    transport.setSource (nullptr);
+    readerSource.reset();
+
+    // Show "Downloading…" state in preview bar immediately
     fileNameLabel.setText ("Downloading: " + row.name, juce::dontSendNotification);
     fileNameLabel.setVisible (true);
     previewVisible = true;
@@ -1035,30 +1071,29 @@ void FileBrowserPanel::loadArchiveFile (const ArchiveRow& row)
     resized();
     repaint();
 
-    ArchiveIntegration::downloadFile (row.downloadUrl,
-        [this] (bool ok, juce::File localFile)
+    // ── Use temp dir for preview-only — not the persistent cache ──────────────
+    ArchiveIntegration::downloadTemp (row.downloadUrl,
+        [this] (bool ok, juce::File tempFile)
         {
             if (ok)
             {
-                fileNameLabel.setText (localFile.getFileName(), juce::dontSendNotification);
-                previewFile    = localFile;
+                previewFile    = tempFile;
                 previewVisible = true;
-                playStopBtn.setVisible  (true);
-                volumeSlider.setVisible (true);
-                stopPreview();
+
+                fileNameLabel.setText    (tempFile.getFileName(), juce::dontSendNotification);
+                fileNameLabel.setVisible (true);
+                playStopBtn.setVisible   (true);
+                volumeSlider.setVisible  (true);
+
+                startPreview (tempFile);
                 updatePlayButton();
-
-                if (onLoadRequest)
-                    onLoadRequest (localFile);
-                else
-                    processor.loadFileAsync (localFile);
-
-                if (onFileLoaded) onFileLoaded();
             }
             else
             {
-                fileNameLabel.setText ("Download failed \u2014 check connection",
+                fileNameLabel.setText (u8"Download failed \u2014 check connection",
                                        juce::dontSendNotification);
+                playStopBtn.setVisible  (false);
+                volumeSlider.setVisible (false);
             }
             resized();
             repaint();

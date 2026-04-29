@@ -88,6 +88,13 @@ public:
     void  setSfzSustain (float pct)  noexcept;   ///< 0-100 %
     void  setSfzRelease (float sec)  noexcept;   ///< 0-60 s
 
+    /** Set per-region volume and pan for SFZ files (sfizz OSC, real-time safe).
+     *  regionIndex is the 0-based zone/region index from the parsed Keyzone list.
+     *  No-op for SF2 files. */
+    void setZoneVolume (int regionIndex, float volDb)    noexcept;
+    void setZonePan    (int regionIndex, float pan)      noexcept;  ///< pan: -1..+1
+    void setZoneTune   (int regionIndex, float cents)    noexcept;  ///< cents: -100..+100
+
     float getSfzAttack()  const noexcept { return sfzAttackSec .load (std::memory_order_relaxed); }
     float getSfzDecay()   const noexcept { return sfzDecaySec  .load (std::memory_order_relaxed); }
     float getSfzSustain() const noexcept { return sfzSustainPct.load (std::memory_order_relaxed); }

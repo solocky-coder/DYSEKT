@@ -89,6 +89,60 @@ void SfzPlayer::setSfzRelease (float s) noexcept
     sfzAdsrDirty .store (true, std::memory_order_release);
 }
 
+// ── Per-zone vol/pan (SFZ only — sfizz OSC) ──────────────────────────────────
+
+void SfzPlayer::setZoneVolume (int regionIndex, float volDb) noexcept
+{
+#if DYSEKT_HAS_SFIZZ
+    if (sfizzSynth == nullptr || !isSfzFile) return;
+    const int numRegions = sfizz_get_num_regions (sfizzSynth);
+    if (regionIndex < 0 || regionIndex >= numRegions) return;
+
+    char path[64];
+    snprintf (path, sizeof (path), "/region%d/volume", regionIndex);
+    sfizz_arg_t arg;
+    arg.f = juce::jlimit (-144.0f, 6.0f, volDb);
+    sfizz_send_message (sfizzSynth, nullptr, 0, path, "f", &arg);
+#else
+    juce::ignoreUnused (regionIndex, volDb);
+#endif
+}
+
+void SfzPlayer::setZonePan (int regionIndex, float pan) noexcept
+{
+#if DYSEKT_HAS_SFIZZ
+    if (sfizzSynth == nullptr || !isSfzFile) return;
+    const int numRegions = sfizz_get_num_regions (sfizzSynth);
+    if (regionIndex < 0 || regionIndex >= numRegions) return;
+
+    // SFZ pan opcode is in percent: -100 (L) .. 0 (C) .. +100 (R)
+    char path[64];
+    snprintf (path, sizeof (path), "/region%d/pan", regionIndex);
+    sfizz_arg_t arg;
+    arg.f = juce::jlimit (-100.0f, 100.0f, pan * 100.0f);
+    sfizz_send_message (sfizzSynth, nullptr, 0, path, "f", &arg);
+#else
+    juce::ignoreUnused (regionIndex, pan);
+#endif
+}
+
+void SfzPlayer::setZoneTune (int regionIndex, float cents) noexcept
+{
+#if DYSEKT_HAS_SFIZZ
+    if (sfizzSynth == nullptr || !isSfzFile) return;
+    const int numRegions = sfizz_get_num_regions (sfizzSynth);
+    if (regionIndex < 0 || regionIndex >= numRegions) return;
+
+    char path[64];
+    snprintf (path, sizeof (path), "/region%d/tune", regionIndex);
+    sfizz_arg_t arg;
+    arg.f = juce::jlimit (-100.0f, 100.0f, cents);
+    sfizz_send_message (sfizzSynth, nullptr, 0, path, "f", &arg);
+#else
+    juce::ignoreUnused (regionIndex, cents);
+#endif
+}
+
 void SfzPlayer::sendAdsrToSfizz()
 {
 #if DYSEKT_HAS_SFIZZ

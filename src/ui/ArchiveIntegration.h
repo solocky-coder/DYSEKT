@@ -83,6 +83,18 @@ public:
     static void downloadFile (const juce::String& downloadUrl,
                               std::function<void (bool ok, juce::File localFile)> cb);
 
+    /**
+     * Download a remote file to a TEMPORARY location (not the persistent cache).
+     * Use this for preview-only downloads — the file will NOT survive a clearTemp() call.
+     * If a temp copy already exists it is reused without re-downloading.
+     * The callback is delivered on the JUCE message thread.
+     */
+    static void downloadTemp (const juce::String& downloadUrl,
+                              std::function<void (bool ok, juce::File tempFile)> cb);
+
+    /** Delete all files in the temp preview directory. Safe to call at any time. */
+    static void clearTemp();
+
     // ═══════════════════════════════════════════════════════════════════════
     // Helpers
     // ═══════════════════════════════════════════════════════════════════════
@@ -105,6 +117,9 @@ public:
 
     /** Returns the directory used for caching downloaded files. */
     static juce::File getCacheDir();
+
+    /** Returns the directory used for temporary preview downloads. */
+    static juce::File getTempDir();
 
     /** Returns the total number of bytes currently stored in the cache. */
     static juce::int64 getCacheSize();
