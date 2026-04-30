@@ -176,27 +176,32 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     // ── Helper: small padlock for SF2 read-only columns ───────────────────────
     auto drawLock = [&] (int cx, int cy)
     {
-        // Padlock proportions: body = 7x5 px, shackle = U-arc above body.
-        // cx/cy = centre of the icon.
-        const float bW   = 7.f;   // body width
-        const float bH   = 5.f;   // body height
-        const float bX   = (float)cx - bW * 0.5f;
-        const float bY   = (float)cy;   // body sits below centre
-        // Shackle: semicircular arc above the body, inner radius so legs
-        // land at the body's left/right inner thirds.
-        const float sR   = bW * 0.28f;          // shackle outer radius
-        const float sCX  = (float)cx;
-        const float sCY  = bY - sR * 0.55f;     // arc centre just above body top
-        // Body
+        // Padlock proportions — icon is centred on (cx, cy).
+        // Total icon height = shackleH + bodyH; split evenly above/below cy.
+        const float bW      = 7.f;    // body width
+        const float bH      = 4.5f;  // body height
+        const float shH     = 4.5f;  // shackle height (arc top to body top)
+        const float totalH  = bH + shH;
+        const float bX      = (float)cx - bW * 0.5f;
+        const float bY      = (float)cy - totalH * 0.5f + shH;  // body top
+
+        // Shackle: U-arc whose legs descend into the body top edge.
+        // Inner radius chosen so legs sit at the inner-third of the body.
+        const float sR      = bW * 0.30f;   // outer radius of shackle arc
+        const float sCX     = (float)cx;
+        const float sCY     = bY;            // arc centre sits at body top edge
+
+        // Body (filled rounded rect)
         g.setColour (theme.foreground.withAlpha (0.55f));
         g.fillRoundedRectangle (bX, bY, bW, bH, 1.2f);
-        // Shackle — open U: pi (left) → 0 (right) going through the top
+
+        // Shackle — open U: left leg at π, sweeping through top to right leg at 0
         juce::Path shackle;
         shackle.addArc (sCX - sR, sCY - sR, sR * 2.f, sR * 2.f,
                         juce::MathConstants<float>::pi,
                         juce::MathConstants<float>::twoPi, true);
         g.setColour (theme.foreground.withAlpha (0.55f));
-        g.strokePath (shackle, juce::PathStrokeType (1.3f,
+        g.strokePath (shackle, juce::PathStrokeType (1.4f,
                       juce::PathStrokeType::curved,
                       juce::PathStrokeType::rounded));
     };
