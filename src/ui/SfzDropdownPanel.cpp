@@ -28,7 +28,7 @@ SfzFileBrowser::SfzFileBrowser()
     addAndMakeVisible (list);
 
     // Default to user's Music directory, falling back to home
-    auto startDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+    auto startDir = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
     if (! startDir.isDirectory())
         startDir = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
 
