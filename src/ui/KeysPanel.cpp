@@ -87,17 +87,18 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     // Right-side fixed columns (anchored from right edge):
     //   LP | REL | VOL | PAN | PITCH | ROOT | loKey | hiKey  — then NAME fills rest
     constexpr int kStripeW  = 4;
-    constexpr int kColGap   = 2;
-    constexpr int kLpW      = 20;
-    constexpr int kRelW     = 52;
-    constexpr int kVolW     = 46;
-    constexpr int kPanW     = 36;
-    constexpr int kPitchW   = 36;
-    constexpr int kRootW    = 36;
-    constexpr int kHiKeyW   = 36;
-    constexpr int kLoKeyW   = 36;
+    constexpr int kColGap   = 3;
+    constexpr int kScrollW  = 10;  // reserve for vertical scrollbar
+    constexpr int kLpW      = 24;
+    constexpr int kRelW     = 58;
+    constexpr int kVolW     = 52;
+    constexpr int kPanW     = 44;
+    constexpr int kPitchW   = 44;
+    constexpr int kRootW    = 44;
+    constexpr int kHiKeyW   = 44;
+    constexpr int kLoKeyW   = 44;
 
-    const int kLpX    = w - kLpW;
+    const int kLpX    = w - kScrollW - kLpW;
     const int kRelX   = kLpX   - kColGap - kRelW;
     const int kVolX   = kRelX  - kColGap - kVolW;
     const int kPanX   = kVolX  - kColGap - kPanW;
@@ -614,8 +615,12 @@ void KeysPanel::autoScrollToZones()
 
 void KeysPanel::rebuildZoneMatrix()
 {
-    // Use the viewport's actual width (which is inset from the frame border).
-    const int vpW = zoneViewport.isVisible() ? zoneViewport.getWidth() : getWidth();
+    // Use the viewport's actual width if available, otherwise fall back to the
+    // component width (happens when called before the first resized() pass,
+    // e.g. after minimize/restore).
+    const int vpW = (zoneViewport.isVisible() && zoneViewport.getWidth() > 0)
+                  ? zoneViewport.getWidth()
+                  : juce::jmax (1, getWidth());
     zoneMatrix.rebuild (keyzones, 0, vpW, 0, kWhiteKeyW, kBlackKeyW, vpW);
 }
 
@@ -720,6 +725,11 @@ void KeysPanel::resized()
     {
         zoneViewport.setVisible (false);
     }
+
+    // If zones are already loaded and the viewport just got a real size,
+    // rebuild so the matrix fills correctly after minimize/restore.
+    if (! keyzones.empty())
+        rebuildZoneMatrix();
 }
 
 // =============================================================================

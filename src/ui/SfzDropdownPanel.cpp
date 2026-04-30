@@ -956,9 +956,12 @@ void SfzDropdownPanel::panelDidShow()
 {
     presetList = processor.sfzPlayer.getPresetList();
 
+    // Force a full layout pass first so keysPanel and its viewport have
+    // correct dimensions before rebuildZoneMatrix() is called.
+    resized();
+
     if (processor.sfzPlayer.isLoaded())
         reloadZones (processor.sfzPlayer.getLoadedFile());
-    resized();
     repaint();
 }
 
