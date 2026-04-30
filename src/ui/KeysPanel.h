@@ -96,7 +96,8 @@ private:
         std::function<void (int rowIndex, const Keyzone&)> onZoneEdited;
 
     private:
-        enum class EditCol { None, LoKey, HiKey, LoVel, HiVel, Root, Loop };
+        enum class EditCol { None, LoKey, HiKey, LoVel, HiVel, Root, Loop,
+                             Pitch, Pan, Vol, Release };
 
         EditCol hitTestCol (int x, int w) const;
 
@@ -106,10 +107,10 @@ private:
         int kbX_ = 0, kbW_ = 0, baseOctave_ = 0, contentW_ = 0;
 
         // Drag-edit state
-        EditCol dragCol    = EditCol::None;
-        int     dragRow    = -1;
-        int     dragStartY = 0;
-        int     dragStartVal = 0;
+        EditCol dragCol      = EditCol::None;
+        int     dragRow      = -1;
+        int     dragStartY   = 0;
+        float   dragStartVal = 0.f;   // float to handle dB / cents / pan
     };
 
     // =========================================================================

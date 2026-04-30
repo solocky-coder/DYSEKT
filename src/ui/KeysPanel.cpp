@@ -83,22 +83,33 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     const int   w     = getWidth();
     const int   h     = getHeight();
 
-    // ── Column geometry — right cols are fixed width, NAME expands to fill ──────
-    constexpr int kStripeW  = 4;     // left colour bar
-    // Right-side fixed columns anchored from the right edge: KEY | ROOT | VEL | LP
-    constexpr int kLoopW    = 24;
-    constexpr int kVelW     = 54;
-    constexpr int kRootW    = 34;
-    constexpr int kKeyW     = 66;
+    // ── Column geometry ───────────────────────────────────────────────────────
+    // Right-side fixed columns (anchored from right edge):
+    //   LP | REL | VOL | PAN | PITCH | ROOT | loKey | hiKey  — then NAME fills rest
+    constexpr int kStripeW  = 4;
     constexpr int kColGap   = 2;
-    const     int kLoopX    = w - kLoopW;
-    const     int kVelX     = kLoopX - kColGap - kVelW;
-    const     int kRootX    = kVelX  - kColGap - kRootW;
-    const     int kKeyX     = kRootX - kColGap - kKeyW;
-    // NAME column fills everything left of KEY
-    const     int kNameColW = kKeyX - kColGap;
-    const     int kNameX    = kStripeW + 2;
-    const     int kNameW    = kNameColW - kStripeW - 4;
+    constexpr int kLpW      = 20;
+    constexpr int kRelW     = 52;
+    constexpr int kVolW     = 46;
+    constexpr int kPanW     = 36;
+    constexpr int kPitchW   = 36;
+    constexpr int kRootW    = 36;
+    constexpr int kHiKeyW   = 36;
+    constexpr int kLoKeyW   = 36;
+
+    const int kLpX    = w - kLpW;
+    const int kRelX   = kLpX   - kColGap - kRelW;
+    const int kVolX   = kRelX  - kColGap - kVolW;
+    const int kPanX   = kVolX  - kColGap - kPanW;
+    const int kPitchX = kPanX  - kColGap - kPitchW;
+    const int kRootX  = kPitchX- kColGap - kRootW;
+    const int kHiKeyX = kRootX - kColGap - kHiKeyW;
+    const int kLoKeyX = kHiKeyX- kColGap - kLoKeyW;
+
+    // NAME column fills everything left of loKey
+    const int kNameColW = kLoKeyX - kColGap;
+    const int kNameX    = kStripeW + 2;
+    const int kNameW    = kNameColW - kStripeW - 4;
 
     // ── Background ────────────────────────────────────────────────────────────
     g.setColour (theme.darkBar.darker (0.55f));
@@ -117,41 +128,68 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         g.setColour (theme.darkBar.darker (0.25f));
         g.fillRect (0, 0, w, kHeaderH);
 
-        // Subtle tint on name column header to match rows below
         g.setColour (juce::Colours::white.withAlpha (0.02f));
         g.fillRect (0, 0, kNameColW, kHeaderH);
 
         g.setFont (DysektLookAndFeel::makeFont (7.5f, true));
         g.setColour (theme.foreground.withAlpha (0.30f));
 
-        auto hdr = [&](const char* txt, int x, int cw,
-                       juce::Justification j = juce::Justification::centredLeft)
+        auto hdr = [&] (const char* txt, int x, int cw,
+                        juce::Justification j = juce::Justification::centred)
         {
             g.drawText (txt, x, 0, cw, kHeaderH, j, false);
         };
 
-        hdr ("SAMPLE", kNameX,       kNameW,  juce::Justification::centredLeft);
-        hdr ("KEY",   kKeyX,        kKeyW,   juce::Justification::centredLeft);
-        hdr ("ROOT",  kRootX,       kRootW,  juce::Justification::centred);
-        hdr ("VEL",   kVelX,        kVelW,   juce::Justification::centred);
-        hdr ("LP",    kLoopX,       kLoopW,  juce::Justification::centred);
+        hdr ("SAMPLE",      kNameX,   kNameW,   juce::Justification::centredLeft);
+        hdr ("loKey",       kLoKeyX,  kLoKeyW);
+        hdr ("hiKey",       kHiKeyX,  kHiKeyW);
+        hdr ("root",        kRootX,   kRootW);
+        hdr ("pitch",       kPitchX,  kPitchW);
+        hdr ("pan",         kPanX,    kPanW);
+        hdr ("vol (dB)",    kVolX,    kVolW);
+        hdr ("release (s)", kRelX,    kRelW);
+        hdr ("LP",          kLpX,     kLpW);
 
-        // In SFZ mode, draw a subtle ↕ drag-hint on editable columns
+        // SFZ: draw up-down drag hint on editable numeric columns
         if (sfzEditable)
         {
             g.setFont (DysektLookAndFeel::makeFont (7.0f));
             g.setColour (theme.accent.withAlpha (0.40f));
-            for (int cx : { kKeyX + kKeyW - 10, kRootX + kRootW - 10, kVelX + kVelW - 10 })
+            for (int cx : { kLoKeyX + kLoKeyW - 10,
+                            kHiKeyX + kHiKeyW - 10,
+                            kRootX  + kRootW  - 10,
+                            kPitchX + kPitchW - 10,
+                            kPanX   + kPanW   - 10,
+                            kVolX   + kVolW   - 10,
+                            kRelX   + kRelW   - 10 })
                 g.drawText (u8"\u2195", cx, 0, 10, kHeaderH, juce::Justification::centred, false);
         }
 
         g.setColour (theme.separator.withAlpha (0.45f));
         g.drawHorizontalLine (kHeaderH - 1, 0.f, (float) w);
 
-        // Vertical divider between name col and data cols in header
         g.setColour (theme.separator.withAlpha (0.20f));
         g.drawVerticalLine (kNameColW - 1, 0.f, (float) kHeaderH);
     }
+
+    // ── Helper: small padlock for SF2 read-only columns ───────────────────────
+    auto drawLock = [&] (int cx, int cy)
+    {
+        g.setColour (theme.foreground.withAlpha (0.28f));
+        const float r = 2.5f;
+        g.drawArc ((float)cx - r, (float)cy - r - 2.f, r * 2.f, r * 2.f,
+                   juce::MathConstants<float>::pi,
+                   juce::MathConstants<float>::twoPi, 1.f, false);
+        g.fillRoundedRectangle ((float)cx - r - 1.f, (float)cy - 1.f,
+                                (r + 1.f) * 2.f, 5.f, 1.f);
+    };
+
+    // ── Note name helper ──────────────────────────────────────────────────────
+    auto noteName = [] (int note) -> juce::String
+    {
+        static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+        return juce::String (names[note % 12]) + juce::String (note / 12 - 1);
+    };
 
     // ── Rows ──────────────────────────────────────────────────────────────────
     const juce::Font fMain  = DysektLookAndFeel::makeFont (10.5f);
@@ -160,112 +198,119 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
 
     for (int i = 0; i < (int) rows.size(); ++i)
     {
-        const auto& r   = rows[(size_t) i];
-        const int   ry  = kHeaderH + i * kRowH;
-        const bool  sel = (i == selectedRow);
+        const auto& r    = rows[(size_t) i];
+        const int   ry   = kHeaderH + i * kRowH;
+        const bool  sel  = (i == selectedRow);
         const juce::Colour zc = r.zone.colour;
+        // A column is editable only for SFZ zones
+        const bool  editable  = sfzEditable && r.zone.isSfz;
 
-        // ── Row base: alternating dark tint ───────────────────────────────────
+        // ── Row base ──────────────────────────────────────────────────────────
         if (i % 2 == 1)
         {
             g.setColour (juce::Colour (0xFF000000).withAlpha (0.10f));
             g.fillRect (0, ry, w, kRowH);
         }
-
-        // ── Selection highlight ───────────────────────────────────────────────
         if (sel)
         {
             g.setColour (theme.accent.withAlpha (0.08f));
             g.fillRect (kStripeW, ry, w - kStripeW, kRowH);
         }
 
-        // ── Left colour stripe ────────────────────────────────────────────────
+        // ── Colour stripe ─────────────────────────────────────────────────────
         g.setColour (zc);
         g.fillRect (0, ry, kStripeW, kRowH);
 
-        // ── Name column: tinted background ───────────────────────────────────
+        // ── Name column ───────────────────────────────────────────────────────
         g.setColour (zc.withAlpha (0.08f));
         g.fillRect (kStripeW, ry, kNameColW - kStripeW, kRowH);
 
-        // ── Name text ─────────────────────────────────────────────────────────
         g.setFont (fMain);
         g.setColour (sel ? theme.foreground : theme.foreground.withAlpha (0.82f));
         g.drawText (r.zone.name, kNameX, ry, kNameW, kRowH,
                     juce::Justification::centredLeft, true);
 
-        // ── Key range column ──────────────────────────────────────────────────
-        auto noteName = [](int note) -> juce::String
+        // ── Helper macros for a data cell ─────────────────────────────────────
+        // dragHighlight: fill cell if being dragged
+        auto cellBg = [&] (EditCol ec, int cx, int cw)
         {
-            static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-            return juce::String (names[note % 12]) + juce::String (note / 12 - 1);
-        };
-
-        const juce::String keyRange = noteName (r.zone.loKey) + "-" + noteName (r.zone.hiKey);
-        g.setFont (fSmall);
-        // Highlight individual key sub-cells when being dragged
-        if (sfzEditable && i == dragRow)
-        {
-            if (dragCol == EditCol::LoKey || dragCol == EditCol::HiKey)
+            if (editable && i == dragRow && dragCol == ec)
             {
                 g.setColour (theme.accent.withAlpha (0.18f));
-                g.fillRect (kKeyX, ry, kKeyW, kRowH);
+                g.fillRect (cx, ry, cw, kRowH);
             }
-        }
-        g.setColour (sfzEditable ? theme.foreground.withAlpha (0.88f)
-                                 : theme.foreground.withAlpha (0.75f));
-        g.drawText (keyRange, kKeyX, ry, kKeyW, kRowH,
-                    juce::Justification::centredLeft, false);
-
-        // ── Root note column ──────────────────────────────────────────────────
-        const juce::String rootTxt = (r.zone.rootPitch >= 0)
-                                     ? noteName (r.zone.rootPitch)
-                                     : juce::String ("--");
-        if (sfzEditable && i == dragRow && dragCol == EditCol::Root)
+        };
+        // drawCell: text + optional lock icon for read-only
+        auto drawCell = [&] (const juce::String& txt, int cx, int cw, bool lock)
         {
-            g.setColour (theme.accent.withAlpha (0.18f));
-            g.fillRect (kRootX, ry, kRootW, kRowH);
-        }
+            const int textW = lock ? cw - 12 : cw;
+            g.drawText (txt, cx, ry, textW, kRowH, juce::Justification::centred, false);
+            if (lock) drawLock (cx + cw - 7, ry + kRowH / 2);
+        };
+
+        // ── loKey ─────────────────────────────────────────────────────────────
+        cellBg (EditCol::LoKey, kLoKeyX, kLoKeyW);
         g.setFont (fSmall);
-        g.setColour (sfzEditable ? theme.foreground.withAlpha (0.80f)
-                                 : theme.foreground.withAlpha (0.65f));
-        g.drawText (rootTxt, kRootX, ry, kRootW, kRowH,
-                    juce::Justification::centred, false);
+        g.setColour (editable ? theme.foreground.withAlpha (0.88f) : theme.foreground.withAlpha (0.70f));
+        drawCell (noteName (r.zone.loKey), kLoKeyX, kLoKeyW, !editable);
 
-        // ── Velocity badge ────────────────────────────────────────────────────
+        // ── hiKey ─────────────────────────────────────────────────────────────
+        cellBg (EditCol::HiKey, kHiKeyX, kHiKeyW);
+        g.setColour (editable ? theme.foreground.withAlpha (0.88f) : theme.foreground.withAlpha (0.70f));
+        drawCell (noteName (r.zone.hiKey), kHiKeyX, kHiKeyW, !editable);
+
+        // ── root ──────────────────────────────────────────────────────────────
+        cellBg (EditCol::Root, kRootX, kRootW);
+        g.setColour (editable ? theme.foreground.withAlpha (0.80f) : theme.foreground.withAlpha (0.60f));
+        drawCell ((r.zone.rootPitch >= 0) ? noteName (r.zone.rootPitch) : juce::String ("--"),
+                  kRootX, kRootW, !editable);
+
+        // ── pitch (tuneCents) ─────────────────────────────────────────────────
+        cellBg (EditCol::Pitch, kPitchX, kPitchW);
+        g.setFont (fTiny);
+        g.setColour (editable ? theme.foreground.withAlpha (0.80f) : theme.foreground.withAlpha (0.60f));
         {
-            const juce::String velTxt = juce::String (r.zone.loVel) + "-"
-                                        + juce::String (r.zone.hiVel);
-            const int bx = kVelX + 1;
-            const int by = ry + 3;
-            const int bh = kRowH - 6;
-            const int bw = juce::jmin (kVelW - 2,
-                           juce::roundToInt (fTiny.getStringWidthFloat (velTxt)) + 8);
-
-            const bool velDrag = sfzEditable && i == dragRow
-                                 && (dragCol == EditCol::LoVel || dragCol == EditCol::HiVel);
-            g.setColour (velDrag ? theme.accent.withAlpha (0.30f)
-                                 : theme.darkBar.withAlpha (0.45f));
-            g.fillRoundedRectangle ((float) bx, (float) by, (float) bw, (float) bh, 2.f);
-
-            g.setFont (fTiny);
-            g.setColour (theme.foreground.withAlpha (0.70f));
-            g.drawText (velTxt, bx, by, bw, bh, juce::Justification::centred, false);
+            const juce::String pitchTxt = (r.zone.tuneCents >= 0 ? "+" : "")
+                                          + juce::String ((int) r.zone.tuneCents) + "c";
+            drawCell (pitchTxt, kPitchX, kPitchW, !editable);
         }
 
-        // ── Loop indicator ────────────────────────────────────────────────────
+        // ── pan ───────────────────────────────────────────────────────────────
+        cellBg (EditCol::Pan, kPanX, kPanW);
+        g.setColour (editable ? theme.foreground.withAlpha (0.80f) : theme.foreground.withAlpha (0.60f));
         {
-            const int cx = kLoopX + kLoopW / 2;
+            const float pPct = r.zone.pan * 100.f;
+            juce::String panTxt;
+            if (std::abs (pPct) < 1.f) panTxt = "C";
+            else if (pPct < 0.f)       panTxt = "L" + juce::String ((int)(-pPct));
+            else                        panTxt = "R" + juce::String ((int)(pPct));
+            drawCell (panTxt, kPanX, kPanW, !editable);
+        }
+
+        // ── vol (dB) ──────────────────────────────────────────────────────────
+        cellBg (EditCol::Vol, kVolX, kVolW);
+        g.setColour (editable ? theme.foreground.withAlpha (0.80f) : theme.foreground.withAlpha (0.60f));
+        drawCell (juce::String (r.zone.volDb, 1) + "dB", kVolX, kVolW, !editable);
+
+        // ── release (s) ───────────────────────────────────────────────────────
+        cellBg (EditCol::Release, kRelX, kRelW);
+        g.setColour (editable ? theme.foreground.withAlpha (0.80f) : theme.foreground.withAlpha (0.60f));
+        drawCell (juce::String (r.zone.releaseSec, 3), kRelX, kRelW, !editable);
+
+        // ── LP (loop toggle) ──────────────────────────────────────────────────
+        {
+            const int cx = kLpX + kLpW / 2;
             const int cy = ry + kRowH / 2;
             if (r.zone.isLooped)
             {
                 g.setColour (theme.accent.withAlpha (0.70f));
                 g.fillEllipse ((float) cx - 3.f, (float) cy - 3.f, 6.f, 6.f);
             }
-            else if (sfzEditable)
+            else
             {
-                // Show a faint ring so users know it's clickable
-                g.setColour (theme.foreground.withAlpha (0.15f));
+                g.setColour (theme.foreground.withAlpha (editable ? 0.15f : 0.08f));
                 g.drawEllipse ((float) cx - 3.f, (float) cy - 3.f, 6.f, 6.f, 1.f);
+                if (! editable) drawLock (cx + 5, cy);
             }
         }
 
@@ -276,7 +321,11 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
 
     // ── Column separator lines ────────────────────────────────────────────────
     g.setColour (theme.separator.withAlpha (0.18f));
-    const int sepLines[] = { kNameColW - 1, kKeyX + kKeyW, kRootX + kRootW, kVelX + kVelW, kLoopX - 1 };
+    const int sepLines[] = { kNameColW - 1,
+                             kLoKeyX + kLoKeyW, kHiKeyX + kHiKeyW,
+                             kRootX + kRootW,   kPitchX + kPitchW,
+                             kPanX + kPanW,     kVolX + kVolW,
+                             kRelX + kRelW,     kLpX - 1 };
     for (int cx : sepLines)
         g.drawVerticalLine (cx, (float) kHeaderH, (float) h);
 }
@@ -352,12 +401,16 @@ void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
             const auto& z = rows[(size_t) clickedRow].zone;
             switch (col)
             {
-                case EditCol::LoKey:  dragStartVal = z.loKey;      break;
-                case EditCol::HiKey:  dragStartVal = z.hiKey;      break;
-                case EditCol::LoVel:  dragStartVal = z.loVel;      break;
-                case EditCol::HiVel:  dragStartVal = z.hiVel;      break;
-                case EditCol::Root:   dragStartVal = juce::jmax (0, z.rootPitch); break;
-                default:              dragStartVal = 0;             break;
+                case EditCol::LoKey:   dragStartVal = (float) z.loKey;                    break;
+                case EditCol::HiKey:   dragStartVal = (float) z.hiKey;                    break;
+                case EditCol::LoVel:   dragStartVal = (float) z.loVel;                    break;
+                case EditCol::HiVel:   dragStartVal = (float) z.hiVel;                    break;
+                case EditCol::Root:    dragStartVal = (float) juce::jmax (0, z.rootPitch); break;
+                case EditCol::Pitch:   dragStartVal = z.tuneCents;                        break;
+                case EditCol::Pan:     dragStartVal = z.pan * 100.f;                      break;
+                case EditCol::Vol:     dragStartVal = z.volDb;                            break;
+                case EditCol::Release: dragStartVal = z.releaseSec;                       break;
+                default:               dragStartVal = 0.f;                                break;
             }
             return;  // don't audition when starting a drag-edit
         }
@@ -379,25 +432,35 @@ void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
 KeysPanel::ZoneMatrixContent::EditCol
 KeysPanel::ZoneMatrixContent::hitTestCol (int x, int w) const
 {
-    // Mirror the column geometry from paint()
-    constexpr int kStripeW = 4;
-    constexpr int kLoopW   = 24;
-    constexpr int kVelW    = 54;
-    constexpr int kRootW   = 34;
-    constexpr int kKeyW    = 66;
-    constexpr int kColGap  = 2;
-    const int kLoopX  = w - kLoopW;
-    const int kVelX   = kLoopX - kColGap - kVelW;
-    const int kRootX  = kVelX  - kColGap - kRootW;
-    const int kKeyX   = kRootX - kColGap - kKeyW;
+    // Must mirror paint() geometry exactly
+    constexpr int kColGap   = 2;
+    constexpr int kLpW      = 20;
+    constexpr int kRelW     = 52;
+    constexpr int kVolW     = 46;
+    constexpr int kPanW     = 36;
+    constexpr int kPitchW   = 36;
+    constexpr int kRootW    = 36;
+    constexpr int kHiKeyW   = 36;
+    constexpr int kLoKeyW   = 36;
 
-    if (x >= kLoopX)                     return EditCol::Loop;
-    if (x >= kVelX   && x < kVelX + kVelW / 2)  return EditCol::LoVel;
-    if (x >= kVelX   && x < kVelX + kVelW)       return EditCol::HiVel;
-    if (x >= kRootX  && x < kRootX + kRootW)     return EditCol::Root;
-    if (x >= kKeyX   && x < kKeyX + kKeyW / 2)   return EditCol::LoKey;
-    if (x >= kKeyX   && x < kKeyX + kKeyW)        return EditCol::HiKey;
-    (void) kStripeW;
+    const int kLpX    = w - kLpW;
+    const int kRelX   = kLpX   - kColGap - kRelW;
+    const int kVolX   = kRelX  - kColGap - kVolW;
+    const int kPanX   = kVolX  - kColGap - kPanW;
+    const int kPitchX = kPanX  - kColGap - kPitchW;
+    const int kRootX  = kPitchX- kColGap - kRootW;
+    const int kHiKeyX = kRootX - kColGap - kHiKeyW;
+    const int kLoKeyX = kHiKeyX- kColGap - kLoKeyW;
+
+    if (x >= kLpX)                              return EditCol::Loop;
+    if (x >= kRelX   && x < kRelX  + kRelW)    return EditCol::Release;
+    if (x >= kVolX   && x < kVolX  + kVolW)    return EditCol::Vol;
+    if (x >= kPanX   && x < kPanX  + kPanW)    return EditCol::Pan;
+    if (x >= kPitchX && x < kPitchX+ kPitchW)  return EditCol::Pitch;
+    if (x >= kRootX  && x < kRootX + kRootW)   return EditCol::Root;
+    if (x >= kHiKeyX && x < kHiKeyX+ kHiKeyW)  return EditCol::HiKey;
+    if (x >= kLoKeyX && x < kLoKeyX+ kLoKeyW)  return EditCol::LoKey;
+
     return EditCol::None;
 }
 
@@ -412,29 +475,41 @@ void KeysPanel::ZoneMatrixContent::mouseDrag (const juce::MouseEvent& e)
         return;
 
     auto& zone = rows[(size_t) dragRow].zone;
-    const int delta = (dragStartY - e.getPosition().y);  // drag up = increase
 
     if (dragCol == EditCol::Loop)
         return;  // loop is toggled on click, not dragged
 
-    int newVal = juce::jlimit (0, 127, dragStartVal + delta);
+    // drag up = increase value; 1 px = 1 unit for ints, scaled for floats
+    const float delta = (float)(dragStartY - e.getPosition().y);
 
     switch (dragCol)
     {
         case EditCol::LoKey:
-            zone.loKey = juce::jmin (newVal, zone.hiKey);
+            zone.loKey = juce::jmin (juce::jlimit (0, 127, (int)(dragStartVal + delta)), zone.hiKey);
             break;
         case EditCol::HiKey:
-            zone.hiKey = juce::jmax (newVal, zone.loKey);
+            zone.hiKey = juce::jmax (juce::jlimit (0, 127, (int)(dragStartVal + delta)), zone.loKey);
             break;
         case EditCol::LoVel:
-            zone.loVel = juce::jmin (newVal, zone.hiVel);
+            zone.loVel = juce::jmin (juce::jlimit (0, 127, (int)(dragStartVal + delta)), zone.hiVel);
             break;
         case EditCol::HiVel:
-            zone.hiVel = juce::jmax (newVal, zone.loVel);
+            zone.hiVel = juce::jmax (juce::jlimit (0, 127, (int)(dragStartVal + delta)), zone.loVel);
             break;
         case EditCol::Root:
-            zone.rootPitch = newVal;
+            zone.rootPitch = juce::jlimit (0, 127, (int)(dragStartVal + delta));
+            break;
+        case EditCol::Pitch:   // 1 px = 1 cent
+            zone.tuneCents = juce::jlimit (-100.f, 100.f, dragStartVal + delta);
+            break;
+        case EditCol::Pan:     // 1 px = 1% pan; stored as -1..+1
+            zone.pan = juce::jlimit (-1.f, 1.f, (dragStartVal + delta) / 100.f);
+            break;
+        case EditCol::Vol:     // 1 px = 0.5 dB
+            zone.volDb = juce::jlimit (-60.f, 12.f, dragStartVal + delta * 0.5f);
+            break;
+        case EditCol::Release: // 1 px = 0.01 s
+            zone.releaseSec = juce::jlimit (0.f, 60.f, dragStartVal + delta * 0.01f);
             break;
         default: break;
     }
@@ -455,6 +530,7 @@ void KeysPanel::ZoneMatrixContent::mouseUp (const juce::MouseEvent&)
     dragCol = EditCol::None;
     dragRow = -1;
 }
+
 
 // =============================================================================
 // KeysPanel::setSfzEditable

@@ -1298,6 +1298,12 @@ void SfzDropdownPanel::writeSfzZoneChange (const juce::File& f,
     if (z.rootPitch >= 0)
         setOpcode (lines, regionLine, "pitch_keycenter", noteStr (z.rootPitch));
 
+    // Write extended fields (only for SFZ zones)
+    setOpcode (lines, regionLine, "tune",         juce::String ((int) z.tuneCents));
+    setOpcode (lines, regionLine, "pan",          juce::String (juce::roundToInt (z.pan * 100.f)));
+    setOpcode (lines, regionLine, "volume",       juce::String (z.volDb, 2));
+    setOpcode (lines, regionLine, "ampeg_release",juce::String (z.releaseSec, 3));
+
     if (z.isLooped)
         setOpcode (lines, regionLine, "loop_mode", "loop_continuous");
     else
