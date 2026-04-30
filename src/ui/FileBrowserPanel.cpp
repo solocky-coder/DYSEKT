@@ -256,10 +256,9 @@ FileBrowserPanel::~FileBrowserPanel()
     stopTimer();
     browser.setLookAndFeel (nullptr);
     archiveList.setLookAndFeel (nullptr);
-    transport.removeChangeListener (this);
     transport.stop();
-    transport.setSource (nullptr);
-    readerSource.reset();
+    transport.setSource (nullptr);   // blocks until audio thread releases reader
+    readerSource.reset();            // now safe to destroy
     sourcePlayer.setSource (nullptr);
     if (deviceManager.getCurrentAudioDevice() != nullptr)
         deviceManager.removeAudioCallback (&sourcePlayer);
@@ -489,18 +488,21 @@ void FileBrowserPanel::startPreview (const juce::File& f)
 {
     if (! f.existsAsFile()) return;
 
+    // ── Safely tear down any current playback before touching readerSource ──
+    // transport.stop() is synchronous but the audio callback may still be
+    // running — setSource(nullptr) blocks until the audio thread is done.
+    transport.stop();
+    transport.setSource (nullptr);   // blocks until audio thread releases reader
+    readerSource.reset();            // now safe to destroy
+
     if (deviceManager.getCurrentAudioDevice() == nullptr)
     {
         deviceManager.initialise (0, 2, nullptr, true, {}, nullptr);
         deviceManager.addAudioCallback (&sourcePlayer);
     }
 
-    transport.stop();
-    transport.setSource (nullptr);
-    readerSource.reset();
-
     auto* reader = formatManager.createReaderFor (f);
-    if (reader == nullptr) return;
+    if (reader == nullptr) return;   // unsupported format or file not ready
 
     readerSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
     transport.setSource (readerSource.get(), 0, nullptr, reader->sampleRate);
@@ -514,7 +516,8 @@ void FileBrowserPanel::startPreview (const juce::File& f)
 void FileBrowserPanel::stopPreview()
 {
     transport.stop();
-    transport.setPosition (0.0);
+    transport.setSource (nullptr);   // blocks until audio thread is done
+    readerSource.reset();            // now safe
     updatePlayButton();
 }
 
@@ -1055,12 +1058,6 @@ void FileBrowserPanel::showCollectionItem (const juce::String& collectionId)
 void FileBrowserPanel::loadArchiveFile (const ArchiveRow& row)
 {
     if (row.downloadUrl.isEmpty()) return;
-
-    // Stop any current preview and release the file handle before we might
-    // overwrite or delete the temp file for the next preview
-    stopPreview();
-    transport.setSource (nullptr);
-    readerSource.reset();
 
     // Show "Downloading…" state in preview bar immediately
     fileNameLabel.setText ("Downloading: " + row.name, juce::dontSendNotification);
