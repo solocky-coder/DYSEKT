@@ -161,6 +161,10 @@ private:
     // ── Cached preset list ────────────────────────────────────────────────────
     std::vector<Sf2PresetInfo> presetList;
 
+    // Ticks remaining before we reload zones after a preset change
+    // (gives the audio thread time to apply the program change first)
+    int pendingZoneReloadTicks { 0 };
+
     // ── Inline file browser ───────────────────────────────────────────────────
     SfzFileBrowser fileBrowser;
     bool           browserOpen { false };

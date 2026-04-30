@@ -739,6 +739,15 @@ void SfzDropdownPanel::timerCallback()
 
     presetList = processor.sfzPlayer.getPresetList();
 
+    // Deferred zone reload after preset switch (audio thread needs a few ticks
+    // to apply the program change before we read the new zones).
+    if (pendingZoneReloadTicks > 0)
+    {
+        --pendingZoneReloadTicks;
+        if (pendingZoneReloadTicks == 0 && processor.sfzPlayer.isLoaded())
+            reloadZones (processor.sfzPlayer.getLoadedFile());
+    }
+
     repaint();
 }
 
@@ -756,10 +765,9 @@ void SfzDropdownPanel::selectPreset (int delta)
     if (next != cur)
     {
         processor.sfzPlayer.setPresetByIndex (next);
-
-        if (processor.sfzPlayer.isLoaded())
-            reloadZones (processor.sfzPlayer.getLoadedFile());
-
+        // Don't reload zones immediately — the audio thread applies the program
+        // change asynchronously. Schedule a reload a few timer ticks later.
+        pendingZoneReloadTicks = 4;   // ~133ms at 30Hz
         repaint();
     }
 }
