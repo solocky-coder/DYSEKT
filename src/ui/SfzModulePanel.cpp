@@ -722,42 +722,16 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
             float rel = getFloat ("ampeg_release");
             if (rel > -999998.f) releaseSec = juce::jlimit (0.0f, 60.0f, rel);
 
-            // sample name — value runs to next opcode (word=) or end of line.
-            // Cannot split on the first space because filenames commonly contain spaces
-            // (e.g. "Blip Bass.wav", "Sine E0.wav").
+            // sample name
             {
                 int smpPos = line.indexOf ("sample=");
                 if (smpPos >= 0)
                 {
-                    auto rest = line.substring (smpPos + 7);   // everything after "sample="
-
-                    // Find where the next opcode starts: <space>keyword=
-                    int endPos = rest.length();
-                    for (int ci = 0; ci < rest.length() - 1; ++ci)
-                    {
-                        if (rest[ci] == ' ')
-                        {
-                            // Look ahead for a bare opcode keyword (letters/digits/underscores then '=')
-                            int j = ci + 1;
-                            while (j < rest.length() &&
-                                   (juce::CharacterFunctions::isLetterOrDigit (rest[j]) || rest[j] == '_'))
-                                ++j;
-                            if (j < rest.length() && rest[j] == '=')
-                            {
-                                endPos = ci;
-                                break;
-                            }
-                        }
-                    }
-
-                    auto s = rest.substring (0, endPos).trim();
-
-                    // Strip directory path separators, remove extension
+                    auto s = line.substring (smpPos + 7)
+                                 .upToFirstOccurrenceOf (" ", false, false).trim();
                     sampleName = s.fromLastOccurrenceOf ("/",  false, false)
                                   .fromLastOccurrenceOf ("\\", false, false)
-                                  .upToLastOccurrenceOf (".",  false, false)
-                                  .trim();
-
+                                  .upToLastOccurrenceOf (".",  false, false).trim();
                     if (sampleName.isEmpty())
                         sampleName = "Zone " + juce::String (colIdx + 1);
                 }
@@ -785,7 +759,6 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
 
     // Walk top-level LIST chunks to find "pdta"
     juce::MemoryBlock igenData;
-    juce::MemoryBlock shdrData;
 
     while (! stream.isExhausted())
     {
@@ -800,7 +773,7 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
 
             if (lid == "pdta")
             {
-                // Scan sub-chunks for "igen" and "shdr"
+                // Scan sub-chunks for "igen"
                 const int pdtaEnd = (int) stream.getPosition() + sz - 4;
                 while (stream.getPosition() < pdtaEnd && ! stream.isExhausted())
                 {
@@ -811,17 +784,9 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
                     {
                         igenData.setSize ((size_t) subSz);
                         stream.read (igenData.getData(), subSz);
+                        break;
                     }
-                    else if (subId == "shdr")
-                    {
-                        // Each SHDR record is 46 bytes; first 20 bytes = sample name
-                        shdrData.setSize ((size_t) subSz);
-                        stream.read (shdrData.getData(), subSz);
-                    }
-                    else
-                    {
-                        stream.skipNextBytes (subSz);
-                    }
+                    stream.skipNextBytes (subSz);
                 }
                 break;
             }
@@ -837,36 +802,6 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
     }
 
     if (igenData.isEmpty()) return zones;
-
-    // Helper: extract sample name from SHDR by sample index (record 46 bytes, name at offset 0, 20 chars)
-    auto shdrName = [&] (int sampleIdx) -> juce::String
-    {
-        if (shdrData.isEmpty()) return {};
-        const int offset = sampleIdx * 46;
-        if (offset + 20 > (int) shdrData.getSize()) return {};
-        const char* raw = static_cast<const char*> (shdrData.getData()) + offset;
-        auto name = juce::String::fromUTF8 (raw, 20).trimCharactersAtEnd ("\0 ");
-        // Strip stereo suffixes like " L" / " R" / "_L" / "_R" — keep base name
-        if (name.endsWithIgnoreCase (" L") || name.endsWithIgnoreCase ("_L"))
-            name = name.dropLastCharacters (2).trim();
-        else if (name.endsWithIgnoreCase (" R") || name.endsWithIgnoreCase ("_R"))
-            name = name.dropLastCharacters (2).trim();
-        return name;
-    };
-
-    // isUsefulName: rejects auto-generated names like "alphabet.sf2 001 L"
-    auto isUsefulName = [&] (const juce::String& n) -> bool
-    {
-        if (n.isEmpty()) return false;
-        // Reject if name is just the filename + a number pattern
-        if (n.containsOnly ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-()"))
-        {
-            // If it contains the sf2 filename stem it's auto-generated
-            const auto stem = f.getFileNameWithoutExtension().toLowerCase();
-            if (n.toLowerCase().startsWith (stem)) return false;
-        }
-        return true;
-    };
 
     // Each IGEN record is 4 bytes: sfGenOper (uint16) + genAmount (lo, hi bytes)
     // SF2 generator opcodes used:
@@ -889,7 +824,6 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
     float zPan       = 0.0f;
     float zTune      = 0.0f;
     float zRelSec    = 0.664f;
-    int   zSampleIdx = -1;   // SHDR sample index from gen 53 (sampleID)
 
     std::set<std::pair<int,int>> seen;
     int colIdx = 0;
@@ -910,22 +844,13 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
             z.tuneCents  = zTune;
             z.releaseSec = zRelSec;
             z.colour     = zoneColour (colIdx);
-            z.isSfz      = false;
-
-            // Use SHDR name if we have a valid sample index and the name is meaningful
-            juce::String name;
-            if (zSampleIdx >= 0)
-                name = shdrName (zSampleIdx);
-            if (! isUsefulName (name))
-                name = "Zone " + juce::String (colIdx + 1);
-            z.name = name;
-
+            z.name       = "Zone " + juce::String (colIdx + 1);
+            z.isSfz      = false;   // SF2 zones are read-only
             zones.push_back (z);
             ++colIdx;
         }
         zLoKey = -1; zHiKey = -1; zRootPitch = -1;
         zVolDb = -7.0f; zPan = 0.0f; zTune = 0.0f; zRelSec = 0.664f;
-        zSampleIdx = -1;
     };
 
     for (size_t i = 0; i < numRecs; ++i)
@@ -958,10 +883,6 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
         {
             const int16_t raw = (int16_t)((uint16_t)(lo | (hi << 8)));
             zTune = juce::jlimit (-100.0f, 100.0f, (float) raw);
-        }
-        else if (oper == 53 && zLoKey >= 0)  // sampleID — index into SHDR table
-        {
-            zSampleIdx = (int)((uint16_t)(lo | (hi << 8)));
         }
         else if (oper == 38 && zLoKey >= 0)  // releaseVolEnv (timecents)
         {
