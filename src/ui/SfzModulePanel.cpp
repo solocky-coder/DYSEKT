@@ -956,6 +956,7 @@ void SfzModulePanel::reloadZones (const juce::File& f)
     else if (ext == ".sf2")
         zones = parseSf2Zones (f);
 
+    keysPanel.setSfzEditable (ext == ".sfz");
     keysPanel.setKeyzones (zones);
     if (! zones.empty())
         keysPanel.autoScrollToZones();

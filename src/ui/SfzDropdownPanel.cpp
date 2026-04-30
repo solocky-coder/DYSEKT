@@ -1027,7 +1027,8 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
             z.name     = sampleName.isNotEmpty()
                        ? sampleName
                        : "Zone " + juce::String (colIdx);
-            zones.push_back (z);
+            z.isSfz = true;
+          zones.push_back (z);
             loKey = 0; hiKey = 127; sampleName = {};
         }
         inRegion = false;
