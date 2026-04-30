@@ -136,6 +136,15 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         hdr ("VEL",   kVelX,        kVelW,   juce::Justification::centred);
         hdr ("LP",    kLoopX,       kLoopW,  juce::Justification::centred);
 
+        // In SFZ mode, draw a subtle ↕ drag-hint on editable columns
+        if (sfzEditable)
+        {
+            g.setFont (DysektLookAndFeel::makeFont (7.0f));
+            g.setColour (theme.accent.withAlpha (0.40f));
+            for (int cx : { kKeyX + kKeyW - 10, kRootX + kRootW - 10, kVelX + kVelW - 10 })
+                g.drawText (u8"\u2195", cx, 0, 10, kHeaderH, juce::Justification::centred, false);
+        }
+
         g.setColour (theme.separator.withAlpha (0.45f));
         g.drawHorizontalLine (kHeaderH - 1, 0.f, (float) w);
 
@@ -193,7 +202,17 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
 
         const juce::String keyRange = noteName (r.zone.loKey) + "-" + noteName (r.zone.hiKey);
         g.setFont (fSmall);
-        g.setColour (theme.foreground.withAlpha (0.75f));
+        // Highlight individual key sub-cells when being dragged
+        if (sfzEditable && i == dragRow)
+        {
+            if (dragCol == EditCol::LoKey || dragCol == EditCol::HiKey)
+            {
+                g.setColour (theme.accent.withAlpha (0.18f));
+                g.fillRect (kKeyX, ry, kKeyW, kRowH);
+            }
+        }
+        g.setColour (sfzEditable ? theme.foreground.withAlpha (0.88f)
+                                 : theme.foreground.withAlpha (0.75f));
         g.drawText (keyRange, kKeyX, ry, kKeyW, kRowH,
                     juce::Justification::centredLeft, false);
 
@@ -201,8 +220,14 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         const juce::String rootTxt = (r.zone.rootPitch >= 0)
                                      ? noteName (r.zone.rootPitch)
                                      : juce::String ("--");
+        if (sfzEditable && i == dragRow && dragCol == EditCol::Root)
+        {
+            g.setColour (theme.accent.withAlpha (0.18f));
+            g.fillRect (kRootX, ry, kRootW, kRowH);
+        }
         g.setFont (fSmall);
-        g.setColour (theme.foreground.withAlpha (0.65f));
+        g.setColour (sfzEditable ? theme.foreground.withAlpha (0.80f)
+                                 : theme.foreground.withAlpha (0.65f));
         g.drawText (rootTxt, kRootX, ry, kRootW, kRowH,
                     juce::Justification::centred, false);
 
@@ -216,7 +241,10 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
             const int bw = juce::jmin (kVelW - 2,
                            juce::roundToInt (fTiny.getStringWidthFloat (velTxt)) + 8);
 
-            g.setColour (theme.darkBar.withAlpha (0.45f));
+            const bool velDrag = sfzEditable && i == dragRow
+                                 && (dragCol == EditCol::LoVel || dragCol == EditCol::HiVel);
+            g.setColour (velDrag ? theme.accent.withAlpha (0.30f)
+                                 : theme.darkBar.withAlpha (0.45f));
             g.fillRoundedRectangle ((float) bx, (float) by, (float) bw, (float) bh, 2.f);
 
             g.setFont (fTiny);
@@ -225,12 +253,20 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         }
 
         // ── Loop indicator ────────────────────────────────────────────────────
-        if (r.zone.isLooped)
         {
             const int cx = kLoopX + kLoopW / 2;
             const int cy = ry + kRowH / 2;
-            g.setColour (theme.accent.withAlpha (0.70f));
-            g.fillEllipse ((float) cx - 3.f, (float) cy - 3.f, 6.f, 6.f);
+            if (r.zone.isLooped)
+            {
+                g.setColour (theme.accent.withAlpha (0.70f));
+                g.fillEllipse ((float) cx - 3.f, (float) cy - 3.f, 6.f, 6.f);
+            }
+            else if (sfzEditable)
+            {
+                // Show a faint ring so users know it's clickable
+                g.setColour (theme.foreground.withAlpha (0.15f));
+                g.drawEllipse ((float) cx - 3.f, (float) cy - 3.f, 6.f, 6.f, 1.f);
+            }
         }
 
         // ── Row separator ─────────────────────────────────────────────────────
@@ -288,21 +324,153 @@ void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
     if (e.y < kHeaderH) return;
 
     const int clickedRow = (e.y - kHeaderH) / kRowH;
-    if (clickedRow >= 0 && clickedRow < (int) rows.size())
+    if (clickedRow < 0 || clickedRow >= (int) rows.size()) return;
+
+    selectedRow = clickedRow;
+    repaint();
+
+    // ── SFZ edit mode: check if click lands on an editable column ─────────────
+    if (sfzEditable)
     {
-        selectedRow = clickedRow;
-        repaint();
+        const EditCol col = hitTestCol (e.x, getWidth());
 
-        // Audition: send note-on then immediately note-off after a short delay.
-        // We do NOT set owner.lastActiveNote here — that field is only for
-        // physical piano-key presses so that mouseUp can release correctly.
-        const int note = rows[(size_t) clickedRow].zone.loKey;
-        owner.processor.sfzUiNoteOnRequest.store (note, std::memory_order_relaxed);
+        if (col == EditCol::Loop)
+        {
+            // Toggle immediately on click — no drag needed
+            rows[(size_t) clickedRow].zone.isLooped ^= true;
+            repaint();
+            if (onZoneEdited)
+                onZoneEdited (clickedRow, rows[(size_t) clickedRow].zone);
+            return;
+        }
 
-        // Schedule an automatic release so the note never sticks.
-        // Use a simple one-shot via the owner's timer mechanism:
-        owner.scheduleNoteOff (note);
+        if (col != EditCol::None)
+        {
+            dragCol = col;
+            dragRow = clickedRow;
+            dragStartY = e.getPosition().y;
+            const auto& z = rows[(size_t) clickedRow].zone;
+            switch (col)
+            {
+                case EditCol::LoKey:  dragStartVal = z.loKey;      break;
+                case EditCol::HiKey:  dragStartVal = z.hiKey;      break;
+                case EditCol::LoVel:  dragStartVal = z.loVel;      break;
+                case EditCol::HiVel:  dragStartVal = z.hiVel;      break;
+                case EditCol::Root:   dragStartVal = juce::jmax (0, z.rootPitch); break;
+                default:              dragStartVal = 0;             break;
+            }
+            return;  // don't audition when starting a drag-edit
+        }
     }
+
+    // ── Audition: send note-on for this zone's loKey ──────────────────────────
+    dragCol = EditCol::None;
+    dragRow = -1;
+
+    const int note = rows[(size_t) clickedRow].zone.loKey;
+    owner.processor.sfzUiNoteOnRequest.store (note, std::memory_order_relaxed);
+    owner.scheduleNoteOff (note);
+}
+
+// =============================================================================
+// ZoneMatrixContent — column hit-test helper
+// =============================================================================
+
+KeysPanel::ZoneMatrixContent::EditCol
+KeysPanel::ZoneMatrixContent::hitTestCol (int x, int w) const
+{
+    // Mirror the column geometry from paint()
+    constexpr int kStripeW = 4;
+    constexpr int kLoopW   = 24;
+    constexpr int kVelW    = 54;
+    constexpr int kRootW   = 34;
+    constexpr int kKeyW    = 66;
+    constexpr int kColGap  = 2;
+    const int kLoopX  = w - kLoopW;
+    const int kVelX   = kLoopX - kColGap - kVelW;
+    const int kRootX  = kVelX  - kColGap - kRootW;
+    const int kKeyX   = kRootX - kColGap - kKeyW;
+
+    if (x >= kLoopX)                     return EditCol::Loop;
+    if (x >= kVelX   && x < kVelX + kVelW / 2)  return EditCol::LoVel;
+    if (x >= kVelX   && x < kVelX + kVelW)       return EditCol::HiVel;
+    if (x >= kRootX  && x < kRootX + kRootW)     return EditCol::Root;
+    if (x >= kKeyX   && x < kKeyX + kKeyW / 2)   return EditCol::LoKey;
+    if (x >= kKeyX   && x < kKeyX + kKeyW)        return EditCol::HiKey;
+    (void) kStripeW;
+    return EditCol::None;
+}
+
+// =============================================================================
+// ZoneMatrixContent — mouse events
+// =============================================================================
+
+void KeysPanel::ZoneMatrixContent::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! sfzEditable || dragCol == EditCol::None || dragRow < 0
+        || dragRow >= (int) rows.size())
+        return;
+
+    auto& zone = rows[(size_t) dragRow].zone;
+    const int delta = (dragStartY - e.getPosition().y);  // drag up = increase
+
+    if (dragCol == EditCol::Loop)
+        return;  // loop is toggled on click, not dragged
+
+    int newVal = juce::jlimit (0, 127, dragStartVal + delta);
+
+    switch (dragCol)
+    {
+        case EditCol::LoKey:
+            zone.loKey = juce::jmin (newVal, zone.hiKey);
+            break;
+        case EditCol::HiKey:
+            zone.hiKey = juce::jmax (newVal, zone.loKey);
+            break;
+        case EditCol::LoVel:
+            zone.loVel = juce::jmin (newVal, zone.hiVel);
+            break;
+        case EditCol::HiVel:
+            zone.hiVel = juce::jmax (newVal, zone.loVel);
+            break;
+        case EditCol::Root:
+            zone.rootPitch = newVal;
+            break;
+        default: break;
+    }
+
+    repaint();
+}
+
+void KeysPanel::ZoneMatrixContent::mouseUp (const juce::MouseEvent&)
+{
+    if (sfzEditable && dragCol != EditCol::None && dragRow >= 0
+        && dragRow < (int) rows.size())
+    {
+        // Commit the edit — notify SfzDropdownPanel to write back to the file
+        if (onZoneEdited)
+            onZoneEdited (dragRow, rows[(size_t) dragRow].zone);
+    }
+
+    dragCol = EditCol::None;
+    dragRow = -1;
+}
+
+// =============================================================================
+// KeysPanel::setSfzEditable
+// =============================================================================
+
+void KeysPanel::setSfzEditable (bool editable)
+{
+    zoneMatrix.sfzEditable = editable;
+    zoneMatrix.setMouseCursor (editable ? juce::MouseCursor::UpDownResizeCursor
+                                        : juce::MouseCursor::NormalCursor);
+    // Forward zone-edit events from the matrix up to whoever owns KeysPanel
+    zoneMatrix.onZoneEdited = [this] (int rowIndex, const Keyzone& z)
+    {
+        if (onZoneEdited)
+            onZoneEdited (rowIndex, z);
+    };
 }
 
 // =============================================================================

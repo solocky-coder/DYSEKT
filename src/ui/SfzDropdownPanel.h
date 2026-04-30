@@ -73,7 +73,6 @@ private:
     void rebuildList();
 
     juce::File currentDir;
-    bool inDrivesView { false };   // ── FIX: true when showing all drive roots
 
     // Rows: sorted directories first, then matching files
     juce::Array<juce::File> rows;
@@ -183,6 +182,8 @@ private:
     static std::vector<KeysPanel::Keyzone> parseSfzZones (const juce::File& f);
     static std::vector<KeysPanel::Keyzone> parseSf2Zones (const juce::File& f);
     void reloadZones (const juce::File& f);
+    void writeSfzZoneChange (const juce::File& f, int rowIndex,
+                              const KeysPanel::Keyzone& updated);
 
     // ── Mouse events ──────────────────────────────────────────────────────────
     void mouseDown        (const juce::MouseEvent&) override;

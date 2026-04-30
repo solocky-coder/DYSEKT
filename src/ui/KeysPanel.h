@@ -22,28 +22,26 @@ public:
     // ── Keyzone overlay ───────────────────────────────────────────────────────
     struct Keyzone
     {
-        int loKey      { 0 };
-        int hiKey      { 127 };
-        int loVel      { 0 };
-        int hiVel      { 127 };
-        int rootPitch  { -1 };
-        bool isLooped  { false };
+        int loKey    { 0 };
+        int hiKey    { 127 };
+        int loVel    { 0 };
+        int hiVel    { 127 };
+        int rootPitch{ -1 };
+        bool isLooped{ false };
         juce::Colour colour;
         juce::String name;
-        float volDb      { -7.0f };   // per-zone volume in dB (SFZ: volume=, SF2: gen48 centibels)
-        float pan        { 0.0f };    // per-zone pan -1..+1  (SFZ: pan=,    SF2: gen17 0.1% units)
-        float tuneCents  { 0.0f };    // per-zone pitch in cents (SFZ: tune=,  SF2: gen52 cents)
-        float releaseSec { 0.664f };  // ampeg_release in seconds (SFZ: ampeg_release=, SF2: gen38 timecents)
-        bool  isSfz      { false };   // true = SFZ (editable), false = SF2 (read-only)
     };
 
     void setKeyzones      (std::vector<Keyzone> zones);
     void clearKeyzones    ();
     void autoScrollToZones();
 
-    /** Fired on the UI thread when the user drags a vol/pan/pitch cell in the zone matrix.
-     *  Only fires for SFZ zones (isSfz == true). zoneIndex is 0-based row index. */
-    std::function<void (int zoneIndex, float volDb, float pan, float tuneCents)> onZoneChanged;
+    /** Pass true for SFZ files (columns are drag-editable), false for SF2. */
+    void setSfzEditable (bool editable);
+
+    /** Fired when the user drag-edits a zone row (SFZ mode only).
+        Connect this in SfzDropdownPanel to write the change back to the file. */
+    std::function<void (int rowIndex, const Keyzone&)> onZoneEdited;
 
     /** Scroll the zone matrix to highlight the row covering 'note'. */
     void highlightNoteInMatrix (int note);
@@ -79,20 +77,28 @@ private:
 
         int  selectedRow = -1;
 
+        /** When true, numeric columns are drag-editable (SFZ only). */
+        bool sfzEditable = false;
+
+        /** Called after a drag-edit commits a zone change.
+            Row index and the updated Keyzone are passed. */
+        std::function<void (int rowIndex, const Keyzone&)> onZoneEdited;
+
     private:
+        enum class EditCol { None, LoKey, HiKey, LoVel, HiVel, Root, Loop };
+
+        EditCol hitTestCol (int x, int w) const;
+
         KeysPanel& owner;
         struct Row { Keyzone zone; };
         std::vector<Row> rows;
         int kbX_ = 0, kbW_ = 0, baseOctave_ = 0, contentW_ = 0;
 
-        // Drag state for vol/pan cells
-        enum class DragCol { None, Vol, Pan, Tune };
-        DragCol dragCol     { DragCol::None };
-        int     dragRow     { -1 };
-        float   dragStartY  { 0.f };
-        float   dragStartVal{ 0.f };
-
-        int  colHitTest (int x) const;  // returns kVolX or kPanX start, or -1
+        // Drag-edit state
+        EditCol dragCol    = EditCol::None;
+        int     dragRow    = -1;
+        int     dragStartY = 0;
+        int     dragStartVal = 0;
     };
 
     // =========================================================================

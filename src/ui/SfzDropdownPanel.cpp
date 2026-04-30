@@ -293,7 +293,7 @@ void SfzDropdownPanel::resized()
 
     // Preset picker (wider, no LOAD button)
     auto pickerSlot = strip.removeFromLeft (kPickerW);
-    nameZone = pickerSlot.withSizeKeepingCentre (kPickerW, 22);
+    nameZone = pickerSlot.withSizeKeepingCentre (kPickerW, kStripH - 6);
     strip.removeFromLeft (kPad * 2);
 
     // Right-side knobs
@@ -1183,10 +1183,119 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
 void SfzDropdownPanel::reloadZones (const juce::File& f)
 {
     const auto ext = f.getFileExtension().toLowerCase();
-    auto zones = (ext == ".sfz") ? parseSfzZones (f)
+    const bool isSfz = (ext == ".sfz");
+
+    auto zones = isSfz ? parseSfzZones (f)
                : (ext == ".sf2") ? parseSf2Zones (f)
                : std::vector<KeysPanel::Keyzone>{};
+
+    keysPanel.setSfzEditable (isSfz);
     keysPanel.setKeyzones (zones);
+
     if (! zones.empty())
         keysPanel.autoScrollToZones();
+
+    // Wire the edit callback — only fires for SFZ (sfzEditable == true)
+    keysPanel.onZoneEdited = [this, f] (int rowIndex, const KeysPanel::Keyzone& updated)
+    {
+        writeSfzZoneChange (f, rowIndex, updated);
+    };
+}
+
+// =============================================================================
+//  writeSfzZoneChange  —  patch one <region> block in the SFZ text file
+// =============================================================================
+
+// Helper: set or replace an opcode value within a region line-block.
+// 'lines' is the full file split by line. 'regionStart' is the line index of
+// the <region> header. We search forward (until the next <region>/<group> or
+// EOF) for the opcode and replace it, or append it to the <region> line.
+static void setOpcode (juce::StringArray& lines, int regionStart,
+                       const juce::String& opcode, const juce::String& value)
+{
+    const juce::String target = opcode + "=";
+
+    // Search within this region's block
+    for (int i = regionStart; i < lines.size(); ++i)
+    {
+        const auto lower = lines[i].toLowerCase().trim();
+        if (i > regionStart && (lower.startsWith ("<region>") ||
+                                lower.startsWith ("<group>") ||
+                                lower.startsWith ("<global>")))
+            break;  // reached next block — opcode not found, append
+
+        const int pos = lines[i].toLowerCase().indexOf (target);
+        if (pos >= 0)
+        {
+            // Replace the value in-place, preserving surrounding tokens
+            // Find end of the value token (next space or end of string)
+            const int valStart = pos + target.length();
+            const auto rest = lines[i].substring (valStart);
+            const int valEnd = rest.indexOfChar (' ');
+            const juce::String newLine = lines[i].substring (0, valStart)
+                                        + value
+                                        + (valEnd >= 0 ? rest.substring (valEnd) : "");
+            lines.set (i, newLine);
+            return;
+        }
+    }
+
+    // Opcode not present — append it to the <region> header line
+    lines.set (regionStart, lines[regionStart].trimEnd() + " " + target + value);
+}
+
+void SfzDropdownPanel::writeSfzZoneChange (const juce::File& f,
+                                            int rowIndex,
+                                            const KeysPanel::Keyzone& z)
+{
+    if (! f.existsAsFile()) return;
+
+    auto lines = juce::StringArray::fromLines (f.loadFileAsString());
+
+    // Find the Nth <region> block (rowIndex is 0-based count of parsed regions)
+    int regionCount = -1;
+    int regionLine  = -1;
+
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        if (lines[i].trim().toLowerCase().startsWith ("<region>"))
+        {
+            ++regionCount;
+            if (regionCount == rowIndex)
+            {
+                regionLine = i;
+                break;
+            }
+        }
+    }
+
+    if (regionLine < 0) return;  // region not found — bail
+
+    // Patch each editable opcode
+    auto noteStr = [] (int note) -> juce::String
+    {
+        static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+        return juce::String (names[note % 12]) + juce::String (note / 12 - 1);
+    };
+
+    setOpcode (lines, regionLine, "lokey",  noteStr (z.loKey));
+    setOpcode (lines, regionLine, "hikey",  noteStr (z.hiKey));
+    setOpcode (lines, regionLine, "lovel",  juce::String (z.loVel));
+    setOpcode (lines, regionLine, "hivel",  juce::String (z.hiVel));
+
+    if (z.rootPitch >= 0)
+        setOpcode (lines, regionLine, "pitch_keycenter", noteStr (z.rootPitch));
+
+    if (z.isLooped)
+        setOpcode (lines, regionLine, "loop_mode", "loop_continuous");
+    else
+        setOpcode (lines, regionLine, "loop_mode", "no_loop");
+
+    // Write back — join with \n (preserve original line endings best-effort)
+    const bool crlf = f.loadFileAsString().contains ("\r\n");
+    const auto newContent = lines.joinIntoString (crlf ? "\r\n" : "\n");
+    f.replaceWithText (newContent);
+
+    // Hot-reload the SFZ player so changes take effect immediately
+    processor.sfzPlayer.loadFile (f);
 }
