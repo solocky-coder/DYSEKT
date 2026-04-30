@@ -64,6 +64,7 @@ public:
 private:
     void   navigateTo   (const juce::File& dir);
     void   navigateUp   ();
+    void   showDrivesList ();
     void   loadRow      (int row);
     juce::File fileForRow (int row) const;
     bool   isDirectory  (int row) const;
@@ -73,6 +74,9 @@ private:
     void rebuildList();
 
     juce::File currentDir;
+
+    // When true, the list shows available drives/volumes instead of a directory
+    bool showingDrives { false };
 
     // Rows: sorted directories first, then matching files
     juce::Array<juce::File> rows;

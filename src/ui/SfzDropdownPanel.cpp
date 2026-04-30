@@ -57,7 +57,8 @@ void SfzFileBrowser::paint (juce::Graphics& g)
 
     // Up-button
     const bool upHover = upBtnZone.contains (getMouseXYRelative());
-    const bool canGoUp = currentDir.getParentDirectory() != currentDir;
+    const bool canGoUp = showingDrives ? false
+                                       : true;  // always allow up (to drives list or parent)
     if (upHover && canGoUp)
     {
         g.setColour (theme.accent.withAlpha (0.18f));
@@ -75,16 +76,23 @@ void SfzFileBrowser::paint (juce::Graphics& g)
         g.setFont (DysektLookAndFeel::makeFont (9.5f));
         g.setColour (theme.foreground.withAlpha (0.55f));
 
-        // Show last 2 path segments so it fits
-        const auto parts = juce::StringArray::fromTokens (
-            currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
         juce::String display;
-        const int n = parts.size();
-        if      (n == 0) display = "/";
-        else if (n <= 2) display = currentDir.getFullPathName();
-        else             display = u8"\u2026" + juce::File::getSeparatorString()
-                                 + parts[n - 2] + juce::File::getSeparatorString()
-                                 + parts[n - 1];
+        if (showingDrives)
+        {
+            display = "Computer";
+        }
+        else
+        {
+            // Show last 2 path segments so it fits
+            const auto parts = juce::StringArray::fromTokens (
+                currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
+            const int n = parts.size();
+            if      (n == 0) display = "/";
+            else if (n <= 2) display = currentDir.getFullPathName();
+            else             display = u8"\u2026" + juce::File::getSeparatorString()
+                                     + parts[n - 2] + juce::File::getSeparatorString()
+                                     + parts[n - 1];
+        }
 
         g.drawText (display, pathArea, juce::Justification::centredLeft, true);
     }
@@ -122,6 +130,7 @@ void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
 void SfzFileBrowser::navigateTo (const juce::File& dir)
 {
     if (! dir.isDirectory()) return;
+    showingDrives = false;
     currentDir = dir;
     rebuildList();
     repaint();
@@ -129,13 +138,38 @@ void SfzFileBrowser::navigateTo (const juce::File& dir)
 
 void SfzFileBrowser::navigateUp()
 {
+    if (showingDrives) return;
+
     const auto parent = currentDir.getParentDirectory();
-    if (parent != currentDir)
+    if (parent == currentDir)
+    {
+        // Already at a filesystem root — show the drives list
+        showDrivesList();
+    }
+    else
+    {
         navigateTo (parent);
+    }
+}
+
+void SfzFileBrowser::showDrivesList()
+{
+    showingDrives = true;
+    rows.clear();
+
+    juce::File::findFileSystemRoots (rows);
+    // Remove any non-existent roots (unmounted, etc.)
+    rows.removeIf ([] (const juce::File& f) { return ! f.isDirectory(); });
+
+    list.updateContent();
+    list.repaint();
+    repaint();
 }
 
 void SfzFileBrowser::rebuildList()
 {
+    if (showingDrives) return;   // drives list is built in showDrivesList()
+
     rows.clear();
 
     // Directories first (hidden files excluded)
@@ -199,9 +233,14 @@ void SfzFileBrowser::paintListBoxItem (int row, juce::Graphics& g,
     if (isDir)
     {
         g.setColour (theme.accent.withAlpha (0.55f));
-        g.drawText (u8"\U0001F4C1", 3, 0, 16, h, juce::Justification::centredLeft, false);
+        // Use a drive icon for filesystem roots, folder icon otherwise
+        const bool isRoot = (f == f.getParentDirectory());
+        g.drawText (isRoot ? u8"\U0001F4BE" : u8"\U0001F4C1",
+                    3, 0, 16, h, juce::Justification::centredLeft, false);
         g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.80f));
-        g.drawText (f.getFileName(), 22, 0, w - 26, h,
+        // For drives show full path (e.g. "D:\"), for dirs show name only
+        const juce::String label = isRoot ? f.getFullPathName() : f.getFileName();
+        g.drawText (label, 22, 0, w - 26, h,
                     juce::Justification::centredLeft, true);
     }
     else
@@ -247,7 +286,7 @@ void SfzFileBrowser::loadRow (int row)
 
     if (f.isDirectory())
     {
-        navigateTo (f);
+        navigateTo (f);  // works for both regular dirs and drive roots
     }
     else if (onFileChosen)
     {
@@ -534,7 +573,7 @@ void SfzDropdownPanel::drawPresetPicker (juce::Graphics& g) const
     // Arrow buttons (only useful when loaded + presets exist)
     auto drawArrow = [&] (juce::Rectangle<int> zone, const juce::String& sym)
     {
-        const bool active = isLoaded && ! presetList.empty() && ! browserOpen;
+        const bool active = isLoaded && presetList.size() > 1 && ! browserOpen;
         const bool hover  = zone.contains (getMouseXYRelative()) && active;
         g.setColour (hover ? theme.accent.withAlpha (0.30f) : juce::Colours::transparentBlack);
         g.fillRoundedRectangle (zone.toFloat(), 2.0f);
