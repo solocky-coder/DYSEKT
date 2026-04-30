@@ -975,7 +975,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
             // Use the sample filename (without extension) as the zone name,
             // falling back to a generic "Zone N" label if none was found.
             z.name     = sampleName.isNotEmpty()
-                       ? juce::File (sampleName).getFileNameWithoutExtension()
+                       ? sampleName
                        : "Zone " + juce::String (colIdx);
             zones.push_back (z);
             loKey = 0; hiKey = 127; sampleName = {};
@@ -1010,10 +1010,22 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
                     lineLower.substring (kRaw + 4).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
                 loKey = hiKey = k;
             }
-            // Extract sample= value (case-preserved path)
+            // Extract sample= value — strip directory and extension to get bare name.
             auto sRaw = lineLower.indexOf ("sample=");
             if (sRaw >= 0 && sampleName.isEmpty())
-                sampleName = lineOrig.substring (sRaw + 7).upToFirstOccurrenceOf (" ", false, false).trim();
+            {
+                auto rawPath = lineOrig.substring (sRaw + 7)
+                                       .upToFirstOccurrenceOf (" ",  false, false)
+                                       .upToFirstOccurrenceOf ("\t", false, false)
+                                       .trim();
+                // Handle both / and \ path separators.
+                auto bare = rawPath.fromLastOccurrenceOf ("/",  false, false)
+                                   .fromLastOccurrenceOf ("\\", false, false);
+                // Strip file extension.
+                if (bare.contains ("."))
+                    bare = bare.upToLastOccurrenceOf (".", false, false);
+                sampleName = bare.isNotEmpty() ? bare : rawPath;
+            }
         }
     }
     flush();

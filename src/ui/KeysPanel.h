@@ -30,6 +30,13 @@ public:
         bool isLooped{ false };
         juce::Colour colour;
         juce::String name;
+
+        // Extended fields used by SFZ/SF2 zone display and real-time editing
+        float volDb     { -7.0f };   ///< Volume in dB  (SFZ: volume=, SF2: velocity scaling)
+        float pan       { 0.0f };    ///< Pan -1..+1    (SFZ: pan=, SF2: pan generator)
+        float tuneCents { 0.0f };    ///< Fine tune in cents
+        float releaseSec{ 0.664f };  ///< Release time in seconds
+        bool  isSfz     { false };   ///< true = SFZ (editable), false = SF2 (read-only)
     };
 
     void setKeyzones      (std::vector<Keyzone> zones);
@@ -42,6 +49,10 @@ public:
     /** Fired when the user drag-edits a zone row (SFZ mode only).
         Connect this in SfzDropdownPanel to write the change back to the file. */
     std::function<void (int rowIndex, const Keyzone&)> onZoneEdited;
+
+    /** Fired when vol/pan/tune change during a drag — lets SfzModulePanel
+        forward the values to SfzPlayer for real-time preview. */
+    std::function<void (int zoneIndex, float volDb, float pan, float tuneCents)> onZoneChanged;
 
     /** Scroll the zone matrix to highlight the row covering 'note'. */
     void highlightNoteInMatrix (int note);

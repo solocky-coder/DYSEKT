@@ -470,6 +470,8 @@ void KeysPanel::setSfzEditable (bool editable)
     {
         if (onZoneEdited)
             onZoneEdited (rowIndex, z);
+        if (onZoneChanged)
+            onZoneChanged (rowIndex, z.volDb, z.pan, z.tuneCents);
     };
 }
 
