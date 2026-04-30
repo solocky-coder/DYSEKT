@@ -176,17 +176,29 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     // ── Helper: small padlock for SF2 read-only columns ───────────────────────
     auto drawLock = [&] (int cx, int cy)
     {
-        g.setColour (theme.foreground.withAlpha (0.28f));
-        const float r = 2.5f;
-        {
-            juce::Path arcPath;
-            arcPath.addArc ((float)cx - r, (float)cy - r - 2.f, r * 2.f, r * 2.f,
-                            juce::MathConstants<float>::pi,
-                            juce::MathConstants<float>::twoPi, true);
-            g.strokePath (arcPath, juce::PathStrokeType (1.f));
-        }
-        g.fillRoundedRectangle ((float)cx - r - 1.f, (float)cy - 1.f,
-                                (r + 1.f) * 2.f, 5.f, 1.f);
+        // Padlock proportions: body = 7x5 px, shackle = U-arc above body.
+        // cx/cy = centre of the icon.
+        const float bW   = 7.f;   // body width
+        const float bH   = 5.f;   // body height
+        const float bX   = (float)cx - bW * 0.5f;
+        const float bY   = (float)cy;   // body sits below centre
+        // Shackle: semicircular arc above the body, inner radius so legs
+        // land at the body's left/right inner thirds.
+        const float sR   = bW * 0.28f;          // shackle outer radius
+        const float sCX  = (float)cx;
+        const float sCY  = bY - sR * 0.55f;     // arc centre just above body top
+        // Body
+        g.setColour (theme.foreground.withAlpha (0.55f));
+        g.fillRoundedRectangle (bX, bY, bW, bH, 1.2f);
+        // Shackle — open U: pi (left) → 0 (right) going through the top
+        juce::Path shackle;
+        shackle.addArc (sCX - sR, sCY - sR, sR * 2.f, sR * 2.f,
+                        juce::MathConstants<float>::pi,
+                        juce::MathConstants<float>::twoPi, true);
+        g.setColour (theme.foreground.withAlpha (0.55f));
+        g.strokePath (shackle, juce::PathStrokeType (1.3f,
+                      juce::PathStrokeType::curved,
+                      juce::PathStrokeType::rounded));
     };
 
     // ── Note name helper ──────────────────────────────────────────────────────
