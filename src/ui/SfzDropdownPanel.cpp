@@ -57,7 +57,7 @@ void SfzFileBrowser::paint (juce::Graphics& g)
 
     // Up-button
     const bool upHover = upBtnZone.contains (getMouseXYRelative());
-    const bool canGoUp = !inDrivesView;   // ── FIX: up is always valid unless already showing drives
+    const bool canGoUp = currentDir.getParentDirectory() != currentDir;
     if (upHover && canGoUp)
     {
         g.setColour (theme.accent.withAlpha (0.18f));
@@ -75,23 +75,16 @@ void SfzFileBrowser::paint (juce::Graphics& g)
         g.setFont (DysektLookAndFeel::makeFont (9.5f));
         g.setColour (theme.foreground.withAlpha (0.55f));
 
-        // ── FIX: show "Drives" label when in drives view; otherwise last 2 path segments
+        // Show last 2 path segments so it fits
+        const auto parts = juce::StringArray::fromTokens (
+            currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
         juce::String display;
-        if (inDrivesView)
-        {
-            display = "Drives";
-        }
-        else
-        {
-            const auto parts = juce::StringArray::fromTokens (
-                currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
-            const int n = parts.size();
-            if      (n == 0) display = "/";
-            else if (n <= 2) display = currentDir.getFullPathName();
-            else             display = u8"\u2026" + juce::File::getSeparatorString()
-                                     + parts[n - 2] + juce::File::getSeparatorString()
-                                     + parts[n - 1];
-        }
+        const int n = parts.size();
+        if      (n == 0) display = "/";
+        else if (n <= 2) display = currentDir.getFullPathName();
+        else             display = u8"\u2026" + juce::File::getSeparatorString()
+                                 + parts[n - 2] + juce::File::getSeparatorString()
+                                 + parts[n - 1];
 
         g.drawText (display, pathArea, juce::Justification::centredLeft, true);
     }
@@ -129,7 +122,6 @@ void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
 void SfzFileBrowser::navigateTo (const juce::File& dir)
 {
     if (! dir.isDirectory()) return;
-    inDrivesView = false;   // ── FIX: entering any real dir exits drives view
     currentDir = dir;
     rebuildList();
     repaint();
@@ -137,39 +129,14 @@ void SfzFileBrowser::navigateTo (const juce::File& dir)
 
 void SfzFileBrowser::navigateUp()
 {
-    // ── FIX: don't get stuck at drive root — step up to a drives listing instead
-    if (inDrivesView) return;   // already at top level, nothing to do
-
     const auto parent = currentDir.getParentDirectory();
     if (parent != currentDir)
-    {
         navigateTo (parent);
-    }
-    else
-    {
-        // At a filesystem root (e.g. C:\) — switch to drives view
-        inDrivesView = true;
-        rebuildList();
-        repaint();
-    }
 }
 
 void SfzFileBrowser::rebuildList()
 {
     rows.clear();
-
-    // ── FIX: in drives view, populate with all filesystem roots (C:\, D:\, etc.)
-    if (inDrivesView)
-    {
-        juce::Array<juce::File> roots;
-        juce::File::findFileSystemRoots (roots);
-        rows.addArray (roots);
-        list.updateContent();
-        list.repaint();
-        repaint();
-        return;
-    }
-    // ── end drives-view block
 
     // Directories first (hidden files excluded)
     auto dirs = currentDir.findChildFiles (
@@ -988,43 +955,65 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
     std::vector<KeysPanel::Keyzone> zones;
     const auto lines = juce::StringArray::fromLines (f.loadFileAsString());
 
-    int  loKey = 0, hiKey = 127;
-    bool inRegion = false;
-    int  colIdx   = 0;
+    int          loKey    = 0, hiKey = 127;
+    bool         inRegion = false;
+    int          colIdx   = 0;
+    juce::String sampleName;
 
     auto flush = [&]
     {
         if (inRegion && hiKey >= loKey)
         {
-            zones.push_back ({ loKey, hiKey, 0, 127, -1, false, zoneColourDP (colIdx++) });
-            loKey = 0; hiKey = 127;
+            KeysPanel::Keyzone z;
+            z.loKey    = loKey;
+            z.hiKey    = hiKey;
+            z.loVel    = 0;
+            z.hiVel    = 127;
+            z.rootPitch= -1;
+            z.isLooped = false;
+            z.colour   = zoneColourDP (colIdx++);
+            // Use the sample filename (without extension) as the zone name,
+            // falling back to a generic "Zone N" label if none was found.
+            z.name     = sampleName.isNotEmpty()
+                       ? juce::File (sampleName).getFileNameWithoutExtension()
+                       : "Zone " + juce::String (colIdx);
+            zones.push_back (z);
+            loKey = 0; hiKey = 127; sampleName = {};
         }
         inRegion = false;
     };
 
     for (auto line : lines)
     {
-        line = line.trim().toLowerCase();
-        if (line.startsWith ("<region>")) { flush(); inRegion = true; loKey = 0; hiKey = 127; }
-        else if (line.startsWith ("<group>") || line.startsWith ("<global>")) flush();
+        // Use the original (case-preserved) line for sample= value extraction,
+        // since file paths may be case-sensitive.
+        const auto lineLower = line.trim().toLowerCase();
+        const auto lineOrig  = line.trim();
+
+        if (lineLower.startsWith ("<region>")) { flush(); inRegion = true; loKey = 0; hiKey = 127; sampleName = {}; }
+        else if (lineLower.startsWith ("<group>") || lineLower.startsWith ("<global>")) flush();
 
         if (inRegion)
         {
-            auto loRaw = line.indexOf ("lokey=");
+            auto loRaw = lineLower.indexOf ("lokey=");
             if (loRaw >= 0)
                 loKey = juce::jlimit (0, 127,
-                    line.substring (loRaw + 6).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
-            auto hiRaw = line.indexOf ("hikey=");
+                    lineLower.substring (loRaw + 6).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
+            auto hiRaw = lineLower.indexOf ("hikey=");
             if (hiRaw >= 0)
                 hiKey = juce::jlimit (0, 127,
-                    line.substring (hiRaw + 6).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
-            auto kRaw = line.indexOf ("key=");
-            if (kRaw >= 0 && line.indexOf ("lokey=") < 0)
+                    lineLower.substring (hiRaw + 6).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
+            auto kRaw = lineLower.indexOf ("key=");
+            if (kRaw >= 0 && lineLower.indexOf ("lokey=") < 0)
             {
                 const int k = juce::jlimit (0, 127,
-                    line.substring (kRaw + 4).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
+                    lineLower.substring (kRaw + 4).upToFirstOccurrenceOf (" ", false, false).trim().getIntValue());
                 loKey = hiKey = k;
             }
+            // Extract sample= value (case-preserved path)
+            auto sRaw = lineLower.indexOf ("sample=");
+            if (sRaw >= 0 && sampleName.isEmpty())
+                sampleName = lineOrig.substring (sRaw + 7).upToFirstOccurrenceOf (" ", false, false).trim();
         }
     }
     flush();
@@ -1043,7 +1032,11 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
     char sfbk[4]; stream.read (sfbk, 4);
     if (juce::String::fromUTF8 (sfbk, 4) != "sfbk") return zones;
 
-    juce::MemoryBlock igenData;
+    // We need two sub-chunks from the pdta LIST: igen and shdr.
+    // igen holds instrument generators (key-range oper=43, sampleID oper=53).
+    // shdr holds sample headers (20-char name per sample record of 46 bytes).
+    juce::MemoryBlock igenData, shdrData;
+
     while (! stream.isExhausted())
     {
         char id[4]; if (stream.read (id, 4) < 4) break;
@@ -1060,8 +1053,20 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
                     char sub[4]; if (stream.read (sub, 4) < 4) break;
                     const auto subId = juce::String::fromUTF8 (sub, 4);
                     const int  subSz = stream.readInt();
-                    if (subId == "igen") { igenData.setSize ((size_t) subSz); stream.read (igenData.getData(), subSz); break; }
-                    stream.skipNextBytes (subSz);
+                    if (subId == "igen")
+                    {
+                        igenData.setSize ((size_t) subSz);
+                        stream.read (igenData.getData(), subSz);
+                    }
+                    else if (subId == "shdr")
+                    {
+                        shdrData.setSize ((size_t) subSz);
+                        stream.read (shdrData.getData(), subSz);
+                    }
+                    else
+                    {
+                        stream.skipNextBytes (subSz);
+                    }
                 }
                 break;
             }
@@ -1072,28 +1077,100 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
 
     if (igenData.isEmpty()) return zones;
 
+    // Build sample-name lookup from shdr.
+    // Each shdr record is 46 bytes: 20-char name, then various uint32/uint16 fields.
+    // The final sentinel record ("EOS") should be ignored.
+    std::vector<juce::String> sampleNames;
+    if (! shdrData.isEmpty())
+    {
+        constexpr size_t kShdrRecSize = 46;
+        const size_t numSamples = shdrData.getSize() / kShdrRecSize;
+        const auto*  shdr       = static_cast<const char*> (shdrData.getData());
+        sampleNames.reserve (numSamples);
+        for (size_t s = 0; s < numSamples; ++s)
+        {
+            const char* namePtr = shdr + s * kShdrRecSize;
+            // Name is null-terminated within 20 bytes
+            sampleNames.push_back (juce::String::fromUTF8 (namePtr, 20).trimEnd());
+        }
+    }
+
+    // Parse igen: collect key-range generators (oper 43) and sampleID (oper 53)
+    // within each instrument zone (ibag boundary = oper 0 / terminal sentinel).
+    // Strategy: scan linearly; track the current zone's keyRange and sampleID.
     const size_t numRecs = igenData.getSize() / 4;
     const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
-    int  colIdx = 0;
-    std::set<std::pair<int,int>> seen;
+
+    struct ZoneCandidate
+    {
+        int          lo { 0 }, hi { 127 };
+        int          sampleId { -1 };
+        bool         hasKeyRange { false };
+    };
+
+    std::vector<ZoneCandidate> candidates;
+    ZoneCandidate cur;
+
+    auto flushCandidate = [&]
+    {
+        if (cur.hasKeyRange && cur.hi >= cur.lo)
+            candidates.push_back (cur);
+        cur = {};
+    };
 
     for (size_t i = 0; i < numRecs; ++i)
     {
-        const uint16_t oper = (uint16_t)(data[i*4] | (data[i*4+1] << 8));
-        if (oper == 43)
+        const uint16_t oper  = (uint16_t)(data[i*4]     | (data[i*4+1] << 8));
+        const uint8_t  lo    = data[i*4+2];
+        const uint8_t  hi    = data[i*4+3];
+        const uint16_t amount= (uint16_t)(data[i*4+2]   | (data[i*4+3] << 8));
+
+        if (oper == 0)          // startAddrsOffset — first gen of a new ibag (zone boundary)
         {
-            const int lo = data[i*4+2];
-            const int hi = data[i*4+3];
-            if (hi >= lo)
-            {
-                auto key = std::make_pair (lo, hi);
-                if (seen.find (key) == seen.end())
-                {
-                    seen.insert (key);
-                    zones.push_back ({ lo, hi, 0, 127, -1, false, zoneColourDP (colIdx++) });
-                }
-            }
+            flushCandidate();
         }
+        else if (oper == 43)    // keyRange
+        {
+            cur.lo           = lo;
+            cur.hi           = hi;
+            cur.hasKeyRange  = true;
+        }
+        else if (oper == 53)    // sampleID (terminal generator — also marks zone end)
+        {
+            cur.sampleId = (int) amount;
+            flushCandidate();
+        }
+    }
+    flushCandidate();
+
+    // De-duplicate by (lo, hi) and build final zone list
+    int  colIdx = 0;
+    std::set<std::pair<int,int>> seen;
+
+    for (auto& c : candidates)
+    {
+        auto key = std::make_pair (c.lo, c.hi);
+        if (seen.find (key) != seen.end()) continue;
+        seen.insert (key);
+
+        KeysPanel::Keyzone z;
+        z.loKey    = c.lo;
+        z.hiKey    = c.hi;
+        z.loVel    = 0;
+        z.hiVel    = 127;
+        z.rootPitch= -1;
+        z.isLooped = false;
+        z.colour   = zoneColourDP (colIdx++);
+
+        // Assign sample name if we have shdr data and a valid sample ID
+        if (c.sampleId >= 0 && c.sampleId < (int) sampleNames.size())
+            z.name = sampleNames[(size_t) c.sampleId];
+
+        // Fall back to "Zone N" if the name is empty or the EOS sentinel
+        if (z.name.isEmpty() || z.name == "EOS")
+            z.name = "Zone " + juce::String (colIdx);
+
+        zones.push_back (z);
     }
 
     std::sort (zones.begin(), zones.end(), [] (auto& a, auto& b) { return a.loKey < b.loKey; });
