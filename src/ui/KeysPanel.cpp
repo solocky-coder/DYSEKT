@@ -176,10 +176,12 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     // ── Helper: small padlock for SF2 read-only columns ───────────────────────
     auto drawLock = [&] (int cx, int cy)
     {
-        const int sz = 11;
-        g.setFont (juce::Font (juce::FontOptions().withName ("Segoe UI Emoji").withPointHeight ((float) sz)));
-        g.setColour (theme.foreground.withAlpha (0.75f));
-        g.drawText (juce::String::fromUTF8 ("\xF0\x9F\x94\x92"),
+        // Draw the 🔒 emoji (U+1F512) using the system default font so JUCE's
+        // font fallback chain finds Segoe UI Emoji on Windows automatically.
+        const int sz = 14;
+        g.setFont (juce::Font (juce::FontOptions().withPointHeight ((float) sz)));
+        g.setColour (theme.foreground.withAlpha (0.80f));
+        g.drawText (juce::String (juce::CharPointer_UTF8 ("\xF0\x9F\x94\x92")),
                     cx - sz / 2, cy - sz / 2, sz, sz,
                     juce::Justification::centred, false);
     };
