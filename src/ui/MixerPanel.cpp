@@ -721,7 +721,7 @@ void MixerPanel::drawSf2Row (juce::Graphics& g, int ry) const
     // Label
     g.setFont (DysektLookAndFeel::makeFont (11.0f, true));
     g.setColour (theme.accent.withAlpha (0.75f));
-    g.drawText ("SF2", 10, ry, kNameColW - 10, kSf2RowH, juce::Justification::centredLeft);
+    g.drawText ("SF-PLAYER", 10, ry, kNameColW - 10, kSf2RowH, juce::Justification::centredLeft);
 
     // Dash-fill all knob columns — SF2 row has no per-row controls here
     g.setFont (DysektLookAndFeel::makeFont (11.0f));
