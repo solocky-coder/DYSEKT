@@ -438,17 +438,18 @@ KeysPanel::ZoneMatrixContent::EditCol
 KeysPanel::ZoneMatrixContent::hitTestCol (int x, int w) const
 {
     // Must mirror paint() geometry exactly
-    constexpr int kColGap   = 2;
-    constexpr int kLpW      = 20;
-    constexpr int kRelW     = 52;
-    constexpr int kVolW     = 46;
-    constexpr int kPanW     = 36;
-    constexpr int kPitchW   = 36;
-    constexpr int kRootW    = 36;
-    constexpr int kHiKeyW   = 36;
-    constexpr int kLoKeyW   = 36;
+    constexpr int kColGap   = 3;
+    constexpr int kScrollW  = 10;
+    constexpr int kLpW      = 24;
+    constexpr int kRelW     = 58;
+    constexpr int kVolW     = 52;
+    constexpr int kPanW     = 44;
+    constexpr int kPitchW   = 44;
+    constexpr int kRootW    = 44;
+    constexpr int kHiKeyW   = 44;
+    constexpr int kLoKeyW   = 44;
 
-    const int kLpX    = w - kLpW;
+    const int kLpX    = w - kScrollW - kLpW;
     const int kRelX   = kLpX   - kColGap - kRelW;
     const int kVolX   = kRelX  - kColGap - kVolW;
     const int kPanX   = kVolX  - kColGap - kPanW;
