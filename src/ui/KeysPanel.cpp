@@ -652,7 +652,7 @@ void KeysPanel::resized()
     // Allow up to 50px tall, minimum 32px.
     kKeyH = juce::jlimit (32, 50, h / 3);
 
-    constexpr int kMatrixKeyGap = 4;   // px gap between zone matrix frame and keyboard
+    constexpr int kMatrixKeyGap = 8;   // px gap between zone matrix frame and keyboard
     kZoneViewH = juce::jmax (0, h - kKeyH - kMatrixKeyGap);
 
     // Full keyboard: 75 white keys spanning the full component width.
