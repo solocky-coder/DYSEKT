@@ -629,6 +629,29 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
     bool  inRegion   = false;
     int   colIdx     = 0;
     juce::String sampleName;
+    juce::String groupSampleName;   // inheritable group/global-level sample=
+
+    // ── Extract the bare filename (no directory, no extension) from a raw line ──
+    // Uses the original (non-lowercased) line so names preserve their case.
+    auto extractSampleName = [] (const juce::String& rawLine) -> juce::String
+    {
+        const juce::String lc = rawLine.toLowerCase();
+        const int smpPos = lc.indexOf ("sample=");
+        if (smpPos < 0) return {};
+
+        // Grab path up to the next whitespace (space or tab).
+        auto path = rawLine.substring (smpPos + 7)
+                           .upToFirstOccurrenceOf (" ",  false, false)
+                           .upToFirstOccurrenceOf ("\t", false, false)
+                           .trim();
+
+        // Strip leading directory components (forward- and back-slash).
+        juce::String name = path.fromLastOccurrenceOf ("/",  false, false)
+                                .fromLastOccurrenceOf ("\\", false, false)
+                                .upToLastOccurrenceOf (".",  false, false)
+                                .trim();
+        return name;
+    };
 
     auto flush = [&]
     {
@@ -643,8 +666,14 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
             z.tuneCents  = tuneVal;
             z.releaseSec = releaseSec;
             z.colour     = zoneColour (colIdx++);
-            z.name       = sampleName;
-            z.isSfz      = true;   // SFZ zones are editable
+            // Use the per-region name; fall back to group-level name; then "Zone N".
+            if (sampleName.isNotEmpty())
+                z.name = sampleName;
+            else if (groupSampleName.isNotEmpty())
+                z.name = groupSampleName;
+            else
+                z.name = "Zone " + juce::String (colIdx);
+            z.isSfz      = true;
             zones.push_back (z);
         }
         loKey = 0; hiKey = 127; rootPitch = -1;
@@ -653,15 +682,39 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
         inRegion = false;
     };
 
-    for (auto line : lines)
+    for (const auto& rawLine : lines)
     {
-        line = line.trim().toLowerCase();
-        if (line.startsWith ("<region>")) { flush(); inRegion = true; loKey = 0; hiKey = 127; }
-        else if (line.startsWith ("<group>") || line.startsWith ("<global>")) flush();
+        // Use lowercase copy for tag/opcode detection; rawLine for sample name.
+        const juce::String line = rawLine.trim().toLowerCase();
+
+        if (line.startsWith ("<region>"))
+        {
+            flush();
+            inRegion = true;
+            loKey = 0; hiKey = 127;
+        }
+        else if (line.startsWith ("<group>"))
+        {
+            flush();
+            groupSampleName = {};   // reset — each group owns its own default
+        }
+        else if (line.startsWith ("<global>"))
+        {
+            flush();
+            groupSampleName = {};
+        }
+
+        // Parse group/global-level sample= so regions can inherit it.
+        if (! inRegion)
+        {
+            juce::String inherited = extractSampleName (rawLine);
+            if (inherited.isNotEmpty())
+                groupSampleName = inherited;
+        }
 
         if (inRegion)
         {
-            // Generic float extractor
+            // Generic float extractor (operates on lowercased line).
             auto getFloat = [&] (const juce::String& key) -> float
             {
                 int pos = line.indexOf (key + "=");
@@ -669,7 +722,7 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
                 return line.substring (pos + key.length() + 1)
                            .trimStart()
                            .upToFirstOccurrenceOf (" ",  false, false)
-                           .upToFirstOccurrenceOf ("	", false, false)
+                           .upToFirstOccurrenceOf ("\t", false, false)
                            .getFloatValue();
             };
 
@@ -722,20 +775,10 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
             float rel = getFloat ("ampeg_release");
             if (rel > -999998.f) releaseSec = juce::jlimit (0.0f, 60.0f, rel);
 
-            // sample name
-            {
-                int smpPos = line.indexOf ("sample=");
-                if (smpPos >= 0)
-                {
-                    auto s = line.substring (smpPos + 7)
-                                 .upToFirstOccurrenceOf (" ", false, false).trim();
-                    sampleName = s.fromLastOccurrenceOf ("/",  false, false)
-                                  .fromLastOccurrenceOf ("\\", false, false)
-                                  .upToLastOccurrenceOf (".",  false, false).trim();
-                    if (sampleName.isEmpty())
-                        sampleName = "Zone " + juce::String (colIdx + 1);
-                }
-            }
+            // Per-region sample= (takes priority over group-level name).
+            juce::String perRegion = extractSampleName (rawLine);
+            if (perRegion.isNotEmpty())
+                sampleName = perRegion;
         }
     }
     flush();
