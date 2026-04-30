@@ -177,9 +177,13 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     {
         g.setColour (theme.foreground.withAlpha (0.28f));
         const float r = 2.5f;
-        g.drawArc ((float)cx - r, (float)cy - r - 2.f, r * 2.f, r * 2.f,
-                   juce::MathConstants<float>::pi,
-                   juce::MathConstants<float>::twoPi, 1.f, false);
+        {
+            juce::Path arcPath;
+            arcPath.addArc ((float)cx - r, (float)cy - r - 2.f, r * 2.f, r * 2.f,
+                            juce::MathConstants<float>::pi,
+                            juce::MathConstants<float>::twoPi, true);
+            g.strokePath (arcPath, juce::PathStrokeType (1.f));
+        }
         g.fillRoundedRectangle ((float)cx - r - 1.f, (float)cy - 1.f,
                                 (r + 1.f) * 2.f, 5.f, 1.f);
     };
