@@ -210,8 +210,8 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             g.drawText (label, r, juce::Justification::centred);
         };
 
-        drawTab (editTabArea, "EDIT", ! padGridActive);
-        drawTab (padTabArea,  "SFZ",  padGridActive);
+        drawTab (editTabArea, "SLICER", ! padGridActive);
+        drawTab (padTabArea,  "SF-PLAYER",  padGridActive);
     }
 
     // ── Top row: four icons evenly spread across full width ──────────────────
