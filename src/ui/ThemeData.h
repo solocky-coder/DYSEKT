@@ -416,6 +416,45 @@ struct ThemeData
         return t;
     }
 
+    // ── SERUM ─────────────────────────────────────────────────────────────────
+    // Cold steel panels · Cyan glow accent · Metallic blue-grey — Serum 2 vibe
+    static ThemeData serumTheme()
+    {
+        ThemeData t;
+        t.name             = "serum";
+        t.background       = juce::Colour (0xFF000000);   // black void chassis
+        t.waveformBg       = juce::Colour (0xFF0A0C12);   // deep cold steel
+        t.darkBar          = juce::Colour (0xFF131720);   // steel panel bar
+        t.foreground       = juce::Colour (0xFFC2D0E0);   // cold blue-grey text
+        t.header           = juce::Colour (0xFF0D101A);   // top bar
+        t.waveform         = juce::Colour (0xFF3ADDE8);   // Serum cyan
+        t.selectionOverlay = juce::Colour (0xFF0C2234);   // cold teal selection
+        t.lockActive       = juce::Colour (0xFF3ADDE8);   // cyan lock
+        t.lockInactive     = juce::Colour (0xFF1C2838);   // steel lock
+        t.gridLine         = juce::Colour (0xFF181E2C);   // barely-visible grid
+        t.accent           = juce::Colour (0xFF3ADDE8);   // Serum cyan accent
+        t.button           = juce::Colour (0xFF1C2438);   // elevated steel button
+        t.buttonHover      = juce::Colour (0xFF263050);   // hover lift
+        t.separator        = juce::Colour (0xFF252E40);   // steel divider
+        t.slicePalette[0 ] = juce::Colour (0xFFFF2DA0); // Hot Magenta
+        t.slicePalette[1 ] = juce::Colour (0xFF00FFC8); // Serum Mint
+        t.slicePalette[2 ] = juce::Colour (0xFFFF7020); // Amber
+        t.slicePalette[3 ] = juce::Colour (0xFF3ADDE8); // Serum Cyan (accent)
+        t.slicePalette[4 ] = juce::Colour (0xFFFFE040); // Solar Yellow
+        t.slicePalette[5 ] = juce::Colour (0xFF8855FF); // UV Violet
+        t.slicePalette[6 ] = juce::Colour (0xFF00FFCC); // Aqua
+        t.slicePalette[7 ] = juce::Colour (0xFFFF2040); // Alarm Red
+        t.slicePalette[8 ] = juce::Colour (0xFF40FF50); // Neon Green
+        t.slicePalette[9 ] = juce::Colour (0xFFFF40B0); // Acid Pink
+        t.slicePalette[10] = juce::Colour (0xFF20A8FF); // Sky Blue
+        t.slicePalette[11] = juce::Colour (0xFFFFBB00); // Gold
+        t.slicePalette[12] = juce::Colour (0xFFFF5070); // Coral Crimson
+        t.slicePalette[13] = juce::Colour (0xFF50D8FF); // Ice Blue
+        t.slicePalette[14] = juce::Colour (0xFFC8FF00); // Chartreuse
+        t.slicePalette[15] = juce::Colour (0xFFAA80FF); // Lavender
+        return t;
+    }
+
     static juce::Colour parseHex (const juce::String& hex)
     {
         return juce::Colour ((juce::uint32) (0xFF000000 | hex.getHexValue32()));
@@ -428,6 +467,7 @@ struct ThemeData
         if (text.contains("name: pigments")) return pigmentsTheme();
         if (text.contains("name: cr8"))      return cr8Theme();
         if (text.contains("name: dysekt"))   return dysektTheme();
+        if (text.contains("name: serum"))    return serumTheme();
 
         for (auto line : juce::StringArray::fromLines (text))
         {

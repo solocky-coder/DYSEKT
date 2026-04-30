@@ -102,9 +102,22 @@ void HeaderBar::paint (juce::Graphics& g)
     const auto accent = getTheme().accent;
     auto b = getLocalBounds();
 
-    // Dark rounded background — same as LCD panel frames
-    juce::ColourGradient bgGrad (juce::Colour (0xFF131313), 0, 0,
-                                  juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+    // Dark rounded background — metallic gradient for serum, flat for all others
+    const auto& theme = getTheme();
+    juce::ColourGradient bgGrad;
+    if (theme.name == "serum")
+    {
+        // Three-stop metallic: bright steel top → dark mid → slight lift bottom
+        auto base = theme.darkBar;
+        bgGrad = juce::ColourGradient (base.brighter (0.22f), 0, 0,
+                                       base.darker   (0.12f), 0, (float) b.getHeight(), false);
+        bgGrad.addColour (0.65, base.brighter (0.08f));
+    }
+    else
+    {
+        bgGrad = juce::ColourGradient (juce::Colour (0xFF131313), 0, 0,
+                                       juce::Colour (0xFF0E0E0E), 0, (float) b.getHeight(), false);
+    }
     g.setGradientFill (bgGrad);
     g.fillRoundedRectangle (b.toFloat(), 3.0f);
 

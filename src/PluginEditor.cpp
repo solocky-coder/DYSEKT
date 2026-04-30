@@ -1011,7 +1011,9 @@ void DysektEditor::ensureDefaultThemes()
  write ("hack", ThemeData::hackTheme());
  write ("midnight", ThemeData::midnightTheme());
  write ("pigments", ThemeData::pigmentsTheme());
- write ("dysekt", ThemeData::dysektTheme());
+ write ("cr8",     ThemeData::cr8Theme());
+ write ("dysekt",  ThemeData::dysektTheme());
+ write ("serum",   ThemeData::serumTheme());
 }
 
 juce::StringArray DysektEditor::getAvailableThemes()
@@ -1046,7 +1048,9 @@ void DysektEditor::applyTheme (const juce::String& themeName)
  else if (themeName == "hack") setTheme (ThemeData::hackTheme());
  else if (themeName == "midnight") setTheme (ThemeData::midnightTheme());
  else if (themeName == "pigments") setTheme (ThemeData::pigmentsTheme());
- else if (themeName == "dysekt") setTheme (ThemeData::dysektTheme());
+ else if (themeName == "cr8")      setTheme (ThemeData::cr8Theme());
+ else if (themeName == "dysekt")   setTheme (ThemeData::dysektTheme());
+ else if (themeName == "serum")    setTheme (ThemeData::serumTheme());
  else setTheme (ThemeData::darkTheme());
  processor.sliceManager.setSlicePalette (getTheme().slicePalette);
  saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);

@@ -86,10 +86,24 @@ void DysektLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
                  : toggled       ? baseBg.interpolatedWith (getTheme().accent, 0.14f)
                                  : baseBg;
 
-    juce::ColourGradient grad (fillCol.brighter (0.03f), bounds.getX(), bounds.getY(),
-                               fillCol.darker   (0.03f), bounds.getX(), bounds.getBottom(),
-                               false);
-    g.setGradientFill (grad);
+    if (getTheme().name == "serum")
+    {
+        // Metallic steel gradient — lighter top edge, darker mid, slight lift at bottom
+        auto top    = fillCol.brighter (0.18f);
+        auto mid    = fillCol.darker   (0.08f);
+        auto bot    = fillCol.brighter (0.06f);
+        juce::ColourGradient grad (top, bounds.getX(), bounds.getY(),
+                                   mid, bounds.getX(), bounds.getBottom(), false);
+        grad.addColour (0.60, bot);
+        g.setGradientFill (grad);
+    }
+    else
+    {
+        juce::ColourGradient grad (fillCol.brighter (0.03f), bounds.getX(), bounds.getY(),
+                                   fillCol.darker   (0.03f), bounds.getX(), bounds.getBottom(),
+                                   false);
+        g.setGradientFill (grad);
+    }
     g.fillRoundedRectangle (bounds, r);
 
     // ── Crisp 1px border — full accent on active, separator otherwise ─────────
@@ -139,8 +153,18 @@ void DysektLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, i
     // Fill entire rect first — eliminates white OS window corners behind rounded shape
     g.fillAll (bgColour);
 
-    // Flat panel — no gradient blur, just a clean solid fill
-    g.setColour (bgColour);
+    // Flat panel for most themes; metallic gradient for serum
+    if (getTheme().name == "serum")
+    {
+        juce::ColourGradient grad (bgColour.brighter (0.15f), 0, 0,
+                                   bgColour.darker   (0.08f), 0, (float) height, false);
+        grad.addColour (0.55, bgColour);
+        g.setGradientFill (grad);
+    }
+    else
+    {
+        g.setColour (bgColour);
+    }
     g.fillRoundedRectangle (bounds, r);
 
     // Outer border — accent tint, full opacity
