@@ -174,16 +174,30 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     }
 
     // ── Helper: small padlock for SF2 read-only columns ───────────────────────
+    // Renders a 🔒-style padlock via an inline SVG drawable.
+    static const char* kLockSvg =
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 16'>"
+        "  <rect x='1' y='7' width='12' height='9' rx='2' ry='2' fill='#ffffff'/>"
+        "  <path d='M3.5 7 V4.5 A3.5 3.5 0 0 1 10.5 4.5 V7' "
+        "        fill='none' stroke='#ffffff' stroke-width='2'"
+        "        stroke-linecap='round'/>"
+        "</svg>";
+
+    auto lockDrawable = std::unique_ptr<juce::Drawable> (
+        juce::Drawable::createFromSVG (*juce::XmlDocument::parse (kLockSvg)));
+    if (lockDrawable)
+        lockDrawable->replaceColour (juce::Colours::white,
+                                     theme.foreground.withAlpha (0.65f));
+
     auto drawLock = [&] (int cx, int cy)
     {
-        // Draw the 🔒 emoji (U+1F512) using the system default font so JUCE's
-        // font fallback chain finds Segoe UI Emoji on Windows automatically.
-        const int sz = 14;
-        g.setFont (juce::Font (juce::FontOptions().withPointHeight ((float) sz)));
-        g.setColour (theme.foreground.withAlpha (0.80f));
-        g.drawText (juce::String (juce::CharPointer_UTF8 ("\xF0\x9F\x94\x92")),
-                    cx - sz / 2, cy - sz / 2, sz, sz,
-                    juce::Justification::centred, false);
+        if (! lockDrawable) return;
+        const int sz = 10;
+        lockDrawable->drawWithin (g,
+                                  juce::Rectangle<float> ((float)(cx - sz / 2),
+                                                           (float)(cy - sz / 2),
+                                                           (float) sz, (float) sz),
+                                  juce::RectanglePlacement::centred, 1.0f);
     };
 
     // ── Note name helper ──────────────────────────────────────────────────────
