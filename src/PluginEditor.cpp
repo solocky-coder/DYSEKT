@@ -556,7 +556,7 @@ void DysektEditor::resized()
  const int wantedSlotH = hasActiveSlot ? si (kPanelSlotH) : 0;
  const int slotH = juce::jmin (wantedSlotH, juce::jmax (0, area.getHeight() - si (80)));
  auto slot = area.removeFromBottom (slotH);
- area.removeFromBottom (si (kMargin));
+ if (hasActiveSlot) area.removeFromBottom (si (kMargin));
 
  if (activeSlot == SlotContent::Mixer) {
  // Expand mixer to fill ALL available area (waveformView space + slot)
