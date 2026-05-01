@@ -48,7 +48,29 @@ void SliceWaveformLcd::repaintLcd()
  else
  {
  const int ver = processor.getUiSliceSnapshotVersion();
- if (ver != lastEnvSnapVer)
+
+ // Also detect changes to the global APVTS ADSR knobs — turning a knob
+ // does not dirty the slice snapshot (it only updates the APVTS param),
+ // so we must check the raw param values directly here.
+ auto apvtsLoad = [&] (const juce::String& id) -> float {
+     auto* p = processor.apvts.getRawParameterValue (id);
+     return p ? p->load() : 0.0f;
+ };
+ const float curA = apvtsLoad (ParamIds::defaultAttack);
+ const float curD = apvtsLoad (ParamIds::defaultDecay);
+ const float curS = apvtsLoad (ParamIds::defaultSustain);
+ const float curR = apvtsLoad (ParamIds::defaultRelease);
+ const bool adsrChanged = (curA != lastApvtsAttack || curD != lastApvtsDecay
+                            || curS != lastApvtsSustain || curR != lastApvtsRelease);
+ if (adsrChanged)
+ {
+     lastApvtsAttack  = curA;
+     lastApvtsDecay   = curD;
+     lastApvtsSustain = curS;
+     lastApvtsRelease = curR;
+ }
+
+ if (ver != lastEnvSnapVer || adsrChanged)
  {
  buildEnvelopeNodes();
  lastEnvSnapVer = ver;
@@ -132,22 +154,32 @@ float SliceWaveformLcd::getSliceDurMs() const
 
 void SliceWaveformLcd::buildEnvelopeNodes()
 {
- // Always read per-slice ADSR values — nodes must reflect the slice's
- // own stored values regardless of lock state, so the envelope display
- // is always authoritative for the selected slice.
+ // Read effective ADSR values — same resolve logic as SliceControlBar:
+ // if the field is locked, use the slice's own stored value;
+ // otherwise use the global APVTS knob value.  This ensures the nodes
+ // track the ADSR knobs even when the field is not locked.
  float attackMs  = 10.0f;
  float decayMs   = 100.0f;
  float sustainPc = 100.0f;
  float releaseMs = 100.0f;
 
+ auto apvtsMs  = [&] (const juce::String& id) -> float {
+     auto* p = processor.apvts.getRawParameterValue (id);
+     return p ? p->load() : 0.0f;
+ };
+ auto apvtsPct = [&] (const juce::String& id) -> float {
+     auto* p = processor.apvts.getRawParameterValue (id);
+     return p ? p->load() : 100.0f;
+ };
+
  const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
  if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
  {
      const auto& s = processor.sliceManager.getSlice (sel);
-     attackMs  = s.attackSec  * 1000.0f;
-     decayMs   = s.decaySec   * 1000.0f;
-     sustainPc = s.sustainLevel * 100.0f;
-     releaseMs = s.releaseSec * 1000.0f;
+     attackMs  = (s.lockMask & kLockAttack)  ? s.attackSec   * 1000.0f : apvtsMs  (ParamIds::defaultAttack);
+     decayMs   = (s.lockMask & kLockDecay)   ? s.decaySec    * 1000.0f : apvtsMs  (ParamIds::defaultDecay);
+     sustainPc = (s.lockMask & kLockSustain) ? s.sustainLevel * 100.0f : apvtsPct (ParamIds::defaultSustain);
+     releaseMs = (s.lockMask & kLockRelease) ? s.releaseSec  * 1000.0f : apvtsMs  (ParamIds::defaultRelease);
  }
 
  // Layout (display-only proportions — must match commitNodes exactly):

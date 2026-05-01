@@ -112,6 +112,13 @@ private:
     int      postCommitGuard { 0 };   // frames to skip rebuild after commitNodes()
     int      lastEnvSnapVer  { -1 };  // snapshot version when env was last built
 
+    // Last-seen global APVTS ADSR values — used by repaintLcd() to detect knob
+    // changes that do not increment the slice snapshot version.
+    float lastApvtsAttack  { -1.0f };
+    float lastApvtsDecay   { -1.0f };
+    float lastApvtsSustain { -1.0f };
+    float lastApvtsRelease { -1.0f };
+
     // Content area cached in resized() / used for hit testing
     juce::Rectangle<float> screenArea;
 
