@@ -831,7 +831,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // Scale all fixed pixel constants proportionally with component height
  paintSf = (float) getHeight() / 72.0f;
  psCellW = juce::roundToInt ((float) kParamCellWidth * paintSf);
- psCellH = juce::roundToInt (32.0f * paintSf);
+ psCellH = juce::roundToInt (28.0f * paintSf);
  psKnobR = juce::roundToInt ((float) kKnobR * paintSf);
  auto si  = [this](int v) { return juce::roundToInt ((float) v * paintSf); };
 
@@ -839,7 +839,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  int idx = ui.selectedSlice;
  int numSlices = ui.numSlices;
  int rightEdge = getWidth() - si (8);
- int row1y = si (2), row2y = si (36);
+ int row1y = si (5), row2y = si (36);
  rootNoteArea = {}; // no longer drawn — LCD shows ROOT and SLICES
 
  if (idx < 0 || idx >= numSlices)
