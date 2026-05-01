@@ -125,11 +125,25 @@ void SliceLcdDisplay::buildDisplayData()
     data.pan         = sl.pan;
     data.pitchSemitones = sl.pitchSemitones;
     data.centsDetune = sl.centsDetune;
-    data.attackSec   = sl.attackSec;
-    data.holdSec     = sl.holdSec;
-    data.decaySec    = sl.decaySec;
-    data.sustainLevel = sl.sustainLevel;
-    data.releaseSec  = sl.releaseSec;
+    // Apply the same lock-resolve logic as SliceControlBar: when a parameter
+    // is NOT locked to this slice, show the global APVTS default so the LCD
+    // and the SCB knobs always agree.
+    auto apvtsMs = [&] (const juce::String& id) -> float {
+        auto* p = processor.apvts.getRawParameterValue (id);
+        return p ? p->load() / 1000.0f : 0.0f;
+    };
+    auto apvtsPct = [&] (const juce::String& id) -> float {
+        auto* p = processor.apvts.getRawParameterValue (id);
+        return p ? p->load() / 100.0f : 1.0f;
+    };
+    auto resolveLcd = [&] (uint32_t bit, float sliceVal, float globalVal) -> float {
+        return (sl.lockMask & bit) ? sliceVal : globalVal;
+    };
+    data.attackSec    = resolveLcd (kLockAttack,   sl.attackSec,   apvtsMs  (ParamIds::defaultAttack));
+    data.holdSec      = sl.holdSec;
+    data.decaySec     = resolveLcd (kLockDecay,    sl.decaySec,    apvtsMs  (ParamIds::defaultDecay));
+    data.sustainLevel = resolveLcd (kLockSustain,  sl.sustainLevel, apvtsPct (ParamIds::defaultSustain));
+    data.releaseSec   = resolveLcd (kLockRelease,  sl.releaseSec,  apvtsMs  (ParamIds::defaultRelease));
     data.reverse     = sl.reverse;
     data.loopMode    = sl.loopMode;
     data.oneShot     = sl.oneShot;

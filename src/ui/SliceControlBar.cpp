@@ -1693,10 +1693,34 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  e.mods.isShiftDown());
  }
 
+ // Unlocked ADSR knobs update the global APVTS default so every unlocked
+ // slice reflects the change.  Writing a per-slice value here would
+ // auto-lock the field, which is only correct when the user explicitly
+ // clicks the lock icon.
+ if (isAdsr && cell.fieldId != F::FieldHold)
+ {
+     juce::String paramId;
+     float apvtsNative = newNative;
+     switch (cell.fieldId)
+     {
+         case F::FieldAttack:  paramId = ParamIds::defaultAttack;  apvtsNative *= 1000.f; break;
+         case F::FieldDecay:   paramId = ParamIds::defaultDecay;   apvtsNative *= 1000.f; break;
+         case F::FieldSustain: paramId = ParamIds::defaultSustain; apvtsNative *= 100.f;  break;
+         case F::FieldRelease: paramId = ParamIds::defaultRelease; apvtsNative *= 1000.f; break;
+         default: break;
+     }
+     if (! paramId.isEmpty())
+     {
+         if (auto* p = processor.apvts.getParameter (paramId))
+             p->setValueNotifyingHost (p->convertTo0to1 (apvtsNative));
+         repaint(); return;
+     }
+ }
+
  DysektProcessor::Command cmd;
  cmd.type = F::CmdSetSliceParam;
  cmd.intParam1 = cell.fieldId; cmd.floatParam1 = newNative;
- cmd.intParam2 = 0; // normal lock behaviour — dragging a knob means the user wants this slice to have its own value
+ cmd.intParam2 = 0;
  processor.pushCommand (cmd); repaint();
 }
 
@@ -1968,15 +1992,35 @@ void SliceControlBar::showTextEditor (const ParamCell& cell, float currentValue)
  if (! textEditor) return;
  float val = textEditor->getText().getFloatValue();
  using F2 = DysektProcessor;
+ const bool isAdsrField = (fieldId == F2::FieldAttack || fieldId == F2::FieldDecay
+                           || fieldId == F2::FieldSustain || fieldId == F2::FieldRelease);
  if (fieldId == F2::FieldAttack || fieldId == F2::FieldDecay || fieldId == F2::FieldRelease)
  val /= 1000.f;
  else if (fieldId == F2::FieldSustain)
  val /= 100.f;
  val = juce::jlimit (minV, maxV, val);
+ // Check the current lock state from the snapshot
+ const auto& snap2 = processor.getUiSliceSnapshot();
+ const int sIdx2 = snap2.selectedSlice;
+ const bool fieldLocked = (sIdx2 >= 0 && sIdx2 < snap2.numSlices)
+     && (snap2.slices[(size_t) sIdx2].lockMask & activeCellSnapshot.lockBit) != 0;
+ if (isAdsrField && ! fieldLocked)
+ {
+     juce::String paramId;
+     float apvtsNative = val;
+     if      (fieldId == F2::FieldAttack)  { paramId = ParamIds::defaultAttack;  apvtsNative *= 1000.f; }
+     else if (fieldId == F2::FieldDecay)   { paramId = ParamIds::defaultDecay;   apvtsNative *= 1000.f; }
+     else if (fieldId == F2::FieldSustain) { paramId = ParamIds::defaultSustain; apvtsNative *= 100.f;  }
+     else if (fieldId == F2::FieldRelease) { paramId = ParamIds::defaultRelease; apvtsNative *= 1000.f; }
+     if (! paramId.isEmpty())
+         if (auto* p = processor.apvts.getParameter (paramId))
+             p->setValueNotifyingHost (p->convertTo0to1 (apvtsNative));
+     textEditor.reset(); repaint(); return;
+ }
  DysektProcessor::Command cmd;
  cmd.type = DysektProcessor::CmdSetSliceParam;
  cmd.intParam1 = fieldId; cmd.floatParam1 = val;
- cmd.intParam2 = 0; // normal lock behaviour — all SCB edits lock the field; skipLock is only for live ADSR node drags
+ cmd.intParam2 = 0;
  processor.pushCommand (cmd); textEditor.reset(); repaint();
  };
  textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };
