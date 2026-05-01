@@ -203,7 +203,7 @@ void SliceLcdDisplay::drawRow (juce::Graphics& g, int row, const juce::String& l
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const float sf = 1.0f; // fixed scale
+    const float sf    = (float) getHeight() / (float) kPreferredHeight;
     const int rowH  = effectiveRowH();
     const int lPad  = juce::roundToInt (kLeftPad * sf);
     int y = b.getY() + 4 + row * rowH;
@@ -244,7 +244,7 @@ void SliceLcdDisplay::drawRowPair (juce::Graphics& g, int row,
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const float sf = 1.0f; // fixed scale
+    const float sf    = (float) getHeight() / (float) kPreferredHeight;
     const int rowH  = effectiveRowH();
     const int lPad  = juce::roundToInt (kLeftPad * sf);
     const int y       = b.getY() + 4 + row * rowH;
@@ -321,7 +321,7 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
     const auto pal = LcdColours::fromTheme();
     auto screen = getLocalBounds().reduced (4);
 
-    const float sf = 1.0f; // fixed scale
+    const float sf      = (float) getHeight() / (float) kPreferredHeight;
     const juce::Font flagFont = DysektLookAndFeel::makeFont (16.0f * sf, true);
     const int flagH   = juce::roundToInt (22 * sf);
     const int flagGap = juce::roundToInt (4  * sf);
@@ -371,7 +371,7 @@ void SliceLcdDisplay::drawNoSliceScreen (juce::Graphics& g)
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const float sf = 1.0f; // fixed scale
+    const float sf = (float) getHeight() / (float) kPreferredHeight;
     g.setFont (DysektLookAndFeel::makeFont (20.0f * sf));
     g.setColour (pal.noDataCol);
 
@@ -399,7 +399,7 @@ void SliceLcdDisplay::drawNoSampleScreen (juce::Graphics& g)
 {
     const auto pal = LcdColours::fromTheme();
     auto b = getLocalBounds().reduced (4);
-    const float sf = 1.0f; // fixed scale
+    const float sf = (float) getHeight() / (float) kPreferredHeight;
     g.setFont (DysektLookAndFeel::makeFont (22.0f * sf));
     g.setColour (pal.noDataCol);
     g.drawText ("-- NO SAMPLE LOADED --", b, juce::Justification::centred);
@@ -415,7 +415,7 @@ void SliceLcdDisplay::drawNoSampleScreen (juce::Graphics& g)
 // -- effectiveRowH -------------------------------------------------------
 int SliceLcdDisplay::effectiveRowH() const noexcept
 {
-    const float sf = 1.0f; // fixed scale
+    const float sf      = (float) getHeight() / (float) kPreferredHeight;
     const int   flagH   = juce::roundToInt (22 * sf);
     const int   flagGap = juce::roundToInt (3  * sf);
     auto        b       = getLocalBounds().reduced (4);
@@ -582,7 +582,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         // Draw centred header: measure label+value as one unit, centre in screen
         auto   screen    = getLocalBounds().reduced (4);
         auto   pal       = LcdColours::fromTheme();
-        const float sf = 1.0f; // fixed scale
+        const float sf   = (float) getHeight() / (float) kPreferredHeight;
         const int rowH  = effectiveRowH();
         const int y      = screen.getY() + 4;
 

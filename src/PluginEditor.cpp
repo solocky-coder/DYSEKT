@@ -157,10 +157,19 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  }
  }
 
+ float apvtsScale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+ if (apvtsScale == 1.0f && savedScale > 0.0f && savedScale != apvtsScale)
+ {
+ if (auto* param = processor.apvts.getParameter (ParamIds::uiScale))
+ param->setValueNotifyingHost (param->convertTo0to1 (savedScale));
+ }
+
  setWantsKeyboardFocus (true);
- setResizable (false, false);
- // Fixed size at 1.25× the base dimensions — this is the canonical window size.
- setSize (juce::roundToInt (kBaseW * 1.25f), juce::roundToInt (kTotalH * 1.25f));
+ setResizable (true, false);
+ setResizeLimits (kBaseW / 2, kTotalH / 2, 3840, 2160);
+ if (auto* c = getConstrainer())
+     c->setFixedAspectRatio ((double) kBaseW / (double) kTotalH);
+ setSize (kBaseW, kTotalH);
  lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
  startTimerHz (30);
 }
@@ -195,7 +204,8 @@ void DysektEditor::setUiMode (int mode)
  }
 
  // Persist the new mode
- saveUserSettings (0.0f, getTheme().name);
+ float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+ saveUserSettings (scale, getTheme().name);
 
  resized();
  repaint();
@@ -317,7 +327,8 @@ void DysektEditor::toggleSoftWave()
  actionPanel.setWaveActive (waveformMode != 0);
  headerBar.setBrowserActive (activeSlot == SlotContent::Browser);
  headerBar.setWaveMode (waveformMode);
- saveUserSettings (0.0f, getTheme().name);
+ float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+ saveUserSettings (scale, getTheme().name);
 }
 
 void DysektEditor::toggleMidiFollow()
@@ -361,7 +372,7 @@ void DysektEditor::toggleThemeEditor()
  themeEditorPanel->onThemeSaved = [this] (const juce::String& name)
  {
  processor.sliceManager.setSlicePalette (getTheme().slicePalette);
- saveUserSettings (0.0f, name);
+ saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), name);
  repaint();
  };
 
@@ -379,7 +390,7 @@ static juce::Rectangle<float> waveformFrameRect (const DysektEditor& ed,
                                                   const juce::Rectangle<int>& wvBounds,
                                                   bool hasTrimDialog)
 {
- const float sf = 1.0f;
+ const float sf = (float) ed.getWidth() / (float) kBaseW;
  const int kFrameInset = juce::roundToInt (4.0f * sf);
  const int kFX = juce::roundToInt (kMargin * sf);
  const int kFW = ed.getWidth() - kFX * 2;
@@ -433,8 +444,9 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
 
  const bool wvVisible = waveformView.isVisible() && waveformView.getHeight() > 0;
 
- // Fixed scale — plugin is non-resizable
- const float sf = 1.0f;
+ // Scale all border pixel amounts proportionally to avoid sub-pixel overlap
+ // at non-integer UI scales (1.5×, 1.75× etc.)
+ const float sf = (float) getWidth() / (float) kBaseW;
 
  if (wvVisible)
  {
@@ -496,8 +508,10 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
 
 void DysektEditor::resized()
 {
- // Plugin is non-resizable — fixed scale factor of 1.0
- const float sf = 1.0f;
+ // ── Scale factor: all fixed-pixel constants scale with component width ────
+ // This prevents layout overlap when the host scales component bounds in
+ // response to setTransform (e.g. at 1.5× and above on high-DPI displays).
+ const float sf = (float) getWidth() / (float) kBaseW;
  auto si = [sf](int v) -> int { return juce::roundToInt ((float) v * sf); };
 
  auto area = juce::Rectangle<int> (0, 0, getWidth(), getHeight());
@@ -872,7 +886,20 @@ void DysektEditor::timerCallback()
  }
  }
 
- // (Plugin is non-resizable — no transform scaling needed)
+ float userScale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
+ float scale = userScale * hostScale;
+ if (scaleDirty || scale != lastScale)
+ {
+ scaleDirty = false; lastScale = scale;
+ // Reset to base size first so the host doesn't compound the scale on
+ // top of a previously-enlarged component (avoids double-scaling at 1.5×+)
+ setTransform (juce::AffineTransform{});
+ setSize (kBaseW, kTotalH);
+ setTransform (juce::AffineTransform::scale (scale));
+ DysektLookAndFeel::setMenuScale (scale);
+ saveUserSettings (userScale, getTheme().name); // persist user portion only — hostScale must not be baked in
+ uiChanged = true;
+ }
 
  const bool playbackActive = std::any_of (processor.voicePool.voicePositions.begin(),
  processor.voicePool.voicePositions.end(),
@@ -1019,7 +1046,7 @@ void DysektEditor::applyTheme (const juce::String& themeName)
  {
  setTheme (t);
  processor.sliceManager.setSlicePalette (getTheme().slicePalette);
- saveUserSettings (0.0f, themeName);
+ saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
  repaint(); return;
  }
  }
@@ -1035,36 +1062,59 @@ void DysektEditor::applyTheme (const juce::String& themeName)
  else if (themeName == "serum")    setTheme (ThemeData::serumTheme());
  else setTheme (ThemeData::darkTheme());
  processor.sliceManager.setSlicePalette (getTheme().slicePalette);
- saveUserSettings (0.0f, themeName);
+ saveUserSettings (processor.apvts.getRawParameterValue (ParamIds::uiScale)->load(), themeName);
  repaint();
 }
 
 void DysektEditor::setScaleFactor (float newScale)
 {
- // Pass host/OS DPI scale through directly. The 1.25× preferred size is already
- // baked into the fixed window dimensions set in the constructor.
- if (std::abs (newScale - lastScale) > 0.001f)
+ // On Windows HiDPI, JUCE's component peer already multiplies coordinates by
+ // the OS DPI scale factor internally. The VST3 host (Nuendo 12, Studio One 7)
+ // calls setScaleFactor() with the *content* scale it expects (e.g. 2.0 on a
+ // 200 % display). If we store that raw value and later do
+ // setTransform(scale(userScale * newScale))
+ // we double-apply the OS scaling → UI renders at 4× / crops badly.
+ //
+ // Fix: divide newScale by the display's native DPI scale so that the product
+ // userScale * hostScale
+ // represents only the delta above what JUCE already handles.
+ float nativeSF = 1.0f;
+ if (auto* disp = juce::Desktop::getInstance().getDisplays()
+ .getDisplayForRect (getScreenBounds()))
+ nativeSF = juce::jmax (0.01f, (float) disp->scale);
+
+ hostScale = newScale / nativeSF;
+ scaleDirty = true;
+
+ // Apply immediately — Nuendo 12 queries the window size synchronously
+ // right after this call, so we cannot wait for the next timer tick.
+ const float scale = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load()
+ * hostScale;
+ if (std::abs (scale - lastScale) > 0.001f)
  {
-     lastScale = newScale;
-     setTransform (juce::AffineTransform{});
-     setSize (juce::roundToInt (kBaseW * 1.25f), juce::roundToInt (kTotalH * 1.25f));
-     setTransform (juce::AffineTransform::scale (newScale));
-     DysektLookAndFeel::setMenuScale (newScale);
+ lastScale = scale;
+ scaleDirty = false;
+ setTransform (juce::AffineTransform{});
+ setSize (kBaseW, kTotalH);
+ setTransform (juce::AffineTransform::scale (scale));
+ DysektLookAndFeel::setMenuScale (scale);
  }
 }
 
-void DysektEditor::saveUserSettings (float /*scale*/, const juce::String& themeName)
+void DysektEditor::saveUserSettings (float scale, const juce::String& themeName)
 {
  auto file = getUserSettingsFile();
  file.getParentDirectory().createDirectory();
 
- file.replaceWithText ("theme: " + themeName
+ file.replaceWithText ("uiScale: " + juce::String (scale, 2)
+ + "\ntheme: " + themeName
  + "\nwaveStyle: " + juce::String (waveformMode)
  + "\nuiMode: " + juce::String (uiMode) + "\n");
 }
 
 void DysektEditor::loadUserSettings()
 {
+ savedScale = -1.0f;
  juce::String themeName = "dark";
  auto file = getUserSettingsFile();
  if (file.existsAsFile())
@@ -1072,7 +1122,12 @@ void DysektEditor::loadUserSettings()
  for (auto line : juce::StringArray::fromLines (file.loadFileAsString()))
  {
  line = line.trim();
- if (line.startsWith ("theme:"))
+ if (line.startsWith ("uiScale:"))
+ {
+ float v = line.fromFirstOccurrenceOf (":", false, false).trim().getFloatValue();
+ if (v >= 0.5f && v <= 2.0f) savedScale = v;
+ }
+ else if (line.startsWith ("theme:"))
  {
  themeName = line.fromFirstOccurrenceOf (":", false, false).trim();
  }

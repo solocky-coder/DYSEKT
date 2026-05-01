@@ -828,8 +828,8 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  cells.clear();
 
- // Plugin is non-resizable — fixed paint scale
- paintSf = 1.0f;
+ // Scale all fixed pixel constants proportionally with component height
+ paintSf = (float) getHeight() / 72.0f;
  psCellW = juce::roundToInt ((float) kParamCellWidth * paintSf);
  psCellH = juce::roundToInt (28.0f * paintSf);
  psKnobR = juce::roundToInt ((float) kKnobR * paintSf);

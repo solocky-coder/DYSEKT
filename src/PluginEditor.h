@@ -65,15 +65,16 @@ private:
     void loadUserSettings();
 
     DysektProcessor& processor;
-
+    float    lastScale             = 1.0f;
+    bool     scaleDirty            = true;
+    float    hostScale             = 1.0f;
     float    lastZoom              = -1.0f;
     float    lastScroll            = -1.0f;
-    float    lastScale             = -1.0f;
     int      lastMidiFollowSlice   = -1;
     int      timerHz               = 30;
     bool     lastWaveformAnimating = false;
     bool     lastPreviewActive     = false;
-
+    float    savedScale            = -1.0f;
     uint32_t lastUiSnapshotVersion = 0;
     int      lastNumSlices         = -1;
     bool     lastTrimActive        = false;
