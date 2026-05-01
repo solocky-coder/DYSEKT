@@ -194,7 +194,7 @@ void DysektEditor::setUiMode (int mode)
  }
 
  // Persist the new mode
- saveUserSettings (scale, 0.0f, getTheme().name);
+ saveUserSettings (0.0f, getTheme().name);
 
  resized();
  repaint();
@@ -316,7 +316,7 @@ void DysektEditor::toggleSoftWave()
  actionPanel.setWaveActive (waveformMode != 0);
  headerBar.setBrowserActive (activeSlot == SlotContent::Browser);
  headerBar.setWaveMode (waveformMode);
- saveUserSettings (scale, 0.0f, getTheme().name);
+ saveUserSettings (0.0f, getTheme().name);
 }
 
 void DysektEditor::toggleMidiFollow()
