@@ -68,6 +68,7 @@ private:
 
     float    lastZoom              = -1.0f;
     float    lastScroll            = -1.0f;
+    float    lastScale             = -1.0f;
     int      lastMidiFollowSlice   = -1;
     int      timerHz               = 30;
     bool     lastWaveformAnimating = false;

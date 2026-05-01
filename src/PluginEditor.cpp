@@ -160,6 +160,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  setWantsKeyboardFocus (true);
  setResizable (false, false);
  setSize (kBaseW, kTotalH);
+ setScaleFactor (1.0f);  // applies 1.25× base scale
  lastUiSnapshotVersion = processor.getUiSliceSnapshotVersion();
  startTimerHz (30);
 }
@@ -1038,9 +1039,19 @@ void DysektEditor::applyTheme (const juce::String& themeName)
  repaint();
 }
 
-void DysektEditor::setScaleFactor (float /*newScale*/)
+void DysektEditor::setScaleFactor (float newScale)
 {
- // Plugin is non-resizable — ignore host scale factor requests.
+ // Compound the host/OS DPI scale with the preferred 1.25 base scale so the
+ // plugin always renders at 1.25× the base size, correctly adjusted for HiDPI.
+ const float scale = newScale * 1.25f;
+ if (std::abs (scale - lastScale) > 0.001f)
+ {
+     lastScale = scale;
+     setTransform (juce::AffineTransform{});
+     setSize (kBaseW, kTotalH);
+     setTransform (juce::AffineTransform::scale (scale));
+     DysektLookAndFeel::setMenuScale (scale);
+ }
 }
 
 void DysektEditor::saveUserSettings (float /*scale*/, const juce::String& themeName)
