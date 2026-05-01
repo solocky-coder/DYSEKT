@@ -109,7 +109,13 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  processor.trimModeActive.store (false, std::memory_order_relaxed);
  waveformView.setTrimMode (false);
  trimSession.reset();
- trimDialog.reset();
+
+ // Hide immediately so the component is not repainted during teardown,
+ // then defer actual destruction so TrimDialog is not deleted while its
+ // own button click event is still on the call stack.
+ if (trimDialog != nullptr)
+ trimDialog->setVisible (false);
+ juce::MessageManager::callAsync ([dlg = std::move (trimDialog)] () mutable { dlg.reset(); });
  resized();
  };
  waveformView.onTrimCancelled = [this]
@@ -117,7 +123,10 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  processor.trimModeActive.store (false, std::memory_order_relaxed);
  waveformView.setTrimMode (false);
  trimSession.reset();
- trimDialog.reset();
+
+ if (trimDialog != nullptr)
+ trimDialog->setVisible (false);
+ juce::MessageManager::callAsync ([dlg = std::move (trimDialog)] () mutable { dlg.reset(); });
  resized();
  };
 
