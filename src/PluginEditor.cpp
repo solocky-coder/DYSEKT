@@ -130,6 +130,15 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  ensureDefaultThemes();
  loadUserSettings();
 
+ // If SF-Player mode was restored from settings, populate the zone matrix now.
+ // loadUserSettings() sets uiMode directly (bypassing setUiMode) so panelDidShow()
+ // was never called — the zone matrix would be empty even though the file is loaded.
+ if (uiMode == 1 && processor.sfzPlayer.isLoaded())
+ {
+     sfzDropdown.setVisible (true);
+     sfzDropdown.panelDidShow();
+ }
+
  if (processor.sampleData.getSnapshot() == nullptr)
  processor.loadDefaultSampleIfNeeded();
 
