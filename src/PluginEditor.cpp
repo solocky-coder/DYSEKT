@@ -115,7 +115,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  // own button click event is still on the call stack.
  if (trimDialog != nullptr)
  trimDialog->setVisible (false);
- juce::MessageManager::callAsync ([dlg = std::move (trimDialog)] () mutable { dlg.reset(); });
+ juce::MessageManager::callAsync ([dlg = std::shared_ptr<TrimDialog> (std::move (trimDialog))] {});
  resized();
  };
  waveformView.onTrimCancelled = [this]
@@ -126,7 +126,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
  if (trimDialog != nullptr)
  trimDialog->setVisible (false);
- juce::MessageManager::callAsync ([dlg = std::move (trimDialog)] () mutable { dlg.reset(); });
+ juce::MessageManager::callAsync ([dlg = std::shared_ptr<TrimDialog> (std::move (trimDialog))] {});
  resized();
  };
 
