@@ -28,7 +28,7 @@ SfzFileBrowser::SfzFileBrowser()
     addAndMakeVisible (list);
 
     // Default to user's Music directory, falling back to home
-    auto startDir = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
+    auto startDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
     if (! startDir.isDirectory())
         startDir = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
 
@@ -68,9 +68,19 @@ void SfzFileBrowser::paint (juce::Graphics& g)
                          : theme.foreground.withAlpha (0.20f));
     g.drawText (u8"\u2191", upBtnZone, juce::Justification::centred, false);
 
+    // Drive/root button (⏏ — jump to filesystem roots to reach external drives)
+    const bool driveHover = driveBtnZone.contains (getMouseXYRelative());
+    if (driveHover)
+    {
+        g.setColour (theme.accent.withAlpha (0.18f));
+        g.fillRoundedRectangle (driveBtnZone.toFloat(), 2.0f);
+    }
+    g.setColour (theme.accent.withAlpha (0.80f));
+    g.drawText (u8"\u23CF", driveBtnZone, juce::Justification::centred, false);
+
     // Current path text (truncated from left)
     {
-        const auto pathArea = breadcrumbZone.withTrimmedLeft (upBtnZone.getWidth() + 4)
+        const auto pathArea = breadcrumbZone.withTrimmedLeft (upBtnZone.getWidth() + driveBtnZone.getWidth() + 6)
                                             .withTrimmedRight (4);
         g.setFont (DysektLookAndFeel::makeFont (9.5f));
         g.setColour (theme.foreground.withAlpha (0.55f));
@@ -99,8 +109,10 @@ void SfzFileBrowser::paint (juce::Graphics& g)
 void SfzFileBrowser::resized()
 {
     constexpr int upW = 24;
+    constexpr int drW = 24;
     breadcrumbZone = { 0, 0, getWidth(), kBreadcrumbH };
-    upBtnZone      = { 2, 1, upW, kBreadcrumbH - 2 };
+    upBtnZone      = { 2,         1, upW, kBreadcrumbH - 2 };
+    driveBtnZone   = { 2 + upW,   1, drW, kBreadcrumbH - 2 };
 
     list.setBounds (0, kBreadcrumbH + 1, getWidth(), getHeight() - kBreadcrumbH - 1);
 }
@@ -112,6 +124,12 @@ void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
     if (upBtnZone.contains (e.getPosition()))
     {
         navigateUp();
+        return;
+    }
+
+    if (driveBtnZone.contains (e.getPosition()))
+    {
+        navigateToRoots();
         return;
     }
     // Clicks below the breadcrumb are handled by the ListBox itself
@@ -132,6 +150,54 @@ void SfzFileBrowser::navigateUp()
     const auto parent = currentDir.getParentDirectory();
     if (parent != currentDir)
         navigateTo (parent);
+}
+
+void SfzFileBrowser::navigateToRoots()
+{
+    // Build a synthetic root list from all filesystem volumes / drive roots.
+    // On macOS this is /Volumes; on Windows these are drive letters; on Linux /media or /.
+    juce::Array<juce::File> roots;
+
+#if JUCE_MAC
+    // /Volumes contains all mounted drives including external ones.
+    auto volumes = juce::File ("/Volumes");
+    if (volumes.isDirectory())
+    {
+        auto vols = volumes.findChildFiles (juce::File::findDirectories, false);
+        vols.sort();
+        for (auto& v : vols)
+            roots.add (v);
+    }
+    if (roots.isEmpty())
+        roots.add (juce::File ("/"));
+#elif JUCE_WINDOWS
+    // Enumerate all available drive letters.
+    for (char c = 'A'; c <= 'Z'; ++c)
+    {
+        juce::File drive (juce::String (c) + ":\\");
+        if (drive.isDirectory())
+            roots.add (drive);
+    }
+#else
+    // Linux / other: start at filesystem root; /media and /mnt hold removable drives.
+    roots.add (juce::File ("/"));
+    for (auto& mp : { "/media", "/mnt", "/run/media" })
+    {
+        juce::File m (mp);
+        if (m.isDirectory())
+            roots.add (m);
+    }
+#endif
+
+    rows.clear();
+    for (auto& r : roots)
+        rows.add (r);
+
+    // Use a sentinel to signal "we are at the virtual root view"
+    currentDir = juce::File ("/");
+    list.updateContent();
+    list.repaint();
+    repaint();
 }
 
 void SfzFileBrowser::rebuildList()
@@ -971,6 +1037,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
             z.hiVel    = 127;
             z.rootPitch= -1;
             z.isLooped = false;
+            z.isSfz    = true;   // SFZ zones are editable — must set explicitly (default is false)
             z.colour   = zoneColourDP (colIdx++);
             // Use the sample filename (without extension) as the zone name,
             // falling back to a generic "Zone N" label if none was found.

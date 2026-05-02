@@ -62,8 +62,9 @@ public:
     juce::String getTooltipForRow (int row)                           override;
 
 private:
-    void   navigateTo   (const juce::File& dir);
-    void   navigateUp   ();
+    void   navigateTo      (const juce::File& dir);
+    void   navigateUp      ();
+    void   navigateToRoots ();   ///< Jump to filesystem volume list (external drives)
     void   loadRow      (int row);
     juce::File fileForRow (int row) const;
     bool   isDirectory  (int row) const;
@@ -82,6 +83,7 @@ private:
     // Breadcrumb / up-button zone (computed in resized)
     juce::Rectangle<int> breadcrumbZone;
     juce::Rectangle<int> upBtnZone;
+    juce::Rectangle<int> driveBtnZone;   // ⏏ button — navigate to filesystem roots
 
     static constexpr int kBreadcrumbH = 22;
     static constexpr int kRowH        = 18;
