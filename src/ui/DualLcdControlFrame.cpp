@@ -35,16 +35,170 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         g.fillRoundedRectangle (cx - 8, cy2 - 3, 7, 3, 1.0f);
         g.fillRoundedRectangle (cx - 9, cy2 - 2, 18, 11, 1.5f);
     }
-    else if (type == 1) // Waveform
+    else if (type == 1) // Waveform — distinct shape per waveMode
     {
-        float pts[] = { -8,-1, -6,-4, -4,0, -2,4, 0,-6, 2,6, 4,-2, 6,2, 8,0 };
+        // All shapes are drawn within roughly ±9 px horizontally, ±6 px vertically
+        // from (cx, cy2).  stroke weight 1.5f for consistency with the other icons.
         juce::Path p;
-        for (int i = 0; i < 9; i++)
+
+        switch (waveMode)
         {
-            float px = cx + pts[i*2], py = cy2 + pts[i*2+1];
-            i == 0 ? p.startNewSubPath (px, py) : p.lineTo (px, py);
+            default:
+            case 0: // Hard — angular zigzag (sharp peaks, no smoothing)
+            {
+                float pts[] = { -8,0, -6,-5, -4,5, -2,-5, 0,5, 2,-5, 4,5, 6,-5, 8,0 };
+                for (int i = 0; i < 9; ++i)
+                {
+                    float px = cx + pts[i*2], py = cy2 + pts[i*2+1];
+                    i == 0 ? p.startNewSubPath (px, py) : p.lineTo (px, py);
+                }
+                g.strokePath (p, juce::PathStrokeType (1.5f));
+                break;
+            }
+            case 1: // Soft — smooth sine curve (cubic bezier approximation)
+            {
+                p.startNewSubPath (cx - 8.0f, cy2);
+                p.cubicTo (cx - 4.0f, cy2 - 6.0f,
+                           cx - 2.0f, cy2 - 6.0f,
+                           cx,        cy2);
+                p.cubicTo (cx + 2.0f, cy2 + 6.0f,
+                           cx + 4.0f, cy2 + 6.0f,
+                           cx + 8.0f, cy2);
+                g.strokePath (p, juce::PathStrokeType (1.5f));
+                break;
+            }
+            case 2: // Outline — sine drawn as hollow stroke with fill below
+            {
+                juce::Path wave;
+                wave.startNewSubPath (cx - 8.0f, cy2);
+                wave.cubicTo (cx - 4.0f, cy2 - 6.0f,
+                              cx - 2.0f, cy2 - 6.0f,
+                              cx,        cy2);
+                wave.cubicTo (cx + 2.0f, cy2 + 6.0f,
+                              cx + 4.0f, cy2 + 6.0f,
+                              cx + 8.0f, cy2);
+                // Close to baseline to create a fill region
+                wave.lineTo (cx + 8.0f, cy2 + 1.0f);
+                wave.lineTo (cx - 8.0f, cy2 + 1.0f);
+                wave.closeSubPath();
+                g.setColour (col.withAlpha (0.18f));
+                g.fillPath (wave);
+                g.setColour (col);
+                // Stroke just the top curve
+                juce::Path outline;
+                outline.startNewSubPath (cx - 8.0f, cy2);
+                outline.cubicTo (cx - 4.0f, cy2 - 6.0f,
+                                 cx - 2.0f, cy2 - 6.0f,
+                                 cx,        cy2);
+                outline.cubicTo (cx + 2.0f, cy2 + 6.0f,
+                                 cx + 4.0f, cy2 + 6.0f,
+                                 cx + 8.0f, cy2);
+                g.strokePath (outline, juce::PathStrokeType (1.5f));
+                // Baseline
+                g.drawLine (cx - 8.0f, cy2, cx + 8.0f, cy2, 0.8f);
+                break;
+            }
+            case 3: // Rectified — all-positive humps (folded sine, both arcs go up)
+            {
+                p.startNewSubPath (cx - 8.0f, cy2 + 2.0f);
+                p.cubicTo (cx - 6.0f, cy2 - 5.0f,
+                           cx - 2.0f, cy2 - 5.0f,
+                           cx,        cy2 + 2.0f);
+                p.cubicTo (cx + 2.0f, cy2 - 5.0f,
+                           cx + 6.0f, cy2 - 5.0f,
+                           cx + 8.0f, cy2 + 2.0f);
+                g.strokePath (p, juce::PathStrokeType (1.5f));
+                // Baseline
+                g.drawLine (cx - 8.0f, cy2 + 2.0f, cx + 8.0f, cy2 + 2.0f, 0.8f);
+                break;
+            }
+            case 4: // Mirrored — top & bottom arcs reflected about centre line
+            {
+                // Top arc
+                juce::Path top;
+                top.startNewSubPath (cx - 8.0f, cy2);
+                top.cubicTo (cx - 4.0f, cy2 - 5.0f,
+                             cx + 4.0f, cy2 - 5.0f,
+                             cx + 8.0f, cy2);
+                g.strokePath (top, juce::PathStrokeType (1.5f));
+                // Bottom arc (mirrored)
+                juce::Path bot;
+                bot.startNewSubPath (cx - 8.0f, cy2);
+                bot.cubicTo (cx - 4.0f, cy2 + 5.0f,
+                             cx + 4.0f, cy2 + 5.0f,
+                             cx + 8.0f, cy2);
+                g.strokePath (bot, juce::PathStrokeType (1.5f));
+                // Centre line
+                g.drawLine (cx - 8.0f, cy2, cx + 8.0f, cy2, 0.8f);
+                break;
+            }
+            case 5: // Bars — vertical bar graph (5 bars, varying heights)
+            {
+                // Heights representative of a typical amplitude envelope
+                const float barH[] = { 3.0f, 6.0f, 5.0f, 4.0f, 2.0f };
+                const float barW   = 2.4f;
+                const float gap    = 0.8f;
+                const float totalW = 5.0f * barW + 4.0f * gap;
+                float bx = cx - totalW * 0.5f;
+                for (int i = 0; i < 5; ++i)
+                {
+                    float h = barH[i] * 1.1f;
+                    g.fillRoundedRectangle (bx, cy2 - h, barW, h * 2.0f, 0.7f);
+                    bx += barW + gap;
+                }
+                break;
+            }
+            case 6: // RMS — smooth stepped energy bars (wider, softer look)
+            {
+                const float rmsH[] = { 2.5f, 5.0f, 5.5f, 4.0f, 1.5f };
+                const float barW   = 2.8f;
+                const float gap    = 0.7f;
+                const float totalW = 5.0f * barW + 4.0f * gap;
+                float bx = cx - totalW * 0.5f;
+                for (int i = 0; i < 5; ++i)
+                {
+                    float h = rmsH[i] * 1.1f;
+                    // Draw as a wide rounded rectangle (RMS looks "fatter/smoother")
+                    g.fillRoundedRectangle (bx, cy2 - h, barW, h * 2.0f, 1.2f);
+                    bx += barW + gap;
+                }
+                // Add a subtle envelope curve on top
+                {
+                    juce::Path env;
+                    float ex = cx - totalW * 0.5f + barW * 0.5f;
+                    for (int i = 0; i < 5; ++i)
+                    {
+                        float ey = cy2 - rmsH[i] * 1.1f;
+                        float nx = ex + barW + gap;
+                        if (i == 0) env.startNewSubPath (ex, ey);
+                        else        env.lineTo (ex, ey);
+                        ex = nx;
+                    }
+                    g.setColour (col.withAlpha (0.50f));
+                    g.strokePath (env, juce::PathStrokeType (0.9f));
+                    g.setColour (col);
+                }
+                break;
+            }
+            case 7: // Stepped — digital staircase waveform
+            {
+                // One cycle: high half → low half, in 4-px wide steps
+                const float stepW = 4.0f;
+                const float hi    = cy2 - 4.5f;
+                const float lo    = cy2 + 4.5f;
+                // Steps: up-up-down-down (two steps each polarity)
+                p.startNewSubPath (cx - 8.0f, hi);
+                p.lineTo (cx - 4.0f, hi);
+                p.lineTo (cx - 4.0f, lo);    // vertical drop at centre
+                p.lineTo (cx,        lo);
+                p.lineTo (cx,        hi);     // vertical rise back up
+                p.lineTo (cx + 4.0f, hi);
+                p.lineTo (cx + 4.0f, lo);
+                p.lineTo (cx + 8.0f, lo);
+                g.strokePath (p, juce::PathStrokeType (1.5f));
+                break;
+            }
         }
-        g.strokePath (p, juce::PathStrokeType (1.5f));
     }
     else if (type == 2) // MIDI Follow — 5-pin DIN connector
     {
