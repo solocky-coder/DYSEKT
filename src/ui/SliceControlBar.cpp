@@ -840,7 +840,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  int numSlices = ui.numSlices;
  int rightEdge = getWidth() - si (8);
  int row1y = si (5), row2y = si (36);
- rootNoteArea = {}; // no longer drawn — LCD shows ROOT and SLICES
+    rootNoteArea = {}; // set below when chromatic slice selected
 
  if (idx < 0 || idx >= numSlices)
  {
@@ -1031,6 +1031,42 @@ void SliceControlBar::paint (juce::Graphics& g)
                     0.f, 1.f, 1.f,
                     false, true, cw);
      x += cw + si (4);
+
+     // ROOT — global chromatic root note (shown only when CHRO active)
+     {
+         const int   rn       = juce::jlimit (0, 127, ui.rootNote);
+         static const char* kNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+         juce::String noteName = juce::String (kNames[rn % 12]) + juce::String (rn / 12 - 2);
+
+         const int cellW = psCellW;
+         const int cellH = psCellH;
+         const auto& theme = getTheme();
+
+         // Label
+         g.setFont (DysektLookAndFeel::makeFont (10.0f * paintSf));
+         g.setColour (theme.foreground.withAlpha (0.42f));
+         g.drawText ("ROOT", x + juce::roundToInt (4.0f * paintSf),
+                     row1y + juce::roundToInt (2.0f * paintSf),
+                     cellW - juce::roundToInt (4.0f * paintSf),
+                     juce::roundToInt (12.0f * paintSf),
+                     juce::Justification::centredLeft);
+
+         // Value badge (same visual style as CHRO badge)
+         const int bx = x + juce::roundToInt (4.0f * paintSf);
+         const int by = row1y + juce::roundToInt (14.0f * paintSf);
+         const int bw = cellW - juce::roundToInt (8.0f * paintSf);
+         const int bh = juce::roundToInt (14.0f * paintSf);
+         g.setColour (theme.accent.withAlpha (0.15f));
+         g.fillRoundedRectangle ((float)bx, (float)by, (float)bw, (float)bh, 2.5f);
+         g.setColour (theme.accent);
+         g.drawRoundedRectangle ((float)bx, (float)by, (float)bw, (float)bh, 2.5f, 0.8f);
+         g.setFont (DysektLookAndFeel::makeMonoFont (11.0f * paintSf));
+         g.drawText (noteName, bx, by, bw, bh, juce::Justification::centred);
+
+         // Register hit area for drag / double-click
+         rootNoteArea = { x, row1y, cellW, cellH };
+         x += cellW + si (4);
+     }
  }
  }
  g.setColour (getTheme().separator);
@@ -1272,7 +1308,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
      return;
  }
 
- if (ui.numSlices == 0 && rootNoteArea.contains (pos))
+ if (! rootNoteArea.isEmpty() && rootNoteArea.contains (pos))
  {
  DysektProcessor::Command gc; gc.type = DysektProcessor::CmdBeginGesture;
  processor.pushCommand (gc);
@@ -1764,7 +1800,7 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  auto pos = e.getPosition();
  const auto& ui = processor.getUiSliceSnapshot();
 
- if (ui.numSlices == 0 && rootNoteArea.contains (pos))
+ if (! rootNoteArea.isEmpty() && rootNoteArea.contains (pos))
  {
  textEditor = std::make_unique<juce::TextEditor>();
  addAndMakeVisible (*textEditor);

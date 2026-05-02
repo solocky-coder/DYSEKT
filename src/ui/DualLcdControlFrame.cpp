@@ -35,170 +35,16 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         g.fillRoundedRectangle (cx - 8, cy2 - 3, 7, 3, 1.0f);
         g.fillRoundedRectangle (cx - 9, cy2 - 2, 18, 11, 1.5f);
     }
-    else if (type == 1) // Waveform — distinct shape per waveMode
+    else if (type == 1) // Waveform
     {
-        // All shapes are drawn within roughly ±9 px horizontally, ±6 px vertically
-        // from (cx, cy2).  stroke weight 1.5f for consistency with the other icons.
+        float pts[] = { -8,-1, -6,-4, -4,0, -2,4, 0,-6, 2,6, 4,-2, 6,2, 8,0 };
         juce::Path p;
-
-        switch (waveMode)
+        for (int i = 0; i < 9; i++)
         {
-            default:
-            case 0: // Hard — angular zigzag (sharp peaks, no smoothing)
-            {
-                float pts[] = { -8,0, -6,-5, -4,5, -2,-5, 0,5, 2,-5, 4,5, 6,-5, 8,0 };
-                for (int i = 0; i < 9; ++i)
-                {
-                    float px = cx + pts[i*2], py = cy2 + pts[i*2+1];
-                    i == 0 ? p.startNewSubPath (px, py) : p.lineTo (px, py);
-                }
-                g.strokePath (p, juce::PathStrokeType (1.5f));
-                break;
-            }
-            case 1: // Soft — smooth sine curve (cubic bezier approximation)
-            {
-                p.startNewSubPath (cx - 8.0f, cy2);
-                p.cubicTo (cx - 4.0f, cy2 - 6.0f,
-                           cx - 2.0f, cy2 - 6.0f,
-                           cx,        cy2);
-                p.cubicTo (cx + 2.0f, cy2 + 6.0f,
-                           cx + 4.0f, cy2 + 6.0f,
-                           cx + 8.0f, cy2);
-                g.strokePath (p, juce::PathStrokeType (1.5f));
-                break;
-            }
-            case 2: // Outline — sine drawn as hollow stroke with fill below
-            {
-                juce::Path wave;
-                wave.startNewSubPath (cx - 8.0f, cy2);
-                wave.cubicTo (cx - 4.0f, cy2 - 6.0f,
-                              cx - 2.0f, cy2 - 6.0f,
-                              cx,        cy2);
-                wave.cubicTo (cx + 2.0f, cy2 + 6.0f,
-                              cx + 4.0f, cy2 + 6.0f,
-                              cx + 8.0f, cy2);
-                // Close to baseline to create a fill region
-                wave.lineTo (cx + 8.0f, cy2 + 1.0f);
-                wave.lineTo (cx - 8.0f, cy2 + 1.0f);
-                wave.closeSubPath();
-                g.setColour (col.withAlpha (0.18f));
-                g.fillPath (wave);
-                g.setColour (col);
-                // Stroke just the top curve
-                juce::Path outline;
-                outline.startNewSubPath (cx - 8.0f, cy2);
-                outline.cubicTo (cx - 4.0f, cy2 - 6.0f,
-                                 cx - 2.0f, cy2 - 6.0f,
-                                 cx,        cy2);
-                outline.cubicTo (cx + 2.0f, cy2 + 6.0f,
-                                 cx + 4.0f, cy2 + 6.0f,
-                                 cx + 8.0f, cy2);
-                g.strokePath (outline, juce::PathStrokeType (1.5f));
-                // Baseline
-                g.drawLine (cx - 8.0f, cy2, cx + 8.0f, cy2, 0.8f);
-                break;
-            }
-            case 3: // Rectified — all-positive humps (folded sine, both arcs go up)
-            {
-                p.startNewSubPath (cx - 8.0f, cy2 + 2.0f);
-                p.cubicTo (cx - 6.0f, cy2 - 5.0f,
-                           cx - 2.0f, cy2 - 5.0f,
-                           cx,        cy2 + 2.0f);
-                p.cubicTo (cx + 2.0f, cy2 - 5.0f,
-                           cx + 6.0f, cy2 - 5.0f,
-                           cx + 8.0f, cy2 + 2.0f);
-                g.strokePath (p, juce::PathStrokeType (1.5f));
-                // Baseline
-                g.drawLine (cx - 8.0f, cy2 + 2.0f, cx + 8.0f, cy2 + 2.0f, 0.8f);
-                break;
-            }
-            case 4: // Mirrored — top & bottom arcs reflected about centre line
-            {
-                // Top arc
-                juce::Path top;
-                top.startNewSubPath (cx - 8.0f, cy2);
-                top.cubicTo (cx - 4.0f, cy2 - 5.0f,
-                             cx + 4.0f, cy2 - 5.0f,
-                             cx + 8.0f, cy2);
-                g.strokePath (top, juce::PathStrokeType (1.5f));
-                // Bottom arc (mirrored)
-                juce::Path bot;
-                bot.startNewSubPath (cx - 8.0f, cy2);
-                bot.cubicTo (cx - 4.0f, cy2 + 5.0f,
-                             cx + 4.0f, cy2 + 5.0f,
-                             cx + 8.0f, cy2);
-                g.strokePath (bot, juce::PathStrokeType (1.5f));
-                // Centre line
-                g.drawLine (cx - 8.0f, cy2, cx + 8.0f, cy2, 0.8f);
-                break;
-            }
-            case 5: // Bars — vertical bar graph (5 bars, varying heights)
-            {
-                // Heights representative of a typical amplitude envelope
-                const float barH[] = { 3.0f, 6.0f, 5.0f, 4.0f, 2.0f };
-                const float barW   = 2.4f;
-                const float gap    = 0.8f;
-                const float totalW = 5.0f * barW + 4.0f * gap;
-                float bx = cx - totalW * 0.5f;
-                for (int i = 0; i < 5; ++i)
-                {
-                    float h = barH[i] * 1.1f;
-                    g.fillRoundedRectangle (bx, cy2 - h, barW, h * 2.0f, 0.7f);
-                    bx += barW + gap;
-                }
-                break;
-            }
-            case 6: // RMS — smooth stepped energy bars (wider, softer look)
-            {
-                const float rmsH[] = { 2.5f, 5.0f, 5.5f, 4.0f, 1.5f };
-                const float barW   = 2.8f;
-                const float gap    = 0.7f;
-                const float totalW = 5.0f * barW + 4.0f * gap;
-                float bx = cx - totalW * 0.5f;
-                for (int i = 0; i < 5; ++i)
-                {
-                    float h = rmsH[i] * 1.1f;
-                    // Draw as a wide rounded rectangle (RMS looks "fatter/smoother")
-                    g.fillRoundedRectangle (bx, cy2 - h, barW, h * 2.0f, 1.2f);
-                    bx += barW + gap;
-                }
-                // Add a subtle envelope curve on top
-                {
-                    juce::Path env;
-                    float ex = cx - totalW * 0.5f + barW * 0.5f;
-                    for (int i = 0; i < 5; ++i)
-                    {
-                        float ey = cy2 - rmsH[i] * 1.1f;
-                        float nx = ex + barW + gap;
-                        if (i == 0) env.startNewSubPath (ex, ey);
-                        else        env.lineTo (ex, ey);
-                        ex = nx;
-                    }
-                    g.setColour (col.withAlpha (0.50f));
-                    g.strokePath (env, juce::PathStrokeType (0.9f));
-                    g.setColour (col);
-                }
-                break;
-            }
-            case 7: // Stepped — digital staircase waveform
-            {
-                // One cycle: high half → low half, in 4-px wide steps
-                const float stepW = 4.0f;
-                const float hi    = cy2 - 4.5f;
-                const float lo    = cy2 + 4.5f;
-                // Steps: up-up-down-down (two steps each polarity)
-                p.startNewSubPath (cx - 8.0f, hi);
-                p.lineTo (cx - 4.0f, hi);
-                p.lineTo (cx - 4.0f, lo);    // vertical drop at centre
-                p.lineTo (cx,        lo);
-                p.lineTo (cx,        hi);     // vertical rise back up
-                p.lineTo (cx + 4.0f, hi);
-                p.lineTo (cx + 4.0f, lo);
-                p.lineTo (cx + 8.0f, lo);
-                g.strokePath (p, juce::PathStrokeType (1.5f));
-                break;
-            }
+            float px = cx + pts[i*2], py = cy2 + pts[i*2+1];
+            i == 0 ? p.startNewSubPath (px, py) : p.lineTo (px, py);
         }
+        g.strokePath (p, juce::PathStrokeType (1.5f));
     }
     else if (type == 2) // MIDI Follow — 5-pin DIN connector
     {
@@ -401,18 +247,10 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         }
     }
 
-    // ── Bottom row: ROOT | PITCH | VOL knobs ─────────────────────────────────
+    // ── Bottom row: PITCH | VOL knobs ─────────────────────────────────────────
     {
-        // Read live values — rootNote from the atomic directly (avoids snapshot lag);
-        // pitch and vol via getRawParameterValue for APVTS-live accuracy.
-        // Normalise using p->convertTo0to1() so the knob arc matches the param's
-        // own mapping exactly (important for any future skewed ranges).
-        const int   liveRoot = processor.sliceManager.rootNote.load (std::memory_order_relaxed);
         float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
         float gVol   = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
-
-        // rootNote is not an APVTS parameter — it is a plain 0-127 integer.
-        float rootN = (float) liveRoot / 127.0f;
 
         float pitchN = 0.0f;
         if (auto* p = processor.apvts.getParameter (ParamIds::defaultPitch))
@@ -426,9 +264,6 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         else
             volN = (gVol + 100.0f) / 124.0f;
 
-        static const char* noteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-        int rn = juce::jlimit (0, 127, liveRoot);
-        juce::String rootStr  = juce::String (noteNames[rn % 12]) + juce::String (rn / 12 - 2);
         juce::String pitchStr = (gPitch >= 0.0f ? "+" : "") + juce::String ((int) std::round (gPitch));
         juce::String volStr   = (gVol >= 0.0f ? "+" : "") + juce::String (gVol, 1);
 
@@ -437,15 +272,13 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         const float kEnd   = juce::MathConstants<float>::pi * 2.75f;
 
         int kcy  = half + (h - half) / 2 - si (5);
-        int k1cx = w / 6;
-        int k2cx = w / 2;
-        int k3cx = w * 5 / 6;
+        int k1cx = w / 3;
+        int k2cx = w * 2 / 3;
 
         struct Knob { int cx; float norm; juce::String lbl; juce::String val; };
         Knob knobs[] = {
-            { k1cx, rootN,  "ROOT",  rootStr  },
-            { k2cx, pitchN, "PITCH", pitchStr },
-            { k3cx, volN,   "VOL",   volStr   },
+            { k1cx, pitchN, "PITCH", pitchStr },
+            { k2cx, volN,   "VOL",   volStr   },
         };
 
         for (auto& k : knobs)
@@ -477,9 +310,8 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             g.drawText (k.val, k.cx - si(18), kcy + kr + si(11), si(36), si(9), juce::Justification::centred);
         }
 
-        rootKnobArea  = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
-        pitchKnobArea = { k2cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
-        volKnobArea   = { k3cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
+        pitchKnobArea = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
+        volKnobArea   = { k2cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
     }
 }
 
@@ -545,13 +377,6 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
     }
 
     // Knobs
-    if (rootKnobArea.contains (pos))
-    {
-        dragTarget     = DragTarget::Root;
-        dragStartY     = pos.y;
-        dragStartValue = (float) processor.sliceManager.rootNote.load (std::memory_order_relaxed);
-        return;
-    }
     if (pitchKnobArea.contains (pos))
     {
         dragTarget     = DragTarget::Pitch;
@@ -578,17 +403,6 @@ void DualLcdControlFrame::mouseDrag (const juce::MouseEvent& e)
 
     switch (dragTarget)
     {
-        case DragTarget::Root:
-        {
-            float sens  = e.mods.isShiftDown() ? 0.1f : 0.4f;
-            int newRoot = juce::jlimit (0, 127, (int) std::round (dragStartValue + delta * sens));
-            DysektProcessor::Command cmd;
-            cmd.type      = DysektProcessor::CmdSetRootNote;
-            cmd.intParam1 = newRoot;
-            processor.pushCommand (cmd);
-            repaint();
-            break;
-        }
         case DragTarget::Pitch:
         {
             float sens = e.mods.isShiftDown() ? 0.05f : 0.5f;
@@ -622,39 +436,9 @@ void DualLcdControlFrame::mouseUp (const juce::MouseEvent&)
     dragTarget = DragTarget::None;
 }
 
-void DualLcdControlFrame::mouseDoubleClick (const juce::MouseEvent& e)
+void DualLcdControlFrame::mouseDoubleClick (const juce::MouseEvent&)
 {
-    if (! rootKnobArea.contains (e.getPosition())) return;
-
-    const int liveRootForEdit = processor.sliceManager.rootNote.load (std::memory_order_relaxed);
-    textEditor = std::make_unique<juce::TextEditor>();
-    addAndMakeVisible (*textEditor);
-    {
-        const int edH = juce::roundToInt (16.0f * (float) getWidth() / 200.0f);
-        textEditor->setBounds (rootKnobArea.getX(), rootKnobArea.getBottom() - edH,
-                               rootKnobArea.getWidth(), edH);
-        textEditor->setFont (DysektLookAndFeel::makeFont (12.0f * (float) getWidth() / 200.0f));
-    }
-    textEditor->setColour (juce::TextEditor::backgroundColourId,
-                           getTheme().header.brighter (0.2f));
-    textEditor->setColour (juce::TextEditor::textColourId,    juce::Colours::white);
-    textEditor->setColour (juce::TextEditor::outlineColourId, getTheme().accent);
-    textEditor->setText (juce::String (liveRootForEdit), false);
-    textEditor->selectAll();
-    textEditor->grabKeyboardFocus();
-
-    textEditor->onReturnKey = [this] {
-        if (! textEditor) return;
-        int val = juce::jlimit (0, 127, textEditor->getText().getIntValue());
-        DysektProcessor::Command cmd;
-        cmd.type      = DysektProcessor::CmdSetRootNote;
-        cmd.intParam1 = val;
-        processor.pushCommand (cmd);
-        textEditor.reset();
-        repaint();
-    };
-    textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };
-    textEditor->onFocusLost = [this] { textEditor.reset(); repaint(); };
+    // ROOT note editing moved to SliceControlBar (shown when CHRO > 0).
 }
 
 void DualLcdControlFrame::mouseMove (const juce::MouseEvent& e)
