@@ -55,6 +55,20 @@ void SfzModulePanel::resized()
     susZone = juce::Rectangle<int> (adsrX + (kAdsrKnobW + kPad) * 2,   adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
     relZone = juce::Rectangle<int> (adsrX + (kAdsrKnobW + kPad) * 3,   adsrArea.getY(), kAdsrKnobW, kAdsrRowH);
 
+    // Reverb row — sits between ADSR row and keyboard
+    constexpr int kRevRowH  = 68;
+    constexpr int kRevKnobW = 52;
+    auto revArea = area.removeFromBottom (kRevRowH);
+    area.removeFromBottom (4); // gap above reverb row
+
+    const int totalRevW = kRevKnobW * 5 + kPad * 4;
+    const int revX = revArea.getX() + (revArea.getWidth() - totalRevW) / 2;
+    rvSizeZone   = juce::Rectangle<int> (revX,                               revArea.getY(), kRevKnobW, kRevRowH);
+    rvDampZone   = juce::Rectangle<int> (revX + (kRevKnobW + kPad),         revArea.getY(), kRevKnobW, kRevRowH);
+    rvWidthZone  = juce::Rectangle<int> (revX + (kRevKnobW + kPad) * 2,     revArea.getY(), kRevKnobW, kRevRowH);
+    rvMixZone    = juce::Rectangle<int> (revX + (kRevKnobW + kPad) * 3,     revArea.getY(), kRevKnobW, kRevRowH);
+    rvFreezeZone = juce::Rectangle<int> (revX + (kRevKnobW + kPad) * 4,     revArea.getY(), kRevKnobW, kRevRowH);
+
     // Top control strip — left to right:
     //   [LOAD] [VOL knob] [TRANS knob] [name label ... ] [meter] [status]
 
@@ -221,6 +235,49 @@ void SfzModulePanel::paint (juce::Graphics& g)
         drawAdsrKnob (decZone, decNorm, "DEC", fmtTime (processor.sfzPlayer.getSfzDecay()),   DysektProcessor::FieldSfzDecay);
         drawAdsrKnob (susZone, susNorm, "SUS", juce::String (juce::roundToInt (processor.sfzPlayer.getSfzSustain())) + "%", DysektProcessor::FieldSfzSustain);
         drawAdsrKnob (relZone, relNorm, "REL", fmtTime (processor.sfzPlayer.getSfzRelease()), DysektProcessor::FieldSfzRelease);
+    }
+
+    // ── Reverb row ────────────────────────────────────────────────────────────
+    {
+        auto rowBounds = rvSizeZone.getUnion (rvFreezeZone).expanded (kPad / 2, 2).toFloat();
+        g.setColour (theme.darkBar.brighter (0.04f));
+        g.fillRoundedRectangle (rowBounds, 3.0f);
+        g.setColour (theme.foreground.withAlpha (0.07f));
+        g.drawRoundedRectangle (rowBounds.reduced (0.5f), 3.0f, 1.0f);
+
+        const float alpha = processor.sfzPlayer.isLoaded() ? 1.0f : 0.35f;
+
+        auto drawRevKnob = [&] (juce::Rectangle<int> zone, float norm,
+                                 const juce::String& label, const juce::String& valStr,
+                                 int fieldId)
+        {
+            const bool learned = processor.midiLearn.isMapped (fieldId);
+            const bool armed   = processor.midiLearn.getArmedSlot() == fieldId;
+            g.saveState();
+            g.setOpacity (alpha);
+            drawKnob (g, zone, norm, label, valStr);
+            g.restoreState();
+            if (learned || armed)
+            {
+                const auto& th = getTheme();
+                const auto  rc = zone.toFloat().reduced (2.0f);
+                g.setColour ((armed ? th.accent.brighter (0.4f) : th.accent).withAlpha (0.55f));
+                g.drawRoundedRectangle (rc, 3.0f, 1.5f);
+            }
+        };
+
+        const float rvSize  = processor.sfzPlayer.getReverbSize();
+        const float rvDamp  = processor.sfzPlayer.getReverbDamp();
+        const float rvWidth = processor.sfzPlayer.getReverbWidth();
+        const float rvMix   = processor.sfzPlayer.getReverbMix();
+        const bool  rvFrz   = processor.sfzPlayer.getReverbFreeze();
+
+        drawRevKnob (rvSizeZone,   rvSize  / 100.0f, "SIZE",  juce::String (juce::roundToInt (rvSize))  + "%", DysektProcessor::FieldSfzReverbSize);
+        drawRevKnob (rvDampZone,   rvDamp  / 100.0f, "DAMP",  juce::String (juce::roundToInt (rvDamp))  + "%", DysektProcessor::FieldSfzReverbDamp);
+        drawRevKnob (rvWidthZone,  rvWidth / 100.0f, "WIDTH", juce::String (juce::roundToInt (rvWidth)) + "%", DysektProcessor::FieldSfzReverbWidth);
+        drawRevKnob (rvMixZone,    rvMix   / 100.0f, "MIX",   juce::String (juce::roundToInt (rvMix))   + "%", DysektProcessor::FieldSfzReverbMix);
+        // Freeze — draws as a binary toggle (0 or 1 normalised)
+        drawRevKnob (rvFreezeZone, rvFrz ? 1.0f : 0.0f, "FRZ", rvFrz ? "ON" : "OFF", DysektProcessor::FieldSfzReverbFreeze);
     }
 
     // ── Drop-target hint when dragging over ───────────────────────────────────
@@ -393,6 +450,11 @@ void SfzModulePanel::mouseDown (const juce::MouseEvent& e)
         if (decZone.contains (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzDecay,   e.getScreenPosition()); return; }
         if (susZone.contains (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzSustain, e.getScreenPosition()); return; }
         if (relZone.contains (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzRelease, e.getScreenPosition()); return; }
+        if (rvSizeZone.contains   (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzReverbSize,   e.getScreenPosition()); return; }
+        if (rvDampZone.contains   (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzReverbDamp,   e.getScreenPosition()); return; }
+        if (rvWidthZone.contains  (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzReverbWidth,  e.getScreenPosition()); return; }
+        if (rvMixZone.contains    (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzReverbMix,    e.getScreenPosition()); return; }
+        if (rvFreezeZone.contains (pos)) { showMidiLearnMenu (DysektProcessor::FieldSfzReverbFreeze, e.getScreenPosition()); return; }
     }
 
     // Knob drag start
@@ -438,6 +500,41 @@ void SfzModulePanel::mouseDown (const juce::MouseEvent& e)
         dragStartVal = processor.sfzPlayer.getSfzRelease() / 60.0f;
         return;
     }
+    if (rvSizeZone.contains (pos))
+    {
+        activeKnob   = ActiveKnob::ReverbSize;
+        dragStartY   = pos.y;
+        dragStartVal = processor.sfzPlayer.getReverbSize() / 100.0f;
+        return;
+    }
+    if (rvDampZone.contains (pos))
+    {
+        activeKnob   = ActiveKnob::ReverbDamp;
+        dragStartY   = pos.y;
+        dragStartVal = processor.sfzPlayer.getReverbDamp() / 100.0f;
+        return;
+    }
+    if (rvWidthZone.contains (pos))
+    {
+        activeKnob   = ActiveKnob::ReverbWidth;
+        dragStartY   = pos.y;
+        dragStartVal = processor.sfzPlayer.getReverbWidth() / 100.0f;
+        return;
+    }
+    if (rvMixZone.contains (pos))
+    {
+        activeKnob   = ActiveKnob::ReverbMix;
+        dragStartY   = pos.y;
+        dragStartVal = processor.sfzPlayer.getReverbMix() / 100.0f;
+        return;
+    }
+    if (rvFreezeZone.contains (pos))
+    {
+        // Freeze is a toggle on click, not a drag
+        processor.sfzPlayer.setReverbFreeze (!processor.sfzPlayer.getReverbFreeze());
+        repaint();
+        return;
+    }
 }
 
 void SfzModulePanel::mouseDrag (const juce::MouseEvent& e)
@@ -461,6 +558,14 @@ void SfzModulePanel::mouseDrag (const juce::MouseEvent& e)
             processor.sfzPlayer.setSfzSustain (newNorm * 100.0f);  break;
         case ActiveKnob::Release:
             processor.sfzPlayer.setSfzRelease (newNorm * 60.0f);   break;
+        case ActiveKnob::ReverbSize:
+            processor.sfzPlayer.setReverbSize  (newNorm * 100.0f); break;
+        case ActiveKnob::ReverbDamp:
+            processor.sfzPlayer.setReverbDamp  (newNorm * 100.0f); break;
+        case ActiveKnob::ReverbWidth:
+            processor.sfzPlayer.setReverbWidth (newNorm * 100.0f); break;
+        case ActiveKnob::ReverbMix:
+            processor.sfzPlayer.setReverbMix   (newNorm * 100.0f); break;
         default: break;
     }
     repaint();
@@ -480,6 +585,11 @@ void SfzModulePanel::mouseDoubleClick (const juce::MouseEvent& e)
     if (decZone.contains (pos))   { processor.sfzPlayer.setSfzDecay   (0.1f);     repaint(); }
     if (susZone.contains (pos))   { processor.sfzPlayer.setSfzSustain (100.0f);   repaint(); }
     if (relZone.contains (pos))   { processor.sfzPlayer.setSfzRelease (0.05f);    repaint(); }
+    if (rvSizeZone.contains (pos))   { processor.sfzPlayer.setReverbSize  (50.0f);  repaint(); }
+    if (rvDampZone.contains (pos))   { processor.sfzPlayer.setReverbDamp  (50.0f);  repaint(); }
+    if (rvWidthZone.contains (pos))  { processor.sfzPlayer.setReverbWidth (50.0f);  repaint(); }
+    if (rvMixZone.contains (pos))    { processor.sfzPlayer.setReverbMix   ( 0.0f);  repaint(); }
+    if (rvFreezeZone.contains (pos)) { processor.sfzPlayer.setReverbFreeze (false); repaint(); }
 }
 
 void SfzModulePanel::mouseWheelMove (const juce::MouseEvent& e,
@@ -522,6 +632,30 @@ void SfzModulePanel::mouseWheelMove (const juce::MouseEvent& e,
     {
         const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getSfzRelease() / 60.0f + step);
         processor.sfzPlayer.setSfzRelease (n * 60.0f);
+        repaint();
+    }
+    else if (rvSizeZone.contains (pos))
+    {
+        const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getReverbSize() / 100.0f + step);
+        processor.sfzPlayer.setReverbSize (n * 100.0f);
+        repaint();
+    }
+    else if (rvDampZone.contains (pos))
+    {
+        const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getReverbDamp() / 100.0f + step);
+        processor.sfzPlayer.setReverbDamp (n * 100.0f);
+        repaint();
+    }
+    else if (rvWidthZone.contains (pos))
+    {
+        const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getReverbWidth() / 100.0f + step);
+        processor.sfzPlayer.setReverbWidth (n * 100.0f);
+        repaint();
+    }
+    else if (rvMixZone.contains (pos))
+    {
+        const float n = juce::jlimit (0.0f, 1.0f, processor.sfzPlayer.getReverbMix() / 100.0f + step);
+        processor.sfzPlayer.setReverbMix (n * 100.0f);
         repaint();
     }
 }
@@ -956,7 +1090,6 @@ void SfzModulePanel::reloadZones (const juce::File& f)
     else if (ext == ".sf2")
         zones = parseSf2Zones (f);
 
-    keysPanel.setSfzEditable (ext == ".sfz");
     keysPanel.setKeyzones (zones);
     if (! zones.empty())
         keysPanel.autoScrollToZones();

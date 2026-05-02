@@ -43,10 +43,12 @@ private:
     // ── Layout zones (computed in resized) ────────────────────────────────────
     juce::Rectangle<int> nameZone, loadBtnZone, volZone, transZone,
                           chZone, meterZone, statusZone,
-                          atkZone, decZone, susZone, relZone;  ///< ADSR knobs
+                          atkZone, decZone, susZone, relZone,  ///< ADSR knobs
+                          rvSizeZone, rvDampZone, rvWidthZone, rvMixZone, rvFreezeZone; ///< Reverb knobs
 
     // ── Drag state for knobs ──────────────────────────────────────────────────
-    enum class ActiveKnob { None, Volume, Transpose, Attack, Decay, Sustain, Release };
+    enum class ActiveKnob { None, Volume, Transpose, Attack, Decay, Sustain, Release,
+                              ReverbSize, ReverbDamp, ReverbWidth, ReverbMix, ReverbFreeze };
     ActiveKnob activeKnob { ActiveKnob::None };
     int        dragStartY  { 0 };
     float      dragStartVal { 0.f };
