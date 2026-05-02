@@ -725,10 +725,56 @@ void MixerPanel::drawSf2Row (juce::Graphics& g, int ry) const
     g.setColour (theme.accent.withAlpha (0.75f));
     g.drawText ("SF-PLAYER", 10, ry, kNameColW - 10, kSf2RowH, juce::Justification::centredLeft);
 
-    // Dash-fill all knob columns — SF2 row has no per-row controls here
+    const int kcy    = ry + kSf2RowH / 2;
+    const float volLin = processor.sfzPlayer.getVolume();
+    const float volDb  = juce::Decibels::gainToDecibels (volLin, -100.f);
+    const float pan    = processor.sfzPlayer.getPan();
+
+    // GAIN knob
+    {
+        const int x  = colX (ColGain);
+        const int cx = x + kKnobR + 8;
+        drawKnobInRow (g, cx, kcy, toNormGain (volDb), false, true);
+        const int tx = cx + kKnobR + 4;
+        const int tw = kKnobColW - (tx - x);
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
+        g.setColour (theme.foreground.withAlpha (0.40f));
+        g.drawText (fmtGain (volDb), tx, ry + 1, tw, kSf2RowH - 2, juce::Justification::centredLeft);
+    }
+
+    // PAN slider
+    {
+        const int   x       = colX (ColPan);
+        const int   sliderX = x + 6;
+        const int   sliderW = kKnobColW - 12;
+        const int   sliderY = kcy - 3;
+        const int   sliderH = 6;
+        const float norm    = toNormPan (pan);
+        const int   thumbX  = sliderX + (int)(norm * (float)sliderW);
+        const int   centreX = sliderX + sliderW / 2;
+        const auto  fillCol = theme.accent;
+
+        g.setColour (theme.darkBar.darker (0.3f));
+        g.fillRoundedRectangle ((float)sliderX, (float)sliderY, (float)sliderW, (float)sliderH, 2.f);
+        g.setColour (theme.foreground.withAlpha (0.18f));
+        g.drawVerticalLine (centreX, (float)sliderY, (float)(sliderY + sliderH));
+        if (std::abs (pan) > 0.005f)
+        {
+            const int fillX = (pan < 0.f) ? thumbX : centreX;
+            const int fillW = std::abs (thumbX - centreX);
+            if (fillW > 0) { g.setColour (fillCol.withAlpha (0.35f)); g.fillRect (fillX, sliderY + 1, fillW, sliderH - 2); }
+        }
+        g.setColour (fillCol.withAlpha (0.85f));
+        g.fillRoundedRectangle ((float)(thumbX - 2), (float)(sliderY - 1), 4.f, (float)(sliderH + 2), 1.5f);
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
+        g.setColour (theme.foreground.withAlpha (0.40f));
+        g.drawText (fmtPan (pan), x, sliderY + sliderH + 2, kKnobColW, 10, juce::Justification::centred);
+    }
+
+    // Dash-fill columns that don't apply to the SF-Player
     g.setFont (DysektLookAndFeel::makeFont (11.0f));
     g.setColour (theme.foreground.withAlpha (0.15f));
-    for (int i = 0; i < kNumCols; ++i)
+    for (int i = ColFcut; i < kNumCols; ++i)
         g.drawText ("—", colX ((Col)i), ry, kKnobColW, kSf2RowH, juce::Justification::centred);
 
     // Peak meter using sfzPeakL/R from processor
@@ -930,11 +976,21 @@ void MixerPanel::mouseDown (const juce::MouseEvent& e)
     // Begin knob drag
     drag.active   = true;
     drag.isMaster = c.isMaster;
+    drag.isSf2    = c.isSf2;
     drag.sliceIdx = c.row;
     drag.col      = c.col;
     drag.startY   = (c.col == ColPan) ? e.getScreenPosition().x : e.getScreenPosition().y;
 
-    if (c.isMaster)
+    if (c.isSf2)
+    {
+        if (c.col == ColGain)
+            drag.startVal = juce::Decibels::gainToDecibels (processor.sfzPlayer.getVolume(), -100.f);
+        else if (c.col == ColPan)
+            drag.startVal = processor.sfzPlayer.getPan();
+        else
+            drag.active = false;  // other columns are not interactive
+    }
+    else if (c.isMaster)
     {
         drag.startVal = (c.col == ColGain)
             ? processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load()
@@ -964,6 +1020,20 @@ void MixerPanel::mouseDrag (const juce::MouseEvent& e)
     const float fineMult = fine ? 0.1f : 1.0f;
 
     float newVal = drag.startVal;
+
+    if (drag.isSf2)
+    {
+        if (drag.col == ColGain)
+        {
+            const float newDb  = juce::jlimit (-100.f, 24.f, drag.startVal + dy * 0.5f * fineMult);
+            processor.sfzPlayer.setVolume (juce::Decibels::decibelsToGain (newDb, -100.f));
+        }
+        else if (drag.col == ColPan)
+        {
+            processor.sfzPlayer.setPan (juce::jlimit (-1.f, 1.f, drag.startVal + dx * 0.01f * fineMult));
+        }
+        repaint(); return;
+    }
 
     if (drag.isMaster)
     {
@@ -1073,14 +1143,21 @@ void MixerPanel::mouseDoubleClick (const juce::MouseEvent& e)
     }
 
     if (c.col == ColMute || c.col == ColOut || c.col == ColLegato) return;
-    if (!c.isMaster && (c.row < 0)) return;
+    if (c.isSf2  && c.col >= ColFcut) return;
+    if (!c.isMaster && !c.isSf2 && (c.row < 0)) return;
     if (c.isMaster && c.col >= ColFcut) return;
 
     // Get current value as display string
     float currentVal = 0.f;
     juce::String suffix;
 
-    if (c.isMaster)
+    if (c.isSf2)
+    {
+        currentVal = (c.col == ColGain)
+            ? juce::Decibels::gainToDecibels (processor.sfzPlayer.getVolume(), -100.f)
+            : processor.sfzPlayer.getPan();
+    }
+    else if (c.isMaster)
     {
         currentVal = (c.col == ColGain)
             ? processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load()
@@ -1118,14 +1195,24 @@ void MixerPanel::mouseDoubleClick (const juce::MouseEvent& e)
     textEditor->grabKeyboardFocus();
 
     const bool  isMaster = c.isMaster;
+    const bool  isSf2    = c.isSf2;
     const Col   col      = c.col;
     const int   rowIdx   = c.row;
 
-    textEditor->onReturnKey = [this, isMaster, col, rowIdx]
+    textEditor->onReturnKey = [this, isMaster, isSf2, col, rowIdx]
     {
         if (!textEditor) return;
         float v = textEditor->getText().getFloatValue();
         textEditor.reset();
+
+        if (isSf2)
+        {
+            if (col == ColGain)
+                processor.sfzPlayer.setVolume (juce::Decibels::decibelsToGain (juce::jlimit (-100.f, 24.f, v), -100.f));
+            else if (col == ColPan)
+                processor.sfzPlayer.setPan (juce::jlimit (-1.f, 1.f, v));
+            repaint(); return;
+        }
 
         if (isMaster)
         {

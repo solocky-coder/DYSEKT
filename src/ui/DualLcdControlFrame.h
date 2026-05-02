@@ -62,11 +62,12 @@ private:
     juce::Rectangle<int> sfzIconArea;  // kept as unused placeholder for layout math
     juce::Rectangle<int> editTabArea;
     juce::Rectangle<int> padTabArea;
+    juce::Rectangle<int> rootKnobArea;
     juce::Rectangle<int> pitchKnobArea;
     juce::Rectangle<int> volKnobArea;
 
     int        hoveredIcon   = -1;   // 0=FIL 1=WA 2=MIDI 3=MIXER 4=SFZ, -1=none
-    enum class DragTarget { None, Pitch, Volume };
+    enum class DragTarget { None, Root, Pitch, Volume };
     DragTarget dragTarget    = DragTarget::None;
     float  dragStartValue    = 0.0f;
     int    dragStartY        = 0;
