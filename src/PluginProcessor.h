@@ -68,6 +68,12 @@ public:
         FieldSfzDecay   = 33,  // 33 - sfizz ampeg_decay   (seconds, 0-30)
         FieldSfzSustain = 34,  // 34 - sfizz ampeg_sustain (percent, 0-100)
         FieldSfzRelease = 35,  // 35 - sfizz ampeg_release (seconds, 0-60)
+        // SfzPlayer Reverb EFX — slots 36-40
+        FieldSfzReverbSize   = 36,  // 36 - reverb room size  (0-100 %)
+        FieldSfzReverbDamp   = 37,  // 37 - reverb damping    (0-100 %)
+        FieldSfzReverbWidth  = 38,  // 38 - reverb width      (0-100 %)
+        FieldSfzReverbMix    = 39,  // 39 - reverb wet/dry    (0-100 %)
+        FieldSfzReverbFreeze = 40,  // 40 - reverb freeze     (bool)
     };
 
     // ── Command types ────────────────────────────────────────────────────────

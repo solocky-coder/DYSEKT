@@ -23,6 +23,7 @@
 
 #include <juce_core/juce_core.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_dsp/juce_dsp.h>
 #include <vector>
 
 #if DYSEKT_HAS_FLUIDSYNTH
@@ -100,6 +101,19 @@ public:
     float getSfzSustain() const noexcept { return sfzSustainPct.load (std::memory_order_relaxed); }
     float getSfzRelease() const noexcept { return sfzReleaseSec.load (std::memory_order_relaxed); }
 
+    // ── Post-processing Reverb EFX (JUCE DSP — works for both SF2 & SFZ) ──
+    void setReverbSize   (float pct) noexcept;   ///< 0–100 %
+    void setReverbDamp   (float pct) noexcept;   ///< 0–100 %
+    void setReverbWidth  (float pct) noexcept;   ///< 0–100 %
+    void setReverbMix    (float pct) noexcept;   ///< 0–100 %
+    void setReverbFreeze (bool  on)  noexcept;   ///< infinite sustain
+
+    float getReverbSize()   const noexcept { return reverbSize  .load (std::memory_order_relaxed); }
+    float getReverbDamp()   const noexcept { return reverbDamp  .load (std::memory_order_relaxed); }
+    float getReverbWidth()  const noexcept { return reverbWidth .load (std::memory_order_relaxed); }
+    float getReverbMix()    const noexcept { return reverbMix   .load (std::memory_order_relaxed); }
+    bool  getReverbFreeze() const noexcept { return reverbFreeze.load (std::memory_order_relaxed); }
+
     /**
      * Returns the cached preset list for the currently loaded SF2.
      * If the audio thread has posted new data since the last call,
@@ -174,7 +188,16 @@ private:
     // ── Scratch buffer for FluidSynth interleaved → planar conversion ─────────
     std::vector<float> scratchL, scratchR;
 
+    // ── Post-processing Reverb EFX (juce::dsp::Reverb) ───────────────────────
+    juce::dsp::Reverb dspReverb;
 
+    std::atomic<float> reverbSize   { 50.0f };   // 0–100
+    std::atomic<float> reverbDamp   { 50.0f };   // 0–100
+    std::atomic<float> reverbWidth  { 50.0f };   // 0–100
+    std::atomic<float> reverbMix    {  0.0f };   // 0–100 (default dry)
+    std::atomic<bool>  reverbFreeze { false };
+
+    void updateReverbParams();  ///< maps atomics → juce::dsp::Reverb::Parameters
 
     // ── Private helpers ───────────────────────────────────────────────────────
     void applyPendingLoad();      ///< called at top of process()

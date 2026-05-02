@@ -1470,6 +1470,43 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     uiSnapshotDirty.store (true, std::memory_order_release);
                     continue;
                 }
+
+                // ── SFZ Reverb EFX CC — global to SfzPlayer ──────────────────
+                if (outFieldId >= FieldSfzReverbSize && outFieldId <= FieldSfzReverbFreeze)
+                {
+                    float val;
+                    if (outIsRelative)
+                    {
+                        float cur;
+                        switch (outFieldId)
+                        {
+                            case FieldSfzReverbSize:   cur = sfzPlayer.getReverbSize();   break;
+                            case FieldSfzReverbDamp:   cur = sfzPlayer.getReverbDamp();   break;
+                            case FieldSfzReverbWidth:  cur = sfzPlayer.getReverbWidth();  break;
+                            case FieldSfzReverbMix:    cur = sfzPlayer.getReverbMix();    break;
+                            case FieldSfzReverbFreeze: cur = sfzPlayer.getReverbFreeze() ? 100.0f : 0.0f; break;
+                            default: cur = 0.0f; break;
+                        }
+                        val = juce::jlimit (0.0f, 100.0f, cur + outNorm * 2.0f);  // 2 %/click
+                    }
+                    else
+                    {
+                        val = outNorm * 100.0f;
+                    }
+
+                    switch (outFieldId)
+                    {
+                        case FieldSfzReverbSize:   sfzPlayer.setReverbSize  (val);         break;
+                        case FieldSfzReverbDamp:   sfzPlayer.setReverbDamp  (val);         break;
+                        case FieldSfzReverbWidth:  sfzPlayer.setReverbWidth (val);         break;
+                        case FieldSfzReverbMix:    sfzPlayer.setReverbMix   (val);         break;
+                        case FieldSfzReverbFreeze: sfzPlayer.setReverbFreeze (val > 50.0f); break;
+                        default: break;
+                    }
+                    uiSnapshotDirty.store (true, std::memory_order_release);
+                    continue;
+                }
+
                 // A note-on and a CC can land in the same MidiBuffer.  If the
                 // selected slice changed since the last CC in this buffer, the
                 // ccPickedUp[] flags from the previous slice are stale for every
