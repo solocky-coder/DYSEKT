@@ -211,11 +211,19 @@ void SfzPlayer::setReverb (float level)
     reverb.store (juce::jlimit (0.0f, 1.0f, level), std::memory_order_relaxed);
 #if DYSEKT_HAS_FLUIDSYNTH
     if (synth != nullptr && !isSfzFile)
-        fluid_synth_set_reverb (synth,
-            0.6,           // room size  (0.0–1.0)
-            0.5,           // damping    (0.0–1.0)
-            0.5,           // width      (0.0–100.0)
-            (double) level); // level    (0.0–1.0)
+    {
+        // Use the non-deprecated group API (fx_group = -1 = all groups).
+        fluid_synth_set_reverb_group_roomsize (synth, -1, 0.6);
+        fluid_synth_set_reverb_group_damp     (synth, -1, 0.5);
+        fluid_synth_set_reverb_group_width    (synth, -1, 0.5);
+        fluid_synth_set_reverb_group_level    (synth, -1, (double) level);
+
+        // GEN_REVERBSEND controls the per-voice send amount (0-1000 centibels,
+        // where 1000 = full send).  Without this the SF2 preset's own send
+        // value (often 0) overrides everything and no signal reaches the
+        // reverb engine regardless of the level setting above.
+        fluid_synth_set_gen (synth, 0, GEN_REVERBSEND, level * 1000.0f);
+    }
 #endif
     // sfizz: no reverb API — SFZ files define reverb via opcodes internally
 }
@@ -225,12 +233,18 @@ void SfzPlayer::setChorus (float level)
     chorus.store (juce::jlimit (0.0f, 1.0f, level), std::memory_order_relaxed);
 #if DYSEKT_HAS_FLUIDSYNTH
     if (synth != nullptr && !isSfzFile)
-        fluid_synth_set_chorus (synth,
-            3,                        // voice count (1–99)
-            (double) level * 10.0,    // level       (0.0–10.0)
-            0.3,                      // speed Hz    (0.29–5.0)
-            8.0,                      // depth ms    (0.0–21.0)
-            FLUID_CHORUS_MOD_SINE);
+    {
+        // Use the non-deprecated group API (fx_group = -1 = all groups).
+        fluid_synth_set_chorus_group_nr    (synth, -1, 3);
+        fluid_synth_set_chorus_group_level (synth, -1, (double) level * 10.0);
+        fluid_synth_set_chorus_group_speed (synth, -1, 0.3);
+        fluid_synth_set_chorus_group_depth (synth, -1, 8.0);
+        fluid_synth_set_chorus_group_type  (synth, -1, FLUID_CHORUS_MOD_SINE);
+
+        // GEN_CHORUSSEND controls the per-voice send amount (0-1000 centibels).
+        // Same as GEN_REVERBSEND — must be forced or the SF2 preset value wins.
+        fluid_synth_set_gen (synth, 0, GEN_CHORUSSEND, level * 1000.0f);
+    }
 #endif
     // sfizz: no chorus API
 }
@@ -270,8 +284,7 @@ void SfzPlayer::prepare (double sampleRate, int maxBlockSize)
 
     scratchL.assign   ((size_t) maxBlockSize, 0.0f);
     scratchR.assign   ((size_t) maxBlockSize, 0.0f);
-    fxScratchL.assign ((size_t) maxBlockSize, 0.0f);
-    fxScratchR.assign ((size_t) maxBlockSize, 0.0f);
+
 
 #if DYSEKT_HAS_FLUIDSYNTH
     // Keep the existing synth in sync with the new sample rate.
@@ -305,8 +318,7 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
     {
         scratchL.assign   ((size_t) numSamples, 0.0f);
         scratchR.assign   ((size_t) numSamples, 0.0f);
-        fxScratchL.assign ((size_t) numSamples, 0.0f);
-        fxScratchR.assign ((size_t) numSamples, 0.0f);
+
     }
 
 #if DYSEKT_HAS_SFIZZ
@@ -459,20 +471,21 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
     std::fill (scratchR.begin(), scratchR.begin() + n, 0.0f);
 
     // FX scratch buffers (reverb L/R + chorus L/R, interleaved as two stereo pairs)
-    if ((int) fxScratchL.size() < n) { fxScratchL.resize ((size_t) n); fxScratchR.resize ((size_t) n); }
-    std::fill (fxScratchL.begin(), fxScratchL.begin() + n, 0.0f);
-    std::fill (fxScratchR.begin(), fxScratchR.begin() + n, 0.0f);
-
     float* dryPlanes[2] = { scratchL.data(), scratchR.data() };
-    float* fxPlanes [2] = { fxScratchL.data(), fxScratchR.data() };
 
-    // nfx=2 provides one stereo FX bus (FluidSynth mixes reverb+chorus into it).
-    fluid_synth_process (synth, n, 2, fxPlanes, 2, dryPlanes);
+    // FluidSynth 2.x uses 4 FX buses: [0]=reverb-L, [1]=reverb-R,
+    // [2]=chorus-L, [3]=chorus-R.  Aliasing them to the dry buffers
+    // causes FluidSynth to accumulate effects directly into the dry output —
+    // the canonical approach when no dedicated FX buses exist (from FluidSynth docs).
+    float* fxPlanes[4] = { scratchL.data(), scratchR.data(),
+                            scratchL.data(), scratchR.data() };
+
+    fluid_synth_process (synth, n, 4, fxPlanes, 2, dryPlanes);
 
     for (int i = 0; i < n; ++i)
     {
-        outL[i] += (scratchL[(size_t) i] + fxScratchL[(size_t) i]) * vol;
-        outR[i] += (scratchR[(size_t) i] + fxScratchR[(size_t) i]) * vol;
+        outL[i] += scratchL[(size_t) i] * vol;
+        outR[i] += scratchR[(size_t) i] * vol;
     }
 #else
     juce::ignoreUnused (midiIn, outL, outR, numSamples);
