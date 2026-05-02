@@ -174,6 +174,10 @@ private:
     // ── Scratch buffer for FluidSynth interleaved → planar conversion ─────────
     std::vector<float> scratchL, scratchR;
 
+    // ── FX (reverb + chorus) scratch buffers — must be provided to
+    //    fluid_synth_process so wet signal is not silently discarded ──────────
+    std::vector<float> fxScratchL, fxScratchR;
+
     // ── Private helpers ───────────────────────────────────────────────────────
     void applyPendingLoad();      ///< called at top of process()
     void applyProgramChange();    ///< called at top of process() when flag set

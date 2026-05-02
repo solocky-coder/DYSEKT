@@ -5,38 +5,42 @@
 
 // ── Parameter name table ──────────────────────────────────────────────────────
 static const char* const gSlotParamNames[kMidiLearnNumSlots] = {
-    "BPM",                   // 0
-    "Pitch",
-    "Algorithm",
-    "Attack",
-    "Decay",
-    "Sustain",
-    "Release",
-    "Mute Group",
-    "Stretch Enabled",
-    "Tonality",
-    "Formant",
-    "Formant Compensation",
-    "Grain Mode",
-    "Volume",
-    "Release Tail",
-    "Reverse",
-    "Output Bus",
-    "Loop",
-    "One Shot",
-    "Cents Detune",
-    "MIDI Note",
-    "Marker",                // 21
-    "",                      // 22
-    "Pan",
-    "Filter Cutoff",
-    "Filter Resonance",
-    "Chromatic Channel",
-    "Chromatic Legato",
+    "",                      // 0  BPM         — removed
+    "Pitch",                 // 1
+    "",                      // 2  Algorithm   — removed
+    "Attack",                // 3
+    "Decay",                 // 4
+    "Sustain",               // 5
+    "Release",               // 6
+    "Mute Group",            // 7
+    "",                      // 8  Stretch Enabled — removed
+    "",                      // 9  Tonality    — removed
+    "Formant",               // 10
+    "",                      // 11 Formant Comp — removed
+    "Grain Mode",            // 12
+    "Volume",                // 13
+    "",                      // 14 Release Tail — removed
+    "",                      // 15 Reverse     — removed
+    "Output Bus",            // 16
+    "Loop",                  // 17
+    "",                      // 18 One Shot    — removed
+    "Cents Detune",          // 19
+    "MIDI Note",             // 20
+    "Slice Start",           // 21
+    "Slice End",             // 22
+    "Pan",                   // 23
+    "Filter Cutoff",         // 24
+    "Filter Resonance",      // 25
+    "",                      // 26 Chromatic Channel — removed
+    "",                      // 27 Chromatic Legato  — removed
     "Trim Out",              // 28
     "Hold",                  // 29
     "Zoom",                  // 30
     "Scroll",                // 31
+    "SF-Player Attack",      // 32
+    "SF-Player Decay",       // 33
+    "SF-Player Sustain",     // 34
+    "SF-Player Release",     // 35
 };
 
 static juce::String getSlotParameterName (int fieldId)

@@ -268,8 +268,10 @@ void SfzPlayer::prepare (double sampleRate, int maxBlockSize)
     currentSR    = sampleRate;
     currentBlock = maxBlockSize;
 
-    scratchL.assign ((size_t) maxBlockSize, 0.0f);
-    scratchR.assign ((size_t) maxBlockSize, 0.0f);
+    scratchL.assign   ((size_t) maxBlockSize, 0.0f);
+    scratchR.assign   ((size_t) maxBlockSize, 0.0f);
+    fxScratchL.assign ((size_t) maxBlockSize, 0.0f);
+    fxScratchR.assign ((size_t) maxBlockSize, 0.0f);
 
 #if DYSEKT_HAS_FLUIDSYNTH
     // Keep the existing synth in sync with the new sample rate.
@@ -301,8 +303,10 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
     // Ensure scratch buffers are large enough
     if ((int) scratchL.size() < numSamples)
     {
-        scratchL.assign ((size_t) numSamples, 0.0f);
-        scratchR.assign ((size_t) numSamples, 0.0f);
+        scratchL.assign   ((size_t) numSamples, 0.0f);
+        scratchR.assign   ((size_t) numSamples, 0.0f);
+        fxScratchL.assign ((size_t) numSamples, 0.0f);
+        fxScratchR.assign ((size_t) numSamples, 0.0f);
     }
 
 #if DYSEKT_HAS_SFIZZ
@@ -445,17 +449,30 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
     }
 
     // ── Render FluidSynth ─────────────────────────────────────────────────────
-    // fluid_synth_process ACCUMULATES — must zero before every call.
-    std::fill (scratchL.begin(), scratchL.begin() + numSamples, 0.0f);
-    std::fill (scratchR.begin(), scratchR.begin() + numSamples, 0.0f);
+    // fluid_synth_process routes:
+    //   dry audio  → out[]  (nout buffers)
+    //   reverb/chorus wet → fx[]  (nfx buffers)
+    // Passing nfx=0 / fx=nullptr silently discards all effects output.
+    // We must supply FX buffers and mix them into the output ourselves.
+    const int n = numSamples;
+    std::fill (scratchL.begin(), scratchL.begin() + n, 0.0f);
+    std::fill (scratchR.begin(), scratchR.begin() + n, 0.0f);
 
-    float* planes[2] = { scratchL.data(), scratchR.data() };
-    fluid_synth_process (synth, numSamples, 0, nullptr, 2, planes);
+    // FX scratch buffers (reverb L/R + chorus L/R, interleaved as two stereo pairs)
+    if ((int) fxScratchL.size() < n) { fxScratchL.resize ((size_t) n); fxScratchR.resize ((size_t) n); }
+    std::fill (fxScratchL.begin(), fxScratchL.begin() + n, 0.0f);
+    std::fill (fxScratchR.begin(), fxScratchR.begin() + n, 0.0f);
 
-    for (int i = 0; i < numSamples; ++i)
+    float* dryPlanes[2] = { scratchL.data(), scratchR.data() };
+    float* fxPlanes [2] = { fxScratchL.data(), fxScratchR.data() };
+
+    // nfx=2 provides one stereo FX bus (FluidSynth mixes reverb+chorus into it).
+    fluid_synth_process (synth, n, 2, fxPlanes, 2, dryPlanes);
+
+    for (int i = 0; i < n; ++i)
     {
-        outL[i] += scratchL[(size_t) i] * vol;
-        outR[i] += scratchR[(size_t) i] * vol;
+        outL[i] += (scratchL[(size_t) i] + fxScratchL[(size_t) i]) * vol;
+        outR[i] += (scratchR[(size_t) i] + fxScratchR[(size_t) i]) * vol;
     }
 #else
     juce::ignoreUnused (midiIn, outL, outR, numSamples);
