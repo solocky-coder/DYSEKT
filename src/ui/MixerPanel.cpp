@@ -34,7 +34,7 @@ void MixerPanel::updateFromSnapshot()
         if (snap.selectedSlice >= 0 && snap.selectedSlice != cachedNumSlices)
         {
             const int visTop    = kHeaderH;
-            const int visBottom = getHeight() - kMasterH;
+            const int visBottom = getHeight() - kSf2RowH - kMasterH;
             const int visH      = visBottom - visTop;
 
             const int rowTop    = kHeaderH + snap.selectedSlice * kRowH - scrollPixels;
@@ -69,16 +69,18 @@ int MixerPanel::rowY (int sliceIdx) const
     return kHeaderH + sliceIdx * kRowH - scrollPixels;
 }
 
-int MixerPanel::masterRowY() const
+int MixerPanel::sf2RowY() const
 {
+    // SF-PLAYER row sits immediately below the slice rows, above Master.
     const auto& snap = processor.getUiSliceSnapshot();
     return kHeaderH + snap.numSlices * kRowH - scrollPixels;
 }
 
-int MixerPanel::sf2RowY() const
+int MixerPanel::masterRowY() const
 {
+    // Master row is at the very bottom, below the SF-PLAYER row.
     const auto& snap = processor.getUiSliceSnapshot();
-    return kHeaderH + snap.numSlices * kRowH + kMasterH - scrollPixels;
+    return kHeaderH + snap.numSlices * kRowH + kSf2RowH - scrollPixels;
 }
 
 MixerPanel::Cell MixerPanel::hitTest (juce::Point<int> pos) const
@@ -100,16 +102,16 @@ MixerPanel::Cell MixerPanel::hitTest (juce::Point<int> pos) const
         c.isMaster = false;
     }
     else if (relY >= snap.numSlices * kRowH &&
-             relY <  snap.numSlices * kRowH + kMasterH)
-    {
-        c.row = -1;
-        c.isMaster = true;
-    }
-    else if (relY >= snap.numSlices * kRowH + kMasterH &&
-             relY <  snap.numSlices * kRowH + kMasterH + kSf2RowH)
+             relY <  snap.numSlices * kRowH + kSf2RowH)
     {
         c.row = -2;
         c.isSf2 = true;
+    }
+    else if (relY >= snap.numSlices * kRowH + kSf2RowH &&
+             relY <  snap.numSlices * kRowH + kSf2RowH + kMasterH)
+    {
+        c.row = -1;
+        c.isMaster = true;
     }
     else return c;  // below content
 
@@ -789,8 +791,8 @@ void MixerPanel::paint (juce::Graphics& g)
     for (int i = 0; i < snap.numSlices; ++i)
         drawSliceRow (g, rowY (i), i, i == snap.selectedSlice);
 
-    drawMasterRow (g, masterRowY());
     drawSf2Row    (g, sf2RowY());
+    drawMasterRow (g, masterRowY());
 
     // Column dividers
     g.setColour (theme.accent.withAlpha (0.12f));
@@ -1167,7 +1169,7 @@ void MixerPanel::mouseWheelMove (const juce::MouseEvent&,
                                    const juce::MouseWheelDetails& wheel)
 {
     const auto& snap = processor.getUiSliceSnapshot();
-    const int contentH = snap.numSlices * kRowH + kMasterH;
+    const int contentH = snap.numSlices * kRowH + kSf2RowH + kMasterH;
     const int visibleH = getHeight() - kHeaderH;
     const int maxScroll = juce::jmax (0, contentH - visibleH);
 
