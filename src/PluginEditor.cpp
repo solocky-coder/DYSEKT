@@ -110,13 +110,20 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  waveformView.setTrimMode (false);
  trimSession.reset();
 
- // Hide immediately so the component is not repainted during teardown,
- // then defer actual destruction so TrimDialog is not deleted while its
- // own button click event is still on the call stack.
+ // Destruction is deferred (callAsync) because this callback fires from
+ // inside TrimDialog's button onClick — deleting it synchronously would
+ // cause a use-after-free on the button.  We remove it as a child component
+ // immediately though, so resized() no longer sees it and the trim bar
+ // cannot flash behind the waveform view that opens right after.
  if (trimDialog != nullptr)
- trimDialog->setVisible (false);
+ {
+     trimDialog->setVisible (false);
+     trimDialog->setBounds ({});
+     removeChildComponent (trimDialog.get());
+ }
  juce::MessageManager::callAsync ([dlg = std::shared_ptr<TrimDialog> (std::move (trimDialog))] {});
  resized();
+ repaint();
  };
  waveformView.onTrimCancelled = [this]
  {
@@ -125,9 +132,14 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  trimSession.reset();
 
  if (trimDialog != nullptr)
- trimDialog->setVisible (false);
+ {
+     trimDialog->setVisible (false);
+     trimDialog->setBounds ({});
+     removeChildComponent (trimDialog.get());
+ }
  juce::MessageManager::callAsync ([dlg = std::shared_ptr<TrimDialog> (std::move (trimDialog))] {});
  resized();
+ repaint();
  };
 
  headerBar.onBodeToggle  = [this] { toggleMixerPanel(); };
