@@ -893,15 +893,7 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  int filterGroupX1 = 0, filterGroupX2 = 0; // FCUT / FRES bracket
 
- // ── Row 1 right: slice index label ───────────────────────────────────────
- {
- g.setFont (DysektLookAndFeel::makeFont (12.0f * paintSf));
- g.setColour (getTheme().accent.withAlpha (0.7f));
- g.drawText ("SLICE " + juce::String (idx + 1),
- si (8), row1y + si (2), rightEdge - si (8), si (13), juce::Justification::right);
- // Sample range + length is shown in full on the LCD (ST / END / LEN rows)
- // so the duplicate read-only text here has been removed.
- }
+ // Slice index label removed — shown in waveform and LCD panels already.
 
  // ── Row 1 params ──────────────────────────────────────────────────
  int x = si (8);

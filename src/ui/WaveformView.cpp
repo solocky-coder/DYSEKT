@@ -822,9 +822,10 @@ void WaveformView::drawSlices (juce::Graphics& g)
  }
  else
  {
- // Number: top-left corner, bold 10pt
+ // Number: just to the right of the marker arrow (10px triangle),
+ // so it does not overlap the marker head.
  g.setFont (DysektLookAndFeel::makeFont (10.0f, true));
- g.drawText (juce::String (i + 1), x1 + 4, 3, 20, 12, juce::Justification::left);
+ g.drawText (juce::String (i + 1), mx + 13, 3, 20, 12, juce::Justification::left);
  }
  }
 }
