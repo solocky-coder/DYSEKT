@@ -84,6 +84,7 @@ private:
     juce::Rectangle<int> breadcrumbZone;
     juce::Rectangle<int> upBtnZone;
     juce::Rectangle<int> driveBtnZone;   // ⏏ button — navigate to filesystem roots
+    bool                 atVirtualRoot { false }; ///< true when showing the drive-list view
 
     static constexpr int kBreadcrumbH = 22;
     static constexpr int kRowH        = 18;

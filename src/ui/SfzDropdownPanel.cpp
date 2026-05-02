@@ -55,9 +55,9 @@ void SfzFileBrowser::paint (juce::Graphics& g)
     g.setColour (theme.darkBar.darker (0.20f));
     g.fillRect (breadcrumbZone);
 
-    // Up-button
+    // Up-button (disabled when already showing the virtual root/drive list)
     const bool upHover = upBtnZone.contains (getMouseXYRelative());
-    const bool canGoUp = currentDir.getParentDirectory() != currentDir;
+    const bool canGoUp = !atVirtualRoot;
     if (upHover && canGoUp)
     {
         g.setColour (theme.accent.withAlpha (0.18f));
@@ -69,32 +69,40 @@ void SfzFileBrowser::paint (juce::Graphics& g)
     g.drawText (u8"\u2191", upBtnZone, juce::Justification::centred, false);
 
     // Drive/root button (⏏ — jump to filesystem roots to reach external drives)
-    const bool driveHover = driveBtnZone.contains (getMouseXYRelative());
+    const bool driveHover = driveBtnZone.contains (getMouseXYRelative()) && !atVirtualRoot;
     if (driveHover)
     {
         g.setColour (theme.accent.withAlpha (0.18f));
         g.fillRoundedRectangle (driveBtnZone.toFloat(), 2.0f);
     }
-    g.setColour (theme.accent.withAlpha (0.80f));
+    g.setColour (atVirtualRoot ? theme.accent.withAlpha (0.90f)
+                               : theme.accent.withAlpha (0.80f));
     g.drawText (u8"\u23CF", driveBtnZone, juce::Justification::centred, false);
 
-    // Current path text (truncated from left)
+    // Current path text — shows "Drives" label when in the virtual root view
     {
         const auto pathArea = breadcrumbZone.withTrimmedLeft (upBtnZone.getWidth() + driveBtnZone.getWidth() + 6)
                                             .withTrimmedRight (4);
         g.setFont (DysektLookAndFeel::makeFont (9.5f));
         g.setColour (theme.foreground.withAlpha (0.55f));
 
-        // Show last 2 path segments so it fits
-        const auto parts = juce::StringArray::fromTokens (
-            currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
+        // Show last 2 path segments so it fits; show "Drives" in virtual-root mode
         juce::String display;
-        const int n = parts.size();
-        if      (n == 0) display = "/";
-        else if (n <= 2) display = currentDir.getFullPathName();
-        else             display = u8"\u2026" + juce::File::getSeparatorString()
-                                 + parts[n - 2] + juce::File::getSeparatorString()
-                                 + parts[n - 1];
+        if (atVirtualRoot)
+        {
+            display = "Drives";
+        }
+        else
+        {
+            const auto parts = juce::StringArray::fromTokens (
+                currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
+            const int n = parts.size();
+            if      (n == 0) display = "/";
+            else if (n <= 2) display = currentDir.getFullPathName();
+            else             display = u8"\u2026" + juce::File::getSeparatorString()
+                                     + parts[n - 2] + juce::File::getSeparatorString()
+                                     + parts[n - 1];
+        }
 
         g.drawText (display, pathArea, juce::Justification::centredLeft, true);
     }
@@ -140,6 +148,7 @@ void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
 void SfzFileBrowser::navigateTo (const juce::File& dir)
 {
     if (! dir.isDirectory()) return;
+    atVirtualRoot = false;
     currentDir = dir;
     rebuildList();
     repaint();
@@ -147,45 +156,52 @@ void SfzFileBrowser::navigateTo (const juce::File& dir)
 
 void SfzFileBrowser::navigateUp()
 {
+    if (atVirtualRoot) return;
     const auto parent = currentDir.getParentDirectory();
-    if (parent != currentDir)
+    if (parent == currentDir)
+        navigateToRoots();   // already at a filesystem root — go to drive picker
+    else
         navigateTo (parent);
 }
 
 void SfzFileBrowser::navigateToRoots()
 {
-    // Build a synthetic root list from all filesystem volumes / drive roots.
-    // On macOS this is /Volumes; on Windows these are drive letters; on Linux /media or /.
+    // Use JUCE's cross-platform API to enumerate all filesystem roots.
+    // On Windows this yields every present drive letter (C:\, D:\, etc.).
+    // On macOS/Linux it yields /.
     juce::Array<juce::File> roots;
+    juce::File::findFileSystemRoots (roots);
 
 #if JUCE_MAC
-    // /Volumes contains all mounted drives including external ones.
+    // findFileSystemRoots returns only / on macOS; /Volumes/* are the actual
+    // named mounts (external drives, network shares, other partitions).
     auto volumes = juce::File ("/Volumes");
     if (volumes.isDirectory())
     {
         auto vols = volumes.findChildFiles (juce::File::findDirectories, false);
         vols.sort();
         for (auto& v : vols)
-            roots.add (v);
+        {
+            bool dupe = false;
+            for (auto& r : roots)
+                if (r == v) { dupe = true; break; }
+            if (! dupe)
+                roots.add (v);
+        }
     }
-    if (roots.isEmpty())
-        roots.add (juce::File ("/"));
-#elif JUCE_WINDOWS
-    // Enumerate all available drive letters.
-    for (char c = 'A'; c <= 'Z'; ++c)
-    {
-        juce::File drive (juce::String (c) + ":\\");
-        if (drive.isDirectory())
-            roots.add (drive);
-    }
-#else
-    // Linux / other: start at filesystem root; /media and /mnt hold removable drives.
-    roots.add (juce::File ("/"));
-    for (auto& mp : { "/media", "/mnt", "/run/media" })
+#elif !JUCE_WINDOWS
+    // Linux: /media and /mnt are conventional mountpoints for removable drives.
+    for (const char* mp : { "/media", "/mnt", "/run/media" })
     {
         juce::File m (mp);
         if (m.isDirectory())
-            roots.add (m);
+        {
+            bool dupe = false;
+            for (auto& r : roots)
+                if (r == m) { dupe = true; break; }
+            if (! dupe)
+                roots.add (m);
+        }
     }
 #endif
 
@@ -193,8 +209,7 @@ void SfzFileBrowser::navigateToRoots()
     for (auto& r : roots)
         rows.add (r);
 
-    // Use a sentinel to signal "we are at the virtual root view"
-    currentDir = juce::File ("/");
+    atVirtualRoot = true;   // breadcrumb shows "Drives" label instead of a path
     list.updateContent();
     list.repaint();
     repaint();
