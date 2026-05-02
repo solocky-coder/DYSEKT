@@ -249,15 +249,31 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
     // ── Bottom row: ROOT | PITCH | VOL knobs ─────────────────────────────────
     {
-        const auto& ui = processor.getUiSliceSnapshot();
+        // Read live values — rootNote from the atomic directly (avoids snapshot lag);
+        // pitch and vol via getRawParameterValue for APVTS-live accuracy.
+        // Normalise using p->convertTo0to1() so the knob arc matches the param's
+        // own mapping exactly (important for any future skewed ranges).
+        const int   liveRoot = processor.sliceManager.rootNote.load (std::memory_order_relaxed);
         float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
         float gVol   = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
-        float rootN  = (float) ui.rootNote / 127.0f;
-        float pitchN = (gPitch + 48.0f) / 96.0f;
-        float volN   = (gVol + 100.0f) / 124.0f;
+
+        // rootNote is not an APVTS parameter — it is a plain 0-127 integer.
+        float rootN = (float) liveRoot / 127.0f;
+
+        float pitchN = 0.0f;
+        if (auto* p = processor.apvts.getParameter (ParamIds::defaultPitch))
+            pitchN = p->convertTo0to1 (gPitch);
+        else
+            pitchN = (gPitch + 48.0f) / 96.0f;
+
+        float volN = 0.0f;
+        if (auto* p = processor.apvts.getParameter (ParamIds::masterVolume))
+            volN = p->convertTo0to1 (gVol);
+        else
+            volN = (gVol + 100.0f) / 124.0f;
 
         static const char* noteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-        int rn = juce::jlimit (0, 127, ui.rootNote);
+        int rn = juce::jlimit (0, 127, liveRoot);
         juce::String rootStr  = juce::String (noteNames[rn % 12]) + juce::String (rn / 12 - 2);
         juce::String pitchStr = (gPitch >= 0.0f ? "+" : "") + juce::String ((int) std::round (gPitch));
         juce::String volStr   = (gVol >= 0.0f ? "+" : "") + juce::String (gVol, 1);
@@ -379,7 +395,7 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
     {
         dragTarget     = DragTarget::Root;
         dragStartY     = pos.y;
-        dragStartValue = (float) processor.getUiSliceSnapshot().rootNote;
+        dragStartValue = (float) processor.sliceManager.rootNote.load (std::memory_order_relaxed);
         return;
     }
     if (pitchKnobArea.contains (pos))
@@ -456,7 +472,7 @@ void DualLcdControlFrame::mouseDoubleClick (const juce::MouseEvent& e)
 {
     if (! rootKnobArea.contains (e.getPosition())) return;
 
-    const auto& ui = processor.getUiSliceSnapshot();
+    const int liveRootForEdit = processor.sliceManager.rootNote.load (std::memory_order_relaxed);
     textEditor = std::make_unique<juce::TextEditor>();
     addAndMakeVisible (*textEditor);
     {
@@ -469,7 +485,7 @@ void DualLcdControlFrame::mouseDoubleClick (const juce::MouseEvent& e)
                            getTheme().header.brighter (0.2f));
     textEditor->setColour (juce::TextEditor::textColourId,    juce::Colours::white);
     textEditor->setColour (juce::TextEditor::outlineColourId, getTheme().accent);
-    textEditor->setText (juce::String (ui.rootNote), false);
+    textEditor->setText (juce::String (liveRootForEdit), false);
     textEditor->selectAll();
     textEditor->grabKeyboardFocus();
 
