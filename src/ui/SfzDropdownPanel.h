@@ -64,7 +64,6 @@ public:
 private:
     void   navigateTo   (const juce::File& dir);
     void   navigateUp   ();
-    void   showDrivesList ();
     void   loadRow      (int row);
     juce::File fileForRow (int row) const;
     bool   isDirectory  (int row) const;
@@ -74,9 +73,6 @@ private:
     void rebuildList();
 
     juce::File currentDir;
-
-    // When true, the list shows available drives/volumes instead of a directory
-    bool showingDrives { false };
 
     // Rows: sorted directories first, then matching files
     juce::Array<juce::File> rows;
@@ -137,7 +133,7 @@ private:
     juce::Rectangle<int> nameZone,
                           volZone, transZone,
                           panZone, fineZone,
-                          reverbZone, chorusZone,
+                          rvMixZone, rvSizeZone,
                           meterZone;
 
     // ADSR knob zones (second row, below header strip)
@@ -147,7 +143,7 @@ private:
     juce::Rectangle<int> presetDecBtn, presetLabel, presetIncBtn, folderIconZone;
 
     // ── Drag state for knobs ──────────────────────────────────────────────────
-    enum class ActiveKnob { None, Volume, Transpose, Pan, FineTune, Reverb, Chorus,
+    enum class ActiveKnob { None, Volume, Transpose, Pan, FineTune, ReverbMix, ReverbSize,
                             AdsrAttack, AdsrDecay, AdsrSustain, AdsrRelease };
     ActiveKnob activeKnob  { ActiveKnob::None };
     int        dragStartY  { 0 };
@@ -160,10 +156,6 @@ private:
 
     // ── Cached preset list ────────────────────────────────────────────────────
     std::vector<Sf2PresetInfo> presetList;
-
-    // Ticks remaining before we reload zones after a preset change
-    // (gives the audio thread time to apply the program change first)
-    int pendingZoneReloadTicks { 0 };
 
     // ── Inline file browser ───────────────────────────────────────────────────
     SfzFileBrowser fileBrowser;
@@ -188,7 +180,7 @@ private:
 
     // ── Zone parsers ──────────────────────────────────────────────────────────
     static std::vector<KeysPanel::Keyzone> parseSfzZones (const juce::File& f);
-    std::vector<KeysPanel::Keyzone> parseSf2Zones (const juce::File& f);
+    static std::vector<KeysPanel::Keyzone> parseSf2Zones (const juce::File& f);
     void reloadZones (const juce::File& f);
     void writeSfzZoneChange (const juce::File& f, int rowIndex,
                               const KeysPanel::Keyzone& updated);

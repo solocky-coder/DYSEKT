@@ -28,7 +28,7 @@ SfzFileBrowser::SfzFileBrowser()
     addAndMakeVisible (list);
 
     // Default to user's Music directory, falling back to home
-    auto startDir = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
+    auto startDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
     if (! startDir.isDirectory())
         startDir = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
 
@@ -57,8 +57,7 @@ void SfzFileBrowser::paint (juce::Graphics& g)
 
     // Up-button
     const bool upHover = upBtnZone.contains (getMouseXYRelative());
-    const bool canGoUp = showingDrives ? false
-                                       : true;  // always allow up (to drives list or parent)
+    const bool canGoUp = currentDir.getParentDirectory() != currentDir;
     if (upHover && canGoUp)
     {
         g.setColour (theme.accent.withAlpha (0.18f));
@@ -76,23 +75,16 @@ void SfzFileBrowser::paint (juce::Graphics& g)
         g.setFont (DysektLookAndFeel::makeFont (9.5f));
         g.setColour (theme.foreground.withAlpha (0.55f));
 
+        // Show last 2 path segments so it fits
+        const auto parts = juce::StringArray::fromTokens (
+            currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
         juce::String display;
-        if (showingDrives)
-        {
-            display = "Computer";
-        }
-        else
-        {
-            // Show last 2 path segments so it fits
-            const auto parts = juce::StringArray::fromTokens (
-                currentDir.getFullPathName(), juce::File::getSeparatorString(), "");
-            const int n = parts.size();
-            if      (n == 0) display = "/";
-            else if (n <= 2) display = currentDir.getFullPathName();
-            else             display = u8"\u2026" + juce::File::getSeparatorString()
-                                     + parts[n - 2] + juce::File::getSeparatorString()
-                                     + parts[n - 1];
-        }
+        const int n = parts.size();
+        if      (n == 0) display = "/";
+        else if (n <= 2) display = currentDir.getFullPathName();
+        else             display = u8"\u2026" + juce::File::getSeparatorString()
+                                 + parts[n - 2] + juce::File::getSeparatorString()
+                                 + parts[n - 1];
 
         g.drawText (display, pathArea, juce::Justification::centredLeft, true);
     }
@@ -130,7 +122,6 @@ void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
 void SfzFileBrowser::navigateTo (const juce::File& dir)
 {
     if (! dir.isDirectory()) return;
-    showingDrives = false;
     currentDir = dir;
     rebuildList();
     repaint();
@@ -138,38 +129,13 @@ void SfzFileBrowser::navigateTo (const juce::File& dir)
 
 void SfzFileBrowser::navigateUp()
 {
-    if (showingDrives) return;
-
     const auto parent = currentDir.getParentDirectory();
-    if (parent == currentDir)
-    {
-        // Already at a filesystem root — show the drives list
-        showDrivesList();
-    }
-    else
-    {
+    if (parent != currentDir)
         navigateTo (parent);
-    }
-}
-
-void SfzFileBrowser::showDrivesList()
-{
-    showingDrives = true;
-    rows.clear();
-
-    juce::File::findFileSystemRoots (rows);
-    // Remove any non-existent roots (unmounted, etc.)
-    rows.removeIf ([] (const juce::File& f) { return ! f.isDirectory(); });
-
-    list.updateContent();
-    list.repaint();
-    repaint();
 }
 
 void SfzFileBrowser::rebuildList()
 {
-    if (showingDrives) return;   // drives list is built in showDrivesList()
-
     rows.clear();
 
     // Directories first (hidden files excluded)
@@ -233,14 +199,9 @@ void SfzFileBrowser::paintListBoxItem (int row, juce::Graphics& g,
     if (isDir)
     {
         g.setColour (theme.accent.withAlpha (0.55f));
-        // Use a drive icon for filesystem roots, folder icon otherwise
-        const bool isRoot = (f == f.getParentDirectory());
-        g.drawText (isRoot ? u8"\U0001F4BE" : u8"\U0001F4C1",
-                    3, 0, 16, h, juce::Justification::centredLeft, false);
+        g.drawText (u8"\U0001F4C1", 3, 0, 16, h, juce::Justification::centredLeft, false);
         g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.80f));
-        // For drives show full path (e.g. "D:\"), for dirs show name only
-        const juce::String label = isRoot ? f.getFullPathName() : f.getFileName();
-        g.drawText (label, 22, 0, w - 26, h,
+        g.drawText (f.getFileName(), 22, 0, w - 26, h,
                     juce::Justification::centredLeft, true);
     }
     else
@@ -286,7 +247,7 @@ void SfzFileBrowser::loadRow (int row)
 
     if (f.isDirectory())
     {
-        navigateTo (f);  // works for both regular dirs and drive roots
+        navigateTo (f);
     }
     else if (onFileChosen)
     {
@@ -344,9 +305,9 @@ void SfzDropdownPanel::resized()
     panZone    = strip.removeFromRight (kKnobW);
     strip.removeFromRight (kPad);
 
-    chorusZone = strip.removeFromRight (kKnobW);
+    rvSizeZone = strip.removeFromRight (kKnobW);
     strip.removeFromRight (kKnobGap);
-    reverbZone = strip.removeFromRight (kKnobW);
+    rvMixZone  = strip.removeFromRight (kKnobW);
     strip.removeFromRight (kPad);
 
     fineZone   = strip.removeFromRight (kKnobW);
@@ -512,13 +473,13 @@ void SfzDropdownPanel::drawHeaderStrip (juce::Graphics& g) const
                   return (c >= 0 ? "+" : "") + juce::String (c, 0) + "c";
               }());
 
-    drawKnob (g, reverbZone, processor.sfzPlayer.getReverb(),
-              "REV",
-              juce::String (juce::roundToInt (processor.sfzPlayer.getReverb() * 100)) + "%");
+    drawKnob (g, rvMixZone, processor.sfzPlayer.getReverbMix() / 100.0f,
+              "MIX",
+              juce::String (juce::roundToInt (processor.sfzPlayer.getReverbMix())) + "%");
 
-    drawKnob (g, chorusZone, processor.sfzPlayer.getChorus(),
-              "CHO",
-              juce::String (juce::roundToInt (processor.sfzPlayer.getChorus() * 100)) + "%");
+    drawKnob (g, rvSizeZone, processor.sfzPlayer.getReverbSize() / 100.0f,
+              "SIZE",
+              juce::String (juce::roundToInt (processor.sfzPlayer.getReverbSize())) + "%");
 
     drawKnob (g, panZone, panToNorm (processor.sfzPlayer.getPan()),
               "PAN",
@@ -573,7 +534,7 @@ void SfzDropdownPanel::drawPresetPicker (juce::Graphics& g) const
     // Arrow buttons (only useful when loaded + presets exist)
     auto drawArrow = [&] (juce::Rectangle<int> zone, const juce::String& sym)
     {
-        const bool active = isLoaded && presetList.size() > 1 && ! browserOpen;
+        const bool active = isLoaded && ! presetList.empty() && ! browserOpen;
         const bool hover  = zone.contains (getMouseXYRelative()) && active;
         g.setColour (hover ? theme.accent.withAlpha (0.30f) : juce::Colours::transparentBlack);
         g.fillRoundedRectangle (zone.toFloat(), 2.0f);
@@ -739,15 +700,6 @@ void SfzDropdownPanel::timerCallback()
 
     presetList = processor.sfzPlayer.getPresetList();
 
-    // Deferred zone reload after preset switch (audio thread needs a few ticks
-    // to apply the program change before we read the new zones).
-    if (pendingZoneReloadTicks > 0)
-    {
-        --pendingZoneReloadTicks;
-        if (pendingZoneReloadTicks == 0 && processor.sfzPlayer.isLoaded())
-            reloadZones (processor.sfzPlayer.getLoadedFile());
-    }
-
     repaint();
 }
 
@@ -765,9 +717,10 @@ void SfzDropdownPanel::selectPreset (int delta)
     if (next != cur)
     {
         processor.sfzPlayer.setPresetByIndex (next);
-        // Don't reload zones immediately — the audio thread applies the program
-        // change asynchronously. Schedule a reload a few timer ticks later.
-        pendingZoneReloadTicks = 4;   // ~133ms at 30Hz
+
+        if (processor.sfzPlayer.isLoaded())
+            reloadZones (processor.sfzPlayer.getLoadedFile());
+
         repaint();
     }
 }
@@ -817,8 +770,8 @@ void SfzDropdownPanel::mouseDown (const juce::MouseEvent& e)
         { transZone,  ActiveKnob::Transpose,   transToNorm (processor.sfzPlayer.getTranspose()) },
         { panZone,    ActiveKnob::Pan,         panToNorm   (processor.sfzPlayer.getPan()) },
         { fineZone,   ActiveKnob::FineTune,    fineToNorm  (processor.sfzPlayer.getFineTune()) },
-        { reverbZone, ActiveKnob::Reverb,      processor.sfzPlayer.getReverb() },
-        { chorusZone, ActiveKnob::Chorus,      processor.sfzPlayer.getChorus() },
+        { rvMixZone,  ActiveKnob::ReverbMix,   processor.sfzPlayer.getReverbMix()  / 100.0f },
+        { rvSizeZone, ActiveKnob::ReverbSize,  processor.sfzPlayer.getReverbSize() / 100.0f },
         { adsrAtkZone, ActiveKnob::AdsrAttack,  juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzAttack()  / 30.0f) },
         { adsrDecZone, ActiveKnob::AdsrDecay,   juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzDecay()   / 30.0f) },
         { adsrSusZone, ActiveKnob::AdsrSustain, juce::jlimit (0.f, 1.f, processor.sfzPlayer.getSfzSustain() / 100.0f) },
@@ -849,8 +802,8 @@ void SfzDropdownPanel::mouseDrag (const juce::MouseEvent& e)
         case ActiveKnob::Transpose:   processor.sfzPlayer.setTranspose (normToTrans (newNorm)); break;
         case ActiveKnob::Pan:         processor.sfzPlayer.setPan       (normToPan   (newNorm)); break;
         case ActiveKnob::FineTune:    processor.sfzPlayer.setFineTune  (normToFine  (newNorm)); break;
-        case ActiveKnob::Reverb:      processor.sfzPlayer.setReverb    (newNorm);               break;
-        case ActiveKnob::Chorus:      processor.sfzPlayer.setChorus    (newNorm);               break;
+        case ActiveKnob::ReverbMix:   processor.sfzPlayer.setReverbMix  (newNorm * 100.0f);     break;
+        case ActiveKnob::ReverbSize:  processor.sfzPlayer.setReverbSize (newNorm * 100.0f);     break;
         case ActiveKnob::AdsrAttack:  processor.sfzPlayer.setSfzAttack  (newNorm * 30.0f);      break;
         case ActiveKnob::AdsrDecay:   processor.sfzPlayer.setSfzDecay   (newNorm * 30.0f);      break;
         case ActiveKnob::AdsrSustain: processor.sfzPlayer.setSfzSustain (newNorm * 100.0f);     break;
@@ -872,8 +825,8 @@ void SfzDropdownPanel::mouseDoubleClick (const juce::MouseEvent& e)
     if (transZone.contains  (pos)) { processor.sfzPlayer.setTranspose (0);     repaint(); }
     if (panZone.contains    (pos)) { processor.sfzPlayer.setPan       (0.0f);  repaint(); }
     if (fineZone.contains   (pos)) { processor.sfzPlayer.setFineTune  (0.0f);  repaint(); }
-    if (reverbZone.contains (pos)) { processor.sfzPlayer.setReverb    (0.4f);  repaint(); }
-    if (chorusZone.contains (pos)) { processor.sfzPlayer.setChorus    (0.2f);  repaint(); }
+    if (rvMixZone.contains  (pos)) { processor.sfzPlayer.setReverbMix  (0.0f);  repaint(); }
+    if (rvSizeZone.contains (pos)) { processor.sfzPlayer.setReverbSize (50.0f);  repaint(); }
     // ADSR defaults
     if (adsrAtkZone.contains (pos)) { processor.sfzPlayer.setSfzAttack  (0.005f);  repaint(); }
     if (adsrDecZone.contains (pos)) { processor.sfzPlayer.setSfzDecay   (0.1f);    repaint(); }
@@ -908,10 +861,10 @@ void SfzDropdownPanel::mouseWheelMove (const juce::MouseEvent& e,
         processor.sfzPlayer.setPan (normToPan (adjustNorm (panToNorm (processor.sfzPlayer.getPan()), step)));
     else if (fineZone.contains (pos))
         processor.sfzPlayer.setFineTune (normToFine (adjustNorm (fineToNorm (processor.sfzPlayer.getFineTune()), step)));
-    else if (reverbZone.contains (pos))
-        processor.sfzPlayer.setReverb (adjustNorm (processor.sfzPlayer.getReverb(), step));
-    else if (chorusZone.contains (pos))
-        processor.sfzPlayer.setChorus (adjustNorm (processor.sfzPlayer.getChorus(), step));
+    else if (rvMixZone.contains (pos))
+        processor.sfzPlayer.setReverbMix  (juce::jlimit (0.0f, 100.0f, processor.sfzPlayer.getReverbMix()  + step * 100.0f));
+    else if (rvSizeZone.contains (pos))
+        processor.sfzPlayer.setReverbSize (juce::jlimit (0.0f, 100.0f, processor.sfzPlayer.getReverbSize() + step * 100.0f));
     else if (adsrAtkZone.contains (pos))
         processor.sfzPlayer.setSfzAttack  (juce::jlimit (0.f, 30.f,  adjustNorm (processor.sfzPlayer.getSfzAttack()  / 30.0f,  step) * 30.0f));
     else if (adsrDecZone.contains (pos))
@@ -964,12 +917,9 @@ void SfzDropdownPanel::panelDidShow()
 {
     presetList = processor.sfzPlayer.getPresetList();
 
-    // Force a full layout pass first so keysPanel and its viewport have
-    // correct dimensions before rebuildZoneMatrix() is called.
-    resized();
-
     if (processor.sfzPlayer.isLoaded())
         reloadZones (processor.sfzPlayer.getLoadedFile());
+    resized();
     repaint();
 }
 
@@ -1027,8 +977,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
             z.name     = sampleName.isNotEmpty()
                        ? sampleName
                        : "Zone " + juce::String (colIdx);
-            z.isSfz = true;
-          zones.push_back (z);
+            zones.push_back (z);
             loKey = 0; hiKey = 127; sampleName = {};
         }
         inRegion = false;
@@ -1085,16 +1034,6 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
 
 std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::File& f)
 {
-    // ── The SF2 zone chain ────────────────────────────────────────────────────
-    // phdr[presetIdx] → pbag[pbag_start..pbag_end)
-    //   each pbag → pgen range, scan for oper=41 (instrument index)
-    //     inst[instIdx] → ibag[ibag_start..ibag_end)
-    //       each ibag → igen range
-    //         oper=43 keyRange (lo=byte2, hi=byte3)
-    //         oper=53 sampleID (amount word = shdr index)
-    // shdr[sampleID] → 20-char sample name
-    // ─────────────────────────────────────────────────────────────────────────
-
     std::vector<KeysPanel::Keyzone> zones;
     juce::FileInputStream stream (f);
     if (stream.failedToOpen()) return zones;
@@ -1105,9 +1044,10 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
     char sfbk[4]; stream.read (sfbk, 4);
     if (juce::String::fromUTF8 (sfbk, 4) != "sfbk") return zones;
 
-    // Read all pdta sub-chunks we need
-    juce::MemoryBlock phdrData, pbagData, pgenData,
-                      instData, ibagData, igenData, shdrData;
+    // We need two sub-chunks from the pdta LIST: igen and shdr.
+    // igen holds instrument generators (key-range oper=43, sampleID oper=53).
+    // shdr holds sample headers (20-char name per sample record of 46 bytes).
+    juce::MemoryBlock igenData, shdrData;
 
     while (! stream.isExhausted())
     {
@@ -1119,25 +1059,26 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
             char listId[4]; stream.read (listId, 4);
             if (juce::String::fromUTF8 (listId, 4) == "pdta")
             {
-                const int64_t pdtaEnd = stream.getPosition() + sz - 4;
+                const int pdtaEnd = (int) stream.getPosition() + sz - 4;
                 while (stream.getPosition() < pdtaEnd && ! stream.isExhausted())
                 {
                     char sub[4]; if (stream.read (sub, 4) < 4) break;
                     const auto subId = juce::String::fromUTF8 (sub, 4);
                     const int  subSz = stream.readInt();
-                    auto readChunk = [&] (juce::MemoryBlock& mb)
+                    if (subId == "igen")
                     {
-                        mb.setSize ((size_t) subSz);
-                        stream.read (mb.getData(), subSz);
-                    };
-                    if      (subId == "phdr") readChunk (phdrData);
-                    else if (subId == "pbag") readChunk (pbagData);
-                    else if (subId == "pgen") readChunk (pgenData);
-                    else if (subId == "inst") readChunk (instData);
-                    else if (subId == "ibag") readChunk (ibagData);
-                    else if (subId == "igen") readChunk (igenData);
-                    else if (subId == "shdr") readChunk (shdrData);
-                    else stream.skipNextBytes (subSz);
+                        igenData.setSize ((size_t) subSz);
+                        stream.read (igenData.getData(), subSz);
+                    }
+                    else if (subId == "shdr")
+                    {
+                        shdrData.setSize ((size_t) subSz);
+                        stream.read (shdrData.getData(), subSz);
+                    }
+                    else
+                    {
+                        stream.skipNextBytes (subSz);
+                    }
                 }
                 break;
             }
@@ -1146,140 +1087,109 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
         else stream.skipNextBytes (sz);
     }
 
-    if (phdrData.isEmpty() || pbagData.isEmpty() || pgenData.isEmpty() ||
-        instData.isEmpty() || ibagData.isEmpty() || igenData.isEmpty())
-        return zones;
+    if (igenData.isEmpty()) return zones;
 
-    // ── Helper lambdas to read little-endian words from raw blocks ────────────
-    auto u16 = [] (const juce::MemoryBlock& mb, size_t byteOffset) -> uint16_t
-    {
-        const auto* d = static_cast<const uint8_t*> (mb.getData());
-        return (uint16_t)(d[byteOffset] | (d[byteOffset + 1] << 8));
-    };
-    auto u8at = [] (const juce::MemoryBlock& mb, size_t byteOffset) -> uint8_t
-    {
-        return static_cast<const uint8_t*> (mb.getData())[byteOffset];
-    };
-    auto nameAt = [] (const juce::MemoryBlock& mb, size_t byteOffset) -> juce::String
-    {
-        const char* p = static_cast<const char*> (mb.getData()) + byteOffset;
-        return juce::String::fromUTF8 (p, 20).trimEnd();
-    };
-
-    // ── Build sample-name table from shdr (46 bytes/record) ──────────────────
+    // Build sample-name lookup from shdr.
+    // Each shdr record is 46 bytes: 20-char name, then various uint32/uint16 fields.
+    // The final sentinel record ("EOS") should be ignored.
     std::vector<juce::String> sampleNames;
     if (! shdrData.isEmpty())
     {
-        const size_t n = shdrData.getSize() / 46;
-        sampleNames.reserve (n);
-        for (size_t i = 0; i < n; ++i)
-            sampleNames.push_back (nameAt (shdrData, i * 46));
-    }
-
-    // ── Get preset index from SfzPlayer ──────────────────────────────────────
-    const int presetIdx = processor.sfzPlayer.getCurrentPresetIndex();
-
-    // phdr record = 38 bytes: name(20) bank(2) preset(2) pbag_idx(2) lib(4) genre(4) morph(4)
-    const size_t numPresets = phdrData.getSize() / 38;
-    if ((size_t) presetIdx + 1 >= numPresets) return zones;   // need sentinel too
-
-    const size_t pbagStart = u16 (phdrData, (size_t) presetIdx       * 38 + 20 + 2 + 2);
-    const size_t pbagEnd   = u16 (phdrData, ((size_t) presetIdx + 1) * 38 + 20 + 2 + 2);
-
-    // pbag record = 4 bytes: gen_idx(2) mod_idx(2)
-    // pgen record = 4 bytes: oper(2) amount(2)
-    const size_t numPbag = pbagData.getSize() / 4;
-    const size_t numPgen = pgenData.getSize() / 4;
-
-    // inst record = 22 bytes: name(20) ibag_idx(2)
-    // ibag record = 4 bytes: gen_idx(2) mod_idx(2)
-    // igen record = 4 bytes: oper(2) lo(1) hi(1)
-    const size_t numInst = instData.getSize() / 22;
-    const size_t numIbag = ibagData.getSize() / 4;
-    const size_t numIgen = igenData.getSize() / 4;
-
-    // Walk all preset bags for this preset
-    for (size_t bi = pbagStart; bi < pbagEnd && bi + 1 < numPbag; ++bi)
-    {
-        const size_t genStart = u16 (pbagData, bi       * 4);
-        const size_t genEnd   = u16 (pbagData, (bi + 1) * 4);
-
-        // Scan pgens for oper=41 (instrument reference)
-        for (size_t gi = genStart; gi < genEnd && gi < numPgen; ++gi)
+        constexpr size_t kShdrRecSize = 46;
+        const size_t numSamples = shdrData.getSize() / kShdrRecSize;
+        const auto*  shdr       = static_cast<const char*> (shdrData.getData());
+        sampleNames.reserve (numSamples);
+        for (size_t s = 0; s < numSamples; ++s)
         {
-            const uint16_t oper   = u16 (pgenData, gi * 4);
-            const uint16_t amount = u16 (pgenData, gi * 4 + 2);
-            if (oper != 41) continue;   // not an instrument ref
-
-            const size_t instIdx = amount;
-            if (instIdx + 1 >= numInst) continue;
-
-            const size_t ibagStart = u16 (instData, instIdx       * 22 + 20);
-            const size_t ibagEnd   = u16 (instData, (instIdx + 1) * 22 + 20);
-
-            // Walk instrument bags
-            for (size_t ibi = ibagStart; ibi < ibagEnd && ibi + 1 < numIbag; ++ibi)
-            {
-                const size_t igStart = u16 (ibagData, ibi       * 4);
-                const size_t igEnd   = u16 (ibagData, (ibi + 1) * 4);
-
-                int  loKey = 0, hiKey = 127, sampleId = -1;
-                bool hasKeyRange = false;
-
-                for (size_t igi = igStart; igi < igEnd && igi < numIgen; ++igi)
-                {
-                    const uint16_t ioper = u16 (igenData, igi * 4);
-                    if (ioper == 43)    // keyRange
-                    {
-                        loKey = u8at (igenData, igi * 4 + 2);
-                        hiKey = u8at (igenData, igi * 4 + 3);
-                        hasKeyRange = true;
-                    }
-                    else if (ioper == 53)   // sampleID
-                    {
-                        sampleId = (int) u16 (igenData, igi * 4 + 2);
-                    }
-                }
-
-                if (! hasKeyRange || hiKey < loKey || sampleId < 0) continue;
-
-                KeysPanel::Keyzone z;
-                z.loKey     = loKey;
-                z.hiKey     = hiKey;
-                z.loVel     = 0;
-                z.hiVel     = 127;
-                z.rootPitch = -1;
-                z.isLooped  = false;
-                z.isSfz     = false;
-
-                if (sampleId < (int) sampleNames.size())
-                    z.name = sampleNames[(size_t) sampleId];
-                if (z.name.isEmpty() || z.name == "EOS")
-                    z.name = "Zone " + juce::String (zones.size() + 1);
-
-                zones.push_back (z);
-            }
+            const char* namePtr = shdr + s * kShdrRecSize;
+            // Name is null-terminated within 20 bytes
+            sampleNames.push_back (juce::String::fromUTF8 (namePtr, 20).trimEnd());
         }
     }
 
-    // Sort by loKey and assign colours
-    std::sort (zones.begin(), zones.end(), [] (auto& a, auto& b) { return a.loKey < b.loKey; });
+    // Parse igen: collect key-range generators (oper 43) and sampleID (oper 53)
+    // within each instrument zone (ibag boundary = oper 0 / terminal sentinel).
+    // Strategy: scan linearly; track the current zone's keyRange and sampleID.
+    const size_t numRecs = igenData.getSize() / 4;
+    const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
 
-    // De-duplicate by (loKey, hiKey, name) — some SF2s layer L/R stereo pairs
-    // that have identical key ranges. Keep the first occurrence only.
-    std::set<std::pair<int,int>> seen;
-    std::vector<KeysPanel::Keyzone> deduped;
-    for (auto& z : zones)
+    struct ZoneCandidate
     {
-        auto key = std::make_pair (z.loKey, z.hiKey);
-        if (seen.insert (key).second)
-            deduped.push_back (z);
+        int          lo { 0 }, hi { 127 };
+        int          sampleId { -1 };
+        bool         hasKeyRange { false };
+    };
+
+    std::vector<ZoneCandidate> candidates;
+    ZoneCandidate cur;
+
+    auto flushCandidate = [&]
+    {
+        if (cur.hasKeyRange && cur.hi >= cur.lo)
+            candidates.push_back (cur);
+        cur = {};
+    };
+
+    for (size_t i = 0; i < numRecs; ++i)
+    {
+        const uint16_t oper  = (uint16_t)(data[i*4]     | (data[i*4+1] << 8));
+        const uint8_t  lo    = data[i*4+2];
+        const uint8_t  hi    = data[i*4+3];
+        const uint16_t amount= (uint16_t)(data[i*4+2]   | (data[i*4+3] << 8));
+
+        if (oper == 0)          // startAddrsOffset — first gen of a new ibag (zone boundary)
+        {
+            flushCandidate();
+        }
+        else if (oper == 43)    // keyRange
+        {
+            cur.lo           = lo;
+            cur.hi           = hi;
+            cur.hasKeyRange  = true;
+        }
+        else if (oper == 53)    // sampleID (terminal generator — also marks zone end)
+        {
+            cur.sampleId = (int) amount;
+            flushCandidate();
+        }
+    }
+    flushCandidate();
+
+    // De-duplicate by (lo, hi) and build final zone list
+    int  colIdx = 0;
+    std::set<std::pair<int,int>> seen;
+
+    for (auto& c : candidates)
+    {
+        auto key = std::make_pair (c.lo, c.hi);
+        if (seen.find (key) != seen.end()) continue;
+        seen.insert (key);
+
+        KeysPanel::Keyzone z;
+        z.loKey    = c.lo;
+        z.hiKey    = c.hi;
+        z.loVel    = 0;
+        z.hiVel    = 127;
+        z.rootPitch= -1;
+        z.isLooped = false;
+        z.colour   = zoneColourDP (colIdx++);
+
+        // Assign sample name if we have shdr data and a valid sample ID
+        if (c.sampleId >= 0 && c.sampleId < (int) sampleNames.size())
+            z.name = sampleNames[(size_t) c.sampleId];
+
+        // Fall back to "Zone N" if the name is empty or the EOS sentinel
+        if (z.name.isEmpty() || z.name == "EOS")
+            z.name = "Zone " + juce::String (colIdx);
+
+        zones.push_back (z);
     }
 
-    for (size_t i = 0; i < deduped.size(); ++i)
-        deduped[i].colour = zoneColourDP ((int) i);
+    std::sort (zones.begin(), zones.end(), [] (auto& a, auto& b) { return a.loKey < b.loKey; });
+    for (size_t i = 0; i < zones.size(); ++i)
+        zones[i].colour = zoneColourDP ((int) i);
 
-    return deduped;
+    return zones;
 }
 
 void SfzDropdownPanel::reloadZones (const juce::File& f)
