@@ -58,6 +58,20 @@ void SfzFileBrowser::paint (juce::Graphics& g)
     g.setColour (theme.darkBar.darker (0.20f));
     g.fillRect (breadcrumbZone);
 
+    // Back/up button (← — navigate to parent directory)
+    {
+        const bool canGoUp  = !atVirtualRoot;
+        const bool upHover  = upBtnZone.contains (getMouseXYRelative()) && canGoUp;
+        if (upHover)
+        {
+            g.setColour (theme.accent.withAlpha (0.18f));
+            g.fillRoundedRectangle (upBtnZone.toFloat(), 2.0f);
+        }
+        g.setColour (canGoUp ? theme.accent.withAlpha (0.90f)
+                             : theme.accent.withAlpha (0.30f));
+        g.drawText (u8"\u2190", upBtnZone, juce::Justification::centred, false);
+    }
+
     // Drive/root button (⏏ — jump to filesystem roots to reach external drives)
     const bool driveHover = driveBtnZone.contains (getMouseXYRelative()) && !atVirtualRoot;
     if (driveHover)
@@ -109,16 +123,26 @@ void SfzFileBrowser::resized()
     constexpr int upW = 24;
     constexpr int drW = 24;
     breadcrumbZone = { 0, 0, getWidth(), kBreadcrumbH };
-    upBtnZone      = { 2,         1, upW, kBreadcrumbH - 2 };
-    driveBtnZone   = { 2 + upW,   1, drW, kBreadcrumbH - 2 };
+    upBtnZone      = { 0,     1, upW, kBreadcrumbH - 2 };
+    driveBtnZone   = { upW,   1, drW, kBreadcrumbH - 2 };
 
     list.setBounds (0, kBreadcrumbH + 1, getWidth(), getHeight() - kBreadcrumbH - 1);
 }
 
 // ── mouseDown ────────────────────────────────────────────────────────────────
 
+void SfzFileBrowser::mouseMove (const juce::MouseEvent&)
+{
+    repaint (breadcrumbZone);  // refresh hover highlight on up/drive buttons
+}
+
 void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
 {
+    if (upBtnZone.contains (e.getPosition()))
+    {
+        navigateUp();
+        return;
+    }
     if (driveBtnZone.contains (e.getPosition()))
     {
         navigateToRoots();
@@ -1165,7 +1189,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
     char sfbk[4]; stream.read (sfbk, 4);
     if (juce::String::fromUTF8 (sfbk, 4) != "sfbk") return zones;
 
-    juce::MemoryBlock phdrData, pbagData, pgenData, instData, ibagData, igenData, shdrData;
+    juce::MemoryBlock phdrData, pbagData, pgenData, ibagData, igenData, shdrData;
 
     while (! stream.isExhausted())
     {
@@ -1191,7 +1215,6 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
                     if      (subId == "phdr") readChunk (phdrData);
                     else if (subId == "pbag") readChunk (pbagData);
                     else if (subId == "pgen") readChunk (pgenData);
-                    else if (subId == "inst") readChunk (instData);
                     else if (subId == "ibag") readChunk (ibagData);
                     else if (subId == "igen") readChunk (igenData);
                     else if (subId == "shdr") readChunk (shdrData);
@@ -1205,7 +1228,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
     }
 
     if (igenData.isEmpty() || phdrData.isEmpty() || pbagData.isEmpty()
-        || pgenData.isEmpty() || instData.isEmpty() || ibagData.isEmpty())
+        || pgenData.isEmpty() || ibagData.isEmpty())
         return zones;
 
     auto readU16 = [] (const juce::MemoryBlock& mb, size_t off) -> uint16_t
@@ -1265,25 +1288,14 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
     }
     if (instrumentIndex < 0) return zones;
 
-    // ── Step 3: ibag → igen range via inst chunk ───────────────────────────────
-    // inst record: 20-char name + uint16 wInstBagNdx = 22 bytes
-    // ibag record: uint16 wInstGenNdx, uint16 wInstModNdx = 4 bytes
-    constexpr size_t kInstSz = 22;
+    // ── Step 3: ibag → igen range for this instrument ─────────────────────────
     constexpr size_t kIbagSz = 4;
-
-    const size_t numInsts = instData.getSize() / kInstSz;
-    if ((size_t) instrumentIndex + 1 >= numInsts) return zones;  // need [i] and [i+1]
-
-    // inst[instrumentIndex].wInstBagNdx is at byte offset 20 within the record
-    const int ibagStart = (int) readU16 (instData, (size_t) instrumentIndex * kInstSz + 20);
-    const int ibagEnd   = (int) readU16 (instData, (size_t)(instrumentIndex + 1) * kInstSz + 20);
-
     const size_t numIbags = ibagData.getSize() / kIbagSz;
-    if ((size_t) ibagStart >= numIbags || ibagEnd < ibagStart) return zones;
+    if ((size_t) instrumentIndex >= numIbags) return zones;
 
-    const int igenStart = (int) readU16 (ibagData, (size_t) ibagStart * kIbagSz);
-    const int igenEnd   = ((size_t) ibagEnd < numIbags)
-                          ? (int) readU16 (ibagData, (size_t) ibagEnd * kIbagSz)
+    const int igenStart = (int) readU16 (ibagData, (size_t) instrumentIndex * kIbagSz);
+    const int igenEnd   = ((size_t)(instrumentIndex + 1) < numIbags)
+                          ? (int) readU16 (ibagData, (size_t)(instrumentIndex + 1) * kIbagSz)
                           : (int)(igenData.getSize() / 4);
 
     // ── Step 4: sample name lookup from shdr (46 bytes/record) ───────────────
