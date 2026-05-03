@@ -1693,7 +1693,7 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
         cmd.type        = F::CmdSetSliceParam;
         cmd.intParam1   = cell.fieldId;
         cmd.floatParam1 = newNative;
-        cmd.intParam2   = 0;
+        cmd.intParam2   = 1; // skipLock — write value without modifying lockMask
         processor.pushCommand (cmd); repaint(); return;
     }
 
