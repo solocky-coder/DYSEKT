@@ -735,14 +735,14 @@ int   SfzModulePanel::normToTrans (float n)       const { return juce::roundToIn
 static juce::Colour zoneColour (int index)
 {
     static const juce::Colour palette[] = {
-        juce::Colour (0xFFD47810),  // bright amber
-        juce::Colour (0xFF8B4500),  // dark orange
-        juce::Colour (0xFFA85215),  // medium orange
-        juce::Colour (0xFF7A3C08),  // deep amber
-        juce::Colour (0xFFBF6A18),  // warm amber
-        juce::Colour (0xFF924E10),  // rich orange
-        juce::Colour (0xFFCC7215),  // golden orange
-        juce::Colour (0xFF7F3C0A),  // dark rich orange
+        juce::Colour (0xFF4FC3F7),  // sky blue
+        juce::Colour (0xFF81C784),  // sage green
+        juce::Colour (0xFFFFB74D),  // warm amber
+        juce::Colour (0xFFE57373),  // soft red
+        juce::Colour (0xFFBA68C8),  // lavender
+        juce::Colour (0xFF4DD0E1),  // teal
+        juce::Colour (0xFFF06292),  // rose
+        juce::Colour (0xFFA1887F),  // mauve
     };
     return palette[index % 8];
 }

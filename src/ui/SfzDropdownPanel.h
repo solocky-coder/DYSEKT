@@ -120,6 +120,9 @@ public:
     // ── Public API ────────────────────────────────────────────────────────────
     void panelDidShow();
 
+    /** Called after a new SF2/SFZ file has been accepted (any path). */
+    std::function<void (const juce::File&)> onFileLoaded;
+
     // ── Layout constants ──────────────────────────────────────────────────────
     static constexpr int kStripH  = 36;
     static constexpr int kAdsrH   = 34;   ///< height of the ADSR knob row
