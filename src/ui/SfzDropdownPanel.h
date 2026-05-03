@@ -65,6 +65,8 @@ private:
     void   navigateTo      (const juce::File& dir);
     void   navigateUp      ();
     void   navigateToRoots ();   ///< Jump to filesystem volume list (external drives)
+    void   showDrives      () { navigateToRoots(); }   ///< Alias used by SfzDropdownPanel
+    bool   hasNavigated    () const { return navigated; }   ///< True after first navigation
     void   loadRow      (int row);
     juce::File fileForRow (int row) const;
     bool   isDirectory  (int row) const;
@@ -85,6 +87,7 @@ private:
     juce::Rectangle<int> upBtnZone;
     juce::Rectangle<int> driveBtnZone;   // ⏏ button — navigate to filesystem roots
     bool                 atVirtualRoot { false }; ///< true when showing the drive-list view
+    bool                 navigated     { false }; ///< true after the first navigateTo/navigateToRoots call
 
     static constexpr int kBreadcrumbH = 22;
     static constexpr int kRowH        = 18;

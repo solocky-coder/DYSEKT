@@ -27,12 +27,8 @@ SfzFileBrowser::SfzFileBrowser()
     list.setColour (juce::ListBox::outlineColourId,    juce::Colours::transparentBlack);
     addAndMakeVisible (list);
 
-    // Default to user's Music directory, falling back to home
-    auto startDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
-    if (! startDir.isDirectory())
-        startDir = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
-
-    navigateTo (startDir);
+    // Don't navigate in the constructor — the component isn't laid out yet.
+    // Navigation is deferred to the first openBrowser() call.
 }
 
 SfzFileBrowser::~SfzFileBrowser()
@@ -149,6 +145,7 @@ void SfzFileBrowser::navigateTo (const juce::File& dir)
 {
     if (! dir.isDirectory()) return;
     atVirtualRoot = false;
+    navigated     = true;
     currentDir = dir;
     rebuildList();
     repaint();
@@ -210,6 +207,7 @@ void SfzFileBrowser::navigateToRoots()
         rows.add (r);
 
     atVirtualRoot = true;   // breadcrumb shows "Drives" label instead of a path
+    navigated     = true;
     list.updateContent();
     list.repaint();
     repaint();
@@ -446,10 +444,33 @@ void SfzDropdownPanel::openBrowser()
     if (browserOpen) return;
     browserOpen = true;
 
-    // Navigate to the directory of the currently loaded file if there is one
     if (processor.sfzPlayer.isLoaded())
+    {
+        // Navigate to the directory of the currently loaded file
         fileBrowser.setRootDirectory (
             processor.sfzPlayer.getLoadedFile().getParentDirectory());
+    }
+    else if (! fileBrowser.hasNavigated())
+    {
+        // First-ever open with nothing loaded — pick the best default directory
+        const juce::File::SpecialLocationType candidates[] = {
+            juce::File::userMusicDirectory,
+            juce::File::userDocumentsDirectory,
+            juce::File::userDesktopDirectory,
+            juce::File::userHomeDirectory,
+        };
+        juce::File startDir;
+        for (auto loc : candidates)
+        {
+            auto d = juce::File::getSpecialLocation (loc);
+            if (d.isDirectory()) { startDir = d; break; }
+        }
+        if (startDir.isDirectory())
+            fileBrowser.setRootDirectory (startDir);
+        else
+            fileBrowser.showDrives();
+    }
+    // else: browser has been used before — leave it where the user left it
 
     resized();
     repaint();
