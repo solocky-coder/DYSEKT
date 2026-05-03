@@ -51,6 +51,8 @@ public:
 
     // Open to a specific root directory (call before making visible)
     void setRootDirectory (const juce::File& dir);
+    void showDrives   ();                        ///< Show the drive/volume picker list
+    bool hasNavigated () const { return navigated; } ///< True after first navigation
     juce::File getCurrentDirectory() const { return currentDir; }
 
     // ── ListBoxModel ──────────────────────────────────────────────────────────
@@ -65,8 +67,6 @@ private:
     void   navigateTo      (const juce::File& dir);
     void   navigateUp      ();
     void   navigateToRoots ();   ///< Jump to filesystem volume list (external drives)
-    void   showDrives      () { navigateToRoots(); }   ///< Alias used by SfzDropdownPanel
-    bool   hasNavigated    () const { return navigated; }   ///< True after first navigation
     void   loadRow      (int row);
     juce::File fileForRow (int row) const;
     bool   isDirectory  (int row) const;

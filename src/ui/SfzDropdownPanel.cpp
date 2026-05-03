@@ -242,6 +242,11 @@ void SfzFileBrowser::setRootDirectory (const juce::File& dir)
     navigateTo (dir);
 }
 
+void SfzFileBrowser::showDrives()
+{
+    navigateToRoots();
+}
+
 // ── ListBoxModel ──────────────────────────────────────────────────────────────
 
 int SfzFileBrowser::getNumRows() { return rows.size(); }
