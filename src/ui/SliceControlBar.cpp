@@ -871,10 +871,10 @@ void SliceControlBar::paint (juce::Graphics& g)
 
  const float effPitch    = resolveF (kLockPitch,   s.pitchSemitones,  apvtsVal (ParamIds::defaultPitch));
  const float effCents    = resolveF (kLockCentsDetune, s.centsDetune,  apvtsVal (ParamIds::defaultCentsDetune));
- const float effAttack   = resolveF (kLockAttack,  s.attackSec,       apvtsVal (ParamIds::defaultAttack) / 1000.0f);
- const float effDecay    = resolveF (kLockDecay,   s.decaySec,        apvtsVal (ParamIds::defaultDecay)  / 1000.0f);
- const float effSustain  = resolveF (kLockSustain, s.sustainLevel,    apvtsVal (ParamIds::defaultSustain) / 100.0f);
- const float effRelease  = resolveF (kLockRelease, s.releaseSec,      apvtsVal (ParamIds::defaultRelease) / 1000.0f);
+ const float effAttack   = s.attackSec;    // always per-slice
+ const float effDecay    = s.decaySec;     // always per-slice
+ const float effSustain  = s.sustainLevel; // always per-slice
+ const float effRelease  = s.releaseSec;   // always per-slice
  const float effVolume   = resolveF (kLockVolume,  s.volume,          apvtsVal (ParamIds::masterVolume));
  const float effPan      = resolveF (kLockPan,     s.pan,             apvtsVal (ParamIds::defaultPan));
  const float effTonality = resolveF (kLockTonality, s.tonalityHz,     apvtsVal (ParamIds::defaultTonality));
@@ -1381,11 +1381,11 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  case F::FieldCentsDetune: dragStartValue = res (kLockCentsDetune, sl.centsDetune,      apvtsRaw (ParamIds::defaultCentsDetune)); break;
  case F::FieldTonality:    dragStartValue = res (kLockTonality,    sl.tonalityHz,       apvtsRaw (ParamIds::defaultTonality)); break;
  case F::FieldFormant:     dragStartValue = res (kLockFormant,     sl.formantSemitones, apvtsRaw (ParamIds::defaultFormant)); break;
- case F::FieldAttack:      dragStartValue = res (kLockAttack,      sl.attackSec,        apvtsRaw (ParamIds::defaultAttack)  / 1000.f); break;
+ case F::FieldAttack:      dragStartValue = sl.attackSec;    break;
  case F::FieldHold:        dragStartValue = res (kLockHold,        sl.holdSec,          apvtsRaw (ParamIds::defaultHold)    / 1000.f); break;
- case F::FieldDecay:       dragStartValue = res (kLockDecay,       sl.decaySec,         apvtsRaw (ParamIds::defaultDecay)   / 1000.f); break;
- case F::FieldSustain:     dragStartValue = res (kLockSustain,     sl.sustainLevel,     apvtsRaw (ParamIds::defaultSustain) / 100.f);  break;
- case F::FieldRelease:     dragStartValue = res (kLockRelease,     sl.releaseSec,       apvtsRaw (ParamIds::defaultRelease) / 1000.f); break;
+ case F::FieldDecay:       dragStartValue = sl.decaySec;     break;
+ case F::FieldSustain:     dragStartValue = sl.sustainLevel; break;
+ case F::FieldRelease:     dragStartValue = sl.releaseSec;   break;
  case F::FieldVolume:      dragStartValue = res (kLockVolume,      sl.volume,           apvtsRaw (ParamIds::masterVolume)); break;
  case F::FieldPan:         dragStartValue = res (kLockPan,         sl.pan,              apvtsRaw (ParamIds::defaultPan)); break;
  case F::FieldFilterCutoff: dragStartValue = res (kLockFilter,     sl.filterCutoff,     apvtsRaw (ParamIds::defaultFilterCutoff)); break;
