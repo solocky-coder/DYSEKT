@@ -495,6 +495,11 @@ void SfzDropdownPanel::onFileChosen (const juce::File& f)
     reloadZones (f);
     closeBrowser();
     repaint();
+
+    // Notify the editor so it can reset sfzPanelRestored and re-populate
+    // the zone matrix once the async load completes.
+    if (onFileLoaded)
+        onFileLoaded (f);
 }
 
 // =============================================================================

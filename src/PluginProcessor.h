@@ -457,6 +457,11 @@ private:
     std::atomic<FailedLoadResult*>          completedLoadFailure { nullptr };
     std::atomic<SfzSlicePayload*>           pendingSfzSlices     { nullptr };
 
+    /** Set by setStateInformation when restoring an SF2 preset index.
+     *  The editor polls this on its timer and applies it once the preset
+     *  list becomes available, then resets it to -1. */
+    std::atomic<int> pendingSfzPresetIndex { -1 };
+
     // =========================================================================
     // APVTS parameter pointers (assigned in constructor, constant thereafter)
     // =========================================================================

@@ -36,6 +36,8 @@ class SfzFileBrowser : public juce::Component,
 public:
     /** Called when the user double-clicks a .sfz or .sf2 file. */
     std::function<void (const juce::File&)> onFileChosen;
+    /** Called after a new SF2/SFZ file has been accepted (any path). */
+    std::function<void (const juce::File&)> onFileLoaded;
 
     /** Called when the user explicitly closes the browser (Esc / icon click). */
     std::function<void()> onDismiss;

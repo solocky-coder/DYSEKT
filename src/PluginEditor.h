@@ -79,6 +79,11 @@ private:
     int      lastNumSlices         = -1;
     bool     lastTrimActive        = false;
 
+    /** True once the SF-player zone matrix has been successfully populated
+     *  after the current sfzPlayer load.  Reset to false when a new file
+     *  is queued so the timer re-runs panelDidShow on the next load. */
+    bool sfzPanelRestored = false;
+
     /// Which panel occupies the bottom slot (browser or mixer).
     /// Mutually exclusive.
     enum class SlotContent { None, Browser, Mixer };

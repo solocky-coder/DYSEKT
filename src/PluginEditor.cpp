@@ -52,6 +52,12 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  addChildComponent (mixerPanel);
  sfzDropdown.setVisible (false);
  addChildComponent (sfzDropdown);
+ // When a new SF2/SFZ is loaded from the dropdown, reset the restore flag
+ // so the timer re-populates the zone matrix on the next completed load.
+ sfzDropdown.onFileLoaded = [this] (const juce::File&)
+ {
+     sfzPanelRestored = false;
+ };
  shortcutsPanel.setVisible (false);
  addChildComponent (shortcutsPanel);
  shortcutsPanel.onDismiss = [this] { toggleShortcutsPanel(); };
@@ -151,13 +157,14 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  ensureDefaultThemes();
  loadUserSettings();
 
- // If SF-Player mode was restored from settings, populate the zone matrix now.
- // loadUserSettings() sets uiMode directly (bypassing setUiMode) so panelDidShow()
- // was never called — the zone matrix would be empty even though the file is loaded.
- if (uiMode == 1 && processor.sfzPlayer.isLoaded())
+ // If SF-Player mode was restored from settings, set up the panel.
+ // loadUserSettings() sets uiMode directly (bypassing setUiMode), so
+ // the timer-driven sfzPanelRestored path will call panelDidShow() once
+ // sfzPlayer.isLoaded() becomes true (async after setStateInformation).
+ if (uiMode == 1)
  {
      sfzDropdown.setVisible (true);
-     sfzDropdown.panelDidShow();
+     // sfzPanelRestored starts false; the timerCallback will populate zones.
  }
 
  if (processor.sampleData.getSnapshot() == nullptr)
@@ -217,7 +224,14 @@ void DysektEditor::setUiMode (int mode)
  if (uiMode == 1)
  {
      sfzDropdown.setVisible (true);
-     sfzDropdown.panelDidShow();
+     // Reset the restore flag so the timer will call panelDidShow once
+     // the player is confirmed loaded (handles async load after project open).
+     sfzPanelRestored = false;
+     if (processor.sfzPlayer.isLoaded())
+     {
+         sfzDropdown.panelDidShow();
+         sfzPanelRestored = true;
+     }
  }
  else
  {
@@ -981,6 +995,30 @@ void DysektEditor::timerCallback()
  // SFZ player refresh
  if (uiMode == 1 && (uiChanged || playbackActive))
      sfzDropdown.repaint();
+
+ // SF-player async restore: once sfzPlayer finishes loading after
+ // setStateInformation (or a fresh UI open), repopulate the zone matrix
+ // and apply the saved preset index. Runs each timer tick until done.
+ if (uiMode == 1 && ! sfzPanelRestored)
+ {
+     if (processor.sfzPlayer.isLoaded())
+     {
+         // getPresetList() drains freshPresets; first call after load
+         // populates cachedPresets inside sfzPlayer.
+         const auto presets = processor.sfzPlayer.getPresetList();
+         if (! presets.empty())
+         {
+             // Apply any preset index that was saved by setStateInformation.
+             const int pending = processor.pendingSfzPresetIndex.exchange (
+                 -1, std::memory_order_relaxed);
+             if (pending >= 0)
+                 processor.sfzPlayer.setPresetByIndex (pending);
+
+             sfzDropdown.panelDidShow();
+             sfzPanelRestored = true;
+         }
+     }
+ }
 
  sliceLcd.repaintLcd();
  sliceWaveformLcd.repaintLcd();

@@ -2682,7 +2682,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (21);
+    stream.writeInt (22);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -2754,6 +2754,22 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // v17: MIDI Learn CC mappings
     midiLearn.writeState (stream);
+
+    // v22: SF-player state
+    const juce::File sfzFile = sfzPlayer.getLoadedFile();
+    stream.writeString (sfzPlayer.isLoaded() ? sfzFile.getFullPathName() : juce::String());
+    stream.writeInt   (sfzPlayer.getCurrentPresetIndex());
+    stream.writeFloat (sfzPlayer.getVolume());
+    stream.writeInt   (sfzPlayer.getTranspose());
+    stream.writeFloat (sfzPlayer.getSfzAttack());
+    stream.writeFloat (sfzPlayer.getSfzDecay());
+    stream.writeFloat (sfzPlayer.getSfzSustain());
+    stream.writeFloat (sfzPlayer.getSfzRelease());
+    stream.writeFloat (sfzPlayer.getReverbSize());
+    stream.writeFloat (sfzPlayer.getReverbDamp());
+    stream.writeFloat (sfzPlayer.getReverbWidth());
+    stream.writeFloat (sfzPlayer.getReverbMix());
+    stream.writeBool  (sfzPlayer.getReverbFreeze());
 }
 
 void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -2761,7 +2777,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version < 16 || version > 21)
+    if (version < 16 || version > 22)
         return;
 
     // APVTS state
@@ -2869,6 +2885,51 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     // v17: MIDI Learn CC mappings (optional — older presets simply leave all unassigned)
     if (! stream.isExhausted())
         midiLearn.readState (stream);
+
+    // v22: SF-player state — restore file, preset, and all knob values
+    if (version >= 22 && ! stream.isExhausted())
+    {
+        const auto sfzPath = stream.readString();
+        const int  sfzPresetIdx = stream.readInt();
+        const float sfzVol    = stream.readFloat();
+        const int   sfzTrans  = stream.readInt();
+        const float sfzAtk    = stream.readFloat();
+        const float sfzDec    = stream.readFloat();
+        const float sfzSus    = stream.readFloat();
+        const float sfzRel    = stream.readFloat();
+        const float sfzRvSz   = stream.readFloat();
+        const float sfzRvDp   = stream.readFloat();
+        const float sfzRvWd   = stream.readFloat();
+        const float sfzRvMx   = stream.readFloat();
+        const bool  sfzRvFrz  = stream.readBool();
+
+        // Restore knob values unconditionally (they apply whenever a file loads)
+        sfzPlayer.setVolume      (sfzVol);
+        sfzPlayer.setTranspose   (sfzTrans);
+        sfzPlayer.setSfzAttack   (sfzAtk);
+        sfzPlayer.setSfzDecay    (sfzDec);
+        sfzPlayer.setSfzSustain  (sfzSus);
+        sfzPlayer.setSfzRelease  (sfzRel);
+        sfzPlayer.setReverbSize  (sfzRvSz);
+        sfzPlayer.setReverbDamp  (sfzRvDp);
+        sfzPlayer.setReverbWidth (sfzRvWd);
+        sfzPlayer.setReverbMix   (sfzRvMx);
+        sfzPlayer.setReverbFreeze(sfzRvFrz);
+
+        // Restore the SF2/SFZ file — this is async; the editor polls isLoaded()
+        if (sfzPath.isNotEmpty())
+        {
+            const juce::File sfzFile (sfzPath);
+            if (sfzFile.existsAsFile())
+            {
+                sfzPlayer.loadFile (sfzFile);
+                // Store the preset index so the audio thread can select it
+                // once the soundfont finishes loading and posts its preset list.
+                sfzPlayer.setPresetByIndex (sfzPresetIdx);
+                pendingSfzPresetIndex.store (sfzPresetIdx, std::memory_order_relaxed);
+            }
+        }
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
