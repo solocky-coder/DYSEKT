@@ -58,19 +58,6 @@ void SfzFileBrowser::paint (juce::Graphics& g)
     g.setColour (theme.darkBar.darker (0.20f));
     g.fillRect (breadcrumbZone);
 
-    // Up-button (disabled when already showing the virtual root/drive list)
-    const bool upHover = upBtnZone.contains (getMouseXYRelative());
-    const bool canGoUp = !atVirtualRoot;
-    if (upHover && canGoUp)
-    {
-        g.setColour (theme.accent.withAlpha (0.18f));
-        g.fillRoundedRectangle (upBtnZone.toFloat(), 2.0f);
-    }
-    g.setFont (DysektLookAndFeel::makeFont (11.0f));
-    g.setColour (canGoUp ? theme.accent.withAlpha (0.80f)
-                         : theme.foreground.withAlpha (0.20f));
-    g.drawText (u8"\u2191", upBtnZone, juce::Justification::centred, false);
-
     // Drive/root button (⏏ — jump to filesystem roots to reach external drives)
     const bool driveHover = driveBtnZone.contains (getMouseXYRelative()) && !atVirtualRoot;
     if (driveHover)
@@ -132,12 +119,6 @@ void SfzFileBrowser::resized()
 
 void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
 {
-    if (upBtnZone.contains (e.getPosition()))
-    {
-        navigateUp();
-        return;
-    }
-
     if (driveBtnZone.contains (e.getPosition()))
     {
         navigateToRoots();
@@ -300,21 +281,31 @@ void SfzFileBrowser::paintListBoxItem (int row, juce::Graphics& g,
     }
     else
     {
-        // Extension badge
+        // Extension badge (only for files with a known extension)
         const auto ext = f.getFileExtension().toUpperCase().trimCharactersAtStart (".");
-        const int  badgeW = 30;
-        const auto badgeRect = juce::Rectangle<int> (w - badgeW - 4, (h - 12) / 2, badgeW, 12);
-        g.setColour (theme.accent.withAlpha (0.18f));
-        g.fillRoundedRectangle (badgeRect.toFloat(), 2.0f);
-        g.setFont (DysektLookAndFeel::makeFont (8.0f));
-        g.setColour (theme.accent.withAlpha (0.80f));
-        g.drawText (ext, badgeRect, juce::Justification::centred, false);
+        if (ext.isEmpty())
+        {
+            g.setFont (DysektLookAndFeel::makeFont (10.5f));
+            g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.80f));
+            g.drawText (f.getFileName(), 6, 0, w - 10, h,
+                        juce::Justification::centredLeft, true);
+        }
+        else
+        {
+            const int  badgeW = 30;
+            const auto badgeRect = juce::Rectangle<int> (w - badgeW - 4, (h - 12) / 2, badgeW, 12);
+            g.setColour (theme.accent.withAlpha (0.18f));
+            g.fillRoundedRectangle (badgeRect.toFloat(), 2.0f);
+            g.setFont (DysektLookAndFeel::makeFont (8.0f));
+            g.setColour (theme.accent.withAlpha (0.80f));
+            g.drawText (ext, badgeRect, juce::Justification::centred, false);
 
-        // Filename
-        g.setFont (DysektLookAndFeel::makeFont (10.5f));
-        g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.80f));
-        g.drawText (f.getFileNameWithoutExtension(), 6, 0, w - badgeW - 12, h,
-                    juce::Justification::centredLeft, true);
+            // Filename
+            g.setFont (DysektLookAndFeel::makeFont (10.5f));
+            g.setColour (selected ? theme.accent : theme.foreground.withAlpha (0.80f));
+            g.drawText (f.getFileNameWithoutExtension(), 6, 0, w - badgeW - 12, h,
+                        juce::Justification::centredLeft, true);
+        }
     }
 }
 
@@ -328,10 +319,9 @@ void SfzFileBrowser::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
     loadRow (row);
 }
 
-juce::String SfzFileBrowser::getTooltipForRow (int row)
+juce::String SfzFileBrowser::getTooltipForRow (int /*row*/)
 {
-    if (row < 0 || row >= rows.size()) return {};
-    return rows[row].getFullPathName();
+    return {};
 }
 
 void SfzFileBrowser::loadRow (int row)
