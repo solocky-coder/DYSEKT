@@ -87,8 +87,7 @@ private:
 
     // Breadcrumb / up-button zone (computed in resized)
     juce::Rectangle<int> breadcrumbZone;
-    juce::Rectangle<int> upBtnZone;
-    juce::Rectangle<int> driveBtnZone;   // ⏏ button — navigate to filesystem roots
+    juce::Rectangle<int> upBtnZone;      // ← button — navigate to parent directory
     bool                 atVirtualRoot { false }; ///< true when showing the drive-list view
     bool                 navigated     { false }; ///< true after the first navigateTo/navigateToRoots call
 

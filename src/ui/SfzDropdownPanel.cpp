@@ -72,20 +72,9 @@ void SfzFileBrowser::paint (juce::Graphics& g)
         g.drawText (u8"\u2190", upBtnZone, juce::Justification::centred, false);
     }
 
-    // Drive/root button (⏏ — jump to filesystem roots to reach external drives)
-    const bool driveHover = driveBtnZone.contains (getMouseXYRelative()) && !atVirtualRoot;
-    if (driveHover)
-    {
-        g.setColour (theme.accent.withAlpha (0.18f));
-        g.fillRoundedRectangle (driveBtnZone.toFloat(), 2.0f);
-    }
-    g.setColour (atVirtualRoot ? theme.accent.withAlpha (0.90f)
-                               : theme.accent.withAlpha (0.80f));
-    g.drawText (u8"\u23CF", driveBtnZone, juce::Justification::centred, false);
-
     // Current path text — shows "Drives" label when in the virtual root view
     {
-        const auto pathArea = breadcrumbZone.withTrimmedLeft (upBtnZone.getWidth() + driveBtnZone.getWidth() + 6)
+        const auto pathArea = breadcrumbZone.withTrimmedLeft (upBtnZone.getWidth() + 4)
                                             .withTrimmedRight (4);
         g.setFont (DysektLookAndFeel::makeFont (9.5f));
         g.setColour (theme.foreground.withAlpha (0.55f));
@@ -121,10 +110,8 @@ void SfzFileBrowser::paint (juce::Graphics& g)
 void SfzFileBrowser::resized()
 {
     constexpr int upW = 24;
-    constexpr int drW = 24;
     breadcrumbZone = { 0, 0, getWidth(), kBreadcrumbH };
-    upBtnZone      = { 0,     1, upW, kBreadcrumbH - 2 };
-    driveBtnZone   = { upW,   1, drW, kBreadcrumbH - 2 };
+    upBtnZone      = { 0, 1, upW, kBreadcrumbH - 2 };
 
     list.setBounds (0, kBreadcrumbH + 1, getWidth(), getHeight() - kBreadcrumbH - 1);
 }
@@ -141,11 +128,6 @@ void SfzFileBrowser::mouseDown (const juce::MouseEvent& e)
     if (upBtnZone.contains (e.getPosition()))
     {
         navigateUp();
-        return;
-    }
-    if (driveBtnZone.contains (e.getPosition()))
-    {
-        navigateToRoots();
         return;
     }
     // Clicks below the breadcrumb are handled by the ListBox itself
