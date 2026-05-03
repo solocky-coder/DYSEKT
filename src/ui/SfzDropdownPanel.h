@@ -186,7 +186,9 @@ private:
 
     // ── Zone parsers ──────────────────────────────────────────────────────────
     static std::vector<KeysPanel::Keyzone> parseSfzZones (const juce::File& f);
-    static std::vector<KeysPanel::Keyzone> parseSf2Zones (const juce::File& f);
+    static std::vector<KeysPanel::Keyzone> parseSf2Zones (const juce::File& f,
+                                                            int targetBank   = 0,
+                                                            int targetPreset = 0);
     void reloadZones (const juce::File& f);
     void writeSfzZoneChange (const juce::File& f, int rowIndex,
                               const KeysPanel::Keyzone& updated);

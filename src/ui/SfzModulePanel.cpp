@@ -919,23 +919,29 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
     return zones;
 }
 
-std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File& f)
+std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File& f,
+                                                                  int targetBank,
+                                                                  int targetPreset)
 {
-    // Lightweight SF2 RIFF parser — extracts keyRange (gen 43) from IGEN chunk.
+    // ── Full SF2 RIFF parser ─────────────────────────────────────────────────
+    // Reads phdr → pbag → pgen to find the instrument index for the selected
+    // preset, then reads ibag → igen to extract only THAT instrument's zones.
+    // Previously this read ALL igen records regardless of preset, which caused
+    // every sample in the file to appear in the zone matrix.
     std::vector<KeysPanel::Keyzone> zones;
 
     juce::FileInputStream stream (f);
     if (stream.failedToOpen()) return zones;
 
-    // RIFF header
+    // RIFF / sfbk header
     char riff[4]; stream.read (riff, 4);
     if (juce::String::fromUTF8 (riff, 4) != "RIFF") return zones;
-    stream.readInt();  // file size
+    stream.readInt();
     char sfbk[4]; stream.read (sfbk, 4);
     if (juce::String::fromUTF8 (sfbk, 4) != "sfbk") return zones;
 
-    // Walk top-level LIST chunks to find "pdta"
-    juce::MemoryBlock igenData;
+    // Collect all pdta sub-chunks we need
+    juce::MemoryBlock phdrData, pbagData, pgenData, ibagData, igenData, shdrData;
 
     while (! stream.isExhausted())
     {
@@ -946,68 +952,161 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
         if (chunkId == "LIST")
         {
             char listId[4]; stream.read (listId, 4);
-            const auto lid = juce::String::fromUTF8 (listId, 4);
-
-            if (lid == "pdta")
+            if (juce::String::fromUTF8 (listId, 4) == "pdta")
             {
-                // Scan sub-chunks for "igen"
                 const int pdtaEnd = (int) stream.getPosition() + sz - 4;
                 while (stream.getPosition() < pdtaEnd && ! stream.isExhausted())
                 {
                     char sub[4]; if (stream.read (sub, 4) < 4) break;
                     const auto subId = juce::String::fromUTF8 (sub, 4);
                     const int  subSz = stream.readInt();
-                    if (subId == "igen")
+                    auto readChunk = [&] (juce::MemoryBlock& mb)
                     {
-                        igenData.setSize ((size_t) subSz);
-                        stream.read (igenData.getData(), subSz);
-                        break;
-                    }
-                    stream.skipNextBytes (subSz);
+                        mb.setSize ((size_t) subSz);
+                        stream.read (mb.getData(), subSz);
+                    };
+                    if      (subId == "phdr") readChunk (phdrData);
+                    else if (subId == "pbag") readChunk (pbagData);
+                    else if (subId == "pgen") readChunk (pgenData);
+                    else if (subId == "ibag") readChunk (ibagData);
+                    else if (subId == "igen") readChunk (igenData);
+                    else if (subId == "shdr") readChunk (shdrData);
+                    else stream.skipNextBytes (subSz);
                 }
                 break;
             }
-            else
-            {
-                stream.skipNextBytes (sz - 4);
-            }
+            else stream.skipNextBytes (sz - 4);
         }
-        else
+        else stream.skipNextBytes (sz);
+    }
+
+    if (igenData.isEmpty() || phdrData.isEmpty() || pbagData.isEmpty()
+        || pgenData.isEmpty() || ibagData.isEmpty())
+        return zones;
+
+    // ── Helper lambdas for reading little-endian values ───────────────────────
+    auto readU16 = [] (const juce::MemoryBlock& mb, size_t byteOffset) -> uint16_t
+    {
+        if (byteOffset + 1 >= mb.getSize()) return 0;
+        const auto* d = static_cast<const uint8_t*> (mb.getData());
+        return (uint16_t)(d[byteOffset] | (d[byteOffset + 1] << 8));
+    };
+    auto readI16 = [&] (const juce::MemoryBlock& mb, size_t byteOffset) -> int16_t
+    {
+        return (int16_t) readU16 (mb, byteOffset);
+    };
+
+    // ── Step 1: find preset in phdr ───────────────────────────────────────────
+    // phdr record: 20-char name, uint16 preset, uint16 bank, uint16 wPresetBagNdx,
+    //              uint32 dwLibrary, uint32 dwGenre, uint32 dwMorphology  = 38 bytes
+    constexpr size_t kPhdrSz = 38;
+    const size_t numPresets  = phdrData.getSize() / kPhdrSz;
+    const auto*  phdrRaw     = static_cast<const uint8_t*> (phdrData.getData());
+
+    int presetBagStart = -1;
+    int presetBagEnd   = -1;
+
+    for (size_t pi = 0; pi + 1 < numPresets; ++pi)  // last record is EOP sentinel
+    {
+        const uint16_t pNum  = readU16 (phdrData, pi * kPhdrSz + 20);
+        const uint16_t pBank = readU16 (phdrData, pi * kPhdrSz + 22);
+        const uint16_t bagNdx= readU16 (phdrData, pi * kPhdrSz + 24);
+
+        if ((int) pNum == targetPreset && (int) pBank == targetBank)
         {
-            stream.skipNextBytes (sz);
+            presetBagStart = (int) bagNdx;
+            // Next record's bag index gives us the exclusive end
+            presetBagEnd = (int) readU16 (phdrData, (pi + 1) * kPhdrSz + 24);
+            break;
         }
     }
 
-    if (igenData.isEmpty()) return zones;
+    // Fallback: if the requested bank/preset wasn't found, use the first preset
+    if (presetBagStart < 0 && numPresets > 1)
+    {
+        presetBagStart = (int) readU16 (phdrData, 24);
+        presetBagEnd   = (int) readU16 (phdrData, kPhdrSz + 24);
+    }
 
-    // Each IGEN record is 4 bytes: sfGenOper (uint16) + genAmount (lo, hi bytes)
-    // SF2 generator opcodes used:
-    //   43 = keyRange          (lo=loKey, hi=hiKey)
-    //   58 = overridingRootKey (lo=rootMidi, hi=unused)
-    //   48 = initialAttenuation (lo|hi as int16 centibels; dB = -val/10.0)
-    //   38 = releaseVolEnv      (lo|hi as int16 timecents; s = 2^(val/1200))
-    //
-    // Strategy: accumulate gens per zone; flush when a new keyRange (43) appears.
-    // Each instrument zone in SF2 ends implicitly when the next one begins — the
-    // ibag pointers encode boundaries, but we approximate with keyRange as delimiter.
-    const size_t numRecs = igenData.getSize() / 4;
-    const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
+    if (presetBagStart < 0) return zones;
 
-    // Current zone accumulator
-    int   zLoKey     = -1;
-    int   zHiKey     = -1;
+    // ── Step 2: walk pbag/pgen to find instrument index (oper=41) ────────────
+    // pbag record: uint16 wGenNdx, uint16 wModNdx  = 4 bytes
+    constexpr size_t kPbagSz = 4;
+    constexpr size_t kPgenSz = 4;
+
+    int instrumentIndex = -1;
+
+    for (int bi = presetBagStart; bi < presetBagEnd; ++bi)
+    {
+        const size_t bagOff = (size_t) bi * kPbagSz;
+        if (bagOff + 2 > pbagData.getSize()) break;
+        const int genStart = (int) readU16 (pbagData, bagOff);
+        const int genEnd   = (bi + 1 < (int)(pbagData.getSize() / kPbagSz))
+                             ? (int) readU16 (pbagData, (size_t)(bi + 1) * kPbagSz)
+                             : (int)(pgenData.getSize() / kPgenSz);
+
+        for (int gi = genStart; gi < genEnd; ++gi)
+        {
+            const size_t gOff = (size_t) gi * kPgenSz;
+            if (gOff + 4 > pgenData.getSize()) break;
+            const uint16_t oper = readU16 (pgenData, gOff);
+            if (oper == 41)  // instrument generator
+            {
+                instrumentIndex = (int) readU16 (pgenData, gOff + 2);
+                break;
+            }
+        }
+        if (instrumentIndex >= 0) break;
+    }
+
+    if (instrumentIndex < 0) return zones;
+
+    // ── Step 3: find igen range via ibag ──────────────────────────────────────
+    // ibag record: uint16 wInstGenNdx, uint16 wInstModNdx  = 4 bytes
+    constexpr size_t kIbagSz = 4;
+    const size_t numIbags = ibagData.getSize() / kIbagSz;
+
+    if ((size_t) instrumentIndex >= numIbags) return zones;
+
+    const int igenStart = (int) readU16 (ibagData, (size_t) instrumentIndex * kIbagSz);
+    const int igenEnd   = ((size_t)(instrumentIndex + 1) < numIbags)
+                          ? (int) readU16 (ibagData, (size_t)(instrumentIndex + 1) * kIbagSz)
+                          : (int)(igenData.getSize() / 4);
+
+    // ── Step 4: build sample-name lookup from shdr ────────────────────────────
+    // shdr record: 20-char name + 26 bytes of other fields = 46 bytes
+    std::vector<juce::String> sampleNames;
+    if (! shdrData.isEmpty())
+    {
+        constexpr size_t kShdrSz = 46;
+        const size_t numSamples  = shdrData.getSize() / kShdrSz;
+        const auto*  shdrRaw     = static_cast<const char*> (shdrData.getData());
+        sampleNames.reserve (numSamples);
+        for (size_t s = 0; s < numSamples; ++s)
+            sampleNames.push_back (juce::String::fromUTF8 (shdrRaw + s * kShdrSz, 20).trimEnd());
+    }
+
+    // ── Step 5: parse igen records in range → build zones ────────────────────
+    // igen record: uint16 sfGenOper, then 2 bytes genAmount (lo/hi for ranges)
+    const auto* igenRaw = static_cast<const uint8_t*> (igenData.getData());
+
+    int   zLoKey     = 0;
+    int   zHiKey     = 127;
     int   zRootPitch = -1;
     float zVolDb     = -7.0f;
     float zPan       = 0.0f;
     float zTune      = 0.0f;
     float zRelSec    = 0.664f;
+    int   zSampleId  = -1;
+    bool  zHasRange  = false;
 
     std::set<std::pair<int,int>> seen;
     int colIdx = 0;
 
     auto flushZone = [&]
     {
-        if (zLoKey < 0 || zHiKey < zLoKey) return;
+        if (! zHasRange || zHiKey < zLoKey) return;
         auto key = std::make_pair (zLoKey, zHiKey);
         if (seen.find (key) == seen.end())
         {
@@ -1021,59 +1120,73 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
             z.tuneCents  = zTune;
             z.releaseSec = zRelSec;
             z.colour     = zoneColour (colIdx);
-            z.name       = "Zone " + juce::String (colIdx + 1);
             z.isSfz      = false;   // SF2 zones are read-only
+
+            if (zSampleId >= 0 && zSampleId < (int) sampleNames.size()
+                && sampleNames[(size_t) zSampleId] != "EOS"
+                && sampleNames[(size_t) zSampleId].isNotEmpty())
+                z.name = sampleNames[(size_t) zSampleId];
+            else
+                z.name = "Zone " + juce::String (colIdx + 1);
+
             zones.push_back (z);
             ++colIdx;
         }
-        zLoKey = -1; zHiKey = -1; zRootPitch = -1;
+        // Reset accumulators for next zone
+        zLoKey = 0; zHiKey = 127; zRootPitch = -1;
         zVolDb = -7.0f; zPan = 0.0f; zTune = 0.0f; zRelSec = 0.664f;
+        zSampleId = -1; zHasRange = false;
     };
 
-    for (size_t i = 0; i < numRecs; ++i)
+    for (int i = igenStart; i < igenEnd; ++i)
     {
-        const uint16_t oper = (uint16_t)(data[i*4] | (data[i*4+1] << 8));
-        const uint8_t  lo   = data[i*4 + 2];
-        const uint8_t  hi   = data[i*4 + 3];
+        const size_t   off  = (size_t) i * 4;
+        if (off + 4 > igenData.getSize()) break;
+        const uint16_t oper = (uint16_t)(igenRaw[off] | (igenRaw[off + 1] << 8));
+        const uint8_t  lo   = igenRaw[off + 2];
+        const uint8_t  hi   = igenRaw[off + 3];
 
-        if (oper == 43)  // keyRange — start new zone
+        if (oper == 43)  // keyRange — marks start of a new zone
         {
             flushZone();
-            zLoKey = (int) lo;
-            zHiKey = (int) hi;
+            zLoKey = (int) lo; zHiKey = (int) hi; zHasRange = true;
         }
-        else if (oper == 58 && zLoKey >= 0)  // overridingRootKey
+        else if (oper == 58)  // overridingRootKey
         {
             zRootPitch = juce::jlimit (0, 127, (int) lo);
         }
-        else if (oper == 48 && zLoKey >= 0)  // initialAttenuation (centibels)
+        else if (oper == 48)  // initialAttenuation (centibels → dB)
         {
             const int16_t cb = (int16_t)((uint16_t)(lo | (hi << 8)));
-            zVolDb = -(float) cb / 10.0f;   // centibels → dB (attenuation → negative gain)
+            zVolDb = -(float) cb / 10.0f;
         }
-        else if (oper == 17 && zLoKey >= 0)  // pan (0.1% units: -500=L, 0=C, +500=R)
+        else if (oper == 17)  // pan (0.1% units; -500=L, 0=C, +500=R)
         {
             const int16_t raw = (int16_t)((uint16_t)(lo | (hi << 8)));
             zPan = juce::jlimit (-1.0f, 1.0f, (float) raw / 500.0f);
         }
-        else if (oper == 52 && zLoKey >= 0)  // fineTune (cents, -99..+99)
+        else if (oper == 52)  // fineTune (cents)
         {
             const int16_t raw = (int16_t)((uint16_t)(lo | (hi << 8)));
             zTune = juce::jlimit (-100.0f, 100.0f, (float) raw);
         }
-        else if (oper == 38 && zLoKey >= 0)  // releaseVolEnv (timecents)
+        else if (oper == 38)  // releaseVolEnv (timecents)
         {
             const int16_t tc = (int16_t)((uint16_t)(lo | (hi << 8)));
             zRelSec = juce::jlimit (0.0f, 60.0f,
                           (float) std::pow (2.0, (double) tc / 1200.0));
         }
+        else if (oper == 53)  // sampleID — terminal generator, ends this zone
+        {
+            zSampleId = (int)(uint16_t)(lo | (hi << 8));
+            flushZone();
+        }
     }
     flushZone();
 
-    // Sort by loKey for display and re-assign colours
+    // Sort by loKey and re-assign palette colours
     std::sort (zones.begin(), zones.end(),
                [] (auto& a, auto& b) { return a.loKey < b.loKey; });
-
     for (size_t i = 0; i < zones.size(); ++i)
         zones[i].colour = zoneColour ((int) i);
 
@@ -1088,7 +1201,19 @@ void SfzModulePanel::reloadZones (const juce::File& f)
     if (ext == ".sfz")
         zones = parseSfzZones (f);
     else if (ext == ".sf2")
-        zones = parseSf2Zones (f);
+    {
+        // Look up the bank and program of the currently selected preset so we
+        // only show zones that belong to it (not every zone in the entire file).
+        int bank = 0, program = 0;
+        const auto presets = processor.sfzPlayer.getPresetList();
+        const int  idx     = processor.sfzPlayer.getCurrentPresetIndex();
+        if (idx >= 0 && idx < (int) presets.size())
+        {
+            bank    = presets[(size_t) idx].bank;
+            program = presets[(size_t) idx].preset;
+        }
+        zones = parseSf2Zones (f, bank, program);
+    }
 
     keysPanel.setKeyzones (zones);
     if (! zones.empty())

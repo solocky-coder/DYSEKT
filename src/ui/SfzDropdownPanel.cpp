@@ -1140,9 +1140,17 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
     return zones;
 }
 
-std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::File& f)
+std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::File& f,
+                                                                    int targetBank,
+                                                                    int targetPreset)
 {
+    // ── Full SF2 RIFF parser ─────────────────────────────────────────────────
+    // Reads phdr → pbag → pgen to resolve the selected preset's instrument,
+    // then reads ibag → igen for only that instrument's zones.
+    // The previous implementation read ALL igen records (every sample in the
+    // file), which caused the zone matrix to show every preset's samples.
     std::vector<KeysPanel::Keyzone> zones;
+
     juce::FileInputStream stream (f);
     if (stream.failedToOpen()) return zones;
 
@@ -1152,10 +1160,7 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
     char sfbk[4]; stream.read (sfbk, 4);
     if (juce::String::fromUTF8 (sfbk, 4) != "sfbk") return zones;
 
-    // We need two sub-chunks from the pdta LIST: igen and shdr.
-    // igen holds instrument generators (key-range oper=43, sampleID oper=53).
-    // shdr holds sample headers (20-char name per sample record of 46 bytes).
-    juce::MemoryBlock igenData, shdrData;
+    juce::MemoryBlock phdrData, pbagData, pgenData, ibagData, igenData, shdrData;
 
     while (! stream.isExhausted())
     {
@@ -1173,98 +1178,141 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
                     char sub[4]; if (stream.read (sub, 4) < 4) break;
                     const auto subId = juce::String::fromUTF8 (sub, 4);
                     const int  subSz = stream.readInt();
-                    if (subId == "igen")
+                    auto readChunk = [&] (juce::MemoryBlock& mb)
                     {
-                        igenData.setSize ((size_t) subSz);
-                        stream.read (igenData.getData(), subSz);
-                    }
-                    else if (subId == "shdr")
-                    {
-                        shdrData.setSize ((size_t) subSz);
-                        stream.read (shdrData.getData(), subSz);
-                    }
-                    else
-                    {
-                        stream.skipNextBytes (subSz);
-                    }
+                        mb.setSize ((size_t) subSz);
+                        stream.read (mb.getData(), subSz);
+                    };
+                    if      (subId == "phdr") readChunk (phdrData);
+                    else if (subId == "pbag") readChunk (pbagData);
+                    else if (subId == "pgen") readChunk (pgenData);
+                    else if (subId == "ibag") readChunk (ibagData);
+                    else if (subId == "igen") readChunk (igenData);
+                    else if (subId == "shdr") readChunk (shdrData);
+                    else stream.skipNextBytes (subSz);
                 }
                 break;
             }
-            stream.skipNextBytes (sz - 4);
+            else stream.skipNextBytes (sz - 4);
         }
         else stream.skipNextBytes (sz);
     }
 
-    if (igenData.isEmpty()) return zones;
+    if (igenData.isEmpty() || phdrData.isEmpty() || pbagData.isEmpty()
+        || pgenData.isEmpty() || ibagData.isEmpty())
+        return zones;
 
-    // Build sample-name lookup from shdr.
-    // Each shdr record is 46 bytes: 20-char name, then various uint32/uint16 fields.
-    // The final sentinel record ("EOS") should be ignored.
+    auto readU16 = [] (const juce::MemoryBlock& mb, size_t off) -> uint16_t
+    {
+        if (off + 1 >= mb.getSize()) return 0;
+        const auto* d = static_cast<const uint8_t*> (mb.getData());
+        return (uint16_t)(d[off] | (d[off + 1] << 8));
+    };
+
+    // ── Step 1: locate preset in phdr (38 bytes/record) ──────────────────────
+    constexpr size_t kPhdrSz = 38;
+    const size_t numPresets  = phdrData.getSize() / kPhdrSz;
+
+    int presetBagStart = -1, presetBagEnd = -1;
+    for (size_t pi = 0; pi + 1 < numPresets; ++pi)
+    {
+        const uint16_t pNum  = readU16 (phdrData, pi * kPhdrSz + 20);
+        const uint16_t pBank = readU16 (phdrData, pi * kPhdrSz + 22);
+        const uint16_t bagNdx= readU16 (phdrData, pi * kPhdrSz + 24);
+        if ((int) pNum == targetPreset && (int) pBank == targetBank)
+        {
+            presetBagStart = (int) bagNdx;
+            presetBagEnd   = (int) readU16 (phdrData, (pi + 1) * kPhdrSz + 24);
+            break;
+        }
+    }
+    // Fallback to first preset if not found
+    if (presetBagStart < 0 && numPresets > 1)
+    {
+        presetBagStart = (int) readU16 (phdrData, 24);
+        presetBagEnd   = (int) readU16 (phdrData, kPhdrSz + 24);
+    }
+    if (presetBagStart < 0) return zones;
+
+    // ── Step 2: pbag → pgen to find instrument index (oper=41) ──────────────
+    constexpr size_t kPbagSz = 4, kPgenSz = 4;
+    int instrumentIndex = -1;
+
+    for (int bi = presetBagStart; bi < presetBagEnd && instrumentIndex < 0; ++bi)
+    {
+        const size_t bagOff = (size_t) bi * kPbagSz;
+        if (bagOff + 2 > pbagData.getSize()) break;
+        const int genStart = (int) readU16 (pbagData, bagOff);
+        const int genEnd   = (bi + 1 < (int)(pbagData.getSize() / kPbagSz))
+                             ? (int) readU16 (pbagData, (size_t)(bi + 1) * kPbagSz)
+                             : (int)(pgenData.getSize() / kPgenSz);
+        for (int gi = genStart; gi < genEnd; ++gi)
+        {
+            const size_t gOff = (size_t) gi * kPgenSz;
+            if (gOff + 4 > pgenData.getSize()) break;
+            if (readU16 (pgenData, gOff) == 41)  // instrument generator
+            {
+                instrumentIndex = (int) readU16 (pgenData, gOff + 2);
+                break;
+            }
+        }
+    }
+    if (instrumentIndex < 0) return zones;
+
+    // ── Step 3: ibag → igen range for this instrument ─────────────────────────
+    constexpr size_t kIbagSz = 4;
+    const size_t numIbags = ibagData.getSize() / kIbagSz;
+    if ((size_t) instrumentIndex >= numIbags) return zones;
+
+    const int igenStart = (int) readU16 (ibagData, (size_t) instrumentIndex * kIbagSz);
+    const int igenEnd   = ((size_t)(instrumentIndex + 1) < numIbags)
+                          ? (int) readU16 (ibagData, (size_t)(instrumentIndex + 1) * kIbagSz)
+                          : (int)(igenData.getSize() / 4);
+
+    // ── Step 4: sample name lookup from shdr (46 bytes/record) ───────────────
     std::vector<juce::String> sampleNames;
     if (! shdrData.isEmpty())
     {
-        constexpr size_t kShdrRecSize = 46;
-        const size_t numSamples = shdrData.getSize() / kShdrRecSize;
-        const auto*  shdr       = static_cast<const char*> (shdrData.getData());
+        constexpr size_t kShdrSz = 46;
+        const size_t numSamples  = shdrData.getSize() / kShdrSz;
+        const auto*  shdrRaw     = static_cast<const char*> (shdrData.getData());
         sampleNames.reserve (numSamples);
         for (size_t s = 0; s < numSamples; ++s)
-        {
-            const char* namePtr = shdr + s * kShdrRecSize;
-            // Name is null-terminated within 20 bytes
-            sampleNames.push_back (juce::String::fromUTF8 (namePtr, 20).trimEnd());
-        }
+            sampleNames.push_back (juce::String::fromUTF8 (shdrRaw + s * kShdrSz, 20).trimEnd());
     }
 
-    // Parse igen: collect key-range generators (oper 43) and sampleID (oper 53)
-    // within each instrument zone (ibag boundary = oper 0 / terminal sentinel).
-    // Strategy: scan linearly; track the current zone's keyRange and sampleID.
-    const size_t numRecs = igenData.getSize() / 4;
-    const auto*  data    = static_cast<const uint8_t*> (igenData.getData());
+    // ── Step 5: parse only this instrument's igen records ────────────────────
+    const auto* igenRaw = static_cast<const uint8_t*> (igenData.getData());
 
-    struct ZoneCandidate
-    {
-        int          lo { 0 }, hi { 127 };
-        int          sampleId { -1 };
-        bool         hasKeyRange { false };
-    };
-
+    struct ZoneCandidate { int lo{0}, hi{127}, sampleId{-1}, root{-1}; bool hasRange{false}; };
     std::vector<ZoneCandidate> candidates;
     ZoneCandidate cur;
 
     auto flushCandidate = [&]
     {
-        if (cur.hasKeyRange && cur.hi >= cur.lo)
+        if (cur.hasRange && cur.hi >= cur.lo)
             candidates.push_back (cur);
         cur = {};
     };
 
-    for (size_t i = 0; i < numRecs; ++i)
+    for (int i = igenStart; i < igenEnd; ++i)
     {
-        const uint16_t oper  = (uint16_t)(data[i*4]     | (data[i*4+1] << 8));
-        const uint8_t  lo    = data[i*4+2];
-        const uint8_t  hi    = data[i*4+3];
-        const uint16_t amount= (uint16_t)(data[i*4+2]   | (data[i*4+3] << 8));
+        const size_t   off  = (size_t) i * 4;
+        if (off + 4 > igenData.getSize()) break;
+        const uint16_t oper   = (uint16_t)(igenRaw[off] | (igenRaw[off+1] << 8));
+        const uint8_t  lo     = igenRaw[off+2];
+        const uint8_t  hi     = igenRaw[off+3];
+        const uint16_t amount = (uint16_t)(igenRaw[off+2] | (igenRaw[off+3] << 8));
 
-        if (oper == 0)          // startAddrsOffset — first gen of a new ibag (zone boundary)
-        {
-            flushCandidate();
-        }
-        else if (oper == 43)    // keyRange
-        {
-            cur.lo           = lo;
-            cur.hi           = hi;
-            cur.hasKeyRange  = true;
-        }
-        else if (oper == 53)    // sampleID (terminal generator — also marks zone end)
-        {
-            cur.sampleId = (int) amount;
-            flushCandidate();
-        }
+        if (oper == 43)                    { flushCandidate(); cur.lo = lo; cur.hi = hi; cur.hasRange = true; }
+        else if (oper == 58)               { cur.root = juce::jlimit (0, 127, (int) lo); }
+        else if (oper == 53)               { cur.sampleId = (int) amount; flushCandidate(); }
+        else if (oper == 0 && cur.hasRange){ flushCandidate(); }  // zone boundary
     }
     flushCandidate();
 
-    // De-duplicate by (lo, hi) and build final zone list
-    int  colIdx = 0;
+    // Build final zone list, de-duplicating by (lo,hi)
+    int colIdx = 0;
     std::set<std::pair<int,int>> seen;
 
     for (auto& c : candidates)
@@ -1274,23 +1322,23 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSf2Zones (const juce::Fil
         seen.insert (key);
 
         KeysPanel::Keyzone z;
-        z.loKey    = c.lo;
-        z.hiKey    = c.hi;
-        z.loVel    = 0;
-        z.hiVel    = 127;
-        z.rootPitch= -1;
-        z.isLooped = false;
-        z.colour   = zoneColourDP (colIdx++);
+        z.loKey     = c.lo;
+        z.hiKey     = c.hi;
+        z.rootPitch = c.root;
+        z.loVel     = 0;
+        z.hiVel     = 127;
+        z.isLooped  = false;
+        z.colour    = zoneColourDP (colIdx);
 
-        // Assign sample name if we have shdr data and a valid sample ID
-        if (c.sampleId >= 0 && c.sampleId < (int) sampleNames.size())
+        if (c.sampleId >= 0 && c.sampleId < (int) sampleNames.size()
+            && sampleNames[(size_t) c.sampleId] != "EOS"
+            && sampleNames[(size_t) c.sampleId].isNotEmpty())
             z.name = sampleNames[(size_t) c.sampleId];
-
-        // Fall back to "Zone N" if the name is empty or the EOS sentinel
-        if (z.name.isEmpty() || z.name == "EOS")
-            z.name = "Zone " + juce::String (colIdx);
+        else
+            z.name = "Zone " + juce::String (colIdx + 1);
 
         zones.push_back (z);
+        ++colIdx;
     }
 
     std::sort (zones.begin(), zones.end(), [] (auto& a, auto& b) { return a.loKey < b.loKey; });
@@ -1305,9 +1353,23 @@ void SfzDropdownPanel::reloadZones (const juce::File& f)
     const auto ext = f.getFileExtension().toLowerCase();
     const bool isSfz = (ext == ".sfz");
 
-    auto zones = isSfz ? parseSfzZones (f)
-               : (ext == ".sf2") ? parseSf2Zones (f)
-               : std::vector<KeysPanel::Keyzone>{};
+    std::vector<KeysPanel::Keyzone> zones;
+    if (isSfz)
+        zones = parseSfzZones (f);
+    else if (ext == ".sf2")
+    {
+        // Resolve bank/program from the currently selected preset so we only
+        // display zones belonging to that preset (not the entire SF2 file).
+        int bank = 0, program = 0;
+        const auto presets = processor.sfzPlayer.getPresetList();
+        const int  idx     = processor.sfzPlayer.getCurrentPresetIndex();
+        if (idx >= 0 && idx < (int) presets.size())
+        {
+            bank    = presets[(size_t) idx].bank;
+            program = presets[(size_t) idx].preset;
+        }
+        zones = parseSf2Zones (f, bank, program);
+    }
 
     keysPanel.setSfzEditable (isSfz);
     keysPanel.setKeyzones (zones);
