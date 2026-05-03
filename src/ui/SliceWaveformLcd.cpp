@@ -260,7 +260,19 @@ void SliceWaveformLcd::commitNodes()
  const float sustainPc = juce::jlimit (0.0f, 100.0f, (1.0f - env.sy) * 100.0f);
  const float releaseMs = juce::jlimit (0.0f, releaseViewMs, (env.rx - kSEnd_eff) / juce::jmax (0.001f, 1.0f - kSEnd_eff) * releaseViewMs);
 
-    // Write dragged value to per-slice storage without locking.
+    // Read the lock state for the selected slice so we can decide whether to
+    // write per-slice or global APVTS — mirroring SliceControlBar::mouseDrag
+    // exactly.  Unlocked ADSR fields only update the global APVTS default
+    // (affecting every unlocked slice); locked fields write only to the
+    // slice's own storage (skipLock = 1, lockMask unchanged).
+    uint32_t sliceLockMask = 0;
+    {
+        const int sel = processor.sliceManager.selectedSlice.load (std::memory_order_relaxed);
+        if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
+            sliceLockMask = processor.sliceManager.getSlice (sel).lockMask;
+    }
+
+    // Write dragged value to per-slice storage without modifying the lock bit.
     // intParam2 = 1 means skipLock — value stored in s.attackSec etc.,
     // lockMask is NOT modified.
     auto writePerSlice = [&] (int fieldId, float nativeVal)
@@ -273,8 +285,7 @@ void SliceWaveformLcd::commitNodes()
         processor.pushCommand (cmd);
     };
 
-    // Also write to the global APVTS param so the SCB knob reflects the drag.
-    // This keeps the node and knob in sync (both show the same value).
+    // Write to the global APVTS param so the SCB knob reflects the drag.
     auto writeApvts = [&] (const juce::String& paramId, float nativeVal)
     {
         if (auto* p = processor.apvts.getParameter (paramId))
@@ -284,20 +295,28 @@ void SliceWaveformLcd::commitNodes()
     switch (dragRole)
     {
         case NodeRole::Attack:
-            writePerSlice (DysektProcessor::FieldAttack,   attackMs  / 1000.f);
-            writeApvts    (ParamIds::defaultAttack,        attackMs);
+            if (sliceLockMask & kLockAttack)
+                writePerSlice (DysektProcessor::FieldAttack, attackMs / 1000.f);
+            else
+                writeApvts (ParamIds::defaultAttack, attackMs);
             break;
         case NodeRole::Decay:
-            writePerSlice (DysektProcessor::FieldDecay,    decayMs   / 1000.f);
-            writeApvts    (ParamIds::defaultDecay,         decayMs);
+            if (sliceLockMask & kLockDecay)
+                writePerSlice (DysektProcessor::FieldDecay, decayMs / 1000.f);
+            else
+                writeApvts (ParamIds::defaultDecay, decayMs);
             break;
         case NodeRole::Sustain:
-            writePerSlice (DysektProcessor::FieldSustain,  sustainPc / 100.f);
-            writeApvts    (ParamIds::defaultSustain,       sustainPc);
+            if (sliceLockMask & kLockSustain)
+                writePerSlice (DysektProcessor::FieldSustain, sustainPc / 100.f);
+            else
+                writeApvts (ParamIds::defaultSustain, sustainPc);
             break;
         case NodeRole::Release:
-            writePerSlice (DysektProcessor::FieldRelease,  releaseMs / 1000.f);
-            writeApvts    (ParamIds::defaultRelease,       releaseMs);
+            if (sliceLockMask & kLockRelease)
+                writePerSlice (DysektProcessor::FieldRelease, releaseMs / 1000.f);
+            else
+                writeApvts (ParamIds::defaultRelease, releaseMs);
             break;
         default: break;
     }
