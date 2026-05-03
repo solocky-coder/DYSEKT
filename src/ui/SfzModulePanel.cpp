@@ -941,7 +941,7 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
     if (juce::String::fromUTF8 (sfbk, 4) != "sfbk") return zones;
 
     // Collect all pdta sub-chunks we need
-    juce::MemoryBlock phdrData, pbagData, pgenData, ibagData, igenData, shdrData;
+    juce::MemoryBlock phdrData, pbagData, pgenData, instData, ibagData, igenData, shdrData;
 
     while (! stream.isExhausted())
     {
@@ -968,6 +968,7 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
                     if      (subId == "phdr") readChunk (phdrData);
                     else if (subId == "pbag") readChunk (pbagData);
                     else if (subId == "pgen") readChunk (pgenData);
+                    else if (subId == "inst") readChunk (instData);
                     else if (subId == "ibag") readChunk (ibagData);
                     else if (subId == "igen") readChunk (igenData);
                     else if (subId == "shdr") readChunk (shdrData);
@@ -981,7 +982,7 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
     }
 
     if (igenData.isEmpty() || phdrData.isEmpty() || pbagData.isEmpty()
-        || pgenData.isEmpty() || ibagData.isEmpty())
+        || pgenData.isEmpty() || instData.isEmpty() || ibagData.isEmpty())
         return zones;
 
     // ── Helper lambdas for reading little-endian values ───────────────────────
@@ -1062,16 +1063,25 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
 
     if (instrumentIndex < 0) return zones;
 
-    // ── Step 3: find igen range via ibag ──────────────────────────────────────
-    // ibag record: uint16 wInstGenNdx, uint16 wInstModNdx  = 4 bytes
+    // ── Step 3: find igen range via inst → ibag ───────────────────────────────
+    // inst record: 20-char name + uint16 wInstBagNdx = 22 bytes
+    // ibag record: uint16 wInstGenNdx, uint16 wInstModNdx = 4 bytes
+    constexpr size_t kInstSz = 22;
     constexpr size_t kIbagSz = 4;
+
+    const size_t numInsts = instData.getSize() / kInstSz;
+    if ((size_t) instrumentIndex + 1 >= numInsts) return zones;  // need [i] and [i+1]
+
+    // inst[instrumentIndex].wInstBagNdx is at byte offset 20 within the record
+    const int ibagStart = (int) readU16 (instData, (size_t) instrumentIndex * kInstSz + 20);
+    const int ibagEnd   = (int) readU16 (instData, (size_t)(instrumentIndex + 1) * kInstSz + 20);
+
     const size_t numIbags = ibagData.getSize() / kIbagSz;
+    if ((size_t) ibagStart >= numIbags || ibagEnd < ibagStart) return zones;
 
-    if ((size_t) instrumentIndex >= numIbags) return zones;
-
-    const int igenStart = (int) readU16 (ibagData, (size_t) instrumentIndex * kIbagSz);
-    const int igenEnd   = ((size_t)(instrumentIndex + 1) < numIbags)
-                          ? (int) readU16 (ibagData, (size_t)(instrumentIndex + 1) * kIbagSz)
+    const int igenStart = (int) readU16 (ibagData, (size_t) ibagStart * kIbagSz);
+    const int igenEnd   = ((size_t) ibagEnd < numIbags)
+                          ? (int) readU16 (ibagData, (size_t) ibagEnd * kIbagSz)
                           : (int)(igenData.getSize() / 4);
 
     // ── Step 4: build sample-name lookup from shdr ────────────────────────────
