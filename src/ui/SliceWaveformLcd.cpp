@@ -59,7 +59,6 @@ void SliceWaveformLcd::repaintLcd()
  }
  }
  }
- }
  repaint();
 }
 
