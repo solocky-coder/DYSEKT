@@ -52,28 +52,11 @@ void SliceWaveformLcd::repaintLcd()
  // Also detect changes to the global APVTS ADSR knobs — turning a knob
  // does not dirty the slice snapshot (it only updates the APVTS param),
  // so we must check the raw param values directly here.
- auto apvtsLoad = [&] (const juce::String& id) -> float {
-     auto* p = processor.apvts.getRawParameterValue (id);
-     return p ? p->load() : 0.0f;
- };
- const float curA = apvtsLoad (ParamIds::defaultAttack);
- const float curD = apvtsLoad (ParamIds::defaultDecay);
- const float curS = apvtsLoad (ParamIds::defaultSustain);
- const float curR = apvtsLoad (ParamIds::defaultRelease);
- const bool adsrChanged = (curA != lastApvtsAttack || curD != lastApvtsDecay
-                            || curS != lastApvtsSustain || curR != lastApvtsRelease);
- if (adsrChanged)
+ if (ver != lastEnvSnapVer)
  {
-     lastApvtsAttack  = curA;
-     lastApvtsDecay   = curD;
-     lastApvtsSustain = curS;
-     lastApvtsRelease = curR;
+     buildEnvelopeNodes();
+     lastEnvSnapVer = ver;
  }
-
- if (ver != lastEnvSnapVer || adsrChanged)
- {
- buildEnvelopeNodes();
- lastEnvSnapVer = ver;
  }
  }
  }
@@ -176,10 +159,10 @@ void SliceWaveformLcd::buildEnvelopeNodes()
  if (sel >= 0 && sel < processor.sliceManager.getNumSlices())
  {
      const auto& s = processor.sliceManager.getSlice (sel);
-     attackMs  = (s.lockMask & kLockAttack)  ? s.attackSec   * 1000.0f : apvtsMs  (ParamIds::defaultAttack);
-     decayMs   = (s.lockMask & kLockDecay)   ? s.decaySec    * 1000.0f : apvtsMs  (ParamIds::defaultDecay);
-     sustainPc = (s.lockMask & kLockSustain) ? s.sustainLevel * 100.0f : apvtsPct (ParamIds::defaultSustain);
-     releaseMs = (s.lockMask & kLockRelease) ? s.releaseSec  * 1000.0f : apvtsMs  (ParamIds::defaultRelease);
+     attackMs  = s.attackSec    * 1000.0f;
+     decayMs   = s.decaySec     * 1000.0f;
+     sustainPc = s.sustainLevel * 100.0f;
+     releaseMs = s.releaseSec   * 1000.0f;
  }
 
  // Layout (display-only proportions — must match commitNodes exactly):
@@ -292,32 +275,13 @@ void SliceWaveformLcd::commitNodes()
             p->setValueNotifyingHost (p->convertTo0to1 (nativeVal));
     };
 
+    // Always write per-slice. Lock = protection only (drag blocked upstream).
     switch (dragRole)
     {
-        case NodeRole::Attack:
-            if (sliceLockMask & kLockAttack)
-                writePerSlice (DysektProcessor::FieldAttack, attackMs / 1000.f);
-            else
-                writeApvts (ParamIds::defaultAttack, attackMs);
-            break;
-        case NodeRole::Decay:
-            if (sliceLockMask & kLockDecay)
-                writePerSlice (DysektProcessor::FieldDecay, decayMs / 1000.f);
-            else
-                writeApvts (ParamIds::defaultDecay, decayMs);
-            break;
-        case NodeRole::Sustain:
-            if (sliceLockMask & kLockSustain)
-                writePerSlice (DysektProcessor::FieldSustain, sustainPc / 100.f);
-            else
-                writeApvts (ParamIds::defaultSustain, sustainPc);
-            break;
-        case NodeRole::Release:
-            if (sliceLockMask & kLockRelease)
-                writePerSlice (DysektProcessor::FieldRelease, releaseMs / 1000.f);
-            else
-                writeApvts (ParamIds::defaultRelease, releaseMs);
-            break;
+        case NodeRole::Attack:  writePerSlice (DysektProcessor::FieldAttack,  attackMs  / 1000.f); break;
+        case NodeRole::Decay:   writePerSlice (DysektProcessor::FieldDecay,   decayMs   / 1000.f); break;
+        case NodeRole::Sustain: writePerSlice (DysektProcessor::FieldSustain, sustainPc / 100.f);  break;
+        case NodeRole::Release: writePerSlice (DysektProcessor::FieldRelease, releaseMs / 1000.f); break;
         default: break;
     }
 

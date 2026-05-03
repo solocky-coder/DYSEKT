@@ -136,14 +136,12 @@ void SliceLcdDisplay::buildDisplayData()
         auto* p = processor.apvts.getRawParameterValue (id);
         return p ? p->load() / 100.0f : 1.0f;
     };
-    auto resolveLcd = [&] (uint32_t bit, float sliceVal, float globalVal) -> float {
-        return (sl.lockMask & bit) ? sliceVal : globalVal;
-    };
-    data.attackSec    = resolveLcd (kLockAttack,   sl.attackSec,   apvtsMs  (ParamIds::defaultAttack));
+    // Always read per-slice. Lock = protection only.
+    data.attackSec    = sl.attackSec;
     data.holdSec      = sl.holdSec;
-    data.decaySec     = resolveLcd (kLockDecay,    sl.decaySec,    apvtsMs  (ParamIds::defaultDecay));
-    data.sustainLevel = resolveLcd (kLockSustain,  sl.sustainLevel, apvtsPct (ParamIds::defaultSustain));
-    data.releaseSec   = resolveLcd (kLockRelease,  sl.releaseSec,  apvtsMs  (ParamIds::defaultRelease));
+    data.decaySec     = sl.decaySec;
+    data.sustainLevel = sl.sustainLevel;
+    data.releaseSec   = sl.releaseSec;
     data.reverse     = sl.reverse;
     data.loopMode    = sl.loopMode;
     data.oneShot     = sl.oneShot;

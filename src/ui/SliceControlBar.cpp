@@ -1685,29 +1685,18 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  e.mods.isShiftDown());
  }
 
- // Unlocked ADSR knobs update the global APVTS default so every unlocked
- // slice reflects the change.  Writing a per-slice value here would
- // auto-lock the field, which is only correct when the user explicitly
- // clicks the lock icon.
- if (isAdsr && cell.fieldId != F::FieldHold)
- {
-     juce::String paramId;
-     float apvtsNative = newNative;
-     switch (cell.fieldId)
-     {
-         case F::FieldAttack:  paramId = ParamIds::defaultAttack;  apvtsNative *= 1000.f; break;
-         case F::FieldDecay:   paramId = ParamIds::defaultDecay;   apvtsNative *= 1000.f; break;
-         case F::FieldSustain: paramId = ParamIds::defaultSustain; apvtsNative *= 100.f;  break;
-         case F::FieldRelease: paramId = ParamIds::defaultRelease; apvtsNative *= 1000.f; break;
-         default: break;
-     }
-     if (! paramId.isEmpty())
-     {
-         if (auto* p = processor.apvts.getParameter (paramId))
-             p->setValueNotifyingHost (p->convertTo0to1 (apvtsNative));
-         repaint(); return;
-     }
- }
+    // ADSR knobs always write per-slice. Lock = protection only (drag is
+    // already blocked by the lockBit guard above when the node is locked).
+    if (isAdsr && cell.fieldId != F::FieldHold)
+    {
+        DysektProcessor::Command cmd;
+        cmd.type        = F::CmdSetSliceParam;
+        cmd.intParam1   = cell.fieldId;
+        cmd.floatParam1 = newNative;
+        cmd.intParam2   = 0;
+        processor.pushCommand (cmd); repaint(); return;
+    }
+
 
  DysektProcessor::Command cmd;
  cmd.type = F::CmdSetSliceParam;
