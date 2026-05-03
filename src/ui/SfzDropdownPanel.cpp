@@ -27,8 +27,15 @@ SfzFileBrowser::SfzFileBrowser()
     list.setColour (juce::ListBox::outlineColourId,    juce::Colours::transparentBlack);
     addAndMakeVisible (list);
 
-    // Don't navigate in the constructor — the component isn't laid out yet.
-    // Navigation is deferred to the first openBrowser() call.
+    // Don't call navigateTo() in the constructor — layout isn't ready yet.
+    // But DO initialise currentDir to a valid root so that navigateUp() never
+    // sees a default-constructed File() and accidentally fires navigateToRoots().
+    {
+        juce::Array<juce::File> roots;
+        juce::File::findFileSystemRoots (roots);
+        if (roots.size() > 0)
+            currentDir = roots[0];
+    }
 }
 
 SfzFileBrowser::~SfzFileBrowser()
@@ -153,6 +160,7 @@ void SfzFileBrowser::navigateTo (const juce::File& dir)
 
 void SfzFileBrowser::navigateUp()
 {
+    if (! isVisible()) return;   // ignore if browser is closed
     if (atVirtualRoot) return;
     const auto parent = currentDir.getParentDirectory();
     if (parent == currentDir)
@@ -163,6 +171,8 @@ void SfzFileBrowser::navigateUp()
 
 void SfzFileBrowser::navigateToRoots()
 {
+    if (! isVisible()) return;   // ignore if browser is closed
+
     // Use JUCE's cross-platform API to enumerate all filesystem roots.
     // On Windows this yields every present drive letter (C:\, D:\, etc.).
     // On macOS/Linux it yields /.
