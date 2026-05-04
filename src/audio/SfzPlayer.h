@@ -60,7 +60,8 @@ public:
     void unload();
 
     void setVolume      (float gainLinear);   ///< 0..2
-    void setTranspose   (int semitones);      ///< -24..+24
+    void setTranspose   (int semitones);      ///< SF2 only — MIDI note shift; SFZ uses setPitchShift
+    void setPitchShift  (float semitones);    ///< SFZ audio-rate pitch shift, -24..+24 semitones
     void setMidiChannel (int ch);             ///< 0 = omni, 1-16 = specific
     void setPan         (float centred);      ///< -1.0 (L) .. 0.0 (C) .. +1.0 (R)
     void setFineTune    (float cents);        ///< -100 .. +100 cents
@@ -72,6 +73,7 @@ public:
 
     float      getVolume()      const noexcept { return volume.load(); }
     int        getTranspose()   const noexcept { return transpose.load(); }
+    float      getPitchShift()  const noexcept { return pitchShift.load (std::memory_order_relaxed); }
     int        getMidiChannel() const noexcept { return midiChannel.load(); }
     float      getPan()         const noexcept { return pan.load(); }
     float      getFineTune()    const noexcept { return fineTune.load(); }
@@ -167,6 +169,7 @@ private:
     // ── Shared params (atomic, UI-writable) ───────────────────────────────────
     std::atomic<float> volume      { 1.0f };
     std::atomic<int>   transpose   { 0 };
+    std::atomic<float> pitchShift  { 0.0f };  ///< SFZ audio-rate pitch, -24..+24 semitones
     std::atomic<int>   midiChannel { 16 };   // 0 = omni, default 16 = DYFONT dedicated channel
     std::atomic<float> pan         { 0.0f }; // -1..+1
     std::atomic<float> fineTune    { 0.0f }; // cents -100..+100
@@ -187,6 +190,17 @@ private:
 
     // ── Scratch buffer for FluidSynth interleaved → planar conversion ─────────
     std::vector<float> scratchL, scratchR;
+
+    // ── Pitch shift render buffer (SFZ only) ──────────────────────────────────
+    // sfizz renders into pitchL/R at an oversampled or undersampled block size,
+    // then a linear interpolating resampler writes the pitch-shifted result into
+    // scratchL/R at the true block size.
+    std::vector<float> pitchBufL, pitchBufR;
+
+    /** Apply a semitone pitch shift to src (srcLen samples) into dst (dstLen
+     *  samples) using linear interpolation.  srcLen/dstLen == ratio == 2^(semi/12). */
+    static void pitchShiftBlock (const float* src, float* dst,
+                                  int srcLen, int dstLen) noexcept;
 
     // ── Post-processing Reverb EFX (juce::dsp::Reverb) ───────────────────────
     juce::dsp::Reverb dspReverb;

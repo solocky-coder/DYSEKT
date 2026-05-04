@@ -64,6 +64,8 @@ void SfzPlayer::unload()
 
 void SfzPlayer::setVolume      (float g) { volume.store (g, std::memory_order_relaxed); }
 void SfzPlayer::setTranspose   (int s)   { transpose.store (s, std::memory_order_relaxed); }
+void SfzPlayer::setPitchShift  (float s) { pitchShift.store (juce::jlimit (-24.0f, 24.0f, s),
+                                                               std::memory_order_relaxed); }
 void SfzPlayer::setMidiChannel (int c)   { midiChannel.store (c, std::memory_order_relaxed); }
 
 // ── SFZ ADSR setters ──────────────────────────────────────────────────────────
@@ -372,13 +374,14 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
 
             if (msg.isNoteOn())
             {
-                const int note = juce::jlimit (0, 127, msg.getNoteNumber() + trans);
-                sfizz_send_note_on (sfizzSynth, meta.samplePosition, note, msg.getVelocity());
+                // SFZ: no MIDI transpose — key zones are fixed, pitch is shifted audio-rate
+                sfizz_send_note_on (sfizzSynth, meta.samplePosition,
+                                    msg.getNoteNumber(), msg.getVelocity());
             }
             else if (msg.isNoteOff())
             {
-                const int note = juce::jlimit (0, 127, msg.getNoteNumber() + trans);
-                sfizz_send_note_off (sfizzSynth, meta.samplePosition, note, msg.getVelocity());
+                sfizz_send_note_off (sfizzSynth, meta.samplePosition,
+                                     msg.getNoteNumber(), msg.getVelocity());
             }
             else if (msg.isController())
             {
@@ -409,12 +412,49 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
             }
         }
 
-        // ── Render sfizz ──────────────────────────────────────────────────────
-        std::fill (scratchL.begin(), scratchL.begin() + numSamples, 0.0f);
-        std::fill (scratchR.begin(), scratchR.begin() + numSamples, 0.0f);
+        // ── Render sfizz with optional audio-rate pitch shift ─────────────────
+        // If pitch shift is active, sfizz renders into pitchBufL/R at a larger or
+        // smaller block size, then pitchShiftBlock() resamples into scratchL/R at
+        // numSamples via linear interpolation.  At 0 semitones we skip the extra
+        // buffer entirely.
+        //
+        // Ratio = 2^(semi/12).  Pitch up (ratio>1) → sfizz renders MORE frames
+        // which we compress into numSamples.  Pitch down → fewer frames stretched.
+        const float pitchSemi  = pitchShift.load (std::memory_order_relaxed);
+        const float pitchRatio = std::pow (2.0f, pitchSemi / 12.0f);
+        const int   srcLen     = (pitchSemi == 0.0f)
+                                 ? numSamples
+                                 : juce::jmax (1, (int) std::roundf ((float) numSamples * pitchRatio));
 
-        float* planes[2] = { scratchL.data(), scratchR.data() };
-        sfizz_render_block (sfizzSynth, planes, 2, numSamples);
+        if (pitchSemi == 0.0f)
+        {
+            // Fast path — no pitch shift, render straight into scratch buffers
+            std::fill (scratchL.begin(), scratchL.begin() + numSamples, 0.0f);
+            std::fill (scratchR.begin(), scratchR.begin() + numSamples, 0.0f);
+
+            float* sfzPlanes[2] = { scratchL.data(), scratchR.data() };
+            sfizz_render_block (sfizzSynth, sfzPlanes, 2, numSamples);
+        }
+        else
+        {
+            // Grow pitch buffers if needed
+            if ((int) pitchBufL.size() < srcLen)
+            {
+                pitchBufL.assign ((size_t) srcLen, 0.0f);
+                pitchBufR.assign ((size_t) srcLen, 0.0f);
+            }
+            std::fill (pitchBufL.begin(), pitchBufL.begin() + srcLen, 0.0f);
+            std::fill (pitchBufR.begin(), pitchBufR.begin() + srcLen, 0.0f);
+
+            float* srcPlanes[2] = { pitchBufL.data(), pitchBufR.data() };
+            sfizz_render_block (sfizzSynth, srcPlanes, 2, srcLen);
+
+            std::fill (scratchL.begin(), scratchL.begin() + numSamples, 0.0f);
+            std::fill (scratchR.begin(), scratchR.begin() + numSamples, 0.0f);
+
+            pitchShiftBlock (pitchBufL.data(), scratchL.data(), srcLen, numSamples);
+            pitchShiftBlock (pitchBufR.data(), scratchR.data(), srcLen, numSamples);
+        }
 
         // Apply volume
         for (int i = 0; i < numSamples; ++i)
@@ -426,8 +466,8 @@ void SfzPlayer::process (const juce::MidiBuffer& midiIn,
         // Apply post-processing reverb
         updateReverbParams();
         {
-            float* planes[2] = { scratchL.data(), scratchR.data() };
-            juce::dsp::AudioBlock<float> block (planes, 2, (size_t) numSamples);
+            float* rvPlanes[2] = { scratchL.data(), scratchR.data() };
+            juce::dsp::AudioBlock<float> block (rvPlanes, 2, (size_t) numSamples);
             juce::dsp::ProcessContextReplacing<float> ctx (block);
             dspReverb.process (ctx);
         }
@@ -738,4 +778,42 @@ void SfzPlayer::postPresetList()
     // Discard any previous unread list and post the fresh one.
     delete freshPresets.exchange (list, std::memory_order_acq_rel);
 #endif
+}
+
+// ── Pitch shift helper ────────────────────────────────────────────────────────
+
+void SfzPlayer::pitchShiftBlock (const float* src, float* dst,
+                                   int srcLen, int dstLen) noexcept
+{
+    // Linear interpolating resampler.
+    // Maps dstLen output samples from srcLen input samples.
+    // ratio = srcLen / dstLen:  >1 compresses (pitch up), <1 stretches (pitch down).
+    //
+    // For each output sample i, the corresponding source position is:
+    //   srcPos = i * (srcLen - 1) / (dstLen - 1)
+    // We split into integer index + fractional part and lerp.
+
+    if (srcLen == 0 || dstLen == 0) return;
+
+    if (srcLen == dstLen)
+    {
+        // Exact 1:1 — just copy
+        for (int i = 0; i < dstLen; ++i)
+            dst[i] = src[i];
+        return;
+    }
+
+    const float step = (float)(srcLen - 1) / (float)(dstLen - 1);
+    float pos = 0.0f;
+
+    for (int i = 0; i < dstLen; ++i, pos += step)
+    {
+        const int   idx  = (int) pos;
+        const float frac = pos - (float) idx;
+
+        const int   idx1 = juce::jmin (idx,     srcLen - 1);
+        const int   idx2 = juce::jmin (idx + 1, srcLen - 1);
+
+        dst[i] = src[idx1] + frac * (src[idx2] - src[idx1]);
+    }
 }
