@@ -170,7 +170,6 @@ public:
     {
         const auto box  = dialogBox();
         const auto rows = spinnerRows (box);
-        const int  padX = 18;
 
         for (int i = 0; i < 3; ++i)
         {

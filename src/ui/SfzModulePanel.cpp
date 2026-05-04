@@ -842,7 +842,7 @@ bool SfzModulePanel::appendZoneToSfz (const juce::File& sfzFile,
     // Relative path from .sfz directory → portable file
     juce::String samplePath;
     const auto sfzDir = sfzFile.getParentDirectory();
-    if (sfzDir.isAncestorOf (sampleFile))
+    if (sampleFile.isAChildOf (sfzDir))
         samplePath = sampleFile.getRelativePathFrom (sfzDir);
     else
         samplePath = sampleFile.getFullPathName();
