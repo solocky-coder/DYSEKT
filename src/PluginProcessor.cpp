@@ -855,11 +855,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     if (!(s.lockMask & kLockBpm))          s.bpm              = bpmParam->load();
                     if (!(s.lockMask & kLockPitch))         s.pitchSemitones   = pitchParam->load();
                     if (!(s.lockMask & kLockAlgorithm))     s.algorithm        = (int) algoParam->load();
-                    if (!(s.lockMask & kLockAttack))        s.attackSec        = attackParam->load()       / 1000.0f;
+                    // ADSR not synced from APVTS — always per-slice
                     if (!(s.lockMask & kLockHold))          s.holdSec          = holdParam->load()         / 1000.0f;
-                    if (!(s.lockMask & kLockDecay))         s.decaySec         = decayParam->load()        / 1000.0f;
-                    if (!(s.lockMask & kLockSustain))       s.sustainLevel     = sustainParam->load()      / 100.0f;
-                    if (!(s.lockMask & kLockRelease))       s.releaseSec       = releaseParam->load()      / 1000.0f;
                     if (!(s.lockMask & kLockMuteGroup))     s.muteGroup        = (int) muteGroupParam->load();
                     if (!(s.lockMask & kLockLoop))          s.loopMode         = (int) loopParam->load();
                     if (!(s.lockMask & kLockStretch))       s.stretchEnabled   = stretchParam->load()      > 0.5f;

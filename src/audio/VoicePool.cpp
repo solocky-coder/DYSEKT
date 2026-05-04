@@ -215,10 +215,11 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     v.endSample = sliceEnd;
 
     // Resolve parameters via inheritance
-    float attack  = sm.resolveParam (sliceIdx, kLockAttack,   s.attackSec,    p.globalAttackSec);
-    float decay   = sm.resolveParam (sliceIdx, kLockDecay,    s.decaySec,     p.globalDecaySec);
-    float sustain = sm.resolveParam (sliceIdx, kLockSustain,  s.sustainLevel, p.globalSustain);
-    float release = sm.resolveParam (sliceIdx, kLockRelease,  s.releaseSec,   p.globalReleaseSec);
+    // ADSR always reads per-slice — lock = protection only, not inheritance
+    float attack  = s.attackSec;
+    float decay   = s.decaySec;
+    float sustain = s.sustainLevel;
+    float release = s.releaseSec;
 
     // Attack and Decay are NOT clamped — both knobs have full range in all modes.
     // Safety net: if the envelope is still active when sample data runs out, the
