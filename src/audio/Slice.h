@@ -43,11 +43,11 @@ struct Slice
     float    bpm            = 120.0f;
     float    pitchSemitones = 0.0f;
     int      algorithm      = 0;        // 0=Repitch, 1=Stretch
-    float    attackSec      = 0.010f;  // 10 ms default → visible attack node on init
+    float    attackSec      = 0.0f;   // default at slice start
     float    holdSec        = 0.0f;   // AHDSR hold time in seconds
     float    decaySec       = 0.0f;
     float    sustainLevel   = 1.0f;
-    float    releaseSec     = 0.100f; // 100 ms default → visible release node on init
+    float    releaseSec     = 0.0f;   // default at slice end
     int      muteGroup      = 1;
     int      loopMode       = 0;        // 0=Off, 1=Loop, 2=Ping-Pong
     bool     stretchEnabled = false;
