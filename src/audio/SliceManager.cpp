@@ -73,10 +73,10 @@ void SliceManager::assignDefaults (Slice& s, int idx)
     s.bpm            = 120.0f;
     s.pitchSemitones = 0.0f;
     s.algorithm      = 0;
-    s.attackSec      = 0.005f;
-    s.decaySec       = 0.1f;
+    s.attackSec      = 0.0f;
+    s.decaySec       = 0.0f;
     s.sustainLevel   = 1.0f;
-    s.releaseSec     = 0.02f;
+    s.releaseSec     = 0.0f;
     s.muteGroup      = 1;
     s.loopMode       = 0;
 }
