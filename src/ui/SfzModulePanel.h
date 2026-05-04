@@ -11,6 +11,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <functional>
 #include "KeysPanel.h"
+#include "AddZoneOverlay.h"
+#include "SaveSfzOverlay.h"
 
 class DysektProcessor;
 
@@ -41,7 +43,7 @@ public:
 
 private:
     // ── Layout zones (computed in resized) ────────────────────────────────────
-    juce::Rectangle<int> nameZone, loadBtnZone, volZone, transZone,
+    juce::Rectangle<int> nameZone, loadBtnZone, saveAsBtnZone, volZone, transZone,
                           chZone, meterZone, statusZone,
                           atkZone, decZone, susZone, relZone,  ///< ADSR knobs
                           rvSizeZone, rvDampZone, rvWidthZone, rvMixZone, rvFreezeZone; ///< Reverb knobs
@@ -60,6 +62,44 @@ private:
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     void openFileChooser();
+
+    // ── Custom SFZ builder ────────────────────────────────────────────────────
+    /** Step 1: pick an audio sample file. */
+    void openAddZoneChooser();
+
+    /** Step 2: show AddZoneOverlay to let user set lo/hi/root before writing. */
+    void showAddZoneOverlay (const juce::File& sfzFile,
+                              const juce::File& sampleFile,
+                              int               prevHiKey);
+
+    /** Write a single <region> to sfzFile with the user-confirmed key range. */
+    static bool appendZoneToSfz (const juce::File& sfzFile,
+                                  const juce::File& sampleFile,
+                                  int loKey, int hiKey, int rootKey);
+
+    /** Show the Save SFZ As overlay, then copy the file on confirm. */
+    void openSaveAsOverlay();
+
+    /** Show an overlay component full-screen over the top-level component. */
+    template <typename OverlayType>
+    void showOverlay (std::unique_ptr<OverlayType>& overlayPtr,
+                      std::unique_ptr<OverlayType>  newOverlay)
+    {
+        hideOverlays();
+        overlayPtr = std::move (newOverlay);
+        if (auto* top = getTopLevelComponent())
+        {
+            top->addAndMakeVisible (*overlayPtr);
+            overlayPtr->setBounds (top->getLocalBounds());
+            overlayPtr->toFront (true);
+        }
+    }
+
+    /** Remove any active overlay. */
+    void hideOverlays();
+
+    std::unique_ptr<AddZoneOverlay> addZoneOverlay;
+    std::unique_ptr<SaveSfzOverlay> saveSfzOverlay;
     void drawKnob (juce::Graphics& g, juce::Rectangle<int> bounds,
                    float normalised, const juce::String& label,
                    const juce::String& valueStr) const;
@@ -82,6 +122,7 @@ private:
                            const juce::MouseWheelDetails&) override;
 
     std::unique_ptr<juce::FileChooser> chooser;
+    std::unique_ptr<juce::FileChooser> addZoneChooser;
 
     // Zone parsers
     static std::vector<KeysPanel::Keyzone> parseSfzZones  (const juce::File& f);

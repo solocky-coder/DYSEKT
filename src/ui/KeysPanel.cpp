@@ -61,7 +61,10 @@ void KeysPanel::ZoneMatrixContent::rebuild (const std::vector<Keyzone>& zones,
     }
 
     // Height = header + one row per zone (minimum 1 row tall for empty state)
-    const int totalH = kHeaderH + juce::jmax (1, (int) rows.size()) * kRowH;
+    // + one extra row at the bottom for the [+ ZONE] button when visible and
+    //   zones already exist (empty state already has 1 spare row).
+    const int extraRow = (addZoneBtnVisible && !rows.empty()) ? 1 : 0;
+    const int totalH = kHeaderH + (juce::jmax (1, (int) rows.size()) + extraRow) * kRowH;
     setSize (componentWidth, totalH);
 
     if (selectedRow >= (int) rows.size())
@@ -173,6 +176,55 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
         g.drawVerticalLine (kNameColW - 1, 0.f, (float) kHeaderH);
     }
 
+    // ── [+ ZONE] add-zone button — drawn as a dedicated strip below the last row ──
+    // When no zones exist it occupies the single placeholder row; when zones are
+    // present it appears as an extra row pinned below the last one.
+    if (addZoneBtnVisible)
+    {
+        const int btnRowY = kHeaderH + (int) rows.size() * kRowH;
+
+        // Subtle row background so it reads as a distinct "action" slot
+        g.setColour (theme.accent.withAlpha (0.06f));
+        g.fillRect (0, btnRowY, w, kRowH);
+
+        // Top border to visually separate from data rows
+        g.setColour (theme.accent.withAlpha (0.28f));
+        g.drawHorizontalLine (btnRowY, 0.f, (float) w);
+
+        // Pill button left-aligned in the row
+        constexpr int kBtnW = 60;
+        constexpr int kBtnH = 11;
+        const int bx = 6;
+        const int by = btnRowY + (kRowH - kBtnH) / 2;
+        const juce::Rectangle<int> btnRect (bx, by, kBtnW, kBtnH);
+
+        g.setColour (theme.accent.withAlpha (0.20f));
+        g.fillRoundedRectangle (btnRect.toFloat(), 3.0f);
+
+        g.setColour (theme.accent.withAlpha (0.65f));
+        g.drawRoundedRectangle (btnRect.toFloat().reduced (0.5f), 3.0f, 0.75f);
+
+        g.setFont (DysektLookAndFeel::makeFont (7.0f, true));
+        g.setColour (theme.accent.brighter (0.5f));
+        g.drawText ("+ ZONE", btnRect, juce::Justification::centred, false);
+
+        // Hint text showing next zone\'s key range
+        if (! rows.empty())
+        {
+            const int lastHi = rows.back().zone.hiKey;
+            const int nextLo = juce::jmin (lastHi + 1, 127);
+            const int nextHi = juce::jmin (lastHi + 12, 127);
+            auto noteName = [] (int n) -> juce::String {
+                static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+                return juce::String (names[n % 12]) + juce::String (n / 12 - 1);
+            };
+            const juce::String hint = noteName (nextLo) + " \u2013 " + noteName (nextHi);
+            g.setFont (DysektLookAndFeel::makeFont (7.5f));
+            g.setColour (theme.foreground.withAlpha (0.30f));
+            g.drawText (hint, bx + kBtnW + 6, btnRowY, 80, kRowH,
+                        juce::Justification::centredLeft, false);
+        }
+    }
     // ── Helper: small padlock for SF2 read-only columns ───────────────────────
     // Renders a 🔒-style padlock via an inline SVG drawable.
     static const char* kLockSvg =
@@ -386,6 +438,27 @@ void KeysPanel::highlightNoteInMatrix (int note)
 
 void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
 {
+    // ── [+ ZONE] button hit test — bottom strip after the last data row ───────
+    if (addZoneBtnVisible)
+    {
+        const int btnRowY = kHeaderH + (int) rows.size() * kRowH;
+        if (e.y >= btnRowY)
+        {
+            // The whole strip is clickable, but give a generous pill hit-target
+            constexpr int kBtnW = 60;
+            constexpr int kBtnH = 11;
+            const int bx = 6;
+            const int by = btnRowY + (kRowH - kBtnH) / 2;
+            const juce::Rectangle<int> pillRect (bx, by, kBtnW, kBtnH);
+
+            // Accept clicks anywhere in the row (not just the pill) for ease-of-use
+            (void) pillRect;
+            if (onAddZoneClicked)
+                onAddZoneClicked();
+            return;
+        }
+    }
+
     if (e.y < kHeaderH) return;
 
     const int clickedRow = (e.y - kHeaderH) / kRowH;
@@ -568,6 +641,18 @@ void KeysPanel::setSfzEditable (bool editable)
     };
 }
 
+void KeysPanel::setAddZoneButtonVisible (bool visible)
+{
+    zoneMatrix.addZoneBtnVisible = visible;
+    // Wire the inner callback up to our public-facing one
+    zoneMatrix.onAddZoneClicked = [this]
+    {
+        if (onAddZoneRequested)
+            onAddZoneRequested();
+    };
+    zoneMatrix.repaint();
+}
+
 // =============================================================================
 // KeysPanel
 // =============================================================================
@@ -621,7 +706,13 @@ void KeysPanel::clearKeyzones()
 
 void KeysPanel::autoScrollToZones()
 {
-    // With a full keyboard there is no scrolling — nothing to do here.
+    // Scroll so the [+ ZONE] button strip at the bottom of the matrix is visible.
+    if (zoneMatrix.addZoneBtnVisible && !keyzones.empty())
+    {
+        const int btnRowY = ZoneMatrixContent::kHeaderH
+                          + (int) keyzones.size() * ZoneMatrixContent::kRowH;
+        zoneViewport.setViewPosition (0, juce::jmax (0, btnRowY - zoneViewport.getHeight() + ZoneMatrixContent::kRowH));
+    }
     repaint();
 }
 

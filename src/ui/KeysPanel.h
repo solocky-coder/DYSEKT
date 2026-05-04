@@ -46,6 +46,13 @@ public:
     /** Pass true for SFZ files (columns are drag-editable), false for SF2. */
     void setSfzEditable (bool editable);
 
+    /** Show or hide the [+ ZONE] button in the matrix header upper-left corner.
+        When visible, clicking it fires onAddZoneRequested. */
+    void setAddZoneButtonVisible (bool visible);
+
+    /** Fired when the user clicks the [+ ZONE] button in the zone matrix header. */
+    std::function<void()> onAddZoneRequested;
+
     /** Fired when the user drag-edits a zone row (SFZ mode only).
         Connect this in SfzDropdownPanel to write the change back to the file. */
     std::function<void (int rowIndex, const Keyzone&)> onZoneEdited;
@@ -94,6 +101,13 @@ private:
         /** Called after a drag-edit commits a zone change.
             Row index and the updated Keyzone are passed. */
         std::function<void (int rowIndex, const Keyzone&)> onZoneEdited;
+
+        /** When true, an [+ ZONE] button is drawn in the upper-left header corner.
+            Clicking it fires onAddZoneRequested (forwarded from KeysPanel). */
+        bool addZoneBtnVisible = false;
+
+        /** Fired when the user clicks the [+ ZONE] header button. */
+        std::function<void()> onAddZoneClicked;
 
     private:
         enum class EditCol { None, LoKey, HiKey, LoVel, HiVel, Root, Loop,

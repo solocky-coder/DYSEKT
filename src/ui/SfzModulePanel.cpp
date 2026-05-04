@@ -74,7 +74,23 @@ void SfzModulePanel::resized()
 
     // LOAD button — leftmost
     loadBtnZone = area.removeFromLeft (kLoadBtnW).withSizeKeepingCentre (kLoadBtnW, kLoadBtnH);
-    area.removeFromLeft (kPad);
+    area.removeFromLeft (4);
+
+    // SAVE AS button — visible only when a custom SFZ is active
+    constexpr int kSaveBtnW = 56;
+    const bool showSaveAs = processor.sfzPlayer.isLoaded() &&
+                            processor.sfzPlayer.getLoadedFile()
+                                .getFileExtension().toLowerCase() == ".sfz";
+    if (showSaveAs)
+    {
+        saveAsBtnZone = area.removeFromLeft (kSaveBtnW).withSizeKeepingCentre (kSaveBtnW, kLoadBtnH);
+        area.removeFromLeft (kPad);
+    }
+    else
+    {
+        saveAsBtnZone = {};
+        area.removeFromLeft (kPad);
+    }
 
     // VOL knob
     constexpr int kKnobWNarrow = 48;
@@ -148,7 +164,22 @@ void SfzModulePanel::paint (juce::Graphics& g)
         g.drawText ("LOAD", loadBtnZone, juce::Justification::centred, false);
     }
 
-    // ── Volume knob ───────────────────────────────────────────────────────────
+    // ── Save As button (SFZ mode only) ────────────────────────────────────────
+    if (! saveAsBtnZone.isEmpty())
+    {
+        const auto btn   = saveAsBtnZone.toFloat();
+        const bool hover = saveAsBtnZone.contains (getMouseXYRelative());
+        g.setColour (hover ? theme.accent.withAlpha (0.18f)
+                           : theme.darkBar.brighter (0.03f));
+        g.fillRoundedRectangle (btn, 3.0f);
+        g.setColour (theme.accent.withAlpha (hover ? 0.70f : 0.38f));
+        g.drawRoundedRectangle (btn.reduced (0.5f), 3.0f, 1.0f);
+
+        g.setFont (DysektLookAndFeel::makeFont (9.5f));
+        g.setColour (theme.accent.withAlpha (hover ? 0.95f : 0.65f));
+        g.drawText ("SAVE AS", saveAsBtnZone, juce::Justification::centred, false);
+    }
+
     {
         const float vol  = processor.sfzPlayer.getVolume();
         const float norm = volToNorm (vol);
@@ -443,6 +474,13 @@ void SfzModulePanel::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
+    // Save As button (SFZ mode only)
+    if (! saveAsBtnZone.isEmpty() && saveAsBtnZone.contains (pos))
+    {
+        openSaveAsOverlay();
+        return;
+    }
+
     // Right-click on ADSR knobs → MIDI Learn menu
     if (e.mods.isRightButtonDown())
     {
@@ -709,6 +747,189 @@ void SfzModulePanel::openFileChooser()
                 repaint();
             }
         });
+}
+
+// ── Custom SFZ builder ────────────────────────────────────────────────────────
+
+void SfzModulePanel::openAddZoneChooser()
+{
+    // ── Resolve or create the target .sfz ─────────────────────────────────────
+    juce::File targetSfz;
+    if (processor.sfzPlayer.isLoaded())
+    {
+        const auto loaded = processor.sfzPlayer.getLoadedFile();
+        if (loaded.getFileExtension().toLowerCase() == ".sfz")
+            targetSfz = loaded;
+    }
+
+    if (! targetSfz.existsAsFile())
+    {
+        targetSfz = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                        .getChildFile ("Custom.sfz");
+        if (! targetSfz.existsAsFile())
+            targetSfz.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+    }
+
+    // ── Find the highest hiKey already written ─────────────────────────────────
+    int prevHiKey = -1;
+    if (targetSfz.existsAsFile())
+    {
+        const auto existing = parseSfzZones (targetSfz);
+        for (const auto& z : existing)
+            prevHiKey = juce::jmax (prevHiKey, z.hiKey);
+    }
+    const int capturedPrevHiKey = prevHiKey;
+
+    // ── Step 1: pick the audio sample ─────────────────────────────────────────
+    addZoneChooser = std::make_unique<juce::FileChooser> (
+        "Add Sample Zone",
+        targetSfz.getParentDirectory(),
+        "*.wav;*.aif;*.aiff;*.flac;*.ogg");
+
+    const juce::File capturedSfz = targetSfz;
+
+    addZoneChooser->launchAsync (
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this, capturedSfz, capturedPrevHiKey] (const juce::FileChooser& fc)
+        {
+            const auto sample = fc.getResult();
+            if (! sample.existsAsFile())
+                return;
+
+            // ── Step 2: show the key-range overlay before writing ──────────────
+            showAddZoneOverlay (capturedSfz, sample, capturedPrevHiKey);
+        });
+}
+
+void SfzModulePanel::showAddZoneOverlay (const juce::File& sfzFile,
+                                          const juce::File& sampleFile,
+                                          int               prevHiKey)
+{
+    const int defaultLo = (prevHiKey < 0) ? 0 : juce::jmin (prevHiKey + 1, 127);
+
+    auto overlay = std::make_unique<AddZoneOverlay> (
+        sampleFile.getFileNameWithoutExtension(), defaultLo);
+
+    overlay->onResult = [this, sfzFile, sampleFile] (int lo, int hi, int root, bool confirmed)
+    {
+        hideOverlays();
+
+        if (! confirmed)
+            return;
+
+        if (! appendZoneToSfz (sfzFile, sampleFile, lo, hi, root))
+        {
+            juce::AlertWindow::showMessageBoxAsync (
+                juce::MessageBoxIconType::WarningIcon,
+                "Add Zone Failed",
+                "Could not write to:\n" + sfzFile.getFullPathName());
+            return;
+        }
+
+        processor.sfzPlayer.loadFile (sfzFile);
+        reloadZones (sfzFile);
+        keysPanel.autoScrollToZones();
+        repaint();
+    };
+
+    showOverlay (addZoneOverlay, std::move (overlay));
+}
+
+bool SfzModulePanel::appendZoneToSfz (const juce::File& sfzFile,
+                                        const juce::File& sampleFile,
+                                        int loKey, int hiKey, int rootKey)
+{
+    // Relative path from .sfz directory → portable file
+    juce::String samplePath;
+    const auto sfzDir = sfzFile.getParentDirectory();
+    if (sfzDir.isAncestorOf (sampleFile))
+        samplePath = sampleFile.getRelativePathFrom (sfzDir);
+    else
+        samplePath = sampleFile.getFullPathName();
+
+    const juce::String region =
+        "\n<region>\n"
+        "sample="          + samplePath              + "\n"
+        "lokey="           + juce::String (loKey)    + "\n"
+        "hikey="           + juce::String (hiKey)    + "\n"
+        "pitch_keycenter=" + juce::String (rootKey)  + "\n"
+        "volume=-7\n"
+        "pan=0\n"
+        "tune=0\n"
+        "ampeg_release=0.664\n";
+
+    juce::FileOutputStream stream (sfzFile);
+    if (stream.failedToOpen())
+        return false;
+
+    stream.setPosition (sfzFile.getSize());
+    stream.writeText (region, false, false, nullptr);
+    stream.flush();
+    return ! stream.getStatus().failed();
+}
+
+// ── Save SFZ As ───────────────────────────────────────────────────────────────
+
+void SfzModulePanel::openSaveAsOverlay()
+{
+    const auto currentFile = processor.sfzPlayer.isLoaded()
+                           ? processor.sfzPlayer.getLoadedFile()
+                           : juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                                 .getChildFile ("Custom.sfz");
+
+    auto overlay = std::make_unique<SaveSfzOverlay> (currentFile);
+
+    overlay->onResult = [this, currentFile] (const juce::File& dest, bool confirmed)
+    {
+        hideOverlays();
+
+        if (! confirmed || dest == juce::File{})
+            return;
+
+        // Copy current .sfz to chosen destination
+        if (currentFile.existsAsFile())
+        {
+            const bool ok = currentFile.copyFileTo (dest);
+            if (! ok)
+            {
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Save Failed",
+                    "Could not write:\n" + dest.getFullPathName());
+                return;
+            }
+        }
+        else
+        {
+            // No existing file — write a minimal placeholder so sfizz can load it
+            dest.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+        }
+
+        // Switch sfzPlayer and zone matrix to the new file
+        processor.sfzPlayer.loadFile (dest);
+        reloadZones (dest);
+        repaint();
+    };
+
+    showOverlay (saveSfzOverlay, std::move (overlay));
+}
+
+// ── Overlay helpers ───────────────────────────────────────────────────────────
+
+void SfzModulePanel::hideOverlays()
+{
+    if (addZoneOverlay)
+    {
+        if (auto* p = addZoneOverlay->getParentComponent())
+            p->removeChildComponent (addZoneOverlay.get());
+        addZoneOverlay.reset();
+    }
+    if (saveSfzOverlay)
+    {
+        if (auto* p = saveSfzOverlay->getParentComponent())
+            p->removeChildComponent (saveSfzOverlay.get());
+        saveSfzOverlay.reset();
+    }
 }
 
 // ── panelDidShow ──────────────────────────────────────────────────────────────
@@ -1205,6 +1426,9 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSf2Zones (const juce::File&
 
 void SfzModulePanel::reloadZones (const juce::File& f)
 {
+    // Refresh layout so Save As button visibility reflects the new file type
+    resized();
+
     const auto ext = f.getFileExtension().toLowerCase();
     std::vector<KeysPanel::Keyzone> zones;
 
@@ -1236,4 +1460,16 @@ void SfzModulePanel::reloadZones (const juce::File& f)
         processor.sfzPlayer.setZonePan    (zoneIndex, pan);
         processor.sfzPlayer.setZoneTune   (zoneIndex, tuneCents);
     };
+
+    // [+ ZONE] button is only available when we're in SFZ mode (editable)
+    const bool isSfz = (f.getFileExtension().toLowerCase() == ".sfz");
+    keysPanel.setAddZoneButtonVisible (isSfz);
+    if (isSfz)
+    {
+        keysPanel.onAddZoneRequested = [this] { openAddZoneChooser(); };
+    }
+    else
+    {
+        keysPanel.onAddZoneRequested = nullptr;
+    }
 }
