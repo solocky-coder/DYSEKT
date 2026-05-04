@@ -1404,6 +1404,13 @@ void SfzDropdownPanel::reloadZones (const juce::File& f)
     {
         writeSfzZoneChange (f, rowIndex, updated);
     };
+
+    // [+ ZONE] button is only available when we're in SFZ mode (editable)
+    keysPanel.setAddZoneButtonVisible (isSfz);
+    if (isSfz)
+        keysPanel.onAddZoneRequested = [this] { openAddZoneChooser(); };
+    else
+        keysPanel.onAddZoneRequested = nullptr;
 }
 
 // =============================================================================
@@ -1508,4 +1515,176 @@ void SfzDropdownPanel::writeSfzZoneChange (const juce::File& f,
 
     // Hot-reload the SFZ player so changes take effect immediately
     processor.sfzPlayer.loadFile (f);
+}
+
+// =============================================================================
+//  openAddZoneChooser  —  Issue 2: Add Zone support
+// =============================================================================
+
+void SfzDropdownPanel::openAddZoneChooser()
+{
+    juce::File targetSfz;
+    if (processor.sfzPlayer.isLoaded())
+    {
+        const auto loaded = processor.sfzPlayer.getLoadedFile();
+        if (loaded.getFileExtension().toLowerCase() == ".sfz")
+            targetSfz = loaded;
+    }
+
+    if (! targetSfz.existsAsFile())
+    {
+        targetSfz = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                        .getChildFile ("Custom.sfz");
+        if (! targetSfz.existsAsFile())
+            targetSfz.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+    }
+
+    int prevHiKey = -1;
+    if (targetSfz.existsAsFile())
+    {
+        const auto existing = parseSfzZones (targetSfz);
+        for (const auto& z : existing)
+            prevHiKey = juce::jmax (prevHiKey, z.hiKey);
+    }
+    const int capturedPrevHiKey = prevHiKey;
+
+    addZoneChooser = std::make_unique<juce::FileChooser> (
+        "Add Sample Zone",
+        targetSfz.getParentDirectory(),
+        "*.wav;*.aif;*.aiff;*.flac;*.ogg");
+
+    const juce::File capturedSfz = targetSfz;
+
+    addZoneChooser->launchAsync (
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this, capturedSfz, capturedPrevHiKey] (const juce::FileChooser& fc)
+        {
+            const auto sample = fc.getResult();
+            if (! sample.existsAsFile())
+                return;
+            showAddZoneOverlay (capturedSfz, sample, capturedPrevHiKey);
+        });
+}
+
+void SfzDropdownPanel::showAddZoneOverlay (const juce::File& sfzFile,
+                                            const juce::File& sampleFile,
+                                            int               prevHiKey)
+{
+    const int defaultLo = (prevHiKey < 0) ? 0 : juce::jmin (prevHiKey + 1, 127);
+
+    auto overlay = std::make_unique<AddZoneOverlay> (
+        sampleFile.getFileNameWithoutExtension(), defaultLo);
+
+    overlay->onResult = [this, sfzFile, sampleFile] (int lo, int hi, int root, bool confirmed)
+    {
+        hideOverlays();
+
+        if (! confirmed)
+            return;
+
+        if (! appendZoneToSfz (sfzFile, sampleFile, lo, hi, root))
+        {
+            juce::AlertWindow::showMessageBoxAsync (
+                juce::MessageBoxIconType::WarningIcon,
+                "Add Zone Failed",
+                "Could not write to:\n" + sfzFile.getFullPathName());
+            return;
+        }
+
+        processor.sfzPlayer.loadFile (sfzFile);
+        reloadZones (sfzFile);
+        keysPanel.autoScrollToZones();
+        repaint();
+    };
+
+    showOverlay (addZoneOverlay, std::move (overlay));
+}
+
+bool SfzDropdownPanel::appendZoneToSfz (const juce::File& sfzFile,
+                                          const juce::File& sampleFile,
+                                          int loKey, int hiKey, int rootKey)
+{
+    juce::String samplePath;
+    const auto sfzDir = sfzFile.getParentDirectory();
+    if (sampleFile.isAChildOf (sfzDir))
+        samplePath = sampleFile.getRelativePathFrom (sfzDir);
+    else
+        samplePath = sampleFile.getFullPathName();
+
+    const juce::String region =
+        "\n<region>\n"
+        "sample="          + samplePath              + "\n"
+        "lokey="           + juce::String (loKey)    + "\n"
+        "hikey="           + juce::String (hiKey)    + "\n"
+        "pitch_keycenter=" + juce::String (rootKey)  + "\n"
+        "volume=-7\n"
+        "pan=0\n"
+        "tune=0\n"
+        "ampeg_release=0.664\n";
+
+    juce::FileOutputStream stream (sfzFile);
+    if (stream.failedToOpen())
+        return false;
+
+    stream.setPosition (sfzFile.getSize());
+    stream.writeText (region, false, false, nullptr);
+    stream.flush();
+    return ! stream.getStatus().failed();
+}
+
+void SfzDropdownPanel::openSaveAsOverlay()
+{
+    const auto currentFile = processor.sfzPlayer.isLoaded()
+                           ? processor.sfzPlayer.getLoadedFile()
+                           : juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                                 .getChildFile ("Custom.sfz");
+
+    auto overlay = std::make_unique<SaveSfzOverlay> (currentFile);
+
+    overlay->onResult = [this, currentFile] (const juce::File& dest, bool confirmed)
+    {
+        hideOverlays();
+
+        if (! confirmed || dest == juce::File{})
+            return;
+
+        if (currentFile.existsAsFile())
+        {
+            const bool ok = currentFile.copyFileTo (dest);
+            if (! ok)
+            {
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Save Failed",
+                    "Could not write:\n" + dest.getFullPathName());
+                return;
+            }
+        }
+        else
+        {
+            dest.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+        }
+
+        processor.sfzPlayer.loadFile (dest);
+        reloadZones (dest);
+        repaint();
+    };
+
+    showOverlay (saveSfzOverlay, std::move (overlay));
+}
+
+void SfzDropdownPanel::hideOverlays()
+{
+    if (addZoneOverlay)
+    {
+        if (auto* p = addZoneOverlay->getParentComponent())
+            p->removeChildComponent (addZoneOverlay.get());
+        addZoneOverlay.reset();
+    }
+    if (saveSfzOverlay)
+    {
+        if (auto* p = saveSfzOverlay->getParentComponent())
+            p->removeChildComponent (saveSfzOverlay.get());
+        saveSfzOverlay.reset();
+    }
 }

@@ -2679,7 +2679,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (22);
+    stream.writeInt (23);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -2767,6 +2767,10 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     stream.writeFloat (sfzPlayer.getReverbWidth());
     stream.writeFloat (sfzPlayer.getReverbMix());
     stream.writeBool  (sfzPlayer.getReverbFreeze());
+    // v23: additional sfzPlayer parameters
+    stream.writeFloat (sfzPlayer.getPan());
+    stream.writeFloat (sfzPlayer.getFineTune());
+    stream.writeInt   (sfzPlayer.getMidiChannel());
 }
 
 void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -2774,7 +2778,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version < 16 || version > 22)
+    if (version < 16 || version > 23)
         return;
 
     // APVTS state
@@ -2912,6 +2916,14 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         sfzPlayer.setReverbWidth (sfzRvWd);
         sfzPlayer.setReverbMix   (sfzRvMx);
         sfzPlayer.setReverbFreeze(sfzRvFrz);
+
+        // v23: Pan, FineTune, MidiChannel
+        if (version >= 23 && ! stream.isExhausted())
+        {
+            sfzPlayer.setPan        (stream.readFloat());
+            sfzPlayer.setFineTune   (stream.readFloat());
+            sfzPlayer.setMidiChannel(stream.readInt());
+        }
 
         // Restore the SF2/SFZ file — this is async; the editor polls isLoaded()
         if (sfzPath.isNotEmpty())

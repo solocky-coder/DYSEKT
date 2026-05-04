@@ -3,7 +3,7 @@
 //  SfzDropdownPanel.h  —  SF2 / SFZ instrument strip with inline file browser
 // =============================================================================
 //  Header strip layout (left → right):
-//    [< Preset Name  📁 >] [TRN] [FINE] [REV] [CHO] [PAN] [VOL] [METER]
+//    [< Preset Name  📁 >] [TRN] [FINE] [REV MIX] [REV SIZE] [PAN] [VOL] [METER]
 //
 //  The preset picker doubles as the file browser entry-point:
 //    • When a file IS loaded   — scrolls through SF2 presets as before.
@@ -22,6 +22,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "KeysPanel.h"
+#include "AddZoneOverlay.h"
+#include "SaveSfzOverlay.h"
 #include "../audio/SfzPlayer.h"
 
 class DysektProcessor;
@@ -197,6 +199,36 @@ private:
     void reloadZones (const juce::File& f);
     void writeSfzZoneChange (const juce::File& f, int rowIndex,
                               const KeysPanel::Keyzone& updated);
+
+    // ── Add Zone / Save SFZ As ────────────────────────────────────────────────
+    void openAddZoneChooser();
+    void showAddZoneOverlay (const juce::File& sfzFile,
+                              const juce::File& sampleFile,
+                              int               prevHiKey);
+    static bool appendZoneToSfz (const juce::File& sfzFile,
+                                  const juce::File& sampleFile,
+                                  int loKey, int hiKey, int rootKey);
+    void openSaveAsOverlay();
+
+    template <typename OverlayType>
+    void showOverlay (std::unique_ptr<OverlayType>& overlayPtr,
+                      std::unique_ptr<OverlayType>  newOverlay)
+    {
+        hideOverlays();
+        overlayPtr = std::move (newOverlay);
+        if (auto* top = getTopLevelComponent())
+        {
+            top->addAndMakeVisible (*overlayPtr);
+            overlayPtr->setBounds (top->getLocalBounds());
+            overlayPtr->toFront (true);
+        }
+    }
+
+    void hideOverlays();
+
+    std::unique_ptr<AddZoneOverlay>    addZoneOverlay;
+    std::unique_ptr<SaveSfzOverlay>    saveSfzOverlay;
+    std::unique_ptr<juce::FileChooser> addZoneChooser;
 
     // ── Mouse events ──────────────────────────────────────────────────────────
     void mouseDown        (const juce::MouseEvent&) override;
