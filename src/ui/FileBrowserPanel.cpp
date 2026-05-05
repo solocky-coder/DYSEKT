@@ -839,45 +839,91 @@ void FileBrowserPanel::rebuildArchiveButtons()
     }
 }
 
+void FileBrowserPanel::showArchiveMessage (const juce::String& title, const juce::String& body)
+{
+    if (archiveMessageOverlay)
+    {
+        if (auto* p = archiveMessageOverlay->getParentComponent())
+            p->removeChildComponent (archiveMessageOverlay.get());
+        archiveMessageOverlay.reset();
+    }
+
+    auto overlay = std::make_unique<ArchiveMessageOverlay> (title, body);
+
+    overlay->onDismiss = [this]
+    {
+        juce::MessageManager::callAsync ([this]
+        {
+            if (archiveMessageOverlay)
+            {
+                if (auto* p = archiveMessageOverlay->getParentComponent())
+                    p->removeChildComponent (archiveMessageOverlay.get());
+                archiveMessageOverlay.reset();
+            }
+        });
+    };
+
+    archiveMessageOverlay = std::move (overlay);
+
+    if (auto* top = getTopLevelComponent())
+    {
+        top->addAndMakeVisible (*archiveMessageOverlay);
+        archiveMessageOverlay->setBounds (top->getLocalBounds());
+        archiveMessageOverlay->toFront (true);
+    }
+}
+
 void FileBrowserPanel::showArchiveUrlDialog()
 {
-    auto* dlg = new juce::AlertWindow ("Add Internet Archive URL",
-                                       "Paste an archive.org URL or bare identifier:",
-                                       juce::MessageBoxIconType::NoIcon);
-    dlg->addTextEditor ("url", "", "URL:");
-    dlg->addButton ("Add", 1, juce::KeyPress (juce::KeyPress::returnKey));
-    dlg->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    // Tear down any existing overlay first
+    if (archiveUrlOverlay)
+    {
+        if (auto* p = archiveUrlOverlay->getParentComponent())
+            p->removeChildComponent (archiveUrlOverlay.get());
+        archiveUrlOverlay.reset();
+    }
 
-    dlg->enterModalState (true,
-        juce::ModalCallbackFunction::create ([this, dlg] (int result)
+    auto overlay = std::make_unique<ArchiveUrlOverlay>();
+
+    overlay->onResult = [this] (const juce::String& url, bool cancelled)
+    {
+        // Defer teardown off the call stack (same pattern as AddZoneOverlay fix)
+        juce::MessageManager::callAsync ([this]
         {
-            if (result != 1) { delete dlg; return; }
-
-            auto url = dlg->getTextEditorContents ("url").trim();
-            delete dlg;
-
-            if (url.isEmpty()) return;
-
-            if (! ArchiveIntegration::isValidArchiveUrl (url))
+            if (archiveUrlOverlay)
             {
-                juce::AlertWindow::showMessageBoxAsync (
-                    juce::MessageBoxIconType::WarningIcon,
-                    "Invalid URL",
-                    "That doesn't look like a valid archive.org URL or identifier.\n\n"
-                    "Expected formats:\n"
-                    "  https://archive.org/details/IDENTIFIER\n"
-                    "  IDENTIFIER",
-                    "OK");
-                return;
+                if (auto* p = archiveUrlOverlay->getParentComponent())
+                    p->removeChildComponent (archiveUrlOverlay.get());
+                archiveUrlOverlay.reset();
             }
+        });
 
-            // Check for duplicate
-            for (auto& b : archiveBookmarks)
-                if (b.url == url) return;
+        if (cancelled || url.isEmpty())
+            return;
 
-            resolveAndAddArchiveBookmark (url);
-        }),
-        true);
+        if (! ArchiveIntegration::isValidArchiveUrl (url))
+        {
+            // Re-open with an error shown — simplest approach is to just
+            // re-invoke so the user can correct the URL
+            juce::MessageManager::callAsync ([this] { showArchiveUrlDialog(); });
+            return;
+        }
+
+        // Check for duplicate
+        for (auto& b : archiveBookmarks)
+            if (b.url == url) return;
+
+        resolveAndAddArchiveBookmark (url);
+    };
+
+    archiveUrlOverlay = std::move (overlay);
+
+    if (auto* top = getTopLevelComponent())
+    {
+        top->addAndMakeVisible (*archiveUrlOverlay);
+        archiveUrlOverlay->setBounds (top->getLocalBounds());
+        archiveUrlOverlay->toFront (true);
+    }
 }
 
 void FileBrowserPanel::resolveAndAddArchiveBookmark (const juce::String& url)
@@ -910,12 +956,9 @@ void FileBrowserPanel::resolveAndAddArchiveBookmark (const juce::String& url)
             rebuildArchiveButtons();
             resized();
 
-            juce::AlertWindow::showMessageBoxAsync (
-                juce::MessageBoxIconType::InfoIcon,
-                "No Audio Found",
+            showArchiveMessage ("No Audio Found",
                 "No supported audio files were found at that URL.\n\n"
-                "Only WAV, FLAC, MP3, OGG, and AIFF files are supported.",
-                "OK");
+                "Only WAV, FLAC, MP3, OGG, and AIFF files are supported.");
         }
         else
         {

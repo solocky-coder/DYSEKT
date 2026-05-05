@@ -4,6 +4,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "DysektLookAndFeel.h"
 #include "ArchiveIntegration.h"
+#include "ArchiveUrlOverlay.h"
 
 class DysektProcessor;
 
@@ -271,7 +272,11 @@ private:
 
     juce::Array<ArchiveBookmark>       archiveBookmarks;
     juce::OwnedArray<RemovableButton>  archiveBtns;
-    juce::TextButton                   addArchiveBtn;
+    juce::TextButton                      addArchiveBtn;
+    std::unique_ptr<ArchiveUrlOverlay>    archiveUrlOverlay;
+    std::unique_ptr<ArchiveMessageOverlay> archiveMessageOverlay;
+
+    void showArchiveMessage (const juce::String& title, const juce::String& body);
 
     void loadArchiveBookmarks();
     void saveArchiveBookmarks();
