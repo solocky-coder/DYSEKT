@@ -13,6 +13,7 @@
 #include "KeysPanel.h"
 #include "AddZoneOverlay.h"
 #include "SaveSfzOverlay.h"
+#include "SfzFileBrowser.h"
 
 class DysektProcessor;
 
@@ -121,8 +122,18 @@ private:
     void mouseWheelMove   (const juce::MouseEvent&,
                            const juce::MouseWheelDetails&) override;
 
-    std::unique_ptr<juce::FileChooser> chooser;
-    std::unique_ptr<juce::FileChooser> addZoneChooser;
+    std::unique_ptr<juce::FileChooser> chooser;  // kept for openFileChooser() (main load)
+
+    SfzFileBrowser fileBrowser;
+    bool           browserOpen      { false };
+
+    // State held between openAddZoneChooser() and sample selection
+    juce::File     addZoneTargetSfz;
+    int            addZonePrevHiKey { -1 };
+
+    void openBrowser  (const juce::File& startDir);
+    void closeBrowser ();
+    void onSampleChosen (const juce::File& f);
 
     // Zone parsers
     static std::vector<KeysPanel::Keyzone> parseSfzZones  (const juce::File& f);

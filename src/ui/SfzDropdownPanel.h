@@ -29,75 +29,7 @@
 class DysektProcessor;
 
 // =============================================================================
-//  SfzFileBrowser — self-contained inline directory browser component
-// =============================================================================
-class SfzFileBrowser : public juce::Component,
-                       public juce::ListBoxModel,
-                       private juce::Timer
-{
-public:
-    /** Called when the user double-clicks a .sfz or .sf2 file. */
-    std::function<void (const juce::File&)> onFileChosen;
-    /** Called after a new SF2/SFZ file has been accepted (any path). */
-    std::function<void (const juce::File&)> onFileLoaded;
-
-    /** Called when the user explicitly closes the browser (Esc / icon click). */
-    std::function<void()> onDismiss;
-
-    SfzFileBrowser();
-    ~SfzFileBrowser() override;
-
-    // juce::Component overrides
-    void paint   (juce::Graphics&) override;
-    void resized () override;
-    void mouseDown  (const juce::MouseEvent&) override;
-    void mouseMove  (const juce::MouseEvent&) override;
-    bool keyPressed (const juce::KeyPress&) override { return false; /* handled via grabKeyboardFocus */ }
-
-    // Open to a specific root directory (call before making visible)
-    void setRootDirectory (const juce::File& dir);
-    void showDrives   ();                        ///< Show the drive/volume picker list
-    bool hasNavigated () const { return navigated; } ///< True after first navigation
-    juce::File getCurrentDirectory() const { return currentDir; }
-
-    // ── ListBoxModel ──────────────────────────────────────────────────────────
-    int  getNumRows()                                                  override;
-    void paintListBoxItem (int row, juce::Graphics& g,
-                           int w, int h, bool selected)               override;
-    void listBoxItemDoubleClicked (int row, const juce::MouseEvent&)  override;
-    void listBoxItemClicked       (int row, const juce::MouseEvent&)  override;
-    juce::String getTooltipForRow (int row)                           override;
-
-private:
-    void   navigateTo      (const juce::File& dir);
-    void   navigateUp      ();
-    void   navigateToRoots ();   ///< Jump to filesystem volume list (external drives)
-    void   loadRow      (int row);
-    juce::File fileForRow (int row) const;
-    bool   isDirectory  (int row) const;
-
-    // Async directory scanning
-    void timerCallback() override;
-    void rebuildList();
-
-    juce::File currentDir;
-
-    // Rows: sorted directories first, then matching files
-    juce::Array<juce::File> rows;
-
-    juce::ListBox list;
-
-    // Breadcrumb / up-button zone (computed in resized)
-    juce::Rectangle<int> breadcrumbZone;
-    juce::Rectangle<int> upBtnZone;      // ← button — navigate to parent directory
-    bool                 atVirtualRoot { false }; ///< true when showing the drive-list view
-    bool                 navigated     { false }; ///< true after the first navigateTo/navigateToRoots call
-
-    static constexpr int kBreadcrumbH = 22;
-    static constexpr int kRowH        = 18;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SfzFileBrowser)
-};
+#include "SfzFileBrowser.h"
 
 // =============================================================================
 //  SfzDropdownPanel
@@ -172,7 +104,11 @@ private:
 
     // ── Inline file browser ───────────────────────────────────────────────────
     SfzFileBrowser fileBrowser;
-    bool           browserOpen { false };
+    bool           browserOpen      { false };
+
+    // State held between openAddZoneChooser() and onFileChosen() in kAddZone mode
+    juce::File     addZoneTargetSfz;
+    int            addZonePrevHiKey { -1 };
 
     void openBrowser();
     void closeBrowser();
@@ -230,7 +166,6 @@ private:
 
     std::unique_ptr<AddZoneOverlay>    addZoneOverlay;
     std::unique_ptr<SaveSfzOverlay>    saveSfzOverlay;
-    std::unique_ptr<juce::FileChooser> addZoneChooser;
 
     // ── Mouse events ──────────────────────────────────────────────────────────
     void mouseDown        (const juce::MouseEvent&) override;

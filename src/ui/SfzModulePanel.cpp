@@ -24,6 +24,15 @@ SfzModulePanel::SfzModulePanel (DysektProcessor& p)
       keysPanel (p)
 {
     addAndMakeVisible (keysPanel);
+
+    fileBrowser.onFileChosen = [this] (const juce::File& f) { onSampleChosen (f); };
+    fileBrowser.onDismiss    = [this]
+    {
+        fileBrowser.setMode (SfzFileBrowser::Mode::kSfz);
+        closeBrowser();
+    };
+    addChildComponent (fileBrowser);
+
     startTimerHz (30);
 }
 
@@ -109,6 +118,10 @@ void SfzModulePanel::resized()
 
     chZone   = {};
     nameZone = area;
+
+    // File browser overlays the entire panel when visible
+    if (browserOpen)
+        fileBrowser.setBounds (getLocalBounds());
 }
 
 // ── Paint ─────────────────────────────────────────────────────────────────────
@@ -751,6 +764,28 @@ void SfzModulePanel::openFileChooser()
 
 // ── Custom SFZ builder ────────────────────────────────────────────────────────
 
+void SfzModulePanel::openBrowser (const juce::File& startDir)
+{
+    fileBrowser.setRootDirectory (startDir);
+    fileBrowser.setBounds (getLocalBounds());
+    fileBrowser.setVisible (true);
+    fileBrowser.toFront (false);
+    browserOpen = true;
+}
+
+void SfzModulePanel::closeBrowser()
+{
+    fileBrowser.setVisible (false);
+    browserOpen = false;
+}
+
+void SfzModulePanel::onSampleChosen (const juce::File& f)
+{
+    fileBrowser.setMode (SfzFileBrowser::Mode::kSfz);
+    closeBrowser();
+    showAddZoneOverlay (addZoneTargetSfz, f, addZonePrevHiKey);
+}
+
 void SfzModulePanel::openAddZoneChooser()
 {
     // ── Resolve or create the target .sfz ─────────────────────────────────────
@@ -770,7 +805,6 @@ void SfzModulePanel::openAddZoneChooser()
             targetSfz.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
     }
 
-    // ── Find the highest hiKey already written ─────────────────────────────────
     int prevHiKey = -1;
     if (targetSfz.existsAsFile())
     {
@@ -778,27 +812,12 @@ void SfzModulePanel::openAddZoneChooser()
         for (const auto& z : existing)
             prevHiKey = juce::jmax (prevHiKey, z.hiKey);
     }
-    const int capturedPrevHiKey = prevHiKey;
 
-    // ── Step 1: pick the audio sample ─────────────────────────────────────────
-    addZoneChooser = std::make_unique<juce::FileChooser> (
-        "Add Sample Zone",
-        targetSfz.getParentDirectory(),
-        "*.wav;*.aif;*.aiff;*.flac;*.ogg");
+    addZoneTargetSfz  = targetSfz;
+    addZonePrevHiKey  = prevHiKey;
 
-    const juce::File capturedSfz = targetSfz;
-
-    addZoneChooser->launchAsync (
-        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this, capturedSfz, capturedPrevHiKey] (const juce::FileChooser& fc)
-        {
-            const auto sample = fc.getResult();
-            if (! sample.existsAsFile())
-                return;
-
-            // ── Step 2: show the key-range overlay before writing ──────────────
-            showAddZoneOverlay (capturedSfz, sample, capturedPrevHiKey);
-        });
+    fileBrowser.setMode (SfzFileBrowser::Mode::kAddZone);
+    openBrowser (targetSfz.getParentDirectory());
 }
 
 void SfzModulePanel::showAddZoneOverlay (const juce::File& sfzFile,

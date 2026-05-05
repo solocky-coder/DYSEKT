@@ -211,6 +211,12 @@ void SfzFileBrowser::navigateToRoots()
     repaint();
 }
 
+void SfzFileBrowser::setMode (Mode m)
+{
+    mode = m;
+    rebuildList();
+}
+
 void SfzFileBrowser::rebuildList()
 {
     rows.clear();
@@ -221,9 +227,13 @@ void SfzFileBrowser::rebuildList()
     dirs.removeIf ([] (const juce::File& f) { return f.isHidden(); });
     dirs.sort();
 
-    // Matching files
+    // Matching files — pattern depends on current mode
+    const auto* pattern = (mode == Mode::kAddZone)
+                            ? "*.wav;*.aif;*.aiff;*.flac;*.ogg"
+                            : "*.sf2;*.sfz";
+
     auto files = currentDir.findChildFiles (
-        juce::File::findFiles, false, "*.sf2;*.sfz");
+        juce::File::findFiles, false, pattern);
     files.removeIf ([] (const juce::File& f) { return f.isHidden(); });
     files.sort();
 
@@ -360,7 +370,11 @@ SfzDropdownPanel::SfzDropdownPanel (DysektProcessor& p)
 
     // ── Inline file browser ───────────────────────────────────────────────────
     fileBrowser.onFileChosen = [this] (const juce::File& f) { onFileChosen (f); };
-    fileBrowser.onDismiss    = [this] { closeBrowser(); };
+    fileBrowser.onDismiss = [this]
+    {
+        fileBrowser.setMode (SfzFileBrowser::Mode::kSfz);
+        closeBrowser();
+    };
     addChildComponent (fileBrowser);
 
     startTimerHz (30);
@@ -498,13 +512,20 @@ void SfzDropdownPanel::closeBrowser()
 
 void SfzDropdownPanel::onFileChosen (const juce::File& f)
 {
+    if (fileBrowser.getMode() == SfzFileBrowser::Mode::kAddZone)
+    {
+        // Reset browser back to SFZ mode before showing the overlay
+        fileBrowser.setMode (SfzFileBrowser::Mode::kSfz);
+        closeBrowser();
+        showAddZoneOverlay (addZoneTargetSfz, f, addZonePrevHiKey);
+        return;
+    }
+
     processor.sfzPlayer.loadFile (f);
     reloadZones (f);
     closeBrowser();
     repaint();
 
-    // Notify the editor so it can reset sfzPanelRestored and re-populate
-    // the zone matrix once the async load completes.
     if (onFileLoaded)
         onFileLoaded (f);
 }
@@ -1600,6 +1621,7 @@ void SfzDropdownPanel::writeSfzZoneChange (const juce::File& f,
 
 void SfzDropdownPanel::openAddZoneChooser()
 {
+    // Resolve the target SFZ up front so onFileChosen can reference it
     juce::File targetSfz;
     if (processor.sfzPlayer.isLoaded())
     {
@@ -1623,24 +1645,15 @@ void SfzDropdownPanel::openAddZoneChooser()
         for (const auto& z : existing)
             prevHiKey = juce::jmax (prevHiKey, z.hiKey);
     }
-    const int capturedPrevHiKey = prevHiKey;
 
-    addZoneChooser = std::make_unique<juce::FileChooser> (
-        "Add Sample Zone",
-        targetSfz.getParentDirectory(),
-        "*.wav;*.aif;*.aiff;*.flac;*.ogg");
+    // Store for use in onFileChosen
+    addZoneTargetSfz    = targetSfz;
+    addZonePrevHiKey    = prevHiKey;
 
-    const juce::File capturedSfz = targetSfz;
-
-    addZoneChooser->launchAsync (
-        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this, capturedSfz, capturedPrevHiKey] (const juce::FileChooser& fc)
-        {
-            const auto sample = fc.getResult();
-            if (! sample.existsAsFile())
-                return;
-            showAddZoneOverlay (capturedSfz, sample, capturedPrevHiKey);
-        });
+    // Switch the inline browser to sample-pick mode and open it
+    fileBrowser.setMode (SfzFileBrowser::Mode::kAddZone);
+    fileBrowser.setRootDirectory (targetSfz.getParentDirectory());
+    openBrowser (targetSfz.getParentDirectory());
 }
 
 void SfzDropdownPanel::showAddZoneOverlay (const juce::File& sfzFile,
