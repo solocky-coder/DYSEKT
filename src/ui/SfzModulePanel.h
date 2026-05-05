@@ -64,6 +64,9 @@ private:
     // ── Helpers ───────────────────────────────────────────────────────────────
     void openFileChooser();
 
+    /** Bootstrap an empty Custom.sfz on first open so [+ ZONE] is always available. */
+    void initEmptySfz();
+
     // ── Custom SFZ builder ────────────────────────────────────────────────────
     /** Step 1: pick an audio sample file. */
     void openAddZoneChooser();

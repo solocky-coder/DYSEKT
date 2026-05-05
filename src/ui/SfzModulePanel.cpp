@@ -961,7 +961,24 @@ void SfzModulePanel::panelDidShow()
 {
     if (processor.sfzPlayer.isLoaded())
         reloadZones (processor.sfzPlayer.getLoadedFile());
+    else
+        initEmptySfz();   // bootstrap so [+ ZONE] is available immediately
     repaint();
+}
+
+void SfzModulePanel::initEmptySfz()
+{
+    // Create Custom.sfz in the user's Music folder if it doesn't exist yet.
+    // (Never overwrites — if the file is already there from a previous session,
+    //  we just reload it so the existing zones are restored.)
+    auto sfz = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                   .getChildFile ("Custom.sfz");
+
+    if (! sfz.existsAsFile())
+        sfz.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+
+    processor.sfzPlayer.loadFile (sfz);   // sfizz handles empty file gracefully (silence)
+    reloadZones (sfz);                    // sets [+ ZONE] button visible + wires callback
 }
 
 // ── Value mapping helpers ─────────────────────────────────────────────────────
