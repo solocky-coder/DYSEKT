@@ -121,9 +121,30 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
 
     if (rows.empty())
     {
-        g.setFont (DysektLookAndFeel::makeFont (9.0f));
-        g.setColour (theme.foreground.withAlpha (0.18f));
-        g.drawText ("No zones loaded", 0, 0, w, h, juce::Justification::centred, false);
+        if (addZoneBtnVisible)
+        {
+            // Draw the [+ ZONE] button in the single placeholder row so the
+            // user can build a new SFZ from scratch without loading a file first.
+            constexpr int kBtnW = 60;
+            constexpr int kBtnH = 11;
+            const int bx = 6;
+            const int by = (h - kBtnH) / 2;
+            const juce::Rectangle<int> btnRect (bx, by, kBtnW, kBtnH);
+
+            g.setColour (theme.accent.withAlpha (0.22f));
+            g.fillRoundedRectangle (btnRect.toFloat(), 2.5f);
+            g.setColour (theme.accent);
+            g.drawRoundedRectangle (btnRect.toFloat().reduced (0.5f), 2.5f, 0.8f);
+            g.setFont (DysektLookAndFeel::makeFont (8.0f, true));
+            g.setColour (theme.accent);
+            g.drawText ("+ ZONE", btnRect, juce::Justification::centred, false);
+        }
+        else
+        {
+            g.setFont (DysektLookAndFeel::makeFont (9.0f));
+            g.setColour (theme.foreground.withAlpha (0.18f));
+            g.drawText ("No zones loaded", 0, 0, w, h, juce::Justification::centred, false);
+        }
         return;
     }
 
@@ -438,21 +459,21 @@ void KeysPanel::highlightNoteInMatrix (int note)
 
 void KeysPanel::ZoneMatrixContent::mouseDown (const juce::MouseEvent& e)
 {
-    // ── [+ ZONE] button hit test — bottom strip after the last data row ───────
+    // ── [+ ZONE] button hit test ──────────────────────────────────────────────
     if (addZoneBtnVisible)
     {
+        if (rows.empty())
+        {
+            // In the empty state the whole component is one clickable zone —
+            // there are no data rows or header to avoid.
+            if (onAddZoneClicked)
+                onAddZoneClicked();
+            return;
+        }
+
         const int btnRowY = kHeaderH + (int) rows.size() * kRowH;
         if (e.y >= btnRowY)
         {
-            // The whole strip is clickable, but give a generous pill hit-target
-            constexpr int kBtnW = 60;
-            constexpr int kBtnH = 11;
-            const int bx = 6;
-            const int by = btnRowY + (kRowH - kBtnH) / 2;
-            const juce::Rectangle<int> pillRect (bx, by, kBtnW, kBtnH);
-
-            // Accept clicks anywhere in the row (not just the pill) for ease-of-use
-            (void) pillRect;
             if (onAddZoneClicked)
                 onAddZoneClicked();
             return;
