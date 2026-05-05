@@ -1654,7 +1654,9 @@ void SfzDropdownPanel::showAddZoneOverlay (const juce::File& sfzFile,
 
     overlay->onResult = [this, sfzFile, sampleFile] (int lo, int hi, int root, bool confirmed)
     {
-        hideOverlays();
+        // Defer hideOverlays() so it runs after fire() has returned and
+        // AddZoneOverlay is no longer on the call stack (use-after-free fix).
+        juce::MessageManager::callAsync ([this] { hideOverlays(); });
 
         if (! confirmed)
             return;
@@ -1720,7 +1722,9 @@ void SfzDropdownPanel::openSaveAsOverlay()
 
     overlay->onResult = [this, currentFile] (const juce::File& dest, bool confirmed)
     {
-        hideOverlays();
+        // Defer hideOverlays() so it runs after fire() has returned and
+        // SaveSfzOverlay is no longer on the call stack (use-after-free fix).
+        juce::MessageManager::callAsync ([this] { hideOverlays(); });
 
         if (! confirmed || dest == juce::File{})
             return;

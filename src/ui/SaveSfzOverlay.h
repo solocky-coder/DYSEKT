@@ -61,6 +61,12 @@ public:
         addAndMakeVisible (cancelBtn);
 
         setInterceptsMouseClicks (true, true);
+
+        // Prevent the PointingHandCursor set on KeysPanel from bleeding through
+        // when JUCE walks up the component hierarchy to resolve the cursor.
+        setMouseCursor (juce::MouseCursor::NormalCursor);
+        for (auto* b : { &folderBtn, &saveBtn, &cancelBtn })
+            b->setMouseCursor (juce::MouseCursor::NormalCursor);
     }
 
     void visibilityChanged() override

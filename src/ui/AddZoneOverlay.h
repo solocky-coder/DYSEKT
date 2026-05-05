@@ -82,6 +82,13 @@ public:
         cancelBtn .onClick = [this] { fire (false); };
 
         setInterceptsMouseClicks (true, true);
+
+        // Prevent the PointingHandCursor set on KeysPanel from bleeding through
+        // when JUCE walks up the component hierarchy to resolve the cursor.
+        setMouseCursor (juce::MouseCursor::NormalCursor);
+        for (auto* b : { &loDown, &loUp, &hiDown, &hiUp, &rtDown, &rtUp,
+                         &confirmBtn, &cancelBtn })
+            b->setMouseCursor (juce::MouseCursor::NormalCursor);
     }
 
     void paint (juce::Graphics& g) override
