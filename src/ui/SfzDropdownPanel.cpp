@@ -4,6 +4,7 @@
 #include "SfzDropdownPanel.h"
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
+#include "../PluginEditor.h"
 #include <set>
 
 // ── Layout constants (header strip) ──────────────────────────────────────────
@@ -844,6 +845,39 @@ void SfzDropdownPanel::selectPreset (int delta)
 }
 
 // =============================================================================
+//  MIDI Learn menu
+// =============================================================================
+
+void SfzDropdownPanel::showMidiLearnMenu (int fieldId, juce::Point<int> screenPos)
+{
+    const bool mapped = processor.midiLearn.isMapped (fieldId);
+    juce::PopupMenu menu;
+    menu.addItem (1, "Learn MIDI CC");
+    if (mapped)
+        menu.addItem (2, "Clear (" + processor.midiLearn.getLabelText (fieldId) + ")");
+    menu.addSeparator();
+    menu.addItem (1000, "Open MIDI Learn Dialog...");
+
+    auto* topLvl = getTopLevelComponent();
+    float ms = DysektLookAndFeel::getMenuScale();
+    menu.showMenuAsync (
+        juce::PopupMenu::Options()
+            .withTargetScreenArea (juce::Rectangle<int> (screenPos.x, screenPos.y, 1, 1))
+            .withParentComponent (topLvl)
+            .withStandardItemHeight ((int)(24 * ms)),
+        [this, fieldId] (int result)
+        {
+            if (result == 1)      { processor.midiLearn.armLearn (fieldId);     repaint(); }
+            else if (result == 2) { processor.midiLearn.clearMapping (fieldId); repaint(); }
+            else if (result == 1000)
+            {
+                if (auto* editor = findParentComponentOfClass<DysektEditor>())
+                    editor->keyPressed (juce::KeyPress ('M', juce::ModifierKeys(), 0));
+            }
+        });
+}
+
+// =============================================================================
 //  Mouse events
 // =============================================================================
 
@@ -871,6 +905,44 @@ void SfzDropdownPanel::mouseDown (const juce::MouseEvent& e)
     if (nameZone.contains (pos) && browserOpen)
     {
         closeBrowser();
+        return;
+    }
+
+    // ── Right-click — MIDI Learn menu or Save SFZ As ─────────────────────────
+    if (e.mods.isRightButtonDown())
+    {
+        // Right-click on nameZone / folderIconZone → Save SFZ As (SFZ mode only)
+        if ((nameZone.contains (pos) || folderIconZone.contains (pos))
+            && processor.sfzPlayer.isLoaded()
+            && processor.sfzPlayer.getLoadedFile().getFileExtension().toLowerCase() == ".sfz")
+        {
+            openSaveAsOverlay();
+            return;
+        }
+
+        // Right-click on any knob → MIDI Learn menu
+        using F = DysektProcessor::SliceParamField;
+        struct { juce::Rectangle<int>& zone; int fieldId; } knobFields[] =
+        {
+            { volZone,     F::FieldSfzVol        },
+            { transZone,   F::FieldSfzTranspose   },
+            { panZone,     F::FieldSfzPan          },
+            { fineZone,    F::FieldSfzFineTune     },
+            { rvMixZone,   F::FieldSfzReverbMix    },
+            { rvSizeZone,  F::FieldSfzReverbSize   },
+            { adsrAtkZone, F::FieldSfzAttack        },
+            { adsrDecZone, F::FieldSfzDecay         },
+            { adsrSusZone, F::FieldSfzSustain       },
+            { adsrRelZone, F::FieldSfzRelease       },
+        };
+        for (auto& kf : knobFields)
+        {
+            if (kf.zone.contains (pos))
+            {
+                showMidiLearnMenu (kf.fieldId, e.getScreenPosition());
+                return;
+            }
+        }
         return;
     }
 
@@ -1394,6 +1466,18 @@ void SfzDropdownPanel::reloadZones (const juce::File& f)
     }
 
     keysPanel.setSfzEditable (isSfz);
+
+    // [+ ZONE] button visibility must be set BEFORE setKeyzones() so that
+    // rebuild() sizes the component correctly (it reads addZoneBtnVisible to
+    // decide whether to add an extra row).  Setting it after setKeyzones()
+    // means rebuild() runs with the wrong value and the component is too short
+    // to display the button even though repaint() draws it.
+    keysPanel.setAddZoneButtonVisible (isSfz);
+    if (isSfz)
+        keysPanel.onAddZoneRequested = [this] { openAddZoneChooser(); };
+    else
+        keysPanel.onAddZoneRequested = nullptr;
+
     keysPanel.setKeyzones (zones);
 
     if (! zones.empty())
@@ -1404,13 +1488,6 @@ void SfzDropdownPanel::reloadZones (const juce::File& f)
     {
         writeSfzZoneChange (f, rowIndex, updated);
     };
-
-    // [+ ZONE] button is only available when we're in SFZ mode (editable)
-    keysPanel.setAddZoneButtonVisible (isSfz);
-    if (isSfz)
-        keysPanel.onAddZoneRequested = [this] { openAddZoneChooser(); };
-    else
-        keysPanel.onAddZoneRequested = nullptr;
 }
 
 // =============================================================================

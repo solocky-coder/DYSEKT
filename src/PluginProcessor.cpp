@@ -1504,6 +1504,54 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                     continue;
                 }
 
+                // ── SFZ master knobs CC — Vol / Transpose / Pan / FineTune ───
+                if (outFieldId == FieldSfzVol      || outFieldId == FieldSfzTranspose ||
+                    outFieldId == FieldSfzPan       || outFieldId == FieldSfzFineTune)
+                {
+                    auto getCurMaster = [&] (int fid) -> float
+                    {
+                        switch (fid)
+                        {
+                            case FieldSfzVol:       return sfzPlayer.getVolume() / 2.0f;              // 0-1
+                            case FieldSfzTranspose: return (sfzPlayer.getTranspose() + 24) / 48.0f;  // 0-1
+                            case FieldSfzPan:       return (sfzPlayer.getPan() + 1.0f) / 2.0f;       // 0-1
+                            case FieldSfzFineTune:  return (sfzPlayer.getFineTune() + 100.0f) / 200.0f; // 0-1
+                            default:                return 0.0f;
+                        }
+                    };
+
+                    float normVal;
+                    if (outIsRelative)
+                    {
+                        const float cur = getCurMaster (outFieldId);
+                        float sens;
+                        switch (outFieldId)
+                        {
+                            case FieldSfzVol:       sens = 0.01f;  break;   // 1 %/click of full range
+                            case FieldSfzTranspose: sens = 1.0f / 48.0f; break; // 1 semitone/click
+                            case FieldSfzPan:       sens = 0.01f;  break;
+                            case FieldSfzFineTune:  sens = 0.01f;  break;   // 2 cents/click
+                            default:                sens = 0.01f;  break;
+                        }
+                        normVal = juce::jlimit (0.0f, 1.0f, cur + outNorm * sens);
+                    }
+                    else
+                    {
+                        normVal = outNorm;
+                    }
+
+                    switch (outFieldId)
+                    {
+                        case FieldSfzVol:       sfzPlayer.setVolume   (normVal * 2.0f);                   break;
+                        case FieldSfzTranspose: sfzPlayer.setTranspose (juce::roundToInt (normVal * 48.0f) - 24); break;
+                        case FieldSfzPan:       sfzPlayer.setPan      (normVal * 2.0f - 1.0f);            break;
+                        case FieldSfzFineTune:  sfzPlayer.setFineTune (normVal * 200.0f - 100.0f);        break;
+                        default: break;
+                    }
+                    uiSnapshotDirty.store (true, std::memory_order_release);
+                    continue;
+                }
+
                 // A note-on and a CC can land in the same MidiBuffer.  If the
                 // selected slice changed since the last CC in this buffer, the
                 // ccPickedUp[] flags from the previous slice are stale for every

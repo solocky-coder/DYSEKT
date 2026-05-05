@@ -210,6 +210,8 @@ private:
                                   int loKey, int hiKey, int rootKey);
     void openSaveAsOverlay();
 
+    void showMidiLearnMenu (int fieldId, juce::Point<int> screenPos);
+
     template <typename OverlayType>
     void showOverlay (std::unique_ptr<OverlayType>& overlayPtr,
                       std::unique_ptr<OverlayType>  newOverlay)

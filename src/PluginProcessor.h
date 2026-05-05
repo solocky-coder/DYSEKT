@@ -74,6 +74,11 @@ public:
         FieldSfzReverbWidth  = 38,  // 38 - reverb width      (0-100 %)
         FieldSfzReverbMix    = 39,  // 39 - reverb wet/dry    (0-100 %)
         FieldSfzReverbFreeze = 40,  // 40 - reverb freeze     (bool)
+        // SfzPlayer master knobs — slots 41-44
+        FieldSfzVol       = 41,  // 41 - master volume   (0..2 linear, maps 0-100%)
+        FieldSfzTranspose = 42,  // 42 - transpose       (-24..+24 semitones)
+        FieldSfzPan       = 43,  // 43 - pan             (-1..+1)
+        FieldSfzFineTune  = 44,  // 44 - fine tune       (-100..+100 cents)
     };
 
     // ── Command types ────────────────────────────────────────────────────────
