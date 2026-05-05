@@ -33,6 +33,10 @@ SfzModulePanel::SfzModulePanel (DysektProcessor& p)
     };
     addChildComponent (fileBrowser);
 
+    // [+ ZONE] always visible — openAddZoneChooser() creates a Custom.sfz if nothing is loaded
+    keysPanel.setAddZoneButtonVisible (true);
+    keysPanel.onAddZoneRequested = [this] { openAddZoneChooser(); };
+
     startTimerHz (30);
 }
 

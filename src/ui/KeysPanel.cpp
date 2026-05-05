@@ -671,7 +671,8 @@ void KeysPanel::setAddZoneButtonVisible (bool visible)
         if (onAddZoneRequested)
             onAddZoneRequested();
     };
-    zoneMatrix.repaint();
+    // Rebuild so the matrix height recalculates immediately (extraRow logic)
+    rebuildZoneMatrix();
 }
 
 // =============================================================================
