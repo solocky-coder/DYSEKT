@@ -1653,7 +1653,7 @@ void SfzDropdownPanel::openAddZoneChooser()
     // Switch the inline browser to sample-pick mode and open it
     fileBrowser.setMode (SfzFileBrowser::Mode::kAddZone);
     fileBrowser.setRootDirectory (targetSfz.getParentDirectory());
-    openBrowser (targetSfz.getParentDirectory());
+    openBrowser();
 }
 
 void SfzDropdownPanel::showAddZoneOverlay (const juce::File& sfzFile,
