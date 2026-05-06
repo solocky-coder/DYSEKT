@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_dsp/juce_dsp.h>
 #include <atomic>
 #include <array>
 #include <deque>
@@ -79,6 +80,12 @@ public:
         FieldSfzTranspose = 42,  // 42 - transpose       (-24..+24 semitones)
         FieldSfzPan       = 43,  // 43 - pan             (-1..+1)
         FieldSfzFineTune  = 44,  // 44 - fine tune       (-100..+100 cents)
+        // v24: per-slice EQ
+        FieldEqLowGain    = 45,  // dB  -18..+18
+        FieldEqMidGain    = 46,  // dB  -18..+18
+        FieldEqMidFreq    = 47,  // Hz  200..8000
+        FieldEqMidQ       = 48,  // Q   0.5..4.0
+        FieldEqHighGain   = 49,  // dB  -18..+18
     };
 
     // ── Command types ────────────────────────────────────────────────────────
@@ -500,6 +507,14 @@ private:
     // =========================================================================
     double currentSampleRate { 44100.0 };
     bool   heldNotes[128]    {};
+
+    // ── Global post-mix EQ (juce::dsp, runs after voice mix, before master volume) ──
+    juce::dsp::ProcessorChain<
+        juce::dsp::IIR::Filter<float>,   // low shelf
+        juce::dsp::IIR::Filter<float>,   // mid peak
+        juce::dsp::IIR::Filter<float>    // high shelf
+    > globalEq;
+    bool globalEqNeedsUpdate = true;
 
     friend class SoundFontLoader;
 

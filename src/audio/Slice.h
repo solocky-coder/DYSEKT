@@ -30,6 +30,9 @@ enum LockBit : uint32_t
     kLockChromaticChannel = 8388608, // bit 23
     kLockChromaticLegato  = 16777216, // bit 24
     kLockHold              = 33554432, // bit 25
+    kLockEqLow             = 67108864,   // bit 26
+    kLockEqMid             = 134217728,  // bit 27
+    kLockEqHigh            = 268435456,  // bit 28
 };
 
 struct Slice
@@ -64,6 +67,16 @@ struct Slice
     float    pan            = 0.0f;     // stereo pan: -1 (L) .. 0 (C) .. +1 (R)
     float    filterCutoff   = 20000.0f; // low-pass cutoff Hz: 20..20000
     float    filterRes      = 0.0f;     // resonance: 0..1
+
+    // ── Per-slice 3-band EQ ───────────────────────────────────────────────────
+    // Low shelf  : gain ±18 dB, fixed fc = 200 Hz
+    // Mid peak   : gain ±18 dB, fc 200-8000 Hz, Q 0.5-4.0
+    // High shelf : gain ±18 dB, fixed fc = 8000 Hz
+    float    eqLowGain      = 0.0f;    // dB  -18..+18
+    float    eqMidGain      = 0.0f;    // dB  -18..+18
+    float    eqMidFreq      = 1000.0f; // Hz  200..8000
+    float    eqMidQ         = 1.0f;    // Q   0.5..4.0
+    float    eqHighGain     = 0.0f;    // dB  -18..+18
     int      chromaticChannel = 0;     // 0=off, 1-16 = receive chromatic play on this MIDI channel
     bool     chromaticLegato  = false; // when true: pitch-only (no speed change), monophonic voice steal
     int      rrCounter      = 0;        // round-robin playback counter (not saved)

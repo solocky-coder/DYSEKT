@@ -15,6 +15,62 @@ static inline float dbToLinear (float dB)
     return std::pow (10.0f, dB / 20.0f);
 }
 
+// ── EQ biquad helpers ─────────────────────────────────────────────────────────
+// All Audio EQ Cookbook formulas (Robert Bristow-Johnson).
+// Coefficients stored as {b0,b1,b2,a1,a2} (a0-normalised, sign convention: y = b*x - a*y).
+
+static void calcLowShelf (float gainDb, float fc, double sr,
+                           float& b0, float& b1, float& b2,
+                           float& a1, float& a2)
+{
+    const float A  = std::pow (10.f, gainDb / 40.f);
+    const float w0 = 2.f * juce::MathConstants<float>::pi * fc / (float) sr;
+    const float cosW = std::cos (w0);
+    const float sinW = std::sin (w0);
+    const float S  = 1.f;   // shelf slope = 1 (maximally steep)
+    const float alpha = sinW / 2.f * std::sqrt ((A + 1.f/A) * (1.f/S - 1.f) + 2.f);
+    const float a0inv = 1.f / ((A+1) + (A-1)*cosW + 2*std::sqrt(A)*alpha);
+    b0 = A * ((A+1) - (A-1)*cosW + 2*std::sqrt(A)*alpha) * a0inv;
+    b1 = 2*A * ((A-1) - (A+1)*cosW) * a0inv;
+    b2 = A * ((A+1) - (A-1)*cosW - 2*std::sqrt(A)*alpha) * a0inv;
+    a1 = -2 * ((A-1) + (A+1)*cosW) * a0inv;
+    a2 = ((A+1) + (A-1)*cosW - 2*std::sqrt(A)*alpha) * a0inv;
+}
+
+static void calcHighShelf (float gainDb, float fc, double sr,
+                            float& b0, float& b1, float& b2,
+                            float& a1, float& a2)
+{
+    const float A  = std::pow (10.f, gainDb / 40.f);
+    const float w0 = 2.f * juce::MathConstants<float>::pi * fc / (float) sr;
+    const float cosW = std::cos (w0);
+    const float sinW = std::sin (w0);
+    const float S  = 1.f;
+    const float alpha = sinW / 2.f * std::sqrt ((A + 1.f/A) * (1.f/S - 1.f) + 2.f);
+    const float a0inv = 1.f / ((A+1) - (A-1)*cosW + 2*std::sqrt(A)*alpha);
+    b0 = A * ((A+1) + (A-1)*cosW + 2*std::sqrt(A)*alpha) * a0inv;
+    b1 = -2*A * ((A-1) + (A+1)*cosW) * a0inv;
+    b2 = A * ((A+1) + (A-1)*cosW - 2*std::sqrt(A)*alpha) * a0inv;
+    a1 = 2 * ((A-1) - (A+1)*cosW) * a0inv;
+    a2 = ((A+1) - (A-1)*cosW - 2*std::sqrt(A)*alpha) * a0inv;
+}
+
+static void calcPeakEq (float gainDb, float fc, float Q, double sr,
+                         float& b0, float& b1, float& b2,
+                         float& a1, float& a2)
+{
+    const float A  = std::pow (10.f, gainDb / 40.f);
+    const float w0 = 2.f * juce::MathConstants<float>::pi * fc / (float) sr;
+    const float cosW = std::cos (w0);
+    const float alpha = std::sin (w0) / (2.f * Q);
+    const float a0inv = 1.f / (1.f + alpha / A);
+    b0 = (1.f + alpha * A) * a0inv;
+    b1 = -2.f * cosW * a0inv;
+    b2 = (1.f - alpha * A) * a0inv;
+    a1 = b1;   // same
+    a2 = (1.f - alpha / A) * a0inv;
+}
+
 VoicePool::VoicePool()
 {
     for (auto& p : voicePositions)
@@ -290,7 +346,34 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     v.filterStateL = 0.0f;
     v.filterStateR = 0.0f;
 
-    v.releaseTail = sm.resolveParam (sliceIdx, kLockReleaseTail,
+    // ── Per-slice EQ coefficients (calculated once at note-on) ────────────────
+    {
+        float lowG  = sm.resolveParam (sliceIdx, kLockEqLow,  s.eqLowGain,  p.globalEqLowGain);
+        float midG  = sm.resolveParam (sliceIdx, kLockEqMid,  s.eqMidGain,  p.globalEqMidGain);
+        float midF  = sm.resolveParam (sliceIdx, kLockEqMid,  s.eqMidFreq,  p.globalEqMidFreq);
+        float midQ  = sm.resolveParam (sliceIdx, kLockEqMid,  s.eqMidQ,     p.globalEqMidQ);
+        float hiG   = sm.resolveParam (sliceIdx, kLockEqHigh, s.eqHighGain, p.globalEqHighGain);
+
+        constexpr float kBypassThreshold = 0.01f; // dB — treat as bypass below this
+        v.eqActive = (std::abs(lowG) > kBypassThreshold ||
+                      std::abs(midG) > kBypassThreshold ||
+                      std::abs(hiG)  > kBypassThreshold);
+
+        if (v.eqActive)
+        {
+            calcLowShelf  (lowG, 200.f,  sampleRate, v.eqB0[0], v.eqB1[0], v.eqB2[0], v.eqA1[0], v.eqA2[0]);
+            calcPeakEq    (midG, juce::jlimit(200.f,8000.f,midF),
+                                 juce::jlimit(0.5f, 4.0f, midQ),
+                                 sampleRate, v.eqB0[1], v.eqB1[1], v.eqB2[1], v.eqA1[1], v.eqA2[1]);
+            calcHighShelf (hiG,  8000.f, sampleRate, v.eqB0[2], v.eqB1[2], v.eqB2[2], v.eqA1[2], v.eqA2[2]);
+        }
+        // Zero delay lines
+        for (int b = 0; b < 3; ++b)
+        {
+            v.eqX1L[b] = v.eqX2L[b] = v.eqY1L[b] = v.eqY2L[b] = 0.f;
+            v.eqX1R[b] = v.eqX2R[b] = v.eqY1R[b] = v.eqY2R[b] = 0.f;
+        }
+    }
                                      s.releaseTail ? 1.0f : 0.0f,
                                      p.globalReleaseTail ? 1.0f : 0.0f) > 0.5f;
     v.oneShot = isOneShot ? 1.0f : 0.0f;  // already resolved before envelope noteOn
@@ -735,8 +818,28 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
         voiceR = v.filterStateR;
     }
 
+    // ── Per-slice 3-band EQ ───────────────────────────────────────────────────
+    if (v.eqActive)
+    {
+        for (int b = 0; b < 3; ++b)
+        {
+            // Left channel
+            float yL = v.eqB0[b]*voiceL + v.eqB1[b]*v.eqX1L[b] + v.eqB2[b]*v.eqX2L[b]
+                                         - v.eqA1[b]*v.eqY1L[b] - v.eqA2[b]*v.eqY2L[b];
+            v.eqX2L[b] = v.eqX1L[b]; v.eqX1L[b] = voiceL;
+            v.eqY2L[b] = v.eqY1L[b]; v.eqY1L[b] = yL;
+            voiceL = yL;
+
+            // Right channel
+            float yR = v.eqB0[b]*voiceR + v.eqB1[b]*v.eqX1R[b] + v.eqB2[b]*v.eqX2R[b]
+                                         - v.eqA1[b]*v.eqY1R[b] - v.eqA2[b]*v.eqY2R[b];
+            v.eqX2R[b] = v.eqX1R[b]; v.eqX1R[b] = voiceR;
+            v.eqY2R[b] = v.eqY1R[b]; v.eqY1R[b] = yR;
+            voiceR = yR;
+        }
+    }
+
     // ── Pan ───────────────────────────────────────────────────────────────────
-    voiceL *= v.panL;
     voiceR *= v.panR;
 
     outL = voiceL;

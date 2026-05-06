@@ -215,9 +215,11 @@ float SliceControlBar::toNorm (int fieldId, float v) const
  case F::FieldVolume: return juce::jlimit (0.f, 1.f, (v + 100.f) / 124.f);
  case F::FieldOutputBus: return juce::jlimit (0.f, 1.f, v / 15.f);
  case F::FieldPan: return juce::jlimit (0.f, 1.f, (v + 1.f) * 0.5f);
- case F::FieldFilterCutoff: return juce::jlimit (0.f, 1.f,
- (std::log2 (juce::jmax (20.f, v) / 20.f) / std::log2 (20000.f / 20.f)));
- case F::FieldFilterRes: return juce::jlimit (0.f, 1.f, v);
+        case F::FieldEqLowGain:  return juce::jlimit (0.f, 1.f, (v + 18.f) / 36.f);
+        case F::FieldEqMidGain:  return juce::jlimit (0.f, 1.f, (v + 18.f) / 36.f);
+        case F::FieldEqMidFreq:  return juce::jlimit (0.f, 1.f, (std::log2(v) - std::log2(200.f)) / (std::log2(8000.f) - std::log2(200.f)));
+        case F::FieldEqMidQ:     return juce::jlimit (0.f, 1.f, (v - 0.5f) / 3.5f);
+        case F::FieldEqHighGain: return juce::jlimit (0.f, 1.f, (v + 18.f) / 36.f);
     case kFieldGlide:       return juce::jlimit (0.f, 1.f, v / 200.f);
  default: return 0.5f;
  }
@@ -880,8 +882,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  const float effTonality = resolveF (kLockTonality, s.tonalityHz,     apvtsVal (ParamIds::defaultTonality));
  const float effFormant  = resolveF (kLockFormant,  s.formantSemitones, apvtsVal (ParamIds::defaultFormant));
  const bool  effFComp    = resolveF (kLockFormantComp, s.formantComp ? 1.f : 0.f, apvtsVal (ParamIds::defaultFormantComp)) > 0.5f;
- const float effFCut     = resolveF (kLockFilter,  s.filterCutoff,    apvtsVal (ParamIds::defaultFilterCutoff));
- const float effFRes     = resolveF (kLockFilter,  s.filterRes,       apvtsVal (ParamIds::defaultFilterRes));
+
  const int   effOutputBus = (int) resolveF (kLockOutputBus, (float) s.outputBus, 0.0f);
  const bool  effStretch  = resolveF (kLockStretch, s.stretchEnabled ? 1.f : 0.f, apvtsVal (ParamIds::defaultStretchEnabled)) > 0.5f;
 
@@ -891,7 +892,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  int cw;
  using F = DysektProcessor;
 
- int filterGroupX1 = 0, filterGroupX2 = 0; // FCUT / FRES bracket
+
 
  // Slice index label removed — shown in waveform and LCD panels already.
 
@@ -1103,33 +1104,8 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  adsrGroupX2 = x - 4;
  }
 
- // FCUT — filter cutoff knob (no lock — always per-slice)
- {
- filterGroupX1 = x;
- float fv = effFCut;
- juce::String fStr = (fv >= 1000.f)
- ? (juce::String (fv / 1000.f, 1) + "k")
- : (juce::String ((int) fv) + "Hz");
- drawKnobCell (g, x, row2y, "FCUT", fStr,
- toNorm (F::FieldFilterCutoff, fv),
- true, 0, F::FieldFilterCutoff,
- 20.f, 20000.f, 1.f, cw);
- x += cw + si (4);
- }
-
- // FRES — filter resonance knob (no lock — always per-slice)
- {
- float rv = effFRes;
- drawKnobCell (g, x, row2y, "RESO",
- juce::String ((int) (rv * 100.f)) + "%",
- toNorm (F::FieldFilterRes, rv),
- true, 0, F::FieldFilterRes,
- 0.f, 1.f, 0.01f, cw);
- x += cw + si (4);
- filterGroupX2 = x - 4;
- }
-
-    // GLIDE — global legato glide time (0-200ms)
+    // GLIDE — shown only when this slice is in chromatic mode
+    if (s.chromaticChannel > 0)
     {
         const float glideMs = processor.voicePool.legatoGlideMs.load (std::memory_order_relaxed);
         const juce::String glideStr = (glideMs < 1.0f) ? "0ms"
@@ -1141,82 +1117,37 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
         x += cw + si (4);
     }
 
- // METER — waveform activity pulse after FRES
- // Shows peak level as a glowing fill + playback cursor for the selected slice
- if (idx >= 0 && idx < DysektProcessor::kMaxMeterSlices)
- {
- const int meterX = x + si (4);
- const int meterW = juce::jmax (si (40), rightEdge - meterX - si (4));
- const int meterY = row2y + si (4);
- const int meterH = si (22);
+ // ── EQ knobs: LOW | MID | HIGH ───────────────────────────────────────────
+ // Resolve effective values (same pattern as filterCutoff above)
+ const float effEqLow  = resolveF (kLockEqLow,  s.eqLowGain,  apvtsVal (ParamIds::defaultEqLowGain));
+ const float effEqMidG = resolveF (kLockEqMid,  s.eqMidGain,  apvtsVal (ParamIds::defaultEqMidGain));
+ const float effEqMidF = resolveF (kLockEqMid,  s.eqMidFreq,  apvtsVal (ParamIds::defaultEqMidFreq));
+ const float effEqMidQ = resolveF (kLockEqMid,  s.eqMidQ,     apvtsVal (ParamIds::defaultEqMidQ));
+ const float effEqHigh = resolveF (kLockEqHigh, s.eqHighGain, apvtsVal (ParamIds::defaultEqHighGain));
 
- // Background track
- g.setColour (juce::Colour (0xFF080808));
- g.fillRect (meterX, meterY, meterW, meterH);
- g.setColour (juce::Colour (0xFF1A1A1A));
- g.drawRect (meterX, meterY, meterW, meterH);
-
- // Peak level bars (L top half, R bottom half)
- const float pkL = processor.slicePeakL[(size_t) idx].load (std::memory_order_relaxed);
- const float pkR = processor.slicePeakR[(size_t) idx].load (std::memory_order_relaxed);
- const int barH = (meterH - 2) / 2;
-
- auto phosphorCol = [&] (float pos) -> juce::Colour
- {
- const auto& sl = processor.sliceManager.getSlice(idx);
- const auto base = sl.colour;
- if (pos < 0.70f) return base.withAlpha (0.25f + (pos / 0.70f) * 0.60f);
- if (pos < 0.85f) return base.interpolatedWith (juce::Colour (0xFFFFE000),
- (pos - 0.70f) / 0.15f).withAlpha (0.88f);
- return juce::Colour (0xFFFF2222).withAlpha (0.80f);
+ // Format display strings
+ auto gainStr = [](float db) -> juce::String {
+     return (db >= 0.f ? "+" : "") + juce::String (db, 1) + "dB";
  };
+ (void) effEqMidF; (void) effEqMidQ; // used in secondary row / right-click context
 
- auto drawBar = [&] (int barY, float pk)
- {
- const float fill = std::sqrt (juce::jlimit (0.0f, 1.0f, pk));
- const int litW = juce::roundToInt (fill * (float)(meterW - 4));
- if (litW <= 0) return;
- for (int px = 0; px < litW; ++px)
- {
- const float pos = (float) px / (float)(meterW - 4);
- g.setColour (phosphorCol (pos));
- g.fillRect (meterX + 2 + px, barY, 1, barH);
- }
- };
+ const int eqKnobW = (rightEdge - x) / 3;
+ int eqCw = eqKnobW;
 
- drawBar (meterY + 1, pkL);
- drawBar (meterY + 1 + barH + 1, pkR);
+ drawKnobCell (g, x,              row2y, "LOW",  gainStr (effEqLow),
+               toNorm (F::FieldEqLowGain, effEqLow),
+               true, kLockEqLow, F::FieldEqLowGain,
+               -18.f, 18.f, 0.1f, eqCw);
 
- // Playback cursor — scan all voices for one playing this slice
- const int sliceStart = s.startSample;
- const int sliceEnd = processor.sliceManager.getEndForSlice (idx, ui.sampleNumFrames);
- const int sliceLen = juce::jmax (1, sliceEnd - sliceStart);
+ drawKnobCell (g, x + eqKnobW,   row2y, "MID",  gainStr (effEqMidG),
+               toNorm (F::FieldEqMidGain, effEqMidG),
+               true, kLockEqMid, F::FieldEqMidGain,
+               -18.f, 18.f, 0.1f, eqCw);
 
- for (int vi = 0; vi < VoicePool::kMaxVoices; ++vi)
- {
- const float vpos = processor.voicePool.voicePositions[vi].load (std::memory_order_relaxed);
- if (vpos <= 0.0f) continue;
- const int ipos = (int) vpos;
- if (ipos < sliceStart || ipos >= sliceEnd) continue;
-
- // Map position within slice to meter width
- const float frac = (float)(ipos - sliceStart) / (float) sliceLen;
- const int cursorX = meterX + 2 + juce::roundToInt (frac * (float)(meterW - 4));
-
- // Bright glowing cursor line
- g.setColour (getTheme().foreground.withAlpha (0.90f));
- g.fillRect (cursorX, meterY + 1, 1, meterH - 2);
- g.setColour (getTheme().foreground.withAlpha (0.25f));
- g.fillRect (cursorX - 1, meterY + 1, 1, meterH - 2);
- g.fillRect (cursorX + 1, meterY + 1, 1, meterH - 2);
- break; // first active voice wins
- }
-
- // Label
- g.setFont (DysektLookAndFeel::makeFont (7.0f * paintSf, true));
- g.setColour (getTheme().foreground.withAlpha (0.30f));
- g.drawText ("", meterX, row2y, si (22), si (8), juce::Justification::centredLeft);
- }
+ drawKnobCell (g, x + 2*eqKnobW, row2y, "HIGH", gainStr (effEqHigh),
+               toNorm (F::FieldEqHighGain, effEqHigh),
+               true, kLockEqHigh, F::FieldEqHighGain,
+               -18.f, 18.f, 0.1f, eqCw);
  {
  g.setFont (DysektLookAndFeel::makeFont (7.5f * paintSf, true));
  g.setColour (getTheme().foreground.withAlpha (0.40f));
@@ -1229,7 +1160,6 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  };
 
  if (adsrGroupX2 > adsrGroupX1) drawGroupLabel (adsrGroupX1, adsrGroupX2, "");
- if (filterGroupX2 > filterGroupX1) drawGroupLabel (filterGroupX1, filterGroupX2, "");
  }
 }
 
@@ -1388,8 +1318,11 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  case F::FieldRelease:     dragStartValue = sl.releaseSec;   break;
  case F::FieldVolume:      dragStartValue = res (kLockVolume,      sl.volume,           apvtsRaw (ParamIds::masterVolume)); break;
  case F::FieldPan:         dragStartValue = res (kLockPan,         sl.pan,              apvtsRaw (ParamIds::defaultPan)); break;
- case F::FieldFilterCutoff: dragStartValue = res (kLockFilter,     sl.filterCutoff,     apvtsRaw (ParamIds::defaultFilterCutoff)); break;
- case F::FieldFilterRes:   dragStartValue = res (kLockFilter,      sl.filterRes,        apvtsRaw (ParamIds::defaultFilterRes)); break;
+        case F::FieldEqLowGain:   dragStartValue = res (kLockEqLow,   sl.eqLowGain,    apvtsRaw (ParamIds::defaultEqLowGain)); break;
+        case F::FieldEqMidGain:   dragStartValue = res (kLockEqMid,   sl.eqMidGain,    apvtsRaw (ParamIds::defaultEqMidGain)); break;
+        case F::FieldEqMidFreq:   dragStartValue = res (kLockEqMid,   sl.eqMidFreq,    apvtsRaw (ParamIds::defaultEqMidFreq)); break;
+        case F::FieldEqMidQ:      dragStartValue = res (kLockEqMid,   sl.eqMidQ,       apvtsRaw (ParamIds::defaultEqMidQ));    break;
+        case F::FieldEqHighGain:  dragStartValue = res (kLockEqHigh,  sl.eqHighGain,   apvtsRaw (ParamIds::defaultEqHighGain)); break;
  case F::FieldMuteGroup:   dragStartValue = (float)((sl.lockMask & kLockMuteGroup) ? sl.muteGroup : (int) apvtsRaw (ParamIds::defaultMuteGroup)); break;
  case F::FieldOutputBus:   dragStartValue = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
  case F::FieldSliceStart:  dragStartValue = (float) sl.startSample; break;
@@ -1808,8 +1741,11 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  case F::FieldVolume: currentVal = sl.volume; break;
  case F::FieldOutputBus: currentVal = (float)((sl.lockMask & kLockOutputBus) ? sl.outputBus : 0); break;
  case F::FieldPan: currentVal = sl.pan; break;
- case F::FieldFilterCutoff: currentVal = sl.filterCutoff; break;
- case F::FieldFilterRes: currentVal = sl.filterRes; break;
+        case F::FieldEqLowGain:  currentVal = sl.eqLowGain;  break;
+        case F::FieldEqMidGain:  currentVal = sl.eqMidGain;  break;
+        case F::FieldEqMidFreq:  currentVal = sl.eqMidFreq;  break;
+        case F::FieldEqMidQ:     currentVal = sl.eqMidQ;     break;
+        case F::FieldEqHighGain: currentVal = sl.eqHighGain; break;
  default: break;
  }
  }

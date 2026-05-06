@@ -37,6 +37,13 @@ struct VoiceStartParams
     float globalFilterCutoff = 20000.0f; // Hz
     float globalFilterRes = 0.0f; // 0..1
 
+    // ── v24 additions: per-slice EQ ──────────────────────────────────────────
+    float globalEqLowGain  = 0.0f;    // dB
+    float globalEqMidGain  = 0.0f;    // dB
+    float globalEqMidFreq  = 1000.0f; // Hz
+    float globalEqMidQ     = 1.0f;    // Q
+    float globalEqHighGain = 0.0f;    // dB
+
     // ── Chromatic legato ──────────────────────────────────────────────────────
     bool chromaticLegatoTrigger = false; // when true: steal prior legato voices, force Stretch pitch-only
 };

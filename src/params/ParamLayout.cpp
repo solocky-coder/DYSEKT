@@ -165,5 +165,67 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         "Global Mono",
         false));
 
+    // ── v24: per-slice EQ defaults ─────────────────────────────────────────────
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultEqLowGain, 1 },
+        "EQ Low Gain",
+        juce::NormalisableRange<float> (-18.0f, 18.0f, 0.1f),
+        0.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultEqMidGain, 1 },
+        "EQ Mid Gain",
+        juce::NormalisableRange<float> (-18.0f, 18.0f, 0.1f),
+        0.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultEqMidFreq, 1 },
+        "EQ Mid Freq",
+        juce::NormalisableRange<float> (200.0f, 8000.0f, 1.0f, 0.4f),
+        1000.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultEqMidQ, 1 },
+        "EQ Mid Q",
+        juce::NormalisableRange<float> (0.5f, 4.0f, 0.01f),
+        1.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::defaultEqHighGain, 1 },
+        "EQ High Gain",
+        juce::NormalisableRange<float> (-18.0f, 18.0f, 0.1f),
+        0.0f));
+
+    // ── v24: global post-mix EQ ────────────────────────────────────────────────
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::globalEqLowGain, 1 },
+        "Global EQ Low",
+        juce::NormalisableRange<float> (-18.0f, 18.0f, 0.1f),
+        0.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::globalEqMidGain, 1 },
+        "Global EQ Mid",
+        juce::NormalisableRange<float> (-18.0f, 18.0f, 0.1f),
+        0.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::globalEqMidFreq, 1 },
+        "Global EQ Mid Freq",
+        juce::NormalisableRange<float> (200.0f, 8000.0f, 1.0f, 0.4f),
+        1000.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::globalEqMidQ, 1 },
+        "Global EQ Mid Q",
+        juce::NormalisableRange<float> (0.5f, 4.0f, 0.01f),
+        1.0f));
+
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::globalEqHighGain, 1 },
+        "Global EQ High",
+        juce::NormalisableRange<float> (-18.0f, 18.0f, 0.1f),
+        0.0f));
+
     return { params.begin(), params.end() };
 }

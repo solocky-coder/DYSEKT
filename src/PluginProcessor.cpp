@@ -222,6 +222,16 @@ void DysektProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         clearVoicesBeforeSampleSwap();
         requestSampleLoad (juce::File (sampleData.getFilePath()), LoadKindRelink);
     }
+
+    // ── Global post-mix EQ ────────────────────────────────────────────────────
+    {
+        juce::dsp::ProcessSpec spec;
+        spec.sampleRate       = sampleRate;
+        spec.maximumBlockSize = (juce::uint32) (samplesPerBlock > 0 ? samplesPerBlock : 512);
+        spec.numChannels      = 2;
+        globalEq.prepare (spec);
+        globalEqNeedsUpdate = true;
+    }
 }
 
 void DysektProcessor::releaseResources() {}
@@ -928,6 +938,11 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldPan:           s.pan            = val;       if (!skipLock) s.lockMask |= kLockPan;         break;
                     case FieldFilterCutoff:  s.filterCutoff   = val;       if (!skipLock) s.lockMask |= kLockFilter;      break;
                     case FieldFilterRes:       s.filterRes       = val;       if (!skipLock) s.lockMask |= kLockFilter;      break;
+                    case FieldEqLowGain:       s.eqLowGain       = val;       if (!skipLock) s.lockMask |= kLockEqLow;       break;
+                    case FieldEqMidGain:       s.eqMidGain       = val;       if (!skipLock) s.lockMask |= kLockEqMid;       break;
+                    case FieldEqMidFreq:       s.eqMidFreq       = val;       if (!skipLock) s.lockMask |= kLockEqMid;       break;
+                    case FieldEqMidQ:          s.eqMidQ          = val;       if (!skipLock) s.lockMask |= kLockEqMid;       break;
+                    case FieldEqHighGain:      s.eqHighGain      = val;       if (!skipLock) s.lockMask |= kLockEqHigh;      break;
                     case FieldChromaticChannel: s.chromaticChannel = juce::jlimit (0, 16, (int) val); break;
                     case FieldChromaticLegato:  s.chromaticLegato  = (val > 0.5f); break;
                     case FieldMidiNote:
@@ -2001,6 +2016,18 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.globalFilterCutoff = filterCutoffParam->load();
                 p.globalFilterRes    = filterResParam->load();
 
+                // ── v24: per-slice EQ defaults ─────────────────────────────────
+                if (auto* pEqLow  = apvts.getRawParameterValue (ParamIds::defaultEqLowGain))
+                    p.globalEqLowGain  = pEqLow->load();
+                if (auto* pEqMidG = apvts.getRawParameterValue (ParamIds::defaultEqMidGain))
+                    p.globalEqMidGain  = pEqMidG->load();
+                if (auto* pEqMidF = apvts.getRawParameterValue (ParamIds::defaultEqMidFreq))
+                    p.globalEqMidFreq  = pEqMidF->load();
+                if (auto* pEqMidQ = apvts.getRawParameterValue (ParamIds::defaultEqMidQ))
+                    p.globalEqMidQ     = pEqMidQ->load();
+                if (auto* pEqHigh = apvts.getRawParameterValue (ParamIds::defaultEqHighGain))
+                    p.globalEqHighGain = pEqHigh->load();
+
                 // ── Trim mode or unsliced: play whole sample / trim region chromatically ──
                 // Root = C3 (MIDI 60). Active whenever trim dialog is open, or when
                 // a sample is loaded but has no slices yet.
@@ -2151,6 +2178,29 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 {
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
+
+    // ── Poll global EQ param changes ──────────────────────────────────────────
+    {
+        static float cachedEqLow = -999.f, cachedEqMidG = -999.f, cachedEqMidF = -999.f,
+                     cachedEqMidQ = -999.f, cachedEqHigh = -999.f;
+        auto* pLow  = apvts.getRawParameterValue (ParamIds::globalEqLowGain);
+        auto* pMidG = apvts.getRawParameterValue (ParamIds::globalEqMidGain);
+        auto* pMidF = apvts.getRawParameterValue (ParamIds::globalEqMidFreq);
+        auto* pMidQ = apvts.getRawParameterValue (ParamIds::globalEqMidQ);
+        auto* pHigh = apvts.getRawParameterValue (ParamIds::globalEqHighGain);
+        if (pLow && pMidG && pMidF && pMidQ && pHigh)
+        {
+            float l = pLow->load(), mg = pMidG->load(), mf = pMidF->load(),
+                  mq = pMidQ->load(), h = pHigh->load();
+            if (l != cachedEqLow || mg != cachedEqMidG || mf != cachedEqMidF ||
+                mq != cachedEqMidQ || h != cachedEqHigh)
+            {
+                cachedEqLow = l; cachedEqMidG = mg; cachedEqMidF = mf;
+                cachedEqMidQ = mq; cachedEqHigh = h;
+                globalEqNeedsUpdate = true;
+            }
+        }
+    }
 
     // Read DAW BPM from playhead
     if (auto* ph = getPlayHead())
@@ -2707,6 +2757,33 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                         std::memory_order_relaxed);
     }
 
+    // ── Global post-mix EQ (applied to main bus only) ─────────────────────────
+    if (busL[0] != nullptr && buffer.getNumSamples() > 0)
+    {
+        // Rebuild coefficients if any global EQ param changed
+        if (globalEqNeedsUpdate)
+        {
+            double sr = getSampleRate();
+            auto lowG = apvts.getRawParameterValue (ParamIds::globalEqLowGain)->load();
+            auto midG = apvts.getRawParameterValue (ParamIds::globalEqMidGain)->load();
+            auto midF = apvts.getRawParameterValue (ParamIds::globalEqMidFreq)->load();
+            auto midQ = apvts.getRawParameterValue (ParamIds::globalEqMidQ)->load();
+            auto hiG  = apvts.getRawParameterValue (ParamIds::globalEqHighGain)->load();
+
+            *globalEq.get<0>().state = *juce::dsp::IIR::Coefficients<float>::makeLowShelf   (sr, 200.f,  1.f, std::pow (10.f, lowG / 20.f));
+            *globalEq.get<1>().state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter  (sr, midF, midQ, std::pow (10.f, midG / 20.f));
+            *globalEq.get<2>().state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, 8000.f, 1.f, std::pow (10.f, hiG  / 20.f));
+            globalEqNeedsUpdate = false;
+        }
+
+        // Build a 2-channel AudioBlock over busL[0] / busR[0] and process in-place
+        const int ns = buffer.getNumSamples();
+        float* chans[2] = { busL[0], busR[0] ? busR[0] : busL[0] };
+        juce::dsp::AudioBlock<float> eqBlock (chans, 2, (size_t) ns);
+        juce::dsp::ProcessContextReplacing<float> eqCtx (eqBlock);
+        globalEq.process (eqCtx);
+    }
+
     // Decay all slice peak meters toward zero (60 dB/s at typical block sizes)
     static const float kDecayPerBlock = 0.60f;  // approx 60 dB/s at 512 @ 44100
     for (int si = 0; si < kMaxMeterSlices; ++si)
@@ -2727,7 +2804,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::MemoryOutputStream stream (destData, false);
 
     // Version
-    stream.writeInt (23);
+    stream.writeInt (24);
 
     // APVTS state
     auto state = apvts.copyState();
@@ -2791,6 +2868,12 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
         stream.writeBool (s.chromaticLegato);
         // v20 fields
         stream.writeString (s.name);
+        // v24 fields
+        stream.writeFloat (s.eqLowGain);
+        stream.writeFloat (s.eqMidGain);
+        stream.writeFloat (s.eqMidFreq);
+        stream.writeFloat (s.eqMidQ);
+        stream.writeFloat (s.eqHighGain);
     }
 
     // v9: store file path only (no PCM)
@@ -2826,7 +2909,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
     juce::MemoryInputStream stream (data, (size_t) sizeInBytes, false);
 
     int version = stream.readInt();
-    if (version < 16 || version > 23)
+    if (version < 16 || version > 24)
         return;
 
     // APVTS state
@@ -2891,6 +2974,12 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         parsed.chromaticLegato   = (version >= 19) ? stream.readBool() : false;
         // v20 fields
         parsed.name              = (version >= 20) ? stream.readString() : juce::String();
+        // v24 fields
+        parsed.eqLowGain         = (version >= 24) ? stream.readFloat() : 0.0f;
+        parsed.eqMidGain         = (version >= 24) ? stream.readFloat() : 0.0f;
+        parsed.eqMidFreq         = (version >= 24) ? stream.readFloat() : 1000.0f;
+        parsed.eqMidQ            = (version >= 24) ? stream.readFloat() : 1.0f;
+        parsed.eqHighGain        = (version >= 24) ? stream.readFloat() : 0.0f;
 
         if (i < validatedNumSlices)
             sliceManager.getSlice (i) = sanitiseRestoredSlice (parsed);

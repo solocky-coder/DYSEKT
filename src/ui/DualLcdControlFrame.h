@@ -66,6 +66,11 @@ private:
     juce::Rectangle<int> pitchKnobArea;
     juce::Rectangle<int> volKnobArea;
 
+    // Global post-mix EQ knob areas (drawn in DualLcdControlFrame, processed in PluginProcessor)
+    juce::Rectangle<int> eqLowKnobArea;
+    juce::Rectangle<int> eqMidKnobArea;
+    juce::Rectangle<int> eqHighKnobArea;
+
     int        hoveredIcon   = -1;   // 0=FIL 1=WA 2=MIDI 3=MIXER 4=SFZ, -1=none
     enum class DragTarget { None, Root, Pitch, Volume };
     DragTarget dragTarget    = DragTarget::None;
