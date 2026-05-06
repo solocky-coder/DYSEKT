@@ -179,8 +179,7 @@ void ArchiveIntegration::streamPreview (const juce::String& downloadUrl,
             return;
         }
 
-        // createReaderFor takes ownership on success; release to avoid leak on failure path.
-        auto* reader = fmPtr->createReaderFor (stream.release());
+        auto reader = fmPtr->createReaderFor (std::move (stream));
         juce::MessageManager::callAsync ([cb, reader] { cb (reader); });
     });
 }
