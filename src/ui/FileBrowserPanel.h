@@ -236,6 +236,7 @@ private:
 
     // ── Preview ───────────────────────────────────────────────────────────────
     void startPreview (const juce::File& f);
+    void startPreviewFromReader (juce::AudioFormatReader* reader);  // takes ownership
     void stopPreview();
     void updatePlayButton();
 
@@ -322,6 +323,7 @@ private:
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
 
     juce::File                     previewFile;
+    juce::String                   streamPreviewUrl;   // non-empty when current preview is a stream
     bool                           previewVisible = false;
 
     IconButton                     playStopBtn;

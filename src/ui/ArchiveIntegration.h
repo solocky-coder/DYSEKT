@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <functional>
 
 /**
@@ -39,6 +40,19 @@ public:
         juce::String identifier;
         juce::Array<AudioFile> audioFiles;
         bool isCollection = false;
+
+        /** Pick the best preview URL from this item's file list.
+            Priority: MP3 → OGG → FLAC → WAV → first available.
+            Returns an empty string if audioFiles is empty. */
+        juce::String bestPreviewUrl() const
+        {
+            static const char* order[] = { "mp3", "ogg", "flac", "wav", nullptr };
+            for (const char** ext = order; *ext; ++ext)
+                for (auto& af : audioFiles)
+                    if (af.name.endsWithIgnoreCase (juce::String (".") + *ext))
+                        return af.downloadUrl;
+            return audioFiles.isEmpty() ? juce::String{} : audioFiles[0].downloadUrl;
+        }
     };
 
     /** One entry returned from a collection search. */
@@ -94,6 +108,20 @@ public:
 
     /** Delete all files in the temp preview directory. Safe to call at any time. */
     static void clearTemp();
+
+    /**
+     * Open a remote archive.org file as a network stream and create an
+     * AudioFormatReader for it — no temp file written to disk.
+     * Use for preview-only playback.  The reader is owned by the caller.
+     * The callback is delivered on the JUCE message thread.
+     *
+     * @param downloadUrl   Full https:// URL.
+     * @param formatManager Must stay alive until the callback fires.
+     * @param cb            Called with the reader (nullptr on failure).
+     */
+    static void streamPreview (const juce::String& downloadUrl,
+                                juce::AudioFormatManager& formatManager,
+                                std::function<void (juce::AudioFormatReader*)> cb);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Helpers

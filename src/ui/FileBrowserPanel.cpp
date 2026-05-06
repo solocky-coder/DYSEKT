@@ -147,9 +147,43 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
     playStopBtn.onClick = [this]
     {
         if (transport.isPlaying())
+        {
             stopPreview();
-        else
+        }
+        else if (previewFile.existsAsFile())
+        {
             startPreview (previewFile);
+        }
+        else if (streamPreviewUrl.isNotEmpty())
+        {
+            // Re-stream the archive file
+            fileNameLabel.setText ("Buffering\u2026", juce::dontSendNotification);
+            playStopBtn.setVisible  (false);
+            volumeSlider.setVisible (false);
+            repaint();
+
+            auto url = streamPreviewUrl;
+            ArchiveIntegration::streamPreview (url, formatManager,
+                [this, url] (juce::AudioFormatReader* reader)
+                {
+                    if (reader != nullptr)
+                    {
+                        streamPreviewUrl = url;
+                        fileNameLabel.setText (url.fromLastOccurrenceOf ("/", false, false),
+                                               juce::dontSendNotification);
+                        playStopBtn.setVisible  (true);
+                        volumeSlider.setVisible (true);
+                        startPreviewFromReader (reader);
+                    }
+                    else
+                    {
+                        fileNameLabel.setText (u8"Stream failed \u2014 check connection",
+                                               juce::dontSendNotification);
+                        streamPreviewUrl = {};
+                    }
+                    repaint();
+                });
+        }
     };
     addChildComponent (playStopBtn);
 
@@ -486,6 +520,7 @@ void FileBrowserPanel::fileDoubleClicked (const juce::File& f)
 
 void FileBrowserPanel::startPreview (const juce::File& f)
 {
+    streamPreviewUrl = {};   // clear any previous stream URL — this is a local file
     if (! f.existsAsFile()) return;
 
     // ── Safely tear down any current playback before touching readerSource ──
@@ -518,6 +553,30 @@ void FileBrowserPanel::stopPreview()
     transport.stop();
     transport.setSource (nullptr);   // blocks until audio thread is done
     readerSource.reset();            // now safe
+    updatePlayButton();
+}
+
+void FileBrowserPanel::startPreviewFromReader (juce::AudioFormatReader* reader)
+{
+    // Same safe teardown as startPreview(File)
+    transport.stop();
+    transport.setSource (nullptr);
+    readerSource.reset();
+
+    if (reader == nullptr) return;
+
+    if (deviceManager.getCurrentAudioDevice() == nullptr)
+    {
+        deviceManager.initialise (0, 2, nullptr, true, {}, nullptr);
+        deviceManager.addAudioCallback (&sourcePlayer);
+    }
+
+    readerSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
+    transport.setSource (readerSource.get(), 0, nullptr, reader->sampleRate);
+    transport.setGain ((float) volumeSlider.getValue());
+    transport.setPosition (0.0);
+    transport.start();
+
     updatePlayButton();
 }
 
@@ -1102,35 +1161,37 @@ void FileBrowserPanel::loadArchiveFile (const ArchiveRow& row)
 {
     if (row.downloadUrl.isEmpty()) return;
 
-    // Show "Downloading…" state in preview bar immediately
-    fileNameLabel.setText ("Downloading: " + row.name, juce::dontSendNotification);
+    // Show "Buffering…" immediately — no waiting for a download to finish
+    stopPreview();
+    streamPreviewUrl = {};
+    fileNameLabel.setText ("Buffering: " + row.name, juce::dontSendNotification);
     fileNameLabel.setVisible (true);
-    previewVisible = true;
     playStopBtn.setVisible  (false);
     volumeSlider.setVisible (false);
+    previewVisible = true;
     resized();
     repaint();
 
-    // ── Use temp dir for preview-only — not the persistent cache ──────────────
-    ArchiveIntegration::downloadTemp (row.downloadUrl,
-        [this] (bool ok, juce::File tempFile)
+    ArchiveIntegration::streamPreview (row.downloadUrl, formatManager,
+        [this, name = row.name, url = row.downloadUrl] (juce::AudioFormatReader* reader)
         {
-            if (ok)
+            if (reader != nullptr)
             {
-                previewFile    = tempFile;
-                previewVisible = true;
+                previewFile      = {};    // no local file for a streaming preview
+                streamPreviewUrl = url;
+                previewVisible   = true;
 
-                fileNameLabel.setText    (tempFile.getFileName(), juce::dontSendNotification);
+                fileNameLabel.setText    (name, juce::dontSendNotification);
                 fileNameLabel.setVisible (true);
                 playStopBtn.setVisible   (true);
                 volumeSlider.setVisible  (true);
 
-                startPreview (tempFile);
-                updatePlayButton();
+                startPreviewFromReader (reader);   // takes ownership
             }
             else
             {
-                fileNameLabel.setText (u8"Download failed \u2014 check connection",
+                streamPreviewUrl = {};
+                fileNameLabel.setText (u8"Stream failed \u2014 check connection",
                                        juce::dontSendNotification);
                 playStopBtn.setVisible  (false);
                 volumeSlider.setVisible (false);

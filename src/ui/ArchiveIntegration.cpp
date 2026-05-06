@@ -151,6 +151,40 @@ void ArchiveIntegration::clearCache()
         f.deleteFile();
 }
 
+// ── streamPreview ─────────────────────────────────────────────────────────────
+
+void ArchiveIntegration::streamPreview (const juce::String& downloadUrl,
+                                         juce::AudioFormatManager& formatManager,
+                                         std::function<void (juce::AudioFormatReader*)> cb)
+{
+    if (downloadUrl.isEmpty())
+    {
+        juce::MessageManager::callAsync ([cb] { cb (nullptr); });
+        return;
+    }
+
+    auto* fmPtr = &formatManager;
+
+    pool().addJob ([downloadUrl, fmPtr, cb]
+    {
+        auto stream = juce::URL (downloadUrl).createInputStream (
+            juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
+                .withConnectionTimeoutMs (10000)
+                .withExtraHeaders ("User-Agent: DYSEKT/1.0")
+                .withNumRedirectsToFollow (3));
+
+        if (stream == nullptr)
+        {
+            juce::MessageManager::callAsync ([cb] { cb (nullptr); });
+            return;
+        }
+
+        // createReaderFor takes ownership on success; release to avoid leak on failure path.
+        auto* reader = fmPtr->createReaderFor (stream.release());
+        juce::MessageManager::callAsync ([cb, reader] { cb (reader); });
+    });
+}
+
 // ── fetchItem ────────────────────────────────────────────────────────────────
 
 void ArchiveIntegration::fetchItem (const juce::String& url,
