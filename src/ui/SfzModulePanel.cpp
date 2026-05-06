@@ -868,9 +868,9 @@ bool SfzModulePanel::appendZoneToSfz (const juce::File& sfzFile,
     juce::String samplePath;
     const auto sfzDir = sfzFile.getParentDirectory();
     if (sampleFile.isAChildOf (sfzDir))
-        samplePath = sampleFile.getRelativePathFrom (sfzDir);
+        samplePath = sampleFile.getRelativePathFrom (sfzDir).replaceCharacter ('\\', '/');
     else
-        samplePath = sampleFile.getFullPathName();
+        samplePath = sampleFile.getFullPathName().replaceCharacter ('\\', '/');
 
     const juce::String region =
         "\n<region>\n"
