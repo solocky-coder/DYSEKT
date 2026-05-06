@@ -904,7 +904,7 @@ void SfzModulePanel::openSaveAsOverlay (bool thenOpenAddZone)
 
     auto overlay = std::make_unique<SaveSfzOverlay> (currentFile);
 
-    overlay->onResult = [this, currentFile] (const juce::File& dest, bool confirmed)
+    overlay->onResult = [this, currentFile, thenOpenAddZone] (const juce::File& dest, bool confirmed)
     {
         // Defer hideOverlays() so it runs after fire() has returned and
         // SaveSfzOverlay is no longer on the call stack (use-after-free fix).
