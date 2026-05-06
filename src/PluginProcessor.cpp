@@ -2770,9 +2770,9 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             auto midQ = apvts.getRawParameterValue (ParamIds::globalEqMidQ)->load();
             auto hiG  = apvts.getRawParameterValue (ParamIds::globalEqHighGain)->load();
 
-            *globalEq.get<0>().state = *juce::dsp::IIR::Coefficients<float>::makeLowShelf   (sr, 200.f,  1.f, std::pow (10.f, lowG / 20.f));
-            *globalEq.get<1>().state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter  (sr, midF, midQ, std::pow (10.f, midG / 20.f));
-            *globalEq.get<2>().state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, 8000.f, 1.f, std::pow (10.f, hiG  / 20.f));
+            *globalEq.get<0>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowShelf  (sr, 200.f,   1.f, std::pow (10.f, lowG / 20.f));
+            *globalEq.get<1>().coefficients = *juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, midF, midQ, std::pow (10.f, midG / 20.f));
+            *globalEq.get<2>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, 8000.f,  1.f, std::pow (10.f, hiG  / 20.f));
             globalEqNeedsUpdate = false;
         }
 
