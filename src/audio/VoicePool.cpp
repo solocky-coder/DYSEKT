@@ -15,7 +15,7 @@ static inline float dbToLinear (float dB)
     return std::pow (10.0f, dB / 20.0f);
 }
 
-// ── EQ biquad helpers ─────────────────────────────────────────────────────────
+// ── EQ biquad helpers ────────────────────────────────────────────────────────[...]
 // All Audio EQ Cookbook formulas (Robert Bristow-Johnson).
 // Coefficients stored as {b0,b1,b2,a1,a2} (a0-normalised, sign convention: y = b*x - a*y).
 
@@ -183,10 +183,10 @@ void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────[...]
 // startVoiceUnsliced — chromatic playback with explicit bounds, no slice needed.
 // Used for trim-mode and unsliced-sample playback. All params come from globals.
-// ─────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────[...]
 void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
                                     int startSample, int endSample,
                                     const SampleData& sample)
@@ -363,8 +363,8 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
         {
             calcLowShelf  (lowG, 200.f,  sampleRate, v.eqB0[0], v.eqB1[0], v.eqB2[0], v.eqA1[0], v.eqA2[0]);
             calcPeakEq    (midG, juce::jlimit(200.f,8000.f,midF),
-                                 juce::jlimit(0.5f, 4.0f, midQ),
-                                 sampleRate, v.eqB0[1], v.eqB1[1], v.eqB2[1], v.eqA1[1], v.eqA2[1]);
+                                juce::jlimit(0.5f, 4.0f, midQ),
+                                sampleRate, v.eqB0[1], v.eqB1[1], v.eqB2[1], v.eqA1[1], v.eqA2[1]);
             calcHighShelf (hiG,  8000.f, sampleRate, v.eqB0[2], v.eqB1[2], v.eqB2[2], v.eqA1[2], v.eqA2[2]);
         }
         // Zero delay lines
@@ -374,6 +374,8 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
             v.eqX1R[b] = v.eqX2R[b] = v.eqY1R[b] = v.eqY2R[b] = 0.f;
         }
     }
+
+    v.releaseTail = sm.resolveParam (sliceIdx, kLockReleaseTail,
                                      s.releaseTail ? 1.0f : 0.0f,
                                      p.globalReleaseTail ? 1.0f : 0.0f) > 0.5f;
     v.oneShot = isOneShot ? 1.0f : 0.0f;  // already resolved before envelope noteOn
@@ -473,7 +475,7 @@ void VoicePool::killVoicesForChromaticLegato (int sliceIdx)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────[...]
 // retuneChromaticLegatoVoice — true sample-through legato pitch update.
 //
 // Instead of killing the old voice and restarting from the slice head, we find
@@ -486,7 +488,7 @@ void VoicePool::killVoicesForChromaticLegato (int sliceIdx)
 //
 // Returns true  → caller should NOT start a new voice.
 // Returns false → no active legato voice found; caller must start fresh.
-// ─────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────[...]
 bool VoicePool::retuneChromaticLegatoVoice (int sliceIdx, float newPitchSemis,
                                              float tonalityHz, int newMidiNote)
 {
@@ -839,7 +841,7 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
         }
     }
 
-    // ── Pan ───────────────────────────────────────────────────────────────────
+    // ── Pan ───────────────────────────────────────────────────────────[...]
     voiceR *= v.panR;
 
     outL = voiceL;
@@ -907,4 +909,3 @@ void VoicePool::stopShiftPreview()
     if (voices[i].active)
         voices[i].envelope.forceRelease (kKillReleaseSec, sampleRate);
 }
-
