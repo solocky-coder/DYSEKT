@@ -82,7 +82,7 @@ private:
                                   int loKey, int hiKey, int rootKey);
 
     /** Show the Save SFZ As overlay, then copy the file on confirm. */
-    void openSaveAsOverlay();
+    void openSaveAsOverlay (bool thenOpenAddZone = false);
 
     /** Show an overlay component full-screen over the top-level component. */
     template <typename OverlayType>

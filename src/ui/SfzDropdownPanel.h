@@ -144,7 +144,7 @@ private:
     static bool appendZoneToSfz (const juce::File& sfzFile,
                                   const juce::File& sampleFile,
                                   int loKey, int hiKey, int rootKey);
-    void openSaveAsOverlay();
+    void openSaveAsOverlay (bool thenOpenAddZone = false);
 
     void showMidiLearnMenu (int fieldId, juce::Point<int> screenPos);
 

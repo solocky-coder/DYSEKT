@@ -803,10 +803,10 @@ void SfzModulePanel::openAddZoneChooser()
 
     if (! targetSfz.existsAsFile())
     {
-        targetSfz = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
-                        .getChildFile ("Custom.sfz");
-        if (! targetSfz.existsAsFile())
-            targetSfz.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+        // Nothing loaded yet: show Save As so the user names the file first,
+        // then chain back into the sample browser.
+        openSaveAsOverlay (/*thenOpenAddZone=*/true);
+        return;
     }
 
     int prevHiKey = -1;
@@ -895,7 +895,7 @@ bool SfzModulePanel::appendZoneToSfz (const juce::File& sfzFile,
 
 // ── Save SFZ As ───────────────────────────────────────────────────────────────
 
-void SfzModulePanel::openSaveAsOverlay()
+void SfzModulePanel::openSaveAsOverlay (bool thenOpenAddZone)
 {
     const auto currentFile = processor.sfzPlayer.isLoaded()
                            ? processor.sfzPlayer.getLoadedFile()
@@ -936,6 +936,11 @@ void SfzModulePanel::openSaveAsOverlay()
         processor.sfzPlayer.loadFile (dest);
         reloadZones (dest);
         repaint();
+
+        // If triggered from [+ ZONE] when nothing was loaded, now open
+        // the sample browser to complete the Add Zone flow.
+        if (thenOpenAddZone)
+            juce::MessageManager::callAsync ([this] { openAddZoneChooser(); });
     };
 
     showOverlay (saveSfzOverlay, std::move (overlay));
@@ -1038,11 +1043,22 @@ std::vector<KeysPanel::Keyzone> SfzModulePanel::parseSfzZones (const juce::File&
         const int smpPos = lc.indexOf ("sample=");
         if (smpPos < 0) return {};
 
-        // Grab path up to the next whitespace (space or tab).
-        auto path = rawLine.substring (smpPos + 7)
-                           .upToFirstOccurrenceOf (" ",  false, false)
-                           .upToFirstOccurrenceOf ("\t", false, false)
-                           .trim();
+        // Grab everything after sample= then strip trailing opcodes
+        // (word= tokens) so paths containing spaces are preserved.
+        auto path = rawLine.substring (smpPos + 7).trim()
+                           .upToFirstOccurrenceOf ("\t", false, false).trim();
+        {
+            juce::String tmp = path;
+            for (;;)
+            {
+                auto idx = tmp.lastIndexOf (" ");
+                if (idx < 0) break;
+                auto tail = tmp.substring (idx + 1);
+                if (tail.containsChar ('=')) { tmp = tmp.substring (0, idx).trim(); }
+                else break;
+            }
+            path = tmp;
+        }
 
         // Strip leading directory components (forward- and back-slash).
         juce::String name = path.fromLastOccurrenceOf ("/",  false, false)

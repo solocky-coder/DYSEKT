@@ -1230,10 +1230,18 @@ std::vector<KeysPanel::Keyzone> SfzDropdownPanel::parseSfzZones (const juce::Fil
             auto sRaw = lineLower.indexOf ("sample=");
             if (sRaw >= 0 && sampleName.isEmpty())
             {
-                auto rawPath = lineOrig.substring (sRaw + 7)
-                                       .upToFirstOccurrenceOf (" ",  false, false)
-                                       .upToFirstOccurrenceOf ("\t", false, false)
-                                       .trim();
+                auto rawPath = [&]() -> juce::String {
+                    juce::String p = lineOrig.substring (sRaw + 7).trim()
+                                             .upToFirstOccurrenceOf ("\t", false, false).trim();
+                    // Strip trailing opcodes (word= tokens) to preserve paths with spaces.
+                    for (;;) {
+                        auto si = p.lastIndexOf (" ");
+                        if (si < 0) break;
+                        if (p.substring (si + 1).containsChar ('=')) p = p.substring (0, si).trim();
+                        else break;
+                    }
+                    return p;
+                }();
                 // Handle both / and \ path separators.
                 auto bare = rawPath.fromLastOccurrenceOf ("/",  false, false)
                                    .fromLastOccurrenceOf ("\\", false, false);
@@ -1636,10 +1644,10 @@ void SfzDropdownPanel::openAddZoneChooser()
 
     if (! targetSfz.existsAsFile())
     {
-        targetSfz = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
-                        .getChildFile ("Custom.sfz");
-        if (! targetSfz.existsAsFile())
-            targetSfz.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+        // Nothing loaded yet: show Save As so the user names the file first,
+        // then chain back into the sample browser.
+        openSaveAsOverlay (/*thenOpenAddZone=*/true);
+        return;
     }
 
     int prevHiKey = -1;
@@ -1703,9 +1711,9 @@ bool SfzDropdownPanel::appendZoneToSfz (const juce::File& sfzFile,
     juce::String samplePath;
     const auto sfzDir = sfzFile.getParentDirectory();
     if (sampleFile.isAChildOf (sfzDir))
-        samplePath = sampleFile.getRelativePathFrom (sfzDir);
+        samplePath = sampleFile.getRelativePathFrom (sfzDir).replaceCharacter ('\\', '/');
     else
-        samplePath = sampleFile.getFullPathName();
+        samplePath = sampleFile.getFullPathName().replaceCharacter ('\\', '/');
 
     const juce::String region =
         "\n<region>\n"
@@ -1728,7 +1736,7 @@ bool SfzDropdownPanel::appendZoneToSfz (const juce::File& sfzFile,
     return ! stream.getStatus().failed();
 }
 
-void SfzDropdownPanel::openSaveAsOverlay()
+void SfzDropdownPanel::openSaveAsOverlay (bool thenOpenAddZone)
 {
     const auto currentFile = processor.sfzPlayer.isLoaded()
                            ? processor.sfzPlayer.getLoadedFile()
@@ -1766,6 +1774,11 @@ void SfzDropdownPanel::openSaveAsOverlay()
         processor.sfzPlayer.loadFile (dest);
         reloadZones (dest);
         repaint();
+
+        // If triggered from [+ ZONE] when nothing was loaded, open the
+        // sample browser to complete the Add Zone flow.
+        if (thenOpenAddZone)
+            juce::MessageManager::callAsync ([this] { openAddZoneChooser(); });
     };
 
     showOverlay (saveSfzOverlay, std::move (overlay));
