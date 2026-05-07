@@ -5,19 +5,20 @@
 class DysektProcessor;
 
 /**
- * GlobalEqPanel — interactive 3-band EQ with a Bode-style magnitude curve.
+ * GlobalEqPanel — interactive 5-band parametric EQ with Bode-style magnitude curve.
  *
  * Bands:
- *   Low  shelf  @ 200 Hz   (±18 dB)
- *   Mid  peak   @ 200–8000 Hz, Q 0.5–4  (±18 dB) — node is draggable in X+Y
- *   High shelf  @ 8000 Hz  (±18 dB)
+ *   0  Low shelf     @ 80 Hz        (±18 dB)               — Y only
+ *   1  Low-Mid peak  @ 100–1000 Hz  (±18 dB, Q 0.5–4)     — X + Y draggable
+ *   2  Mid peak      @ 500–5000 Hz  (±18 dB, Q 0.5–4)     — X + Y draggable
+ *   3  High-Mid peak @ 1–10 kHz     (±18 dB, Q 0.5–4)     — X + Y draggable
+ *   4  High shelf    @ 12 kHz       (±18 dB)               — Y only
  *
- * Dragging a node up/down adjusts gain; dragging the Mid node left/right
- * also adjusts frequency.  All writes go through APVTS so undo/automation
- * work out of the box.
+ * Double-click a node to snap it back to 0 dB gain (and default frequency for
+ * draggable bands).  All writes go through APVTS for undo / automation.
  *
- * Layout follows the same addChildComponent / setVisible / setBounds pattern
- * used by MixerPanel and SfzDropdownPanel in PluginEditor.
+ * The panel draws a theme-aware frame (gradient background, accent border)
+ * matching the DualLcdControlFrame / MixerPanel visual language.
  */
 class GlobalEqPanel : public juce::Component
 {
@@ -25,72 +26,68 @@ public:
     explicit GlobalEqPanel (DysektProcessor& p);
     ~GlobalEqPanel() override = default;
 
-    void paint       (juce::Graphics&) override;
-    void resized     () override;
-    void mouseDown   (const juce::MouseEvent&) override;
-    void mouseDrag   (const juce::MouseEvent&) override;
-    void mouseUp     (const juce::MouseEvent&) override;
-    void mouseMove   (const juce::MouseEvent&) override;
+    void paint            (juce::Graphics&) override;
+    void resized          () override;
+    void mouseDown        (const juce::MouseEvent&) override;
+    void mouseDrag        (const juce::MouseEvent&) override;
+    void mouseUp          (const juce::MouseEvent&) override;
+    void mouseMove        (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
 
 private:
-    // ── Internal node representation ─────────────────────────────────────────
-    enum Band { Low = 0, Mid = 1, High = 2, NoBand = -1 };
+    // ── Band indices ──────────────────────────────────────────────────────────
+    enum { BLow = 0, BLowMid = 1, BMid = 2, BHighMid = 3, BHigh = 4, NoBand = -1 };
+    static constexpr int kNumBands = 5;
 
     struct Node
     {
-        Band  band;
-        float gainDb;    // −18 … +18
-        float freqHz;    // Mid only: 200 … 8000
-        float q;         // Mid only: 0.5 … 4.0
-        juce::Point<float> pos;  // screen position (centre of handle), updated in layout()
+        int   band;
+        float gainDb;        // ±kGainMax
+        float freqHz;        // current frequency (fixed for shelves)
+        float q;             // peak bands only
+        float defaultFreqHz; // reset target on double-click
+        bool  freqDraggable; // true for peak bands (1,2,3)
+        juce::Point<float> pos;  // screen centre, updated in layout()
     };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    /** Recompute node screen positions from current APVTS values. */
     void  layout();
-
-    /** Return the plot area (excludes labels and border padding). */
     juce::Rectangle<float> plotArea() const;
 
-    /** Map gain dB → Y within plotArea. */
     float gainToY  (float dB) const;
-    /** Map Y → gain dB. */
     float yToGain  (float y)  const;
-
-    /** Map frequency (log scale) → X within plotArea (Mid only). */
     float freqToX  (float hz) const;
-    /** Map X → frequency (log scale). */
     float xToFreq  (float x)  const;
 
-    /** Build the magnitude response curve as a Path. */
     juce::Path buildCurve() const;
 
-    /**
-     * Return the IIR magnitude at freqHz for a shelf / peak filter,
-     * given gain dB, frequency, and Q.
-     *
-     * type: 0 = lowShelf, 1 = peakFilter, 2 = highShelf
-     */
     static float filterMagnitudeAt (int type, float evalHz, float filterHz,
                                     float gainDb, float q, float sampleRate);
 
-    /** Hit-test: return the band whose node is within radius of p, else NoBand. */
-    Band hitTest (juce::Point<float> p) const;
+    int hitTest (juce::Point<float> p) const;  // returns band index or NoBand
+
+    void resetBandToDefault (int band);
 
     // ── State ─────────────────────────────────────────────────────────────────
     DysektProcessor& processor;
 
-    std::array<Node, 3> nodes;
-    Band  dragBand     = NoBand;
+    std::array<Node, kNumBands> nodes;
+    int   dragBand      = NoBand;
     float dragStartGain = 0.f;
     float dragStartFreq = 0.f;
-    juce::Point<float> dragStartPos;
 
-    static constexpr float kNodeRadius  = 7.f;
-    static constexpr float kGainMax     = 18.f;
-    static constexpr float kFreqLo      = 200.f;
-    static constexpr float kFreqHi      = 8000.f;
-    static constexpr float kSampleRate  = 44100.f;  // for curve drawing only
+    static constexpr float kNodeRadius = 7.f;
+    static constexpr float kGainMax    = 18.f;
+    static constexpr float kSampleRate = 44100.f;
+
+    // Frequency extents for the plot (log scale)
+    static constexpr float kPlotFreqLo = 20.f;
+    static constexpr float kPlotFreqHi = 20000.f;
+
+    // Draggable frequency ranges per band
+    static constexpr float kLowMidFreqLo  = 100.f,   kLowMidFreqHi  = 1000.f;
+    static constexpr float kMidFreqLo     = 500.f,   kMidFreqHi     = 5000.f;
+    static constexpr float kHighMidFreqLo = 1000.f,  kHighMidFreqHi = 10000.f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlobalEqPanel)
 };

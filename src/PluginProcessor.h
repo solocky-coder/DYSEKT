@@ -510,9 +510,11 @@ private:
 
     // ── Global post-mix EQ (juce::dsp, runs after voice mix, before master volume) ──
     juce::dsp::ProcessorChain<
-        juce::dsp::IIR::Filter<float>,   // low shelf
-        juce::dsp::IIR::Filter<float>,   // mid peak
-        juce::dsp::IIR::Filter<float>    // high shelf
+        juce::dsp::IIR::Filter<float>,   // band 0: low shelf  (~80 Hz)
+        juce::dsp::IIR::Filter<float>,   // band 1: low-mid peak (draggable 100–1000 Hz)
+        juce::dsp::IIR::Filter<float>,   // band 2: mid peak   (draggable 500–5000 Hz)
+        juce::dsp::IIR::Filter<float>,   // band 3: high-mid peak (draggable 1–10 kHz)
+        juce::dsp::IIR::Filter<float>    // band 4: high shelf (~12 kHz)
     > globalEq;
     bool globalEqNeedsUpdate = true;
 

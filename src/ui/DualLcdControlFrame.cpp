@@ -243,45 +243,38 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         g.drawLine (cx, bY + bH, cx, bY + bH + 3.5f, 1.5f);
         g.fillEllipse (cx - 2.0f, bY + bH + 3.0f, 4.0f, 3.0f);
     }
-    else if (type == 5) // Global EQ — parametric EQ curve (low shelf up → bell peak → high shelf down)
+    else if (type == 5) // Global EQ — single bell peak with flat baseline
     {
-        // 0 dB reference baseline
-        g.setColour (col.withAlpha (0.28f));
-        g.drawHorizontalLine (juce::roundToInt (cy2 + 1.0f), cx - 9.0f, cx + 9.0f);
+        // Flat baseline
+        g.setColour (col.withAlpha (0.45f));
+        g.drawHorizontalLine (juce::roundToInt (cy2 + 2.0f), cx - 9.0f, cx + 9.0f);
 
-        // EQ curve path
-        juce::Path eq;
-        eq.startNewSubPath (cx - 9.0f,  cy2 + 2.5f);   // low end, below baseline (shelf boost coming)
-        eq.cubicTo         (cx - 6.5f,  cy2 + 2.5f,
-                            cx - 5.5f,  cy2 - 2.0f,
-                            cx - 3.5f,  cy2 - 2.0f);   // low shelf plateau
-        eq.cubicTo         (cx - 1.5f,  cy2 - 2.0f,
-                            cx - 0.5f,  cy2 - 7.0f,
-                            cx + 1.0f,  cy2 - 7.0f);   // bell peak
-        eq.cubicTo         (cx + 2.5f,  cy2 - 7.0f,
-                            cx + 3.5f,  cy2 - 2.0f,
-                            cx + 5.0f,  cy2 - 2.0f);   // back down from bell
-        eq.cubicTo         (cx + 6.5f,  cy2 - 2.0f,
-                            cx + 7.5f,  cy2 + 3.5f,
-                            cx + 9.0f,  cy2 + 3.5f);   // high shelf cut
+        // Bell curve: rises symmetrically from baseline, peaks above centre
+        juce::Path bell;
+        bell.startNewSubPath (cx - 9.0f, cy2 + 2.0f);
+        bell.cubicTo (cx - 6.0f, cy2 + 2.0f,
+                      cx - 4.5f, cy2 - 7.5f,
+                      cx,        cy2 - 7.5f);   // left half rises to peak
+        bell.cubicTo (cx + 4.5f, cy2 - 7.5f,
+                      cx + 6.0f, cy2 + 2.0f,
+                      cx + 9.0f, cy2 + 2.0f);   // right half mirrors down
 
-        // Subtle fill under curve
-        juce::Path fill = eq;
-        fill.lineTo (cx + 9.0f, cy2 + 8.0f);
-        fill.lineTo (cx - 9.0f, cy2 + 8.0f);
+        // Subtle fill inside the bell
+        juce::Path fill = bell;
+        fill.lineTo (cx + 9.0f, cy2 + 2.0f);
         fill.closeSubPath();
-        g.setColour (col.withAlpha (0.10f));
+        g.setColour (col.withAlpha (0.12f));
         g.fillPath (fill);
 
-        // Curve stroke
+        // Bell stroke
         g.setColour (col);
-        g.strokePath (eq, juce::PathStrokeType (1.5f,
-                          juce::PathStrokeType::curved,
-                          juce::PathStrokeType::rounded));
+        g.strokePath (bell, juce::PathStrokeType (1.5f,
+                            juce::PathStrokeType::curved,
+                            juce::PathStrokeType::rounded));
 
-        // Dot at bell peak
-        g.setColour (col.withAlpha (0.90f));
-        g.fillEllipse (cx + 1.0f - 1.8f, cy2 - 7.0f - 1.8f, 3.6f, 3.6f);
+        // Small dot at the peak centre
+        g.setColour (col);
+        g.fillEllipse (cx - 1.8f, cy2 - 7.5f - 1.8f, 3.6f, 3.6f);
     }
     else if (type == 4) // SFZ / SF2 instrument — mini piano keys
     {
