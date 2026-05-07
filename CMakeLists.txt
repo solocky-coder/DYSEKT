@@ -140,6 +140,7 @@ target_sources(Dysekt PRIVATE
     src/ui/SfzModulePanel.cpp
     src/ui/WaveformOverview.cpp
     src/ui/ArchiveIntegration.cpp
+    src/ui/GlobalEqPanel.cpp   
 )
 
 target_include_directories(Dysekt PRIVATE
