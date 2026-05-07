@@ -1147,6 +1147,12 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
                    -18.f, 18.f, 0.1f, eqCw);
      x += eqCw + si (4);
 
+     drawKnobCell (g, x, row2y, "HIGH", gainStr (effEqHigh),
+                   toNorm (F::FieldEqHighGain, effEqHigh),
+                   false, 0, F::FieldEqHighGain,
+                   -18.f, 18.f, 0.1f, eqCw);
+     x += eqCw + si (4);
+
      drawKnobCell (g, x, row2y, "FREQ",
                    juce::String ((int) effEqMidF) + "Hz",
                    toNorm (F::FieldEqMidFreq, effEqMidF),
@@ -1161,11 +1167,6 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
                    0.5f, 4.f, 0.01f, eqCw);
      x += eqCw + si (4);
 
-     drawKnobCell (g, x, row2y, "HIGH", gainStr (effEqHigh),
-                   toNorm (F::FieldEqHighGain, effEqHigh),
-                   false, 0, F::FieldEqHighGain,
-                   -18.f, 18.f, 0.1f, eqCw);
-     x += eqCw + si (4);
  }
 
  // ── Meter — takes remaining space after EQ ──────────────────────────────────
