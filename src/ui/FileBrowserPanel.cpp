@@ -98,6 +98,8 @@ void FileBrowserPanel::ArchiveListModel::listBoxItemDoubleClicked (int row, cons
             {
                 if (! ok) return;
 
+                owner->stopPreview();   // stop streaming preview on load
+
                 auto ext = localFile.getFileExtension().toLowerCase();
                 if (ext == ".sf2" || ext == ".sfz")
                     owner->processor.loadSoundFontAsync (localFile);
