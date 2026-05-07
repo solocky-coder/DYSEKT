@@ -167,19 +167,33 @@ void ArchiveIntegration::streamPreview (const juce::String& downloadUrl,
 
     pool().addJob ([downloadUrl, fmPtr, cb]
     {
-        auto stream = juce::URL (downloadUrl).createInputStream (
+        auto netStream = juce::URL (downloadUrl).createInputStream (
             juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
                 .withConnectionTimeoutMs (10000)
                 .withExtraHeaders ("User-Agent: DYSEKT/1.0")
                 .withNumRedirectsToFollow (3));
 
-        if (stream == nullptr)
+        if (netStream == nullptr)
         {
             juce::MessageManager::callAsync ([cb] { cb (nullptr); });
             return;
         }
 
-        auto reader = fmPtr->createReaderFor (std::move (stream));
+        // Network streams are non-seekable; AudioFormatReaders require seekability.
+        // Buffer into memory first to produce a seekable MemoryInputStream.
+        juce::MemoryOutputStream mo;
+        mo.writeFromInputStream (*netStream, -1);
+
+        if (mo.getDataSize() == 0)
+        {
+            juce::MessageManager::callAsync ([cb] { cb (nullptr); });
+            return;
+        }
+
+        auto memStream = std::make_unique<juce::MemoryInputStream> (mo.getData(),
+                                                                     mo.getDataSize(),
+                                                                     true /* copy */);
+        auto* reader = fmPtr->createReaderFor (std::move (memStream));
         juce::MessageManager::callAsync ([cb, reader] { cb (reader); });
     });
 }
