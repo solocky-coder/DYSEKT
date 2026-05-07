@@ -1117,65 +1117,62 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
         x += cw + si (4);
     }
 
- // ── Meter (narrower — leaves room for 3 EQ knobs on the right) ──────────────
+ // ── Meter — narrower so EQ knobs fit to the right ────────────────────────
+ // Reserve exactly 3 standard knob cells + 2 gaps + separator for EQ.
  {
-     // EQ knobs will occupy 3 × psCellW + 2 gaps + separator clearance on the right.
-     const int eqBlockW = 3 * psCellW + 2 * si (4) + si (12); // 3 knobs + 2 gaps + sep margin
+     const int eqReserve = si (8) + 3 * psCellW + 2 * si (4); // sep + 3 knobs + 2 gaps
      const int meterX = x + si (4);
-     const int meterW = juce::jmax (si (20), rightEdge - meterX - si (4) - eqBlockW);
+     const int meterW = juce::jmax (si (20), rightEdge - meterX - si (4) - eqReserve);
      const int meterY = row2y + si (4);
      const int meterH = si (22);
 
-     g.setColour (getTheme().separator.withAlpha (0.25f));
+     // Background + border
+     g.setColour (getTheme().separator.withAlpha (0.20f));
      g.fillRect (meterX, meterY, meterW, meterH);
-     g.setColour (getTheme().separator.withAlpha (0.55f));
+     g.setColour (getTheme().separator.withAlpha (0.50f));
      g.drawRect (meterX, meterY, meterW, meterH);
 
      if (idx >= 0 && idx < DysektProcessor::kMaxMeterSlices)
      {
          const float pkL = processor.slicePeakL[(size_t) idx].load (std::memory_order_relaxed);
          const float pkR = processor.slicePeakR[(size_t) idx].load (std::memory_order_relaxed);
+         const int barH  = (meterH - 2) / 2;
+         const int inner = meterW - 4; // pixels available for signal fill
 
-         const int barH = (meterH - 2) / 2;
          auto drawBar = [&] (int barY, float peak)
          {
-             const float fill = juce::jlimit (0.f, 1.f, peak);
-             for (int px = 0; px < meterW - 4; ++px)
+             const int litW = juce::roundToInt (juce::jlimit (0.f, 1.f, peak) * (float) inner);
+             // Lit portion
+             if (litW > 0)
              {
-                 const float pos = (float) px / (float) (meterW - 4);
-                 const juce::Colour col = (pos < 0.75f)
-                     ? getTheme().accent.withAlpha (0.55f)
-                     : juce::Colour (0xFFE05050).withAlpha (0.70f);
-                 g.setColour (col.withAlpha (px < (int) (fill * (meterW - 4)) ? col.getAlpha() : col.getAlpha() * 0.15f));
-                 g.fillRect (meterX + 2 + px, barY, 1, barH);
-             }
-         };
-         drawBar (meterY + 1, pkL);
-         drawBar (meterY + 1 + barH + 1, pkR);
-
-         // Playhead cursor
-         const int total = processor.sampleData.getNumFrames();
-         if (total > 0)
-         {
-             const auto& snap2 = processor.getUiSliceSnapshot();
-             if (idx < (int) snap2.slices.size())
-             {
-                 const float vpos = processor.voicePool.voicePositions[0].load (std::memory_order_relaxed);
-                 const int sliceStart = snap2.slices[(size_t) idx].startSample;
-                 const int sliceEnd   = processor.sliceManager.getEndForSlice (idx, total);
-                 const int sliceLen   = sliceEnd - sliceStart;
-                 if (sliceLen > 0 && vpos >= (float) sliceStart && vpos <= (float) sliceEnd)
+                 // Green/accent section (0-75%)
+                 const int greenW = juce::jmin (litW, juce::roundToInt (0.75f * (float) inner));
+                 if (greenW > 0)
                  {
-                     const float frac = (vpos - (float) sliceStart) / (float) sliceLen;
-                     const int cursorX = meterX + 2 + juce::roundToInt (frac * (float) (meterW - 4));
-                     g.setColour (getTheme().foreground.withAlpha (0.80f));
-                     g.fillRect (cursorX, meterY + 1, 1, meterH - 2);
-                     g.setColour (getTheme().foreground.withAlpha (0.30f));
-                     g.fillRect (cursorX - 1, meterY + 1, 1, meterH - 2);
-                     g.fillRect (cursorX + 1, meterY + 1, 1, meterH - 2);
+                     g.setColour (getTheme().accent.withAlpha (0.70f));
+                     g.fillRect (meterX + 2, barY, greenW, barH);
+                 }
+                 // Red section (75-100%)
+                 const int redStart = juce::roundToInt (0.75f * (float) inner);
+                 const int redW = litW - greenW;
+                 if (redW > 0)
+                 {
+                     g.setColour (juce::Colour (0xFFE05050).withAlpha (0.80f));
+                     g.fillRect (meterX + 2 + redStart, barY, redW, barH);
                  }
              }
-         }
+             // Unlit portion (dim)
+             const int unlitStart = litW;
+             const int unlitW     = inner - unlitStart;
+             if (unlitW > 0)
+             {
+                 g.setColour (getTheme().foreground.withAlpha (0.06f));
+                 g.fillRect (meterX + 2 + unlitStart, barY, unlitW, barH);
+             }
+         };
+
+         drawBar (meterY + 1,             pkL);
+         drawBar (meterY + 1 + barH + 1,  pkR);
      }
 
      x = meterX + meterW + si (4);
@@ -1186,14 +1183,15 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  g.drawVerticalLine (x + 2, (float) row2y + 4.f, (float) row2y + 28.f);
  x += si (8);
 
- // ── EQ knobs: LOW | MID | HIGH — standard psCellW so hit testing works ───
+ // ── EQ knobs: LOW | MID | HIGH ───────────────────────────────────────────
+ // Use standard sequential x += cw pattern so hit rects are correct.
+ // lockBit = 0 on all three — EQ gain is not lockable per-slice.
  {
-     const float effEqLow  = resolveF (kLockEqLow,  s.eqLowGain,  apvtsVal (ParamIds::defaultEqLowGain));
-     const float effEqMidG = resolveF (kLockEqMid,  s.eqMidGain,  apvtsVal (ParamIds::defaultEqMidGain));
-     const float effEqMidF = resolveF (kLockEqMid,  s.eqMidFreq,  apvtsVal (ParamIds::defaultEqMidFreq));
-     const float effEqMidQ = resolveF (kLockEqMid,  s.eqMidQ,     apvtsVal (ParamIds::defaultEqMidQ));
-     const float effEqHigh = resolveF (kLockEqHigh, s.eqHighGain, apvtsVal (ParamIds::defaultEqHighGain));
-     (void) effEqMidF; (void) effEqMidQ; // used in secondary row / right-click context
+     const float effEqLow  = s.eqLowGain;
+     const float effEqMidG = s.eqMidGain;
+     const float effEqMidF = s.eqMidFreq; (void) effEqMidF;
+     const float effEqMidQ = s.eqMidQ;    (void) effEqMidQ;
+     const float effEqHigh = s.eqHighGain;
 
      auto gainStr = [](float db) -> juce::String {
          return (db >= 0.f ? "+" : "") + juce::String (db, 1) + "dB";
@@ -1202,19 +1200,19 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
      int eqCw = 0;
      drawKnobCell (g, x, row2y, "LOW", gainStr (effEqLow),
                    toNorm (F::FieldEqLowGain, effEqLow),
-                   true, kLockEqLow, F::FieldEqLowGain,
+                   false, 0, F::FieldEqLowGain,
                    -18.f, 18.f, 0.1f, eqCw);
      x += eqCw + si (4);
 
      drawKnobCell (g, x, row2y, "MID", gainStr (effEqMidG),
                    toNorm (F::FieldEqMidGain, effEqMidG),
-                   true, kLockEqMid, F::FieldEqMidGain,
+                   false, 0, F::FieldEqMidGain,
                    -18.f, 18.f, 0.1f, eqCw);
      x += eqCw + si (4);
 
      drawKnobCell (g, x, row2y, "HIGH", gainStr (effEqHigh),
                    toNorm (F::FieldEqHighGain, effEqHigh),
-                   true, kLockEqHigh, F::FieldEqHighGain,
+                   false, 0, F::FieldEqHighGain,
                    -18.f, 18.f, 0.1f, eqCw);
  }
  {
