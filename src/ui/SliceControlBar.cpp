@@ -1117,12 +1117,55 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
         x += cw + si (4);
     }
 
- // ── Meter — narrower so EQ knobs fit to the right ────────────────────────
- // Reserve exactly 3 standard knob cells + 2 gaps + separator for EQ.
+ // ── Separator before EQ group ───────────────────────────────────────────
+ g.setColour (getTheme().separator.withAlpha (0.5f));
+ g.drawVerticalLine (x + 2, (float) row2y + 4.f, (float) row2y + 28.f);
+ x += si (8);
+
+ // ── EQ knobs: LOW | MID | FREQ | Q | HIGH ───────────────────────────────────
  {
-     const int eqReserve = si (8) + 3 * psCellW + 2 * si (4); // sep + 3 knobs + 2 gaps
+     auto gainStr = [](float db) -> juce::String {
+         return (db >= 0.f ? "+" : "") + juce::String (db, 1) + "dB";
+     };
+
+     int eqCw = 0;
+     drawKnobCell (g, x, row2y, "LOW", gainStr (effEqLow),
+                   toNorm (F::FieldEqLowGain, effEqLow),
+                   false, 0, F::FieldEqLowGain,
+                   -18.f, 18.f, 0.1f, eqCw);
+     x += eqCw + si (4);
+
+     drawKnobCell (g, x, row2y, "MID", gainStr (effEqMidG),
+                   toNorm (F::FieldEqMidGain, effEqMidG),
+                   false, 0, F::FieldEqMidGain,
+                   -18.f, 18.f, 0.1f, eqCw);
+     x += eqCw + si (4);
+
+     drawKnobCell (g, x, row2y, "FREQ",
+                   juce::String ((int) effEqMidF) + "Hz",
+                   toNorm (F::FieldEqMidFreq, effEqMidF),
+                   false, 0, F::FieldEqMidFreq,
+                   200.f, 8000.f, 10.f, eqCw);
+     x += eqCw + si (4);
+
+     drawKnobCell (g, x, row2y, "Q",
+                   juce::String (effEqMidQ, 1),
+                   toNorm (F::FieldEqMidQ, effEqMidQ),
+                   false, 0, F::FieldEqMidQ,
+                   0.5f, 4.f, 0.01f, eqCw);
+     x += eqCw + si (4);
+
+     drawKnobCell (g, x, row2y, "HIGH", gainStr (effEqHigh),
+                   toNorm (F::FieldEqHighGain, effEqHigh),
+                   false, 0, F::FieldEqHighGain,
+                   -18.f, 18.f, 0.1f, eqCw);
+     x += eqCw + si (4);
+ }
+
+ // ── Meter — takes remaining space after EQ ──────────────────────────────────
+ {
      const int meterX = x + si (4);
-     const int meterW = juce::jmax (si (20), rightEdge - meterX - si (4) - eqReserve);
+     const int meterW = juce::jmax (si (20), rightEdge - meterX - si (4));
      const int meterY = row2y + si (4);
      const int meterH = si (22);
 
@@ -1174,47 +1217,8 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
          drawBar (meterY + 1,             pkL);
          drawBar (meterY + 1 + barH + 1,  pkR);
      }
-
-     x = meterX + meterW + si (4);
  }
 
- // ── Separator before EQ group ─────────────────────────────────────────────
- g.setColour (getTheme().separator.withAlpha (0.5f));
- g.drawVerticalLine (x + 2, (float) row2y + 4.f, (float) row2y + 28.f);
- x += si (8);
-
- // ── EQ knobs: LOW | MID | HIGH ───────────────────────────────────────────
- // Use standard sequential x += cw pattern so hit rects are correct.
- // lockBit = 0 on all three — EQ gain is not lockable per-slice.
- {
-     const float effEqLow  = s.eqLowGain;
-     const float effEqMidG = s.eqMidGain;
-     const float effEqMidF = s.eqMidFreq; (void) effEqMidF;
-     const float effEqMidQ = s.eqMidQ;    (void) effEqMidQ;
-     const float effEqHigh = s.eqHighGain;
-
-     auto gainStr = [](float db) -> juce::String {
-         return (db >= 0.f ? "+" : "") + juce::String (db, 1) + "dB";
-     };
-
-     int eqCw = 0;
-     drawKnobCell (g, x, row2y, "LOW", gainStr (effEqLow),
-                   toNorm (F::FieldEqLowGain, effEqLow),
-                   false, 0, F::FieldEqLowGain,
-                   -18.f, 18.f, 0.1f, eqCw);
-     x += eqCw + si (4);
-
-     drawKnobCell (g, x, row2y, "MID", gainStr (effEqMidG),
-                   toNorm (F::FieldEqMidGain, effEqMidG),
-                   false, 0, F::FieldEqMidGain,
-                   -18.f, 18.f, 0.1f, eqCw);
-     x += eqCw + si (4);
-
-     drawKnobCell (g, x, row2y, "HIGH", gainStr (effEqHigh),
-                   toNorm (F::FieldEqHighGain, effEqHigh),
-                   false, 0, F::FieldEqHighGain,
-                   -18.f, 18.f, 0.1f, eqCw);
- }
  {
  g.setFont (DysektLookAndFeel::makeFont (7.5f * paintSf, true));
  g.setColour (getTheme().foreground.withAlpha (0.40f));
