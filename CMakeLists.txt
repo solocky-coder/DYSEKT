@@ -151,8 +151,8 @@ target_include_directories(Dysekt PRIVATE
 )
 
 target_compile_definitions(Dysekt PUBLIC
-    JUCE_WEB_BROWSER=1          # enables juce::WebBrowserComponent
-    JUCE_USE_WIN_WEBVIEW2=1     # Edge WebView2 backend — renders PDF natively on Windows
+    JUCE_WEB_BROWSER=0          # enables juce::WebBrowserComponent
+    JUCE_USE_WIN_WEBVIEW2=0     # Edge WebView2 backend — renders PDF natively on Windows
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
