@@ -1,17 +1,17 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <juce_gui_extra/juce_gui_extra.h>   // required for WebBrowserComponent
 #include <functional>
 #include <vector>
 
 class DysektProcessor;
 
 /// Modal overlay panel displaying keyboard shortcuts, global preferences,
-/// and an embedded PDF user manual viewer.
+/// and a User Manual launcher.
 ///
 /// The panel has two tabs:
-///   "Settings & Shortcuts"  — the existing preferences / shortcut list
-///   "User Manual"           — WebBrowserComponent rendering the bundled PDF
+///   "Settings & Shortcuts"  — preferences and shortcut reference
+///   "User Manual"           — button that opens the embedded PDF in the
+///                             system default viewer (no WebView required)
 ///
 /// Shown via ? or the "?" button in ActionPanel.
 /// Dismissed by pressing Escape or clicking the close button.
@@ -51,18 +51,11 @@ private:
     juce::TextButton tabManualBtn   { "User Manual"          };
 
     // ── Manual viewer ─────────────────────────────────────────────────────────
-#if JUCE_WEB_BROWSER
-    std::unique_ptr<juce::WebBrowserComponent> manualViewer;
-#endif
-    bool manualLoaded = false;
+    juce::TextButton openManualBtn { "Open User Manual (PDF)" };
 
-    /// Returns the URL to load in the manual viewer.
-    /// Looks for DYSEKT_User_Manual.pdf next to the VST3, then in
-    /// %AppData%\DYSEKT\, and falls back to the GitHub releases page.
-    juce::URL findManualPdf() const;
-
-    /// Creates manualViewer (if needed) and navigates it to findManualPdf().
-    void setupManualViewer();
+    /// Extracts the embedded BinaryData PDF to a temp file (once) and opens
+    /// it in the system default viewer (Edge / Adobe / Preview etc.).
+    void openManualPdf();
 
     // ── Settings-tab widgets ──────────────────────────────────────────────────
     struct ShortcutEntry    { juce::String keys, description; };

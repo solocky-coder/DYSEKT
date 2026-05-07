@@ -105,74 +105,40 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     styleTab (tabSettingsBtn, Tab::Settings);
     styleTab (tabManualBtn,   Tab::Manual);
 
+    // ── Open Manual button ───────────────────────────────────────────────────────────────────
+    openManualBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
+    openManualBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
+    openManualBtn.setTooltip ("Opens DYSEKT_User_Manual.pdf in your default PDF viewer");
+    openManualBtn.onClick = [this] { openManualPdf(); };
+    addChildComponent (openManualBtn);   // hidden until Manual tab is active
+
     setWantsKeyboardFocus (true);
 }
 
 ShortcutsPanel::~ShortcutsPanel() = default;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// findManualPdf
+// openManualPdf
 // ─────────────────────────────────────────────────────────────────────────────
 
-juce::URL ShortcutsPanel::findManualPdf() const
+void ShortcutsPanel::openManualPdf()
 {
-    // 1. Next to the VST3 bundle
-    juce::File pluginDir = juce::File::getSpecialLocation (
-                               juce::File::currentExecutableFile).getParentDirectory();
-    juce::File pdfNearPlugin = pluginDir.getChildFile ("DYSEKT_User_Manual.pdf");
-    if (pdfNearPlugin.existsAsFile())
-        return juce::URL (pdfNearPlugin);
+    // Write the embedded PDF to a temp file on first call, then open it.
+    juce::File tmp = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                         .getChildFile ("DYSEKT_User_Manual.pdf");
 
-    // 2. %AppData%\DYSEKT\DYSEKT_User_Manual.pdf
-    juce::File appData = juce::File::getSpecialLocation (
-                             juce::File::userApplicationDataDirectory)
-                             .getChildFile ("DYSEKT")
-                             .getChildFile ("DYSEKT_User_Manual.pdf");
-    if (appData.existsAsFile())
-        return juce::URL (appData);
+    if (! tmp.existsAsFile())
+        tmp.replaceWithData (BinaryData::DYSEKT_User_Manual_pdf,
+                             BinaryData::DYSEKT_User_Manual_pdfSize);
 
-    // 3. Fallback — GitHub releases page (opens in system browser via WebView)
-    return juce::URL ("https://github.com/solocky-coder/DYSEKT/releases");
+    if (! tmp.startAsProcess())
+    {
+        // Fallback: open the GitHub releases page in the system browser.
+        juce::URL ("https://github.com/solocky-coder/DYSEKT/releases")
+            .launchInDefaultBrowser();
+    }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// setupManualViewer
-// ─────────────────────────────────────────────────────────────────────────────
-
-void ShortcutsPanel::setupManualViewer()
-{
-#if JUCE_WEB_BROWSER
-    if (manualViewer == nullptr)
-    {
-        manualViewer = std::make_unique<juce::WebBrowserComponent>(
-            juce::WebBrowserComponent::Options{}
-                .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
-                .withKeepPageLoadedWhenBrowserIsHidden()
-        );
-        addAndMakeVisible (*manualViewer);
-    }
-
-    if (! manualLoaded)
-    {
-        const juce::URL url = findManualPdf();
-
-        if (url.isLocalFile())
-        {
-            // Edge WebView2 can render PDF files natively when navigated via
-            // a file:// URL — no Acrobat or plugin needed.
-            manualViewer->goToURL (url.toString (false));
-        }
-        else
-        {
-            manualViewer->goToURL (url.toString (true));
-        }
-
-        manualLoaded = true;
-    }
-#endif
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // applyTabLayout  — shows / hides children for the active tab
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -188,20 +154,8 @@ void ShortcutsPanel::applyTabLayout()
     scaleLcd    .setVisible (isSettings);
     searchBox   .setVisible (isSettings);
 
-    // Manual-tab viewer
-#if JUCE_WEB_BROWSER
-    if (! isSettings)
-    {
-        setupManualViewer();
-        if (manualViewer != nullptr)
-            manualViewer->setVisible (true);
-    }
-    else
-    {
-        if (manualViewer != nullptr)
-            manualViewer->setVisible (false);
-    }
-#endif
+    // Manual-tab button
+    openManualBtn.setVisible (! isSettings);
 
     // Trigger a layout recalculation
     resized();
@@ -453,10 +407,17 @@ void ShortcutsPanel::paint (juce::Graphics& g)
 
     if (activeTab == Tab::Manual)
     {
-        // The WebBrowserComponent covers the content area — nothing to draw here
-        // beyond the panel background and tab strip (handled by child components).
+        // openManualBtn is a child component and handles interaction.
+        // Draw a short hint above it.
+        auto hint = panel.reduced (14, 6);
+        hint.removeFromTop (30 + 8 + 28 + 8);   // title + gap + tabs + gap
+        g.setFont (DysektLookAndFeel::makeFont (10.5f));
+        g.setColour (getTheme().foreground.withAlpha (0.45f));
+        g.drawText ("Opens in your default PDF viewer",
+                    hint.removeFromTop (22), juce::Justification::centred);
         return;
     }
+
 
     // ── Settings tab content ──────────────────────────────────────────────────
     auto content = panel.reduced (14, 6);
@@ -568,18 +529,17 @@ void ShortcutsPanel::resized()
 
     if (activeTab == Tab::Manual)
     {
-        // ── Manual tab: WebBrowserComponent fills the rest of the panel ───────
-#if JUCE_WEB_BROWSER
-        if (manualViewer != nullptr)
-            manualViewer->setBounds (header);
-#endif
-        // Hide settings-only widgets (search box etc.)
+        // Centre the Open button in the remaining content area.
+        openManualBtn.setBounds (header.withSizeKeepingCentre (220, 34));
+
+        // Clear settings-only widget bounds.
         searchBox   .setBounds ({});
         scaleDownBtn.setBounds ({});
         scaleLcd    .setBounds ({});
         scaleUpBtn  .setBounds ({});
         return;
     }
+
 
     // ── Settings tab ──────────────────────────────────────────────────────────
     searchBox.setBounds (header.removeFromTop (26));

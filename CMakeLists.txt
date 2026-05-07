@@ -98,6 +98,10 @@ if (MSVC)
     target_compile_options(Dysekt PRIVATE /source-charset:utf-8)
 endif()
 
+juce_add_binary_data(DysektManual SOURCES
+    docs/DYSEKT_User_Manual.pdf
+)
+
 juce_add_binary_data(DysektFonts SOURCES
     src/ui/fonts/BarlowCondensed-Regular.ttf
     src/ui/fonts/BarlowCondensed-SemiBold.ttf
@@ -152,8 +156,6 @@ target_include_directories(Dysekt PRIVATE
 )
 
 target_compile_definitions(Dysekt PUBLIC
-    JUCE_WEB_BROWSER=0          # enables juce::WebBrowserComponent
-    JUCE_USE_WIN_WEBVIEW2=0     # Edge WebView2 backend — renders PDF natively on Windows
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
@@ -165,8 +167,8 @@ target_link_libraries(Dysekt
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
-        juce::juce_gui_extra        # required for WebBrowserComponent (PDF manual viewer)
         DysektFonts
+        DysektManual
         # sfizz — slice-render pipeline (SoundFontLoader) + live SFZ playback (SfzPlayer)
         $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:sfizz::sfizz>
         # FluidSynth — live SF2 playback (SfzPlayer)
