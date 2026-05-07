@@ -165,9 +165,17 @@ FileBrowserPanel::FileBrowserPanel (DysektProcessor& p)
             repaint();
 
             auto url = streamPreviewUrl;
+            const int replayGen = ++streamGeneration;
+
             ArchiveIntegration::streamPreview (url, formatManager,
-                [this, url] (juce::AudioFormatReader* reader)
+                [this, url, replayGen] (juce::AudioFormatReader* reader)
                 {
+                    if (streamGeneration.load() != replayGen)
+                    {
+                        delete reader;
+                        return;
+                    }
+
                     if (reader != nullptr)
                     {
                         streamPreviewUrl = url;
@@ -552,6 +560,8 @@ void FileBrowserPanel::startPreview (const juce::File& f)
 
 void FileBrowserPanel::stopPreview()
 {
+    ++streamGeneration;              // invalidate any in-flight stream callback
+    streamPreviewUrl = {};
     transport.stop();
     transport.setSource (nullptr);   // blocks until audio thread is done
     readerSource.reset();            // now safe
@@ -1174,9 +1184,18 @@ void FileBrowserPanel::loadArchiveFile (const ArchiveRow& row)
     resized();
     repaint();
 
+    const int myGeneration = ++streamGeneration;
+
     ArchiveIntegration::streamPreview (row.downloadUrl, formatManager,
-        [this, name = row.name, url = row.downloadUrl] (juce::AudioFormatReader* reader)
+        [this, name = row.name, url = row.downloadUrl, myGeneration] (juce::AudioFormatReader* reader)
         {
+            // If stopPreview() or a newer stream was started, discard this result
+            if (streamGeneration.load() != myGeneration)
+            {
+                delete reader;
+                return;
+            }
+
             if (reader != nullptr)
             {
                 previewFile      = {};    // no local file for a streaming preview

@@ -325,6 +325,7 @@ private:
     juce::File                     previewFile;
     juce::String                   streamPreviewUrl;   // non-empty when current preview is a stream
     bool                           previewVisible = false;
+    std::atomic<int>               streamGeneration { 0 };  // incremented to cancel stale stream callbacks
 
     IconButton                     playStopBtn;
     juce::Slider                   volumeSlider;
