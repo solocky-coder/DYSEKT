@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_gui_extra/juce_gui_extra.h>
 #include <functional>
 #include <vector>
 
@@ -61,6 +62,11 @@ private:
     void drawScaleSection        (juce::Graphics& g, juce::Rectangle<int>& area);
     void drawInterfaceSection    (juce::Graphics& g, juce::Rectangle<int>& area);
     void updateScaleLcd();
+
+    // ── Manual PDF viewer ──────────────────────────────────────────────
+    std::unique_ptr<juce::WebBrowserComponent> manualViewer;
+    static juce::File findManualPdf();
+    void setupManualViewer();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShortcutsPanel)
 };

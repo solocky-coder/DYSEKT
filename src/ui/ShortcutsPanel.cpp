@@ -76,11 +76,48 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     };
     addAndMakeVisible (searchBox);
 
+    setupManualViewer();   // ← PDF viewer setup
     setWantsKeyboardFocus (true);
 }
 
 ShortcutsPanel::~ShortcutsPanel() = default;
 
+//==============================================================================
+// Finds the bundled user manual PDF from common locations.
+juce::File ShortcutsPanel::findManualPdf()
+{
+    // 1) macOS: inside the plugin/app bundle Resources folder
+    auto bundle = juce::File::getSpecialLocation (juce::File::currentApplicationFile);
+    auto f = bundle.getChildFile ("Contents/Resources/DYSEKT_Manual.pdf");
+    if (f.existsAsFile()) return f;
+
+    // 2) Next to the VST3 / component / DLL on Windows & macOS
+    f = bundle.getParentDirectory().getChildFile ("DYSEKT_Manual.pdf");
+    if (f.existsAsFile()) return f;
+
+    // 3) User application data folder  (~/Library/Application Support/DYSEKT/ etc.)
+    f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+            .getChildFile ("DYSEKT").getChildFile ("DYSEKT_Manual.pdf");
+    if (f.existsAsFile()) return f;
+
+    return {};
+}
+
+void ShortcutsPanel::setupManualViewer()
+{
+    manualViewer = std::make_unique<juce::WebBrowserComponent>();
+
+    auto pdf = findManualPdf();
+    if (pdf.existsAsFile())
+        manualViewer->goToURL ("file://" + pdf.getFullPathName());
+    else
+        // Graceful placeholder — swap for a real URL if you host the manual online
+        manualViewer->goToURL ("about:blank");
+
+    addAndMakeVisible (*manualViewer);
+}
+
+//==============================================================================
 void ShortcutsPanel::updateScaleLcd()
 {
     float cur = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
@@ -303,52 +340,44 @@ void ShortcutsPanel::paint (juce::Graphics& g)
     auto content = panel.reduced (14, 6);
     content.removeFromTop (30 + 8 + 26 + 10); // title + gap + search + gap
 
-    // ── Left column ───────────────────────────────────────────────────────────
-    const int colW  = content.getWidth() / 2;
-    auto leftCol    = content.removeFromLeft (colW);
-    auto rightCol   = content;
+    const int colW = content.getWidth() / 2;
+    auto leftCol  = content.removeFromLeft (colW);
+    auto rightCol = content;
 
-    // UI Scale
+    // ── Left column: settings + ALL shortcuts ────────────────────────────
     g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
     g.setColour (getTheme().accent);
     g.drawText ("UI SCALE", leftCol.removeFromTop (18), juce::Justification::centredLeft);
     drawScaleSection (g, leftCol);
 
-    // Trim prefs
-    drawTrimPrefsSection (g, leftCol);
+    drawTrimPrefsSection  (g, leftCol);
+    drawInterfaceSection  (g, leftCol);
 
-    // Interface mode  ← NEW SECTION
-    drawInterfaceSection (g, leftCol);
-
-    // Divider
     g.setColour (getTheme().separator.withAlpha (0.4f));
     g.drawHorizontalLine (leftCol.getY() + 2, (float) leftCol.getX(), (float) leftCol.getRight() - 8);
     leftCol.removeFromTop (10);
 
-    // ── Shortcut rows ─────────────────────────────────────────────────────────
-    const int rowH    = 18;
-    const int catGap  = 10;
-    const int keysMin = 52;
-    const int keysMax = 120;
+    const int rowH   = 18;
+    const int catGap = 10;
+    const int keysMin = 52, keysMax = 120;
     juce::Font keyFont = DysektLookAndFeel::makeFont (9.5f, true);
 
-    bool useLeft = true;
+    // ── ALL categories go to the left column now ─────────────────────────
     for (const auto& cat : categories)
     {
         bool hasMatch = currentFilter.isEmpty();
         if (! hasMatch)
             for (const auto& e : cat.entries)
-                if (e.keys.toLowerCase().contains (currentFilter) || e.description.toLowerCase().contains (currentFilter))
+                if (e.keys.toLowerCase().contains (currentFilter)
+                    || e.description.toLowerCase().contains (currentFilter))
                     { hasMatch = true; break; }
         if (! hasMatch) continue;
 
-        auto& col = useLeft ? leftCol : rightCol;
-        useLeft = ! useLeft;
-
         g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
         g.setColour (getTheme().accent);
-        g.drawText (cat.title.toUpperCase(), col.removeFromTop (rowH), juce::Justification::centredLeft);
-        col.removeFromTop (2);
+        g.drawText (cat.title.toUpperCase(), leftCol.removeFromTop (rowH),
+                    juce::Justification::centredLeft);
+        leftCol.removeFromTop (2);
 
         for (const auto& entry : cat.entries)
         {
@@ -357,10 +386,10 @@ void ShortcutsPanel::paint (juce::Graphics& g)
                 && ! entry.description.toLowerCase().contains (currentFilter))
                 continue;
 
-            const int textW = (int) std::ceil (keyFont.getStringWidthFloat (entry.keys));
-            const int keysW = juce::jlimit (keysMin, keysMax, textW + 10);
+            const int textW  = (int) std::ceil (keyFont.getStringWidthFloat (entry.keys));
+            const int keysW  = juce::jlimit (keysMin, keysMax, textW + 10);
 
-            auto row     = col.removeFromTop (rowH);
+            auto row     = leftCol.removeFromTop (rowH);
             auto keyRect = row.removeFromLeft (keysW);
             g.setColour (getTheme().button.withAlpha (0.9f));
             g.fillRoundedRectangle (keyRect.reduced (0, 2).toFloat(), 3.0f);
@@ -373,30 +402,47 @@ void ShortcutsPanel::paint (juce::Graphics& g)
             g.setColour (getTheme().foreground.withAlpha (0.85f));
             g.drawText (entry.description, row, juce::Justification::centredLeft);
         }
-        col.removeFromTop (catGap);
+        leftCol.removeFromTop (catGap);
+    }
+
+    // ── Right column: "USER MANUAL" heading (viewer is a child component) ─
+    rightCol.removeFromLeft (8);   // left inset to match child component
+    g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
+    g.setColour (getTheme().accent);
+    g.drawText ("USER MANUAL", rightCol.removeFromTop (22), juce::Justification::centredLeft);
+
+    // Draw a thin border around the viewer area so it looks intentional
+    // when the PDF hasn't loaded yet
+    if (manualViewer != nullptr)
+    {
+        g.setColour (getTheme().accent.withAlpha (0.25f));
+        g.drawRoundedRectangle (manualViewer->getBounds().toFloat().expanded (1.0f), 4.0f, 1.0f);
     }
 }
 
 void ShortcutsPanel::resized()
 {
-    auto panel  = getLocalBounds().reduced (40, 30);
+    auto panel = getLocalBounds().reduced (40, 30);
     auto header = panel.reduced (14, 6);
 
     auto titleRow = header.removeFromTop (30);
-    closeBtn.setBounds  (titleRow.removeFromRight (30));
-    themeBtn.setBounds  (titleRow.removeFromRight (120));
+    closeBtn.setBounds (titleRow.removeFromRight (30));
+    themeBtn.setBounds (titleRow.removeFromRight (120));
     titleRow.removeFromRight (6);
     titleLabel.setBounds (titleRow);
 
     header.removeFromTop (8);
     searchBox.setBounds (header.removeFromTop (26));
 
-    // ── Scale controls ────────────────────────────────────────────────────────
+    // ── Derive the same content rect used in paint() ──────────────────────
     auto content = panel.reduced (14, 6);
     content.removeFromTop (30 + 8 + 26 + 10);
-    auto leftCol = content.removeFromLeft (content.getWidth() / 2);
 
-    leftCol.removeFromTop (18);  // "UI SCALE" heading
+    auto leftCol  = content.removeFromLeft (content.getWidth() / 2);
+    auto rightCol = content;
+
+    // ── Scale buttons (left column) ───────────────────────────────────────
+    leftCol.removeFromTop (18); // "UI SCALE" heading
 
     auto scaleRow = leftCol.removeFromTop (24);
     const int btnW = 26;
@@ -405,4 +451,14 @@ void ShortcutsPanel::resized()
     scaleLcd.setBounds (scaleRow.removeFromLeft (52));
     scaleRow.removeFromLeft (4);
     scaleUpBtn.setBounds (scaleRow.removeFromLeft (btnW));
+
+    // ── PDF viewer (right column) ─────────────────────────────────────────
+    if (manualViewer != nullptr)
+    {
+        rightCol.removeFromLeft   (8);  // left inset
+        rightCol.removeFromRight  (4);  // right inset
+        rightCol.removeFromTop    (22); // space for the "USER MANUAL" heading drawn in paint()
+        rightCol.removeFromBottom (6);  // bottom inset
+        manualViewer->setBounds (rightCol);
+    }
 }
