@@ -20,7 +20,7 @@ GlobalEqPanel::GlobalEqPanel (DysektProcessor& p)
 
 void GlobalEqPanel::paint (juce::Graphics& g)
 {
-    auto& theme = ThemeData::current();
+    auto& theme = getTheme();
     auto  bounds = getLocalBounds().toFloat();
     auto  plot   = plotArea();
 
