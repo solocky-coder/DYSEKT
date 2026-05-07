@@ -28,6 +28,7 @@ public:
     std::function<void()>    onWaveToggle;
     std::function<void()>    onMidiFollowToggle;
     std::function<void()>    onBodeToggle;
+    std::function<void()>    onEqToggle;
     std::function<void(int)> onUiModeChanged;   // 0 = Edit, 1 = SFZ Player
 
     void setBrowserActive    (bool v) { browserActive    = v; repaint(); }
@@ -40,7 +41,8 @@ public:
 
     void setMidiFollowActive (bool v) { midiFollowActive = v; repaint(); }
     void setBodeActive       (bool v) { bodeActive       = v; repaint(); }
-    void setPadGridActive    (bool v) { padGridActive    = v; repaint(); }
+    void setEqActive         (bool v) { eqActive         = v; repaint(); }
+    void setPadGridActive    (bool v) { padGridActive     = v; repaint(); }
 
 private:
     void drawIcon (juce::Graphics& g, juce::Rectangle<float> b, int type, bool active);
@@ -52,6 +54,7 @@ private:
     int  waveMode         = 0;   // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
     bool midiFollowActive = false;
     bool bodeActive       = false;
+    bool eqActive         = false;
     bool padGridActive    = false;
 
     // Hit areas (set during paint, used in mouseDown)
@@ -59,6 +62,7 @@ private:
     juce::Rectangle<int> waIconArea;
     juce::Rectangle<int> midiFollowIconArea;
     juce::Rectangle<int> bodeIconArea;
+    juce::Rectangle<int> eqIconArea;
     juce::Rectangle<int> sfzIconArea;  // kept as unused placeholder for layout math
     juce::Rectangle<int> editTabArea;
     juce::Rectangle<int> padTabArea;
@@ -71,7 +75,7 @@ private:
     juce::Rectangle<int> eqMidKnobArea;
     juce::Rectangle<int> eqHighKnobArea;
 
-    int        hoveredIcon   = -1;   // 0=FIL 1=WA 2=MIDI 3=MIXER 4=SFZ, -1=none
+    int        hoveredIcon   = -1;   // 0=FIL 1=WA 2=MIDI 3=MIXER 4=EQ, -1=none
     enum class DragTarget { None, Root, Pitch, Volume };
     DragTarget dragTarget    = DragTarget::None;
     float  dragStartValue    = 0.0f;

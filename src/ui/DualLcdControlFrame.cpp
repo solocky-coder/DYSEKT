@@ -243,6 +243,46 @@ void DualLcdControlFrame::drawIcon (juce::Graphics& g, juce::Rectangle<float> b,
         g.drawLine (cx, bY + bH, cx, bY + bH + 3.5f, 1.5f);
         g.fillEllipse (cx - 2.0f, bY + bH + 3.0f, 4.0f, 3.0f);
     }
+    else if (type == 5) // Global EQ — parametric EQ curve (low shelf up → bell peak → high shelf down)
+    {
+        // 0 dB reference baseline
+        g.setColour (col.withAlpha (0.28f));
+        g.drawHorizontalLine (juce::roundToInt (cy2 + 1.0f), cx - 9.0f, cx + 9.0f);
+
+        // EQ curve path
+        juce::Path eq;
+        eq.startNewSubPath (cx - 9.0f,  cy2 + 2.5f);   // low end, below baseline (shelf boost coming)
+        eq.cubicTo         (cx - 6.5f,  cy2 + 2.5f,
+                            cx - 5.5f,  cy2 - 2.0f,
+                            cx - 3.5f,  cy2 - 2.0f);   // low shelf plateau
+        eq.cubicTo         (cx - 1.5f,  cy2 - 2.0f,
+                            cx - 0.5f,  cy2 - 7.0f,
+                            cx + 1.0f,  cy2 - 7.0f);   // bell peak
+        eq.cubicTo         (cx + 2.5f,  cy2 - 7.0f,
+                            cx + 3.5f,  cy2 - 2.0f,
+                            cx + 5.0f,  cy2 - 2.0f);   // back down from bell
+        eq.cubicTo         (cx + 6.5f,  cy2 - 2.0f,
+                            cx + 7.5f,  cy2 + 3.5f,
+                            cx + 9.0f,  cy2 + 3.5f);   // high shelf cut
+
+        // Subtle fill under curve
+        juce::Path fill = eq;
+        fill.lineTo (cx + 9.0f, cy2 + 8.0f);
+        fill.lineTo (cx - 9.0f, cy2 + 8.0f);
+        fill.closeSubPath();
+        g.setColour (col.withAlpha (0.10f));
+        g.fillPath (fill);
+
+        // Curve stroke
+        g.setColour (col);
+        g.strokePath (eq, juce::PathStrokeType (1.5f,
+                          juce::PathStrokeType::curved,
+                          juce::PathStrokeType::rounded));
+
+        // Dot at bell peak
+        g.setColour (col.withAlpha (0.90f));
+        g.fillEllipse (cx + 1.0f - 1.8f, cy2 - 7.0f - 1.8f, 3.6f, 3.6f);
+    }
     else if (type == 4) // SFZ / SF2 instrument — mini piano keys
     {
         const float keyW  = 5.0f;
@@ -370,27 +410,29 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
     // ── Top row: four icons evenly spread across full width ──────────────────
     {
-        const int btnSz  = si (32);
+        const int btnSz  = si (28);
         const int btnY   = (half - btnSz) / 2;
-        const int gap    = (w - 4 * btnSz) / 5;
+        const int gap    = (w - 5 * btnSz) / 6;
 
         filIconArea        = { gap,                       btnY, btnSz, btnSz };
         waIconArea         = { gap * 2 + btnSz,           btnY, btnSz, btnSz };
         midiFollowIconArea = { gap * 3 + btnSz * 2,       btnY, btnSz, btnSz };
         bodeIconArea       = { gap * 4 + btnSz * 3,       btnY, btnSz, btnSz };
+        eqIconArea         = { gap * 5 + btnSz * 4,       btnY, btnSz, btnSz };
         sfzIconArea        = {};
 
         drawIcon (g, filIconArea       .toFloat(), 0, browserActive);
         drawIcon (g, waIconArea        .toFloat(), 1, waveMode != 0);
         drawIcon (g, midiFollowIconArea.toFloat(), 2, midiFollowActive);
         drawIcon (g, bodeIconArea      .toFloat(), 3, bodeActive);
+        drawIcon (g, eqIconArea        .toFloat(), 5, eqActive);
 
         // ── Hover tooltip label ──────────────────────────────────────
         if (hoveredIcon >= 0)
         {
-            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER" };
+            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER", "GLOBAL EQ" };
             const juce::Rectangle<int>* areas[] = { &filIconArea, &waIconArea,
-                                                     &midiFollowIconArea, &bodeIconArea };
+                                                     &midiFollowIconArea, &bodeIconArea, &eqIconArea };
             const auto& area = *areas[hoveredIcon];
             const int labelH  = si (9);
             const int labelY  = area.getY() - labelH - 2;
@@ -519,6 +561,13 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
         bodeActive = ! bodeActive;
         repaint();
         if (onBodeToggle) onBodeToggle();
+        return;
+    }
+    if (eqIconArea.contains (pos))
+    {
+        eqActive = ! eqActive;
+        repaint();
+        if (onEqToggle) onEqToggle();
         return;
     }
 
@@ -665,6 +714,7 @@ void DualLcdControlFrame::mouseMove (const juce::MouseEvent& e)
     else if (waIconArea.contains (pos))         found = 1;
     else if (midiFollowIconArea.contains (pos)) found = 2;
     else if (bodeIconArea.contains (pos))       found = 3;
+    else if (eqIconArea.contains (pos))         found = 4;
 
     if (found != hoveredIcon)
     {

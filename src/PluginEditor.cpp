@@ -152,7 +152,8 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  repaint();
  };
 
- headerBar.onBodeToggle  = [this] { toggleEqPanel(); };
+ headerBar.onBodeToggle  = [this] { toggleMixerPanel(); };
+ headerBar.onEqToggle    = [this] { toggleEqPanel(); };
  headerBar.onBrowserToggle = [this] { toggleBrowserPanel(); };
  headerBar.onWaveToggle = [this] { toggleSoftWave(); };
  headerBar.onMidiFollowToggle = [this] { toggleMidiFollow(); };
@@ -774,6 +775,9 @@ void DysektEditor::toggleMixerPanel()
  activeSlot = SlotContent::None;
  browserPanel.setVisible (false);
  headerBar.setBrowserActive (false);
+ } else if (activeSlot == SlotContent::Eq) {
+ eqPanel.setVisible (false);
+ headerBar.setEqActive (false);
  }
  activeSlot = SlotContent::Mixer;
  mixerPanel.setVisible (true);
@@ -787,18 +791,19 @@ void DysektEditor::toggleEqPanel()
     if (activeSlot == SlotContent::Eq) {
         activeSlot = SlotContent::None;
         eqPanel.setVisible (false);
-        headerBar.setBodeActive (false);
+        headerBar.setEqActive (false);
     } else {
         // Close any currently open slot
         if (activeSlot == SlotContent::Mixer) {
             mixerPanel.setVisible (false);
+            headerBar.setBodeActive (false);
         } else if (activeSlot == SlotContent::Browser) {
             browserPanel.setVisible (false);
             headerBar.setBrowserActive (false);
         }
         activeSlot = SlotContent::Eq;
         eqPanel.setVisible (true);
-        headerBar.setBodeActive (true);
+        headerBar.setEqActive (true);
     }
     resized(); repaint(); resized(); repaint();
 }

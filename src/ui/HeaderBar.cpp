@@ -51,6 +51,7 @@ HeaderBar::HeaderBar (DysektProcessor& p)
     controlFrame.onWaveToggle    = [this] { if (onWaveToggle)    onWaveToggle(); };
     controlFrame.onMidiFollowToggle = [this] { if (onMidiFollowToggle) onMidiFollowToggle(); };
     controlFrame.onBodeToggle    = [this] { if (onBodeToggle)    onBodeToggle(); };
+    controlFrame.onEqToggle      = [this] { if (onEqToggle)      onEqToggle(); };
     // Note: controlFrame is NOT added as a visible child here —
     // PluginEditor::resized() calls addAndMakeVisible(*headerBar.getControlFrame())
     // and positions it between the two LCD panels.
@@ -63,6 +64,7 @@ void HeaderBar::setWaveActive     (bool v) { controlFrame.setWaveActive (v); }
 void HeaderBar::setWaveMode       (int  m) { controlFrame.setWaveMode (m); }
 void HeaderBar::setMidiFollowActive (bool v) { controlFrame.setMidiFollowActive (v); }
 void HeaderBar::setBodeActive     (bool v) { controlFrame.setBodeActive (v); }
+void HeaderBar::setEqActive       (bool v) { controlFrame.setEqActive (v); }
 
 // ── resized ───────────────────────────────────────────────────────────────────
 
