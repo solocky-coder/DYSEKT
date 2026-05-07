@@ -15,61 +15,6 @@ static inline float dbToLinear (float dB)
     return std::pow (10.0f, dB / 20.0f);
 }
 
-// ── EQ biquad helpers ────────────────────────────────────────────────────────[...]
-// All Audio EQ Cookbook formulas (Robert Bristow-Johnson).
-// Coefficients stored as {b0,b1,b2,a1,a2} (a0-normalised, sign convention: y = b*x - a*y).
-
-static void calcLowShelf (float gainDb, float fc, double sr,
-                           float& b0, float& b1, float& b2,
-                           float& a1, float& a2)
-{
-    const float A  = std::pow (10.f, gainDb / 40.f);
-    const float w0 = 2.f * juce::MathConstants<float>::pi * fc / (float) sr;
-    const float cosW = std::cos (w0);
-    const float sinW = std::sin (w0);
-    const float S  = 1.f;   // shelf slope = 1 (maximally steep)
-    const float alpha = sinW / 2.f * std::sqrt ((A + 1.f/A) * (1.f/S - 1.f) + 2.f);
-    const float a0inv = 1.f / ((A+1) + (A-1)*cosW + 2*std::sqrt(A)*alpha);
-    b0 = A * ((A+1) - (A-1)*cosW + 2*std::sqrt(A)*alpha) * a0inv;
-    b1 = 2*A * ((A-1) - (A+1)*cosW) * a0inv;
-    b2 = A * ((A+1) - (A-1)*cosW - 2*std::sqrt(A)*alpha) * a0inv;
-    a1 = -2 * ((A-1) + (A+1)*cosW) * a0inv;
-    a2 = ((A+1) + (A-1)*cosW - 2*std::sqrt(A)*alpha) * a0inv;
-}
-
-static void calcHighShelf (float gainDb, float fc, double sr,
-                            float& b0, float& b1, float& b2,
-                            float& a1, float& a2)
-{
-    const float A  = std::pow (10.f, gainDb / 40.f);
-    const float w0 = 2.f * juce::MathConstants<float>::pi * fc / (float) sr;
-    const float cosW = std::cos (w0);
-    const float sinW = std::sin (w0);
-    const float S  = 1.f;
-    const float alpha = sinW / 2.f * std::sqrt ((A + 1.f/A) * (1.f/S - 1.f) + 2.f);
-    const float a0inv = 1.f / ((A+1) - (A-1)*cosW + 2*std::sqrt(A)*alpha);
-    b0 = A * ((A+1) + (A-1)*cosW + 2*std::sqrt(A)*alpha) * a0inv;
-    b1 = -2*A * ((A-1) + (A+1)*cosW) * a0inv;
-    b2 = A * ((A+1) + (A-1)*cosW - 2*std::sqrt(A)*alpha) * a0inv;
-    a1 = 2 * ((A-1) - (A+1)*cosW) * a0inv;
-    a2 = ((A+1) - (A-1)*cosW - 2*std::sqrt(A)*alpha) * a0inv;
-}
-
-static void calcPeakEq (float gainDb, float fc, float Q, double sr,
-                         float& b0, float& b1, float& b2,
-                         float& a1, float& a2)
-{
-    const float A  = std::pow (10.f, gainDb / 40.f);
-    const float w0 = 2.f * juce::MathConstants<float>::pi * fc / (float) sr;
-    const float cosW = std::cos (w0);
-    const float alpha = std::sin (w0) / (2.f * Q);
-    const float a0inv = 1.f / (1.f + alpha / A);
-    b0 = (1.f + alpha * A) * a0inv;
-    b1 = -2.f * cosW * a0inv;
-    b2 = (1.f - alpha * A) * a0inv;
-    a1 = b1;   // same
-    a2 = (1.f - alpha / A) * a0inv;
-}
 
 VoicePool::VoicePool()
 {
@@ -346,7 +291,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     v.filterStateL = 0.0f;
     v.filterStateR = 0.0f;
 
-    // ── Per-slice EQ coefficients (calculated once at note-on) ────────────────
+    // ── Per-slice 3-band EQ (chowdsp SVF — prepared once at note-on) ──────
     {
         float lowG  = sm.resolveParam (sliceIdx, kLockEqLow,  s.eqLowGain,  p.globalEqLowGain);
         float midG  = sm.resolveParam (sliceIdx, kLockEqMid,  s.eqMidGain,  p.globalEqMidGain);
@@ -361,17 +306,26 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
 
         if (v.eqActive)
         {
-            calcLowShelf  (lowG, 200.f,  sampleRate, v.eqB0[0], v.eqB1[0], v.eqB2[0], v.eqA1[0], v.eqA2[0]);
-            calcPeakEq    (midG, juce::jlimit(200.f,8000.f,midF),
-                                juce::jlimit(0.5f, 4.0f, midQ),
-                                sampleRate, v.eqB0[1], v.eqB1[1], v.eqB2[1], v.eqA1[1], v.eqA2[1]);
-            calcHighShelf (hiG,  8000.f, sampleRate, v.eqB0[2], v.eqB1[2], v.eqB2[2], v.eqA1[2], v.eqA2[2]);
-        }
-        // Zero delay lines
-        for (int b = 0; b < 3; ++b)
-        {
-            v.eqX1L[b] = v.eqX2L[b] = v.eqY1L[b] = v.eqY2L[b] = 0.f;
-            v.eqX1R[b] = v.eqX2R[b] = v.eqY1R[b] = v.eqY2R[b] = 0.f;
+            // maxBlockSize=1: DYSEKT processes sample-by-sample via processSample()
+            const juce::dsp::ProcessSpec spec { sampleRate, 1, 2 };
+
+            v.eqLowShelf.prepare (spec);
+            v.eqLowShelf.reset();
+            v.eqLowShelf.setCutoffFrequency (200.f);
+            v.eqLowShelf.setGainDecibels (lowG);
+            v.eqLowShelf.setQValue (0.707f);
+
+            v.eqMid.prepare (spec);
+            v.eqMid.reset();
+            v.eqMid.setCutoffFrequency (juce::jlimit (200.f, 8000.f, midF));
+            v.eqMid.setGainDecibels (midG);
+            v.eqMid.setQValue (juce::jlimit (0.5f, 4.f, midQ));
+
+            v.eqHighShelf.prepare (spec);
+            v.eqHighShelf.reset();
+            v.eqHighShelf.setCutoffFrequency (8000.f);
+            v.eqHighShelf.setGainDecibels (hiG);
+            v.eqHighShelf.setQValue (0.707f);
         }
     }
 
@@ -820,25 +774,15 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
         voiceR = v.filterStateR;
     }
 
-    // ── Per-slice 3-band EQ ───────────────────────────────────────────────────
+    // ── Per-slice 3-band EQ (chowdsp SVF) ────────────────────────────────────
     if (v.eqActive)
     {
-        for (int b = 0; b < 3; ++b)
-        {
-            // Left channel
-            float yL = v.eqB0[b]*voiceL + v.eqB1[b]*v.eqX1L[b] + v.eqB2[b]*v.eqX2L[b]
-                                         - v.eqA1[b]*v.eqY1L[b] - v.eqA2[b]*v.eqY2L[b];
-            v.eqX2L[b] = v.eqX1L[b]; v.eqX1L[b] = voiceL;
-            v.eqY2L[b] = v.eqY1L[b]; v.eqY1L[b] = yL;
-            voiceL = yL;
-
-            // Right channel
-            float yR = v.eqB0[b]*voiceR + v.eqB1[b]*v.eqX1R[b] + v.eqB2[b]*v.eqX2R[b]
-                                         - v.eqA1[b]*v.eqY1R[b] - v.eqA2[b]*v.eqY2R[b];
-            v.eqX2R[b] = v.eqX1R[b]; v.eqX1R[b] = voiceR;
-            v.eqY2R[b] = v.eqY1R[b]; v.eqY1R[b] = yR;
-            voiceR = yR;
-        }
+        voiceL = v.eqLowShelf.processSample (0, voiceL);
+        voiceR = v.eqLowShelf.processSample (1, voiceR);
+        voiceL = v.eqMid.processSample (0, voiceL);
+        voiceR = v.eqMid.processSample (1, voiceR);
+        voiceL = v.eqHighShelf.processSample (0, voiceL);
+        voiceR = v.eqHighShelf.processSample (1, voiceR);
     }
 
     // ── Pan ───────────────────────────────────────────────────────────[...]

@@ -6,6 +6,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/JUCE JUCE)
 
+# --- chowdsp_utils (SVF EQ filters — used by VoicePool per-slice EQ) ---
+include(FetchContent)
+FetchContent_Declare(
+    chowdsp_utils
+    GIT_REPOSITORY https://github.com/Chowdhury-DSP/chowdsp_utils
+    GIT_TAG        v2.3.0
+    GIT_SHALLOW    TRUE
+)
+set(CHOWDSP_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(chowdsp_utils)
+
 # --- sfizz (SFZ/SF2 engine — SoundFontLoader slice-render + SfzPlayer live SFZ playback) ---
 if(TRUE)
     set(SFIZZ_CLIENTS    OFF CACHE BOOL "" FORCE)
@@ -158,6 +169,7 @@ target_link_libraries(Dysekt
         # FluidSynth — live SF2 playback (SfzPlayer)
         $<$<BOOL:${DYSEKT_HAS_FLUIDSYNTH}>:FluidSynth::libfluidsynth>
         $<$<PLATFORM_ID:Linux>:asound>
+        chowdsp::chowdsp_filters
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
