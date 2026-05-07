@@ -889,6 +889,12 @@ void SliceControlBar::paint (juce::Graphics& g)
  // Aliases used by existing paint code further down
  const bool  stretchVal    = effStretch;
 
+ const float effEqLow  = resolveF (kLockEqLow,  s.eqLowGain,  apvtsVal (ParamIds::defaultEqLowGain));
+ const float effEqMidG = resolveF (kLockEqMid,  s.eqMidGain,  apvtsVal (ParamIds::defaultEqMidGain));
+ const float effEqMidF = resolveF (kLockEqMid,  s.eqMidFreq,  apvtsVal (ParamIds::defaultEqMidFreq));
+ const float effEqMidQ = resolveF (kLockEqMid,  s.eqMidQ,     apvtsVal (ParamIds::defaultEqMidQ));
+ const float effEqHigh = resolveF (kLockEqHigh, s.eqHighGain, apvtsVal (ParamIds::defaultEqHighGain));
+
  int cw;
  using F = DysektProcessor;
 
