@@ -902,10 +902,19 @@ void KeysPanel::paint (juce::Graphics& g)
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────────────
-    const auto& ui = processor.getUiSliceSnapshot();
+    // The slicedNotes highlight (coloured accent outline) belongs to the sample-
+    // slicer engine.  When SFZ/SF2 zones are loaded the slicer snapshot is
+    // unrelated leftover data whose MIDI note numbers happen to coincide with
+    // piano keys, producing random coloured outlines.  Suppress it entirely
+    // while any keyzone is active; the zone-colour dots already convey the same
+    // information on the SFZ/SF2 keyboard.
     std::set<int> slicedNotes;
-    for (int s = 0; s < ui.numSlices; ++s)
-        slicedNotes.insert (ui.slices[(size_t) s].midiNote);
+    if (keyzones.empty())
+    {
+        const auto& ui = processor.getUiSliceSnapshot();
+        for (int s = 0; s < ui.numSlices; ++s)
+            slicedNotes.insert (ui.slices[(size_t) s].midiNote);
+    }
 
     // White keys first
     for (const auto& kr : keyRects)
@@ -1145,7 +1154,14 @@ void KeysPanel::releaseLastNote()
 {
     if (lastActiveNote >= 0)
     {
-        processor.sfzUiNoteOffRequest.store (lastActiveNote, std::memory_order_relaxed);
+        // Try to write the note-off immediately.  If the slot already holds an
+        // unconsumed value from a prior release, park this one in pendingNoteOff
+        // so the timer delivers it on the next tick rather than losing it.
+        int expected = -1;
+        if (! processor.sfzUiNoteOffRequest.compare_exchange_strong (
+                expected, lastActiveNote, std::memory_order_relaxed))
+            pendingNoteOff = lastActiveNote;   // retry via timer
+
         lastActiveNote = -1;
         repaint();
     }
@@ -1157,11 +1173,17 @@ void KeysPanel::releaseLastNote()
 
 void KeysPanel::timerCallback()
 {
-    // Send any pending scheduled note-off (from zone-table clicks)
+    // Send any pending scheduled note-off (from zone-table clicks).
+    // Use compare_exchange so we never clobber an unconsumed note-off that the
+    // audio thread hasn't read yet — if the slot is already occupied, leave
+    // pendingNoteOff intact and retry on the next timer tick.
     if (pendingNoteOff >= 0)
     {
-        processor.sfzUiNoteOffRequest.store (pendingNoteOff, std::memory_order_relaxed);
-        pendingNoteOff = -1;
+        int expected = -1;
+        if (processor.sfzUiNoteOffRequest.compare_exchange_strong (
+                expected, pendingNoteOff, std::memory_order_relaxed))
+            pendingNoteOff = -1;
+        // else: slot busy, will retry next tick
     }
 
     const uint64_t lo = processor.sfzActiveNotes[0].load (std::memory_order_relaxed);

@@ -2432,10 +2432,24 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
         if (noteOff >= 0 && noteOff <= 127)
         {
-            midi.addEvent (juce::MidiMessage::noteOff (ch, noteOff, (juce::uint8) 0),   0);
-            const int w = noteOff < 64 ? 0 : 1;
-            const int b = noteOff < 64 ? noteOff : noteOff - 64;
-            sfzActiveNotes[w].fetch_and (~((uint64_t)1 << b), std::memory_order_relaxed);
+            // If noteOn and noteOff arrived in the same buffer (fast click), place
+            // the noteOff at the last sample so the synth gets at least one full
+            // buffer of audio rather than a zero-duration note that never sounds.
+            const int offSample = (noteOn == noteOff)
+                                ? juce::jmax (0, buffer.getNumSamples() - 1)
+                                : 0;
+            midi.addEvent (juce::MidiMessage::noteOff (ch, noteOff, (juce::uint8) 0), offSample);
+            // Only clear the active-note bit when this is a standalone note-off
+            // (not paired with a note-on for the same note in the same buffer).
+            // If they're the same note the release tail is still active — the
+            // snoop loop below will clear the bit when FluidSynth/sfizz sends
+            // its own note-off back through the MIDI buffer.
+            if (noteOff != noteOn)
+            {
+                const int w = noteOff < 64 ? 0 : 1;
+                const int b = noteOff < 64 ? noteOff : noteOff - 64;
+                sfzActiveNotes[w].fetch_and (~((uint64_t)1 << b), std::memory_order_relaxed);
+            }
         }
     }
 
