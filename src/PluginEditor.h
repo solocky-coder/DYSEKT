@@ -23,6 +23,7 @@
 #include "ui/SliceWaveformLcd.h"
 #include "ui/WaveformOverview.h"
 #include "ui/SfzDropdownPanel.h"
+#include "ui/GlobalEqPanel.h"
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 #include "ui/PluginEditorConstants.h"
@@ -86,7 +87,7 @@ private:
 
     /// Which panel occupies the bottom slot (browser or mixer).
     /// Mutually exclusive.
-    enum class SlotContent { None, Browser, Mixer };
+    enum class SlotContent { None, Browser, Mixer, Eq };
     SlotContent activeSlot   = SlotContent::None;
     bool initBrowserOpen     = false;  // true until the first real sample is loaded
     int  waveformMode = 0;  // 0=Hard 1=Soft 2=Outline 3=Rectified 4=Mirrored 5=Bars 6=RMS 7=Stepped
@@ -123,10 +124,12 @@ private:
     MixerPanel       mixerPanel;
     SfzDropdownPanel sfzDropdown;
     ShortcutsPanel   shortcutsPanel { processor };
+    GlobalEqPanel    eqPanel;
 
     juce::TooltipWindow tooltipWindow { this, 500 };
 
     void toggleMixerPanel();
+    void toggleEqPanel();
     void toggleShortcutsPanel();
     void toggleThemeEditor();
 

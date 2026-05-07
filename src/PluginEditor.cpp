@@ -26,6 +26,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  actionPanel (p, waveformView),
  browserPanel (p),
  mixerPanel (p),
+      eqPanel (p),
  sfzDropdown (p),
  shortcutsPanel (p)
 {
@@ -50,6 +51,9 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  addChildComponent (browserPanel);
  mixerPanel.setVisible (false);
  addChildComponent (mixerPanel);
+ eqPanel.setVisible (false);
+ addChildComponent (eqPanel);
+
  sfzDropdown.setVisible (false);
  addChildComponent (sfzDropdown);
  // When a new SF2/SFZ is loaded from the dropdown, reset the restore flag
@@ -148,7 +152,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  repaint();
  };
 
- headerBar.onBodeToggle  = [this] { toggleMixerPanel(); };
+ headerBar.onBodeToggle  = [this] { toggleEqPanel(); };
  headerBar.onBrowserToggle = [this] { toggleBrowserPanel(); };
  headerBar.onWaveToggle = [this] { toggleSoftWave(); };
  headerBar.onMidiFollowToggle = [this] { toggleMidiFollow(); };
@@ -608,6 +612,7 @@ void DysektEditor::resized()
  const int mixBot = slot.getBottom();
  mixerPanel.setBounds (kFX, mixTop, kFW, mixBot - mixTop);
  browserPanel.setBounds ({});
+ eqPanel.setBounds ({});
  }
  else if (activeSlot == SlotContent::Browser && ! initBrowserOpen) {
  // Expand browser to fill ALL available area (waveformView space + slot)
@@ -615,8 +620,17 @@ void DysektEditor::resized()
  const int browserBot = slot.getBottom();
  browserPanel.setBounds (kFX, browserTop, kFW, browserBot - browserTop);
  mixerPanel.setBounds ({});
+ eqPanel.setBounds ({});
+ }
+ else if (activeSlot == SlotContent::Eq) {
+     const int eqTop = actionArea.getY();
+     const int eqBot = slot.getBottom();
+     eqPanel.setBounds (kFX, eqTop, kFW, eqBot - eqTop);
+     mixerPanel.setBounds ({});
+     browserPanel.setBounds ({});
  } else {
  mixerPanel.setBounds ({});
+ eqPanel.setBounds ({});
  if (! initBrowserOpen)
  browserPanel.setBounds ({});
  // initBrowserOpen browser is sized below, in the waveform frame area
@@ -766,6 +780,27 @@ void DysektEditor::toggleMixerPanel()
  headerBar.setBodeActive (true);
  }
  resized(); repaint(); resized(); repaint();
+}
+
+void DysektEditor::toggleEqPanel()
+{
+    if (activeSlot == SlotContent::Eq) {
+        activeSlot = SlotContent::None;
+        eqPanel.setVisible (false);
+        headerBar.setBodeActive (false);
+    } else {
+        // Close any currently open slot
+        if (activeSlot == SlotContent::Mixer) {
+            mixerPanel.setVisible (false);
+        } else if (activeSlot == SlotContent::Browser) {
+            browserPanel.setVisible (false);
+            headerBar.setBrowserActive (false);
+        }
+        activeSlot = SlotContent::Eq;
+        eqPanel.setVisible (true);
+        headerBar.setBodeActive (true);
+    }
+    resized(); repaint(); resized(); repaint();
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
@@ -1055,6 +1090,7 @@ void DysektEditor::timerCallback()
  if (waveformOverview.isVisible())
  waveformOverview.repaintOverview();
  if (activeSlot == SlotContent::Mixer) mixerPanel.repaint();
+ if (activeSlot == SlotContent::Eq)    eqPanel.repaint();
 
  headerBar.repaint();
  sliceControlBar.updateMidiLearnPulse();
