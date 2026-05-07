@@ -3,28 +3,36 @@
 #include "../PluginProcessor.h"
 #include "MidiLearnDialog.h"
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Constructor
+// ─────────────────────────────────────────────────────────────────────────────
+
 ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     : processor (proc)
 {
     buildShortcutData();
 
+    // ── Title label ───────────────────────────────────────────────────────────
     titleLabel.setText ("Settings & Shortcuts", juce::dontSendNotification);
     titleLabel.setFont (DysektLookAndFeel::makeFont (15.0f, true));
     titleLabel.setColour (juce::Label::textColourId, getTheme().foreground);
     titleLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (titleLabel);
 
+    // ── Close button ──────────────────────────────────────────────────────────
     closeBtn.setColour (juce::TextButton::buttonColourId,  juce::Colours::transparentBlack);
     closeBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground.withAlpha (0.75f));
     closeBtn.onClick = [this] { if (onDismiss) onDismiss(); };
     addAndMakeVisible (closeBtn);
 
+    // ── Theme button ──────────────────────────────────────────────────────────
     themeBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
     themeBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
     themeBtn.setTooltip ("Open the theme colour editor");
     themeBtn.onClick = [this] { if (onThemeRequest) onThemeRequest(); };
     addAndMakeVisible (themeBtn);
 
+    // ── Scale buttons ─────────────────────────────────────────────────────────
     auto styleScaleBtn = [this] (juce::TextButton& btn)
     {
         btn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
@@ -64,6 +72,7 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     updateScaleLcd();
     addAndMakeVisible (scaleLcd);
 
+    // ── Search box ────────────────────────────────────────────────────────────
     searchBox.setTextToShowWhenEmpty ("Search shortcuts...", getTheme().foreground.withAlpha (0.4f));
     searchBox.setFont (DysektLookAndFeel::makeFont (11.0f));
     searchBox.setColour (juce::TextEditor::backgroundColourId, getTheme().background.withAlpha (0.6f));
@@ -76,48 +85,133 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     };
     addAndMakeVisible (searchBox);
 
-    setupManualViewer();   // ← PDF viewer setup
+    // ── Tab buttons ───────────────────────────────────────────────────────────
+    auto styleTab = [this] (juce::TextButton& btn, Tab t)
+    {
+        btn.setColour (juce::TextButton::buttonColourId,    getTheme().button);
+        btn.setColour (juce::TextButton::buttonOnColourId,  getTheme().accent.withAlpha (0.25f));
+        btn.setColour (juce::TextButton::textColourOffId,   getTheme().foreground.withAlpha (0.7f));
+        btn.setColour (juce::TextButton::textColourOnId,    getTheme().foreground);
+        btn.setClickingTogglesState (false);
+        btn.onClick = [this, t]
+        {
+            activeTab = t;
+            applyTabLayout();
+            repaint();
+        };
+        addAndMakeVisible (btn);
+        (void) t;
+    };
+    styleTab (tabSettingsBtn, Tab::Settings);
+    styleTab (tabManualBtn,   Tab::Manual);
+
     setWantsKeyboardFocus (true);
 }
 
 ShortcutsPanel::~ShortcutsPanel() = default;
 
-//==============================================================================
-// Finds the bundled user manual PDF from common locations.
-juce::File ShortcutsPanel::findManualPdf()
+// ─────────────────────────────────────────────────────────────────────────────
+// findManualPdf
+// ─────────────────────────────────────────────────────────────────────────────
+
+juce::URL ShortcutsPanel::findManualPdf() const
 {
-    // 1) macOS: inside the plugin/app bundle Resources folder
-    auto bundle = juce::File::getSpecialLocation (juce::File::currentApplicationFile);
-    auto f = bundle.getChildFile ("Contents/Resources/DYSEKT_Manual.pdf");
-    if (f.existsAsFile()) return f;
+    // 1. Next to the VST3 bundle
+    juce::File pluginDir = juce::File::getSpecialLocation (
+                               juce::File::currentExecutableFile).getParentDirectory();
+    juce::File pdfNearPlugin = pluginDir.getChildFile ("DYSEKT_User_Manual.pdf");
+    if (pdfNearPlugin.existsAsFile())
+        return juce::URL (pdfNearPlugin);
 
-    // 2) Next to the VST3 / component / DLL on Windows & macOS
-    f = bundle.getParentDirectory().getChildFile ("DYSEKT_Manual.pdf");
-    if (f.existsAsFile()) return f;
+    // 2. %AppData%\DYSEKT\DYSEKT_User_Manual.pdf
+    juce::File appData = juce::File::getSpecialLocation (
+                             juce::File::userApplicationDataDirectory)
+                             .getChildFile ("DYSEKT")
+                             .getChildFile ("DYSEKT_User_Manual.pdf");
+    if (appData.existsAsFile())
+        return juce::URL (appData);
 
-    // 3) User application data folder  (~/Library/Application Support/DYSEKT/ etc.)
-    f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-            .getChildFile ("DYSEKT").getChildFile ("DYSEKT_Manual.pdf");
-    if (f.existsAsFile()) return f;
-
-    return {};
+    // 3. Fallback — GitHub releases page (opens in system browser via WebView)
+    return juce::URL ("https://github.com/solocky-coder/DYSEKT/releases");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// setupManualViewer
+// ─────────────────────────────────────────────────────────────────────────────
 
 void ShortcutsPanel::setupManualViewer()
 {
-    manualViewer = std::make_unique<juce::WebBrowserComponent>();
+#if JUCE_WEB_BROWSER
+    if (manualViewer == nullptr)
+    {
+        manualViewer = std::make_unique<juce::WebBrowserComponent>(
+            juce::WebBrowserComponent::Options{}
+                .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
+                .withKeepPageLoadedWhenBrowserIsHidden()
+        );
+        addAndMakeVisible (*manualViewer);
+    }
 
-    auto pdf = findManualPdf();
-    if (pdf.existsAsFile())
-        manualViewer->goToURL ("file://" + pdf.getFullPathName());
-    else
-        // Graceful placeholder — swap for a real URL if you host the manual online
-        manualViewer->goToURL ("about:blank");
+    if (! manualLoaded)
+    {
+        const juce::URL url = findManualPdf();
 
-    addAndMakeVisible (*manualViewer);
+        if (url.isLocalFile())
+        {
+            // Edge WebView2 can render PDF files natively when navigated via
+            // a file:// URL — no Acrobat or plugin needed.
+            manualViewer->goToURL (url.toString (false));
+        }
+        else
+        {
+            manualViewer->goToURL (url.toString (true));
+        }
+
+        manualLoaded = true;
+    }
+#endif
 }
 
-//==============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// applyTabLayout  — shows / hides children for the active tab
+// ─────────────────────────────────────────────────────────────────────────────
+
+void ShortcutsPanel::applyTabLayout()
+{
+    const bool isSettings = (activeTab == Tab::Settings);
+
+    // Settings-tab children
+    titleLabel  .setVisible (isSettings);
+    themeBtn    .setVisible (isSettings);
+    scaleDownBtn.setVisible (isSettings);
+    scaleUpBtn  .setVisible (isSettings);
+    scaleLcd    .setVisible (isSettings);
+    searchBox   .setVisible (isSettings);
+
+    // Manual-tab viewer
+#if JUCE_WEB_BROWSER
+    if (! isSettings)
+    {
+        setupManualViewer();
+        if (manualViewer != nullptr)
+            manualViewer->setVisible (true);
+    }
+    else
+    {
+        if (manualViewer != nullptr)
+            manualViewer->setVisible (false);
+    }
+#endif
+
+    // Trigger a layout recalculation
+    resized();
+    repaint();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ShortcutsPanel::updateScaleLcd()
 {
     float cur = processor.apvts.getRawParameterValue (ParamIds::uiScale)->load();
@@ -126,9 +220,13 @@ void ShortcutsPanel::updateScaleLcd()
 
 void ShortcutsPanel::drawScaleSection (juce::Graphics& /*g*/, juce::Rectangle<int>& area)
 {
-    area.removeFromTop (24);  // scale button row
-    area.removeFromTop (4);   // gap before next section
+    area.removeFromTop (24);
+    area.removeFromTop (4);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildShortcutData
+// ─────────────────────────────────────────────────────────────────────────────
 
 void ShortcutsPanel::buildShortcutData()
 {
@@ -138,9 +236,9 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory slicing;
         slicing.title = "Slicing";
         slicing.entries = {
-            { "Double-click", "Add slice at position"  },
-            { "L",            "MIDI Slice"              },
-            { "Del",          "Delete selected slice"   },
+            { "Double-click", "Add slice at position" },
+            { "L",            "MIDI Slice"             },
+            { "Del",          "Delete selected slice"  },
         };
         categories.push_back (std::move (slicing));
     }
@@ -169,12 +267,16 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory misc;
         misc.title = "General";
         misc.entries = {
-            { "?  (QWERTZ: Shift+\xc3\x9f)", "Toggle this panel"        },
-            { "Esc",                           "Close panel / cancel"    },
+            { "?  (QWERTZ: Shift+\xc3\x9f)", "Toggle this panel"   },
+            { "Esc",                           "Close panel / cancel" },
         };
         categories.push_back (std::move (misc));
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Event handlers
+// ─────────────────────────────────────────────────────────────────────────────
 
 bool ShortcutsPanel::keyPressed (const juce::KeyPress& key)
 {
@@ -188,6 +290,9 @@ bool ShortcutsPanel::keyPressed (const juce::KeyPress& key)
 
 void ShortcutsPanel::mouseDown (const juce::MouseEvent& e)
 {
+    if (activeTab != Tab::Settings)
+        return;
+
     // ── Trim preference ───────────────────────────────────────────────────────
     const int pref    = processor.trimPreference.load (std::memory_order_relaxed);
     int       newPref = pref;
@@ -224,6 +329,9 @@ void ShortcutsPanel::mouseDown (const juce::MouseEvent& e)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// drawTrimPrefsSection
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ShortcutsPanel::drawTrimPrefsSection (juce::Graphics& g, juce::Rectangle<int>& area)
 {
     const int pref  = processor.trimPreference.load (std::memory_order_relaxed);
@@ -276,6 +384,9 @@ void ShortcutsPanel::drawTrimPrefsSection (juce::Graphics& g, juce::Rectangle<in
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// drawInterfaceSection
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ShortcutsPanel::drawInterfaceSection (juce::Graphics& g, juce::Rectangle<int>& area)
 {
     const int rowH = 22;
@@ -326,6 +437,9 @@ void ShortcutsPanel::drawInterfaceSection (juce::Graphics& g, juce::Rectangle<in
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// paint
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ShortcutsPanel::paint (juce::Graphics& g)
 {
     // Dim overlay
@@ -337,32 +451,47 @@ void ShortcutsPanel::paint (juce::Graphics& g)
     g.setColour (getTheme().accent.withAlpha (0.5f));
     g.drawRoundedRectangle (panel.toFloat().reduced (0.5f), 8.0f, 1.0f);
 
+    if (activeTab == Tab::Manual)
+    {
+        // The WebBrowserComponent covers the content area — nothing to draw here
+        // beyond the panel background and tab strip (handled by child components).
+        return;
+    }
+
+    // ── Settings tab content ──────────────────────────────────────────────────
     auto content = panel.reduced (14, 6);
-    content.removeFromTop (30 + 8 + 26 + 10); // title + gap + search + gap
+    // Skip: title row (30) + gap (8) + tabs (28) + gap (8) + search (26) + gap (10)
+    content.removeFromTop (30 + 8 + 28 + 8 + 26 + 10);
 
-    const int colW = content.getWidth() / 2;
-    auto leftCol  = content.removeFromLeft (colW);
-    auto rightCol = content;
+    const int colW  = content.getWidth() / 2;
+    auto leftCol    = content.removeFromLeft (colW);
+    auto rightCol   = content;
 
-    // ── Left column: settings + ALL shortcuts ────────────────────────────
+    // UI Scale
     g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
     g.setColour (getTheme().accent);
     g.drawText ("UI SCALE", leftCol.removeFromTop (18), juce::Justification::centredLeft);
     drawScaleSection (g, leftCol);
 
-    drawTrimPrefsSection  (g, leftCol);
-    drawInterfaceSection  (g, leftCol);
+    // Trim prefs
+    drawTrimPrefsSection (g, leftCol);
 
+    // Interface mode
+    drawInterfaceSection (g, leftCol);
+
+    // Divider
     g.setColour (getTheme().separator.withAlpha (0.4f));
     g.drawHorizontalLine (leftCol.getY() + 2, (float) leftCol.getX(), (float) leftCol.getRight() - 8);
     leftCol.removeFromTop (10);
 
-    const int rowH   = 18;
-    const int catGap = 10;
-    const int keysMin = 52, keysMax = 120;
+    // ── Shortcut rows ─────────────────────────────────────────────────────────
+    const int rowH    = 18;
+    const int catGap  = 10;
+    const int keysMin = 52;
+    const int keysMax = 120;
     juce::Font keyFont = DysektLookAndFeel::makeFont (9.5f, true);
 
-    // ── ALL categories go to the left column now ─────────────────────────
+    bool useLeft = true;
     for (const auto& cat : categories)
     {
         bool hasMatch = currentFilter.isEmpty();
@@ -373,11 +502,13 @@ void ShortcutsPanel::paint (juce::Graphics& g)
                     { hasMatch = true; break; }
         if (! hasMatch) continue;
 
+        auto& col = useLeft ? leftCol : rightCol;
+        useLeft = ! useLeft;
+
         g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
         g.setColour (getTheme().accent);
-        g.drawText (cat.title.toUpperCase(), leftCol.removeFromTop (rowH),
-                    juce::Justification::centredLeft);
-        leftCol.removeFromTop (2);
+        g.drawText (cat.title.toUpperCase(), col.removeFromTop (rowH), juce::Justification::centredLeft);
+        col.removeFromTop (2);
 
         for (const auto& entry : cat.entries)
         {
@@ -386,10 +517,10 @@ void ShortcutsPanel::paint (juce::Graphics& g)
                 && ! entry.description.toLowerCase().contains (currentFilter))
                 continue;
 
-            const int textW  = (int) std::ceil (keyFont.getStringWidthFloat (entry.keys));
-            const int keysW  = juce::jlimit (keysMin, keysMax, textW + 10);
+            const int textW = (int) std::ceil (keyFont.getStringWidthFloat (entry.keys));
+            const int keysW = juce::jlimit (keysMin, keysMax, textW + 10);
 
-            auto row     = leftCol.removeFromTop (rowH);
+            auto row     = col.removeFromTop (rowH);
             auto keyRect = row.removeFromLeft (keysW);
             g.setColour (getTheme().button.withAlpha (0.9f));
             g.fillRoundedRectangle (keyRect.reduced (0, 2).toFloat(), 3.0f);
@@ -402,63 +533,70 @@ void ShortcutsPanel::paint (juce::Graphics& g)
             g.setColour (getTheme().foreground.withAlpha (0.85f));
             g.drawText (entry.description, row, juce::Justification::centredLeft);
         }
-        leftCol.removeFromTop (catGap);
-    }
-
-    // ── Right column: "USER MANUAL" heading (viewer is a child component) ─
-    rightCol.removeFromLeft (8);   // left inset to match child component
-    g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
-    g.setColour (getTheme().accent);
-    g.drawText ("USER MANUAL", rightCol.removeFromTop (22), juce::Justification::centredLeft);
-
-    // Draw a thin border around the viewer area so it looks intentional
-    // when the PDF hasn't loaded yet
-    if (manualViewer != nullptr)
-    {
-        g.setColour (getTheme().accent.withAlpha (0.25f));
-        g.drawRoundedRectangle (manualViewer->getBounds().toFloat().expanded (1.0f), 4.0f, 1.0f);
+        col.removeFromTop (catGap);
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// resized
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ShortcutsPanel::resized()
 {
-    auto panel = getLocalBounds().reduced (40, 30);
+    auto panel  = getLocalBounds().reduced (40, 30);
     auto header = panel.reduced (14, 6);
 
+    // ── Title row: [Title label] [Theme btn] [Close btn] ─────────────────────
     auto titleRow = header.removeFromTop (30);
     closeBtn.setBounds (titleRow.removeFromRight (30));
     themeBtn.setBounds (titleRow.removeFromRight (120));
     titleRow.removeFromRight (6);
     titleLabel.setBounds (titleRow);
+    header.removeFromTop (8);
+
+    // ── Tab strip ─────────────────────────────────────────────────────────────
+    auto tabRow = header.removeFromTop (28);
+    const int tabW = tabRow.getWidth() / 2;
+    tabSettingsBtn.setBounds (tabRow.removeFromLeft (tabW).reduced (0, 2));
+    tabManualBtn  .setBounds (tabRow.reduced (0, 2));
+
+    // Highlight the active tab visually
+    tabSettingsBtn.setToggleState (activeTab == Tab::Settings, juce::dontSendNotification);
+    tabManualBtn  .setToggleState (activeTab == Tab::Manual,   juce::dontSendNotification);
 
     header.removeFromTop (8);
+
+    if (activeTab == Tab::Manual)
+    {
+        // ── Manual tab: WebBrowserComponent fills the rest of the panel ───────
+#if JUCE_WEB_BROWSER
+        if (manualViewer != nullptr)
+            manualViewer->setBounds (header);
+#endif
+        // Hide settings-only widgets (search box etc.)
+        searchBox   .setBounds ({});
+        scaleDownBtn.setBounds ({});
+        scaleLcd    .setBounds ({});
+        scaleUpBtn  .setBounds ({});
+        return;
+    }
+
+    // ── Settings tab ──────────────────────────────────────────────────────────
     searchBox.setBounds (header.removeFromTop (26));
+    header.removeFromTop (10);
 
-    // ── Derive the same content rect used in paint() ──────────────────────
+    // Scale controls sit in the left column below the "UI SCALE" heading
     auto content = panel.reduced (14, 6);
-    content.removeFromTop (30 + 8 + 26 + 10);
+    content.removeFromTop (30 + 8 + 28 + 8 + 26 + 10);  // match paint() offset
+    auto leftCol = content.removeFromLeft (content.getWidth() / 2);
 
-    auto leftCol  = content.removeFromLeft (content.getWidth() / 2);
-    auto rightCol = content;
-
-    // ── Scale buttons (left column) ───────────────────────────────────────
-    leftCol.removeFromTop (18); // "UI SCALE" heading
+    leftCol.removeFromTop (18);  // "UI SCALE" heading
 
     auto scaleRow = leftCol.removeFromTop (24);
     const int btnW = 26;
     scaleDownBtn.setBounds (scaleRow.removeFromLeft (btnW));
     scaleRow.removeFromLeft (4);
-    scaleLcd.setBounds (scaleRow.removeFromLeft (52));
+    scaleLcd    .setBounds (scaleRow.removeFromLeft (52));
     scaleRow.removeFromLeft (4);
-    scaleUpBtn.setBounds (scaleRow.removeFromLeft (btnW));
-
-    // ── PDF viewer (right column) ─────────────────────────────────────────
-    if (manualViewer != nullptr)
-    {
-        rightCol.removeFromLeft   (8);  // left inset
-        rightCol.removeFromRight  (4);  // right inset
-        rightCol.removeFromTop    (22); // space for the "USER MANUAL" heading drawn in paint()
-        rightCol.removeFromBottom (6);  // bottom inset
-        manualViewer->setBounds (rightCol);
-    }
+    scaleUpBtn  .setBounds (scaleRow.removeFromLeft (btnW));
 }

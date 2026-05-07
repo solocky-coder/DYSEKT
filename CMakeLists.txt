@@ -151,7 +151,8 @@ target_include_directories(Dysekt PRIVATE
 )
 
 target_compile_definitions(Dysekt PUBLIC
-    JUCE_WEB_BROWSER=0
+    JUCE_WEB_BROWSER=1          # enables juce::WebBrowserComponent
+    JUCE_USE_WIN_WEBVIEW2=1     # Edge WebView2 backend — renders PDF natively on Windows
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
@@ -163,6 +164,7 @@ target_link_libraries(Dysekt
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
+        juce::juce_gui_extra        # required for WebBrowserComponent (PDF manual viewer)
         DysektFonts
         # sfizz — slice-render pipeline (SoundFontLoader) + live SFZ playback (SfzPlayer)
         $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:sfizz::sfizz>
