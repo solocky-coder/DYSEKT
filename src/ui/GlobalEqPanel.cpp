@@ -2,6 +2,7 @@
 #include "../PluginProcessor.h"
 #include "../params/ParamIds.h"
 #include "ThemeData.h"
+#include "DysektLookAndFeel.h"
 #include <cmath>
 
 // ── Constructor ───────────────────────────────────────────────────────────────
