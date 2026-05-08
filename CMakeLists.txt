@@ -98,11 +98,8 @@ if (MSVC)
     target_compile_options(Dysekt PRIVATE /source-charset:utf-8)
 endif()
 
-juce_add_binary_data(DysektManual SOURCES
-    docs/DYSEKT_User_Manual.pdf
-)
-
 juce_add_binary_data(DysektFonts SOURCES
+    docs/DYSEKT_User_Manual.pdf
     src/ui/fonts/BarlowCondensed-Regular.ttf
     src/ui/fonts/BarlowCondensed-SemiBold.ttf
     src/ui/fonts/JetBrainsMono-Regular.ttf
@@ -168,7 +165,6 @@ target_link_libraries(Dysekt
         juce::juce_audio_utils
         juce::juce_dsp
         DysektFonts
-        DysektManual
         # sfizz — slice-render pipeline (SoundFontLoader) + live SFZ playback (SfzPlayer)
         $<$<BOOL:${DYSEKT_HAS_SFIZZ}>:sfizz::sfizz>
         # FluidSynth — live SF2 playback (SfzPlayer)

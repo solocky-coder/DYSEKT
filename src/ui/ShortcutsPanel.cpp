@@ -1,4 +1,5 @@
 #include "ShortcutsPanel.h"
+#include <BinaryData.h>
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 #include "MidiLearnDialog.h"

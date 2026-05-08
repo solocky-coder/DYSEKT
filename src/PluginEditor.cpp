@@ -28,6 +28,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  mixerPanel (p),
       eqPanel (p),
  sfzDropdown (p),
+ padGridView (p),
  shortcutsPanel (p)
 {
  juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
@@ -56,6 +57,26 @@ DysektEditor::DysektEditor (DysektProcessor& p)
 
  sfzDropdown.setVisible (false);
  addChildComponent (sfzDropdown);
+
+ addChildComponent (padGridView);
+ padGridView.onRenameRequest = [this] (int sliceIdx, const juce::String& currentName)
+ {
+     renameOverlay = std::make_unique<RenameOverlay> (sliceIdx + 1, currentName);
+     addAndMakeVisible (*renameOverlay);
+     renameOverlay->setBounds (getLocalBounds());
+     renameOverlay->toFront (true);
+     renameOverlay->onResult = [this, sliceIdx] (bool ok, const juce::String& newName)
+     {
+         if (ok && newName.isNotEmpty())
+             processor.sliceManager.setSliceName (sliceIdx, newName.toUpperCase());
+         renameOverlay.reset();
+     };
+ };
+ sliceControlBar.onPadViewToggle = [this] (bool on)
+ {
+     showPadGrid = on;
+     resized();
+ };
  // When a new SF2/SFZ is loaded from the dropdown, reset the restore flag
  // so the timer re-populates the zone matrix on the next completed load.
  sfzDropdown.onFileLoaded = [this] (const juce::File&)
@@ -218,6 +239,8 @@ void DysektEditor::setUiMode (int mode)
 {
  if (uiMode == mode) return;
  uiMode = mode;
+ // Leaving slicer mode — reset pad view to waveform
+ if (uiMode != 0) { showPadGrid = false; sliceControlBar.setPadViewActive (false); }
 
  // Keep the EDIT|SFZ tab in sync
  headerBar.dualFrame().setPadGridActive (uiMode == 1);
@@ -657,15 +680,14 @@ void DysektEditor::resized()
  sliceControlBar.setBounds ({});
  waveformOverview.setBounds ({});
  } else {
- if ((trimDialog != nullptr || (uiMode == 0 && hasRealSample)) && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
+ if (hasRealSample && uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
  {
- auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
- sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+     auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
+     sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
  }
  else
  {
- sliceControlBar.setBounds ({});
- // SCB space NOT removed from area — pad grid uses it
+     sliceControlBar.setBounds ({});
  }
 
  if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample)
@@ -706,38 +728,45 @@ void DysektEditor::resized()
 
  if (slotCoveringFrame)
  {
- // Mixer or normal browser is open — hide both main views so nothing overlaps
- waveformView.setVisible (false);
- waveformView.setBounds ({});
- sfzDropdown.setVisible (false);
- sfzDropdown.setBounds ({});
+     // Mixer or normal browser is open — hide all main views
+     waveformView.setVisible (false);   waveformView.setBounds ({});
+     sfzDropdown.setVisible  (false);   sfzDropdown.setBounds  ({});
+     padGridView.setVisible  (false);   padGridView.setBounds  ({});
  }
  else if (initBrowserOpen)
  {
- // No real sample yet — browser occupies the full waveform frame area
- browserPanel.setBounds (screenX, y, screenW, h);
- waveformView.setVisible (false);
- waveformView.setBounds ({});
- sfzDropdown.setVisible (false);
- sfzDropdown.setBounds ({});
+     // No real sample yet — browser occupies the full waveform frame area
+     browserPanel.setBounds (screenX, y, screenW, h);
+     waveformView.setVisible (false);   waveformView.setBounds ({});
+     sfzDropdown.setVisible  (false);   sfzDropdown.setBounds  ({});
+     padGridView.setVisible  (false);   padGridView.setBounds  ({});
  }
  else if (uiMode == 0 || trimActive)
  {
- // Original waveform layout
- waveformView.setVisible (true);
- waveformView.setBounds (juce::Rectangle<int> (screenX, y, screenW, waveH));
+     // Slicer mode — WaveformView or PadGridView depending on toggle
+     const bool showPads = showPadGrid && ! trimActive;
 
- sfzDropdown.setVisible (false);
- sfzDropdown.setBounds ({});
+     waveformView.setVisible (! showPads);
+     waveformView.setBounds (showPads ? juce::Rectangle<int>()
+                                      : juce::Rectangle<int> (screenX, y, screenW, waveH));
+
+     padGridView.setVisible (showPads);
+     padGridView.setBounds (showPads ? juce::Rectangle<int> (screenX, y, screenW, waveH)
+                                     : juce::Rectangle<int>());
+
+     sfzDropdown.setVisible (false);
+     sfzDropdown.setBounds ({});
  }
  else
  {
- // SFZ player layout
- sfzDropdown.setVisible (true);
- sfzDropdown.setBounds (juce::Rectangle<int> (screenX, y, screenW, waveH));
+     // SFZ player layout
+     sfzDropdown.setVisible (true);
+     sfzDropdown.setBounds (juce::Rectangle<int> (screenX, y, screenW, waveH));
 
- waveformView.setVisible (false);
- waveformView.setBounds ({});
+     waveformView.setVisible (false);
+     waveformView.setBounds ({});
+     padGridView.setVisible (false);
+     padGridView.setBounds ({});
  }
 
   // ── Trim bar: hide behind browser or mixer, restore when they close ───────
@@ -983,7 +1012,7 @@ void DysektEditor::timerCallback()
  const bool waveformAnimating = waveformInteracting || previewActive
  || playbackActive || processor.lazyChop.isActive()
  || (processor.liveDragSliceIdx.load (std::memory_order_relaxed) >= 0);
- const bool waveformShowing = (uiMode == 0) || processor.trimModeActive.load (std::memory_order_relaxed);
+ const bool waveformShowing = (uiMode == 0 && ! showPadGrid) || processor.trimModeActive.load (std::memory_order_relaxed);
  const bool waveformNeedsRepaint = waveformShowing && (uiChanged || viewportChanged || waveformAnimating || lastWaveformAnimating);
  const bool laneNeedsRepaint = waveformShowing && (uiChanged || viewportChanged || previewActive || lastPreviewActive);
 
@@ -1033,7 +1062,9 @@ void DysektEditor::timerCallback()
  if (laneNeedsRepaint) sliceLane.repaint();
 
  // SFZ player refresh
- if (uiMode == 1 && (uiChanged || playbackActive))
+    if (showPadGrid) padGridView.repaintGrid();
+
+  if (uiMode == 1 && (uiChanged || playbackActive))
      sfzDropdown.repaint();
 
  // SF-player async restore: once sfzPlayer finishes loading after

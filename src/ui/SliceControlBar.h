@@ -21,10 +21,19 @@ public:
     // Called by the parent editor's timer — starts/stops the pulse as needed
     void updateMidiLearnPulse();
 
+    // PAD/WAVE view toggle — set externally by the editor and reflected in the button.
+    void setPadViewActive (bool on) { padViewActive = on; repaint(); }
+    bool getPadViewActive() const noexcept { return padViewActive; }
+
+    /// Fired when the user clicks the PAD/WAVE toggle button.
+    std::function<void (bool padActive)> onPadViewToggle;
+
 private:
     void timerCallback() override;
     float pulsePhase    = 0.0f;   // 0..1, advances each timer tick
     int   lastLiveDrag  = -1;      // last liveDragBoundsStart value seen, for repaint gating
+    bool  padViewActive = false;   // mirrors editor showPadGrid
+    juce::Rectangle<int> padToggleBtnArea; // hit-tested in mouseDown
 
 private:
     struct ParamCell

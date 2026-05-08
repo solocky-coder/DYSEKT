@@ -24,6 +24,7 @@
 #include "ui/WaveformOverview.h"
 #include "ui/SfzDropdownPanel.h"
 #include "ui/GlobalEqPanel.h"
+#include "ui/PadGridView.h"
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 #include "ui/PluginEditorConstants.h"
@@ -95,7 +96,8 @@ private:
     /// Current interface layout mode.
     /// 0 = Waveform View (original UI — never overwritten).
     /// 1 = SFZ Player.
-    int uiMode = 0;
+    int  uiMode = 0;
+    bool showPadGrid     = false;  ///< true = PadGridView, false = WaveformView (within uiMode 0)
     bool hasSampleLoaded = false;   // true once a sample with audio is loaded
 
     std::unique_ptr<TrimSession>       trimSession;
@@ -122,6 +124,7 @@ private:
 
     FileBrowserPanel browserPanel;
     MixerPanel       mixerPanel;
+    PadGridView      padGridView;
     SfzDropdownPanel sfzDropdown;
     ShortcutsPanel   shortcutsPanel { processor };
     GlobalEqPanel    eqPanel;

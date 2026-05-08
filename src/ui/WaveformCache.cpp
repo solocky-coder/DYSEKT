@@ -46,6 +46,7 @@ void WaveformCache::rebuild (const juce::AudioBuffer<float>& buffer,
             float valL = dataL[ipos] + (dataL[ipos + 1] - dataL[ipos]) * frac;
             float valR = dataR[ipos] + (dataR[ipos + 1] - dataR[ipos]) * frac;
             float val = (valL + valR) * 0.5f;
+            val = std::max (-1.0f, std::min (1.0f, val));
             peaks[(size_t) px] = { val, val };
         }
         return;
@@ -89,6 +90,8 @@ void WaveformCache::rebuild (const juce::AudioBuffer<float>& buffer,
                 if (mip->minPeaks[(size_t) m] < lo) lo = mip->minPeaks[(size_t) m];
             }
 
+            hi = std::max (-1.0f, std::min (1.0f, hi));
+            lo = std::max (-1.0f, std::min (1.0f, lo));
             peaks[(size_t) px] = { hi, lo };
         }
     }
@@ -111,6 +114,8 @@ void WaveformCache::rebuild (const juce::AudioBuffer<float>& buffer,
                 if (val < lo) lo = val;
             }
 
+            hi = std::max (-1.0f, std::min (1.0f, hi));
+            lo = std::max (-1.0f, std::min (1.0f, lo));
             peaks[(size_t) px] = { hi, lo };
         }
     }
