@@ -65,11 +65,17 @@ DysektEditor::DysektEditor (DysektProcessor& p)
      addAndMakeVisible (*renameOverlay);
      renameOverlay->setBounds (getLocalBounds());
      renameOverlay->toFront (true);
-     renameOverlay->onResult = [this, sliceIdx] (bool ok, const juce::String& newName)
+     renameOverlay->onResult = [this, sliceIdx] (const juce::String& newName, bool cancelled)
      {
-         if (ok && newName.isNotEmpty())
-             processor.sliceManager.setSliceName (sliceIdx, newName.toUpperCase());
          renameOverlay.reset();
+         if (! cancelled)
+         {
+             DysektProcessor::Command cmd;
+             cmd.type = DysektProcessor::CmdSetSliceName;
+             cmd.intParam1 = sliceIdx;
+             cmd.stringParam = newName;
+             processor.pushCommand (cmd);
+         }
      };
  };
  sliceControlBar.onPadViewToggle = [this] (bool on)
