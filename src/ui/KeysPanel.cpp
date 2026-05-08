@@ -579,6 +579,45 @@ KeysPanel::ZoneMatrixContent::hitTestCol (int x, int w) const
 // ZoneMatrixContent — mouse events
 // =============================================================================
 
+void KeysPanel::ZoneMatrixContent::mouseMove (const juce::MouseEvent& e)
+{
+    if (! sfzEditable)
+    {
+        setMouseCursor (juce::MouseCursor::NormalCursor);
+        return;
+    }
+
+    // Add Zone button area
+    if (addZoneBtnVisible && ! rows.empty())
+    {
+        const int btnRowY = kHeaderH + (int) rows.size() * kRowH;
+        if (e.y >= btnRowY)
+        {
+            setMouseCursor (juce::MouseCursor::PointingHandCursor);
+            return;
+        }
+    }
+
+    // Header row
+    if (e.y < kHeaderH)
+    {
+        setMouseCursor (juce::MouseCursor::NormalCursor);
+        return;
+    }
+
+    // Data rows — show resize cursor only over editable columns
+    const EditCol col = hitTestCol (e.x, getWidth());
+    if (col == EditCol::None || col == EditCol::Loop)
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    else
+        setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+}
+
+void KeysPanel::ZoneMatrixContent::mouseExit (const juce::MouseEvent&)
+{
+    setMouseCursor (juce::MouseCursor::NormalCursor);
+}
+
 void KeysPanel::ZoneMatrixContent::mouseDrag (const juce::MouseEvent& e)
 {
     if (! sfzEditable || dragCol == EditCol::None || dragRow < 0
@@ -650,8 +689,7 @@ void KeysPanel::ZoneMatrixContent::mouseUp (const juce::MouseEvent&)
 void KeysPanel::setSfzEditable (bool editable)
 {
     zoneMatrix.sfzEditable = editable;
-    zoneMatrix.setMouseCursor (editable ? juce::MouseCursor::UpDownResizeCursor
-                                        : juce::MouseCursor::NormalCursor);
+    // Cursor is set dynamically in ZoneMatrixContent::mouseMove — not globally here.
     // Forward zone-edit events from the matrix up to whoever owns KeysPanel
     zoneMatrix.onZoneEdited = [this] (int rowIndex, const Keyzone& z)
     {
