@@ -177,7 +177,7 @@ void ShortcutsPanel::buildShortcutData()
         ShortcutCategory misc;
         misc.title = "General";
         misc.entries = {
-            { "?  (QWERTZ: Shift+\xc3\x9f)", "Toggle this panel"   },
+            { juce::String (juce::CharPointer_UTF8 ("?  (QWERTZ: Shift+\xc3\x9f)")), "Toggle this panel" },
             { "Esc",                           "Close panel / cancel" },
         };
         categories.push_back (std::move (misc));
