@@ -5,13 +5,9 @@
 
 class DysektProcessor;
 
-/// Modal overlay panel displaying keyboard shortcuts, global preferences,
-/// and a User Manual launcher.
-///
-/// The panel has two tabs:
-///   "Settings & Shortcuts"  — preferences and shortcut reference
-///   "User Manual"           — button that opens the embedded PDF in the
-///                             system default viewer (no WebView required)
+/// Modal overlay panel displaying keyboard shortcuts and global preferences.
+/// An "RTFM" button in the settings panel opens the embedded PDF in the
+/// system default viewer.
 ///
 /// Shown via ? or the "?" button in ActionPanel.
 /// Dismissed by pressing Escape or clicking the close button.
@@ -43,21 +39,14 @@ public:
 private:
     DysektProcessor& processor;
 
-    // ── Tab state ─────────────────────────────────────────────────────────────
-    enum class Tab { Settings, Manual };
-    Tab activeTab = Tab::Settings;
-
-    juce::TextButton tabSettingsBtn { "Settings & Shortcuts" };
-    juce::TextButton tabManualBtn   { "User Manual"          };
-
-    // ── Manual viewer ─────────────────────────────────────────────────────────
-    juce::TextButton openManualBtn { "Open User Manual (PDF)" };
+    // ── Manual button ─────────────────────────────────────────────────────────
+    juce::TextButton rtfmBtn { "RTFM" };
 
     /// Extracts the embedded BinaryData PDF to a temp file (once) and opens
-    /// it in the system default viewer (Edge / Adobe / Preview etc.).
+    /// it in the system default viewer.
     void openManualPdf();
 
-    // ── Settings-tab widgets ──────────────────────────────────────────────────
+    // ── Settings widgets ──────────────────────────────────────────────────────
     struct ShortcutEntry    { juce::String keys, description; };
     struct ShortcutCategory { juce::String title; std::vector<ShortcutEntry> entries; };
 
@@ -80,7 +69,6 @@ private:
     void drawScaleSection     (juce::Graphics& g, juce::Rectangle<int>& area);
     void drawInterfaceSection (juce::Graphics& g, juce::Rectangle<int>& area);
     void updateScaleLcd();
-    void applyTabLayout();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShortcutsPanel)
 };

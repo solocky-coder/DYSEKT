@@ -86,32 +86,12 @@ ShortcutsPanel::ShortcutsPanel (DysektProcessor& proc)
     };
     addAndMakeVisible (searchBox);
 
-    // ── Tab buttons ───────────────────────────────────────────────────────────
-    auto styleTab = [this] (juce::TextButton& btn, Tab t)
-    {
-        btn.setColour (juce::TextButton::buttonColourId,    getTheme().button);
-        btn.setColour (juce::TextButton::buttonOnColourId,  getTheme().accent.withAlpha (0.25f));
-        btn.setColour (juce::TextButton::textColourOffId,   getTheme().foreground.withAlpha (0.7f));
-        btn.setColour (juce::TextButton::textColourOnId,    getTheme().foreground);
-        btn.setClickingTogglesState (false);
-        btn.onClick = [this, t]
-        {
-            activeTab = t;
-            applyTabLayout();
-            repaint();
-        };
-        addAndMakeVisible (btn);
-        (void) t;
-    };
-    styleTab (tabSettingsBtn, Tab::Settings);
-    styleTab (tabManualBtn,   Tab::Manual);
-
-    // ── Open Manual button ───────────────────────────────────────────────────────────────────
-    openManualBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
-    openManualBtn.setColour (juce::TextButton::textColourOffId, getTheme().foreground);
-    openManualBtn.setTooltip ("Opens DYSEKT_User_Manual.pdf in your default PDF viewer");
-    openManualBtn.onClick = [this] { openManualPdf(); };
-    addChildComponent (openManualBtn);   // hidden until Manual tab is active
+    // ── RTFM button ───────────────────────────────────────────────────────────
+    rtfmBtn.setColour (juce::TextButton::buttonColourId,  getTheme().button);
+    rtfmBtn.setColour (juce::TextButton::textColourOffId, getTheme().accent);
+    rtfmBtn.setTooltip ("Open the user manual PDF");
+    rtfmBtn.onClick = [this] { openManualPdf(); };
+    addAndMakeVisible (rtfmBtn);
 
     setWantsKeyboardFocus (true);
 }
@@ -124,7 +104,6 @@ ShortcutsPanel::~ShortcutsPanel() = default;
 
 void ShortcutsPanel::openManualPdf()
 {
-    // Write the embedded PDF to a temp file on first call, then open it.
     juce::File tmp = juce::File::getSpecialLocation (juce::File::tempDirectory)
                          .getChildFile ("DYSEKT_User_Manual.pdf");
 
@@ -134,33 +113,9 @@ void ShortcutsPanel::openManualPdf()
 
     if (! tmp.startAsProcess())
     {
-        // Fallback: open the GitHub releases page in the system browser.
         juce::URL ("https://github.com/solocky-coder/DYSEKT/releases")
             .launchInDefaultBrowser();
     }
-}
-
-// applyTabLayout  — shows / hides children for the active tab
-// ─────────────────────────────────────────────────────────────────────────────
-
-void ShortcutsPanel::applyTabLayout()
-{
-    const bool isSettings = (activeTab == Tab::Settings);
-
-    // Settings-tab children
-    titleLabel  .setVisible (isSettings);
-    themeBtn    .setVisible (isSettings);
-    scaleDownBtn.setVisible (isSettings);
-    scaleUpBtn  .setVisible (isSettings);
-    scaleLcd    .setVisible (isSettings);
-    searchBox   .setVisible (isSettings);
-
-    // Manual-tab button
-    openManualBtn.setVisible (! isSettings);
-
-    // Trigger a layout recalculation
-    resized();
-    repaint();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,9 +200,6 @@ bool ShortcutsPanel::keyPressed (const juce::KeyPress& key)
 
 void ShortcutsPanel::mouseDown (const juce::MouseEvent& e)
 {
-    if (activeTab != Tab::Settings)
-        return;
-
     // ── Trim preference ───────────────────────────────────────────────────────
     const int pref    = processor.trimPreference.load (std::memory_order_relaxed);
     int       newPref = pref;
@@ -406,28 +358,14 @@ void ShortcutsPanel::paint (juce::Graphics& g)
     g.setColour (getTheme().accent.withAlpha (0.5f));
     g.drawRoundedRectangle (panel.toFloat().reduced (0.5f), 8.0f, 1.0f);
 
-    if (activeTab == Tab::Manual)
-    {
-        // openManualBtn is a child component and handles interaction.
-        // Draw a short hint above it.
-        auto hint = panel.reduced (14, 6);
-        hint.removeFromTop (30 + 8 + 28 + 8);   // title + gap + tabs + gap
-        g.setFont (DysektLookAndFeel::makeFont (10.5f));
-        g.setColour (getTheme().foreground.withAlpha (0.45f));
-        g.drawText ("Opens in your default PDF viewer",
-                    hint.removeFromTop (22), juce::Justification::centred);
-        return;
-    }
-
-
-    // ── Settings tab content ──────────────────────────────────────────────────
+    // ── Settings content ──────────────────────────────────────────────────────
     auto content = panel.reduced (14, 6);
-    // Skip: title row (30) + gap (8) + tabs (28) + gap (8) + search (26) + gap (10)
-    content.removeFromTop (30 + 8 + 28 + 8 + 26 + 10);
+    // Skip: title row (30) + gap (8) + search (26) + gap (10)
+    content.removeFromTop (30 + 8 + 26 + 10);
 
-    const int colW  = content.getWidth() / 2;
-    auto leftCol    = content.removeFromLeft (colW);
-    auto rightCol   = content;
+    const int colW = content.getWidth() / 2;
+    auto leftCol   = content.removeFromLeft (colW);
+    auto rightCol  = content;
 
     // UI Scale
     g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
@@ -508,47 +446,23 @@ void ShortcutsPanel::resized()
     auto panel  = getLocalBounds().reduced (40, 30);
     auto header = panel.reduced (14, 6);
 
-    // ── Title row: [Title label] [Theme btn] [Close btn] ─────────────────────
+    // ── Title row: [Title label] [RTFM btn] [Theme btn] [Close btn] ──────────
     auto titleRow = header.removeFromTop (30);
-    closeBtn.setBounds (titleRow.removeFromRight (30));
-    themeBtn.setBounds (titleRow.removeFromRight (120));
+    closeBtn .setBounds (titleRow.removeFromRight (30));
+    themeBtn .setBounds (titleRow.removeFromRight (120));
+    titleRow.removeFromRight (6);
+    rtfmBtn  .setBounds (titleRow.removeFromRight (52));
     titleRow.removeFromRight (6);
     titleLabel.setBounds (titleRow);
     header.removeFromTop (8);
 
-    // ── Tab strip ─────────────────────────────────────────────────────────────
-    auto tabRow = header.removeFromTop (28);
-    const int tabW = tabRow.getWidth() / 2;
-    tabSettingsBtn.setBounds (tabRow.removeFromLeft (tabW).reduced (0, 2));
-    tabManualBtn  .setBounds (tabRow.reduced (0, 2));
-
-    // Highlight the active tab visually
-    tabSettingsBtn.setToggleState (activeTab == Tab::Settings, juce::dontSendNotification);
-    tabManualBtn  .setToggleState (activeTab == Tab::Manual,   juce::dontSendNotification);
-
-    header.removeFromTop (8);
-
-    if (activeTab == Tab::Manual)
-    {
-        // Centre the Open button in the remaining content area.
-        openManualBtn.setBounds (header.withSizeKeepingCentre (220, 34));
-
-        // Clear settings-only widget bounds.
-        searchBox   .setBounds ({});
-        scaleDownBtn.setBounds ({});
-        scaleLcd    .setBounds ({});
-        scaleUpBtn  .setBounds ({});
-        return;
-    }
-
-
-    // ── Settings tab ──────────────────────────────────────────────────────────
+    // ── Search box ────────────────────────────────────────────────────────────
     searchBox.setBounds (header.removeFromTop (26));
     header.removeFromTop (10);
 
-    // Scale controls sit in the left column below the "UI SCALE" heading
+    // ── Scale controls ────────────────────────────────────────────────────────
     auto content = panel.reduced (14, 6);
-    content.removeFromTop (30 + 8 + 28 + 8 + 26 + 10);  // match paint() offset
+    content.removeFromTop (30 + 8 + 26 + 10);   // match paint() offset
     auto leftCol = content.removeFromLeft (content.getWidth() / 2);
 
     leftCol.removeFromTop (18);  // "UI SCALE" heading
