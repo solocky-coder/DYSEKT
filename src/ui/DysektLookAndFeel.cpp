@@ -230,7 +230,7 @@ void DysektLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g,
                                                      const juce::Rectangle<int>& area,
                                                      const juce::String& sectionName)
 {
-    g.setFont (makeFont (12.0f * sMenuScale, true));
+    g.setFont (makeFont (14.0f * sMenuScale, true));
     g.setColour (getTheme().foreground);
     g.drawFittedText (sectionName,
                       area.getX() + (int) (12 * sMenuScale), area.getY(),
@@ -241,7 +241,7 @@ void DysektLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g,
 
 juce::Font DysektLookAndFeel::getPopupMenuFont()
 {
-    return makeFont (12.0f * sMenuScale);
+    return makeFont (14.0f * sMenuScale);
 }
 
 // ── ComboBox ──────────────────────────────────────────────────────────────────
@@ -274,7 +274,7 @@ void DysektLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
 
 juce::Font DysektLookAndFeel::getComboBoxFont (juce::ComboBox&)
 {
-    return makeFont (12.0f * sMenuScale);
+    return makeFont (14.0f * sMenuScale);
 }
 
 void DysektLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
@@ -372,4 +372,51 @@ void DysektLookAndFeel::drawScrollbar (juce::Graphics& g,
         g.setColour (t.accent.withAlpha (0.35f));
         g.drawRoundedRectangle (thumbF, thumbR, 1.0f);
     }
+}
+
+//==============================================================================
+// AlertWindow overrides — make every SF-player popup readable
+//==============================================================================
+juce::Font DysektLookAndFeel::getAlertWindowTitleFont()
+{
+    return makeFont (16.0f * sMenuScale, true);
+}
+
+juce::Font DysektLookAndFeel::getAlertWindowMessageFont()
+{
+    return makeFont (14.0f * sMenuScale);
+}
+
+int DysektLookAndFeel::getAlertWindowButtonHeight()
+{
+    return juce::roundToInt (28.0f * sMenuScale);
+}
+
+void DysektLookAndFeel::drawAlertBox (juce::Graphics& g, juce::AlertWindow& alert,
+                                      const juce::Rectangle<int>& textArea,
+                                      juce::TextLayout& textLayout)
+{
+    const auto& t = getTheme();
+
+    // Background
+    g.setColour (t.panelBg);
+    g.fillRoundedRectangle (alert.getLocalBounds().toFloat(), 4.0f);
+
+    // Accent border
+    g.setColour (t.accent.withAlpha (0.6f));
+    g.drawRoundedRectangle (alert.getLocalBounds().toFloat().reduced (0.5f), 4.0f, 1.0f);
+
+    // Title strip
+    const auto titleArea = juce::Rectangle<int> (0, 0, alert.getWidth(), textArea.getY());
+    g.setColour (t.accent.withAlpha (0.15f));
+    g.fillRoundedRectangle (titleArea.toFloat(), 4.0f);
+
+    g.setColour (t.fg);
+    g.setFont (getAlertWindowTitleFont());
+    g.drawFittedText (alert.getName(),
+                      titleArea.reduced (8, 4),
+                      juce::Justification::centredLeft, 1);
+
+    // Message body
+    textLayout.draw (g, textArea.toFloat());
 }

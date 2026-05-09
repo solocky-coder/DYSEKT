@@ -46,6 +46,14 @@ public:
     juce::Rectangle<int> getTooltipBounds (const juce::String& text, juce::Point<int> screenPos,
                                            juce::Rectangle<int> parentArea) override;
 
+    // ── AlertWindow sizing ────────────────────────────────────────────────
+    juce::Font getAlertWindowTitleFont()   override;
+    juce::Font getAlertWindowMessageFont() override;
+    int        getAlertWindowButtonHeight() override;
+    void       drawAlertBox (juce::Graphics&, juce::AlertWindow&,
+                             const juce::Rectangle<int>& textArea,
+                             juce::TextLayout&) override;
+
     juce::Typeface::Ptr getTypefaceForFont (const juce::Font& f) override;
 
     static juce::Font makeFont     (float pointSize, bool bold = false);  // Barlow Condensed — labels
