@@ -237,7 +237,7 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
             const int nextHi = juce::jmin (lastHi + 12, 127);
             auto noteName = [] (int n) -> juce::String {
                 static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-                return juce::String (names[n % 12]) + juce::String (n / 12 - 1);
+                return juce::String (names[n % 12]) + juce::String (n / 12 - 2);
             };
             const juce::String hint = noteName (nextLo) + " \u2013 " + noteName (nextHi);
             g.setFont (DysektLookAndFeel::makeFont (7.5f));
@@ -277,7 +277,7 @@ void KeysPanel::ZoneMatrixContent::paint (juce::Graphics& g)
     auto noteName = [] (int note) -> juce::String
     {
         static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-        return juce::String (names[note % 12]) + juce::String (note / 12 - 1);
+        return juce::String (names[note % 12]) + juce::String (note / 12 - 2);
     };
 
     // ── Rows ──────────────────────────────────────────────────────────────────
