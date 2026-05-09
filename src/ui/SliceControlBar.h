@@ -33,7 +33,8 @@ private:
     float pulsePhase    = 0.0f;   // 0..1, advances each timer tick
     int   lastLiveDrag  = -1;      // last liveDragBoundsStart value seen, for repaint gating
     bool  padViewActive = false;   // mirrors editor showPadGrid
-    juce::Rectangle<int> padToggleBtnArea; // hit-tested in mouseDown
+    juce::Rectangle<int> padToggleBtnArea;  // hit-tested in mouseDown — PADS button
+    juce::Rectangle<int> waveToggleBtnArea; // hit-tested in mouseDown — WAVE button
 
 private:
     struct ParamCell

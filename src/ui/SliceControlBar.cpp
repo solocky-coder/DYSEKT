@@ -841,7 +841,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  int idx = ui.selectedSlice;
  int numSlices = ui.numSlices;
  const int kToggleBtnW = si (52);
- int rightEdge = getWidth() - si (8) - kToggleBtnW - si (6);
+ int rightEdge = getWidth() - si (8) - kToggleBtnW * 2 - si (4) - si (6); // two buttons + gap
  int row1y = si (5), row2y = si (36);
  rootNoteArea = {}; // no longer drawn — LCD shows ROOT and SLICES
 
@@ -1241,40 +1241,40 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
  if (adsrGroupX2 > adsrGroupX1) drawGroupLabel (adsrGroupX1, adsrGroupX2, "");
  }
 
- // ── PAD / WAVE toggle button ─────────────────────────────────────────────────────────────────
+ // ── PAD / WAVE — two separate toggle buttons side by side ────────────────────────────────────
  {
-     const int btnX = getWidth() - si (8) - kToggleBtnW;
-     const int btnY = si (10);
-     const int btnH = si (52);
-     padToggleBtnArea = juce::Rectangle<int> (btnX, btnY, kToggleBtnW, btnH);
+     const int btnY   = si (10);
+     const int btnH   = si (24);
+     const int gap    = si (4);
+     const int rightX = getWidth() - si (8);
 
-     const auto btnBg = padViewActive
-         ? getTheme().accent.withAlpha (0.20f)
-         : getTheme().separator.withAlpha (0.12f);
-     g.setColour (btnBg);
-     g.fillRoundedRectangle (padToggleBtnArea.toFloat(), 4.0f);
-     g.setColour (getTheme().separator.withAlpha (0.40f));
-     g.drawRoundedRectangle (padToggleBtnArea.toFloat().reduced (0.5f), 4.0f, 1.0f);
-
-     const int halfH = btnH / 2;
-     juce::Rectangle<int> topHalf  (btnX, btnY,         kToggleBtnW, halfH);
-     juce::Rectangle<int> botHalf  (btnX, btnY + halfH, kToggleBtnW, halfH);
+     padToggleBtnArea  = juce::Rectangle<int> (rightX - kToggleBtnW * 2 - gap, btnY, kToggleBtnW, btnH);
+     waveToggleBtnArea = juce::Rectangle<int> (rightX - kToggleBtnW,            btnY, kToggleBtnW, btnH);
 
      g.setFont (DysektLookAndFeel::makeFont (9.5f * paintSf, true));
-     g.setColour (padViewActive
-         ? getTheme().accent
-         : getTheme().foreground.withAlpha (0.55f));
-     g.drawText ("PADS", topHalf, juce::Justification::centred);
 
-     g.setColour (! padViewActive
-         ? getTheme().accent
-         : getTheme().foreground.withAlpha (0.55f));
-     g.drawText ("WAVE", botHalf, juce::Justification::centred);
+     auto drawBtn = [&] (const juce::Rectangle<int>& area, const juce::String& label, bool active)
+     {
+         const auto bg = active
+             ? getTheme().accent.withAlpha (0.22f)
+             : getTheme().separator.withAlpha (0.10f);
+         g.setColour (bg);
+         g.fillRoundedRectangle (area.toFloat(), 4.0f);
 
-     g.setColour (getTheme().separator.withAlpha (0.35f));
-     g.drawHorizontalLine (btnY + halfH,
-                           (float) btnX + 6,
-                           (float) (btnX + kToggleBtnW - 6));
+         const auto border = active
+             ? getTheme().accent.withAlpha (0.80f)
+             : getTheme().separator.withAlpha (0.35f);
+         g.setColour (border);
+         g.drawRoundedRectangle (area.toFloat().reduced (0.5f), 4.0f, 1.0f);
+
+         g.setColour (active
+             ? getTheme().accent
+             : getTheme().foreground.withAlpha (0.50f));
+         g.drawText (label, area, juce::Justification::centred);
+     };
+
+     drawBtn (padToggleBtnArea,  "PADS",  padViewActive);
+     drawBtn (waveToggleBtnArea, "WAVE", !padViewActive);
  }
 }
 
@@ -1283,14 +1283,25 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
 // =============================================================================
 void SliceControlBar::mouseDown (const juce::MouseEvent& e)
 {
-    // ── PAD/WAVE toggle button takes priority over all other cells ──────────
-    if (e.mods.isLeftButtonDown() && padToggleBtnArea.contains (e.getPosition()))
+    // ── PAD / WAVE — two separate buttons, each sets its own active state ───
+    if (e.mods.isLeftButtonDown())
     {
-        padViewActive = ! padViewActive;
-        repaint();
-        if (onPadViewToggle)
-            onPadViewToggle (padViewActive);
-        return;
+        if (padToggleBtnArea.contains (e.getPosition()) && !padViewActive)
+        {
+            padViewActive = true;
+            repaint();
+            if (onPadViewToggle) onPadViewToggle (true);
+            return;
+        }
+        if (waveToggleBtnArea.contains (e.getPosition()) && padViewActive)
+        {
+            padViewActive = false;
+            repaint();
+            if (onPadViewToggle) onPadViewToggle (false);
+            return;
+        }
+        if (padToggleBtnArea.contains (e.getPosition()) || waveToggleBtnArea.contains (e.getPosition()))
+            return; // already active — swallow click, no-op
     }
 
  // ── Lock guard: block all param changes if selected slice is fully locked ─

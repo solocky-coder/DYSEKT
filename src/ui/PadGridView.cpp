@@ -2,7 +2,7 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 #include "../params/ParamIds.h"
-#include <cmath>
+#include <juce_gui_extra/juce_gui_extra.h>
 
 //==============================================================================
 PadGridView::PadGridView (DysektProcessor& proc)
@@ -23,8 +23,8 @@ void PadGridView::layoutBankButtons()
     const int btnW = (barW - kPadPadX * 2 - 6) / 2;
     const int btnY = (kBankBarH - 20) / 2;
 
-    bankAButtonBounds = { kPadPadX,               btnY, btnW, 20 };
-    bankBButtonBounds = { kPadPadX + btnW + 6,    btnY, btnW, 20 };
+    bankAButtonBounds = { kPadPadX, btnY, btnW, 20 };
+    bankBButtonBounds = { kPadPadX + btnW + 6, btnY, btnW, 20 };
 }
 
 void PadGridView::drawBankBar (juce::Graphics& g) const
@@ -107,7 +107,7 @@ int PadGridView::padIndexAt (juce::Point<int> p) const noexcept
 juce::String PadGridView::midiNoteName (int note)
 {
     static const char* kNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-    const int oct = (note / 12) - 2;  // matches LCD: MIDI 60 = C3
+    const int oct = (note / 12) - 2;
     return juce::String (kNames[note % 12]) + juce::String (oct);
 }
 
@@ -116,15 +116,14 @@ void PadGridView::drawPad (juce::Graphics& g,
                             int absIndex,
                             bool isEmpty) const
 {
-    const auto& th  = getTheme();
-    const auto& ui  = processor.getUiSliceSnapshot();
-    const bool  sel = (ui.selectedSlice == absIndex);
-    const bool  hov = (hoveredPad == absIndex);
+    const auto& th = getTheme();
+    const auto& ui = processor.getUiSliceSnapshot();
+    const bool sel = (ui.selectedSlice == absIndex);
+    const bool hov = (hoveredPad == absIndex);
 
     // ── Background: full pad filled with the slice color ─────────────────────
     if (isEmpty)
     {
-        // Background gradient — same recipe as DualLcdControlFrame
         {
             auto bgTop = th.darkBar.darker (0.45f);
             auto bgBot = th.darkBar.darker (0.65f);
@@ -133,49 +132,38 @@ void PadGridView::drawPad (juce::Graphics& g,
             g.setGradientFill (grad);
             g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
         }
-        // Outer glow
         g.setColour (th.accent.withAlpha (0.08f));
         g.drawRoundedRectangle (bounds.toFloat().expanded (1.0f), 5.0f, 1.0f);
-        // Inner border
         g.setColour (th.accent.withAlpha (0.20f));
         g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, 1.0f);
         return;
     }
 
-    const auto& slice    = ui.slices[(size_t) absIndex];
+    const auto& slice  = ui.slices[(size_t) absIndex];
     const juce::Colour sliceCol = slice.colour;
 
-    // Darkened version of the slice color for the pad body
-    // Selected pads are a bit brighter so they stand out clearly.
     juce::Colour padBg = sliceCol.darker (sel ? 0.38f : 0.58f);
     if (hov) padBg = padBg.brighter (0.12f);
 
-    // Background fill — darkened slice color with subtle gradient
     {
         juce::ColourGradient grad (padBg.brighter (0.08f), 0, (float) bounds.getY(),
-                                   padBg.darker (0.12f),  0, (float) bounds.getBottom(), false);
+                                   padBg.darker  (0.12f), 0, (float) bounds.getBottom(), false);
         g.setGradientFill (grad);
         g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
     }
 
-    // Outer glow — always accent color (matches every other frame in the UI)
     g.setColour (th.accent.withAlpha (sel ? 0.28f : 0.14f));
     g.drawRoundedRectangle (bounds.toFloat().expanded (1.0f), 5.0f, 1.0f);
 
-    // Inner border — accent at full strength when selected, dimmed otherwise
     g.setColour (th.accent.withAlpha (sel ? 0.90f : (hov ? 0.55f : 0.35f)));
     g.drawRoundedRectangle (bounds.toFloat().reduced (0.5f), 4.0f, sel ? 1.5f : 1.0f);
 
     // ── Inner layout ──────────────────────────────────────────────────────────
-    auto inner     = bounds.reduced (3, 3);
+    auto inner  = bounds.reduced (3, 3);
+    auto topRow = inner.removeFromTop (11);
+    auto waveArea = inner;
 
-    // Top row: note name left + slice name centred  (fixed height = 11 px)
-    auto topRow    = inner.removeFromTop (11);
-
-    // Remaining space = waveform canvas (no meter strip any more)
-    auto waveArea  = inner;
-
-    // ── MIDI note name — top-left (replaces old pad number) ──────────────────
+    // ── MIDI note name ────────────────────────────────────────────────────────
     {
         g.setFont (DysektLookAndFeel::makeMonoFont (7.5f));
         g.setColour (sliceCol.brighter (0.55f).withAlpha (0.90f));
@@ -184,17 +172,17 @@ void PadGridView::drawPad (juce::Graphics& g,
                     juce::Justification::centredLeft);
     }
 
-    // ── Slice name — top-centre ───────────────────────────────────────────────
+    // ── Slice name ────────────────────────────────────────────────────────────
     {
         const juce::String displayName = slice.name.isNotEmpty()
-                                       ? slice.name
-                                       : ("Slice " + juce::String (absIndex + 1));
+            ? slice.name
+            : ("Slice " + juce::String (absIndex + 1));
         g.setFont (DysektLookAndFeel::makeFont (8.5f, true));
         g.setColour (juce::Colours::white.withAlpha (sel ? 1.0f : 0.88f));
         g.drawText (displayName, topRow, juce::Justification::centred, true);
     }
 
-    // ── Slice waveform — fills the middle canvas (8-mode, SliceWaveformLcd style) ──
+    // ── Waveform ──────────────────────────────────────────────────────────────
     if (waveArea.getWidth() > 4 && waveArea.getHeight() > 4 && ui.sampleLoaded)
     {
         const int startSamp = slice.startSample;
@@ -203,7 +191,6 @@ void PadGridView::drawPad (juce::Graphics& g,
 
         if (sliceLen > 0)
         {
-            // Build per-pixel peak array for this slice
             const int W = waveArea.getWidth();
             const int H = waveArea.getHeight();
             std::vector<float> peaks ((size_t) W, 0.0f);
@@ -213,7 +200,6 @@ void PadGridView::drawPad (juce::Graphics& g,
                 peaks[(size_t) x] = processor.getWaveformPeakAt (samp);
             }
 
-            // Clip drawing to waveArea
             g.saveState();
             g.reduceClipRegion (waveArea);
 
@@ -222,14 +208,12 @@ void PadGridView::drawPad (juce::Graphics& g,
             const float cy    = oy + (float) H * 0.5f;
             const float scale = (float) H * 0.44f;
 
-            // Use slice color (brightened slightly) to mirror SliceWaveformLcd
             const juce::Colour waveCol = sliceCol.brighter (0.25f);
 
             auto px2x = [&] (int px) -> float { return ox + (float) px; };
 
             switch (waveformMode)
             {
-                // ── Mode 0 : Hard (SliceWaveformLcd default — fill + glow lines) ──
                 default:
                 case 0:
                 {
@@ -250,9 +234,7 @@ void PadGridView::drawPad (juce::Graphics& g,
                         fill.lineTo (px2x (px), cy + peaks[(size_t) px] * scale);
                     fill.closeSubPath();
 
-                    // Phosphor-style fill + glow — matches SliceWaveformLcd
-                    g.setColour (waveCol.withAlpha (0.12f));
-                    g.fillPath (fill);
+                    g.setColour (waveCol.withAlpha (0.12f)); g.fillPath (fill);
                     g.setColour (waveCol.withAlpha (0.22f));
                     g.strokePath (lineTop, juce::PathStrokeType (2.5f));
                     g.strokePath (lineBot, juce::PathStrokeType (2.5f));
@@ -262,7 +244,6 @@ void PadGridView::drawPad (juce::Graphics& g,
                     break;
                 }
 
-                // ── Mode 1 : Soft ─────────────────────────────────────────────
                 case 1:
                 {
                     juce::Path fillPath;
@@ -284,7 +265,6 @@ void PadGridView::drawPad (juce::Graphics& g,
                     break;
                 }
 
-                // ── Mode 2 : Outline ──────────────────────────────────────────
                 case 2:
                 {
                     juce::Path topPath, botPath;
@@ -308,7 +288,6 @@ void PadGridView::drawPad (juce::Graphics& g,
                     break;
                 }
 
-                // ── Mode 3 : Rectified ────────────────────────────────────────
                 case 3:
                 {
                     const float baseline  = oy + (float) H * 0.85f;
@@ -318,7 +297,7 @@ void PadGridView::drawPad (juce::Graphics& g,
                     for (int px = 1; px < W; ++px)
                         rectPath.lineTo (px2x (px), baseline - peaks[(size_t) px] * rectScale);
                     rectPath.lineTo (px2x (W - 1), baseline);
-                    rectPath.lineTo (px2x (0), baseline);
+                    rectPath.lineTo (px2x (0),     baseline);
                     rectPath.closeSubPath();
                     juce::ColourGradient grad (waveCol.withAlpha (0.60f), 0.0f, oy,
                                                waveCol.withAlpha (0.05f), 0.0f, oy + (float) H, false);
@@ -334,7 +313,6 @@ void PadGridView::drawPad (juce::Graphics& g,
                     break;
                 }
 
-                // ── Mode 4 : Mirrored ─────────────────────────────────────────
                 case 4:
                 {
                     juce::Path upper, lower;
@@ -359,7 +337,6 @@ void PadGridView::drawPad (juce::Graphics& g,
                     break;
                 }
 
-                // ── Mode 5 : Bars ─────────────────────────────────────────────
                 case 5:
                 {
                     for (int px = 0; px < W; ++px)
@@ -372,7 +349,6 @@ void PadGridView::drawPad (juce::Graphics& g,
                     break;
                 }
 
-                // ── Mode 6 : RMS ──────────────────────────────────────────────
                 case 6:
                 {
                     juce::Path rmsPath;
@@ -402,18 +378,17 @@ void PadGridView::drawPad (juce::Graphics& g,
                     break;
                 }
 
-                // ── Mode 7 : Stepped ──────────────────────────────────────────
                 case 7:
                 {
                     const int stepW = juce::jmax (2, W / juce::jmax (1, W / 4));
                     juce::Path upper;
                     bool started = false;
-                    float lastY = cy;
+                    float lastY  = cy;
                     for (int px = 0; px < W; px += stepW)
                     {
                         float y = cy - peaks[(size_t) px] * scale;
                         if (! started) { upper.startNewSubPath (px2x (px), y); started = true; }
-                        else { upper.lineTo (px2x (px), lastY); upper.lineTo (px2x (px), y); }
+                        else           { upper.lineTo (px2x (px), lastY); upper.lineTo (px2x (px), y); }
                         upper.lineTo (px2x (juce::jmin (px + stepW, W - 1)), y);
                         lastY = y;
                     }
@@ -423,7 +398,7 @@ void PadGridView::drawPad (juce::Graphics& g,
                     {
                         float y = cy + peaks[(size_t) px] * scale;
                         if (! startedL) { lower.startNewSubPath (px2x (px), y); startedL = true; }
-                        else { lower.lineTo (px2x (px), lastYL); lower.lineTo (px2x (px), y); }
+                        else            { lower.lineTo (px2x (px), lastYL); lower.lineTo (px2x (px), y); }
                         lower.lineTo (px2x (juce::jmin (px + stepW, W - 1)), y);
                         lastYL = y;
                     }
@@ -442,8 +417,6 @@ void PadGridView::drawPad (juce::Graphics& g,
             g.restoreState();
         }
     }
-
-    // Playhead removed from pad view by design.
 }
 
 //==============================================================================
@@ -469,7 +442,6 @@ void PadGridView::paint (juce::Graphics& g)
         if (r.isEmpty()) continue;
         drawPad (g, r, absIdx, isEmpty);
     }
-
 }
 
 void PadGridView::resized()
@@ -511,7 +483,6 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
     // ── Right-click: context menu ─────────────────────────────────────────────
     if (e.mods.isRightButtonDown())
     {
-        // Select the pad first so the menu acts on the right slice
         DysektProcessor::Command selCmd;
         selCmd.type      = DysektProcessor::CmdSelectSlice;
         selCmd.intParam1 = idx;
@@ -528,7 +499,6 @@ void PadGridView::mouseDown (const juce::MouseEvent& e)
     cmd.intParam1 = idx;
     processor.pushCommand (cmd);
 
-    // Fire noteOn so the pad plays its slice
     const int midiNote = processor.sliceManager.getSlice (idx).midiNote;
     processor.uiNoteOnRequest.store (midiNote, std::memory_order_relaxed);
 
@@ -546,7 +516,6 @@ void PadGridView::mouseUp (const juce::MouseEvent& e)
     const auto& ui = processor.getUiSliceSnapshot();
     if (idx >= ui.numSlices) return;
 
-    // Send noteOff so voice can stop if the sampler is in gated mode
     const int midiNote = processor.sliceManager.getSlice (idx).midiNote;
     processor.uiNoteOffRequest.store (midiNote, std::memory_order_relaxed);
 }
@@ -575,25 +544,21 @@ void PadGridView::mouseExit (const juce::MouseEvent&)
 // Pad right-click context menu
 //==============================================================================
 
-// ── Inline slider CustomComponent ────────────────────────────────────────────
-/// A draggable slider row that lives directly inside a PopupMenu.
-/// Drag left/right to change value; double-click to reset to default.
-/// Fires onChange live while dragging so the processor is updated in real time.
-class PadGridView::MenuSliderItem  : public juce::PopupMenu::CustomComponent
+class PadGridView::MenuSliderItem : public juce::PopupMenu::CustomComponent
 {
 public:
-    juce::String            label;
-    float                   value    { 0.f };
-    float                   minVal   { 0.f };
-    float                   maxVal   { 1.f };
-    float                   resetVal { 0.f };
-    std::function<juce::String (float)> formatValue;
-    std::function<void (float)>         onChange;
+    juce::String              label;
+    float                     value    { 0.f };
+    float                     minVal   { 0.f };
+    float                     maxVal   { 1.f };
+    float                     resetVal { 0.f };
+    std::function<juce::String(float)> formatValue;
+    std::function<void(float)>         onChange;
 
     MenuSliderItem (const juce::String& lbl,
                     float cur, float lo, float hi, float def,
-                    std::function<juce::String (float)> fmt,
-                    std::function<void (float)>         cb)
+                    std::function<juce::String(float)> fmt,
+                    std::function<void(float)> cb)
         : juce::PopupMenu::CustomComponent (false),
           label (lbl), value (cur), minVal (lo), maxVal (hi), resetVal (def),
           formatValue (std::move (fmt)), onChange (std::move (cb))
@@ -601,19 +566,17 @@ public:
         setSize (220, 36);
     }
 
-    void getIdealSize (int& w, int& h) override  { w = 220; h = 36; }
+    void getIdealSize (int& w, int& h) override { w = 220; h = 36; }
 
     void paint (juce::Graphics& g) override
     {
-        const auto& th  = getTheme();
-        const auto  b   = getLocalBounds().toFloat().reduced (2.f, 2.f);
+        const auto& th = getTheme();
+        const auto b   = getLocalBounds().toFloat().reduced (2.f, 2.f);
         const float norm = (value - minVal) / (maxVal - minVal);
 
-        // Background
         g.setColour (th.darkBar.darker (0.2f));
         g.fillRoundedRectangle (b, 3.f);
 
-        // Filled track — centred for bipolar ranges (pan/pitch), left-to-right for unipolar (volume)
         const bool bipolar = (minVal < 0.f && maxVal > 0.f);
         const float cx = b.getX() + b.getWidth() * (bipolar ? (-minVal / (maxVal - minVal)) : 0.f);
         const float fx = b.getX() + b.getWidth() * norm;
@@ -627,24 +590,20 @@ public:
         g.setColour (th.accent.withAlpha (isItemHighlighted() ? 0.55f : 0.38f));
         g.fillRoundedRectangle (fill, 3.f);
 
-        // Centre line for bipolar
         if (bipolar)
         {
             g.setColour (th.separator.withAlpha (0.6f));
             g.drawLine (cx, b.getY() + 3.f, cx, b.getBottom() - 3.f, 1.f);
         }
 
-        // Border
         g.setColour (th.separator.withAlpha (0.5f));
         g.drawRoundedRectangle (b, 3.f, 0.8f);
 
-        // Label (left)
         g.setFont (DysektLookAndFeel::makeFont (10.5f, true));
         g.setColour (th.foreground.withAlpha (0.80f));
         g.drawText (label, b.reduced (7.f, 0.f).withWidth (60.f),
                     juce::Justification::centredLeft);
 
-        // Value (right)
         g.setFont (DysektLookAndFeel::makeFont (10.5f, false));
         g.setColour (th.foreground);
         g.drawText (formatValue (value), b.reduced (7.f, 0.f),
@@ -666,9 +625,9 @@ public:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
-        const float range    = maxVal - minVal;
-        const float pxRange  = (float) getWidth() - 14.f;
-        const float delta    = (e.position.x - dragStart) / pxRange * range;
+        const float range   = maxVal - minVal;
+        const float pxRange = (float) getWidth() - 14.f;
+        const float delta   = (e.position.x - dragStart) / pxRange * range;
         value = juce::jlimit (minVal, maxVal, dragStartVal + delta);
         if (onChange) onChange (value);
         repaint();
@@ -683,7 +642,7 @@ private:
 
 void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
 {
-    const auto& snap  = processor.getUiSliceSnapshot();
+    const auto& snap = processor.getUiSliceSnapshot();
     if (idx < 0 || idx >= snap.numSlices) return;
     const auto& slice = snap.slices[(size_t) idx];
 
@@ -692,20 +651,16 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
     int   sliderH = (int) (36 * ms);
     auto* topLvl = getTopLevelComponent();
 
-    // Resolve effective values the same way the SCB does:
-    // if the field is locked on this slice use the slice value,
-    // otherwise fall back to the global APVTS default.
     const float effVolume = (slice.lockMask & kLockVolume)
-                          ? slice.volume
-                          : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
+        ? slice.volume
+        : processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
     const float effPitch  = (slice.lockMask & kLockPitch)
-                          ? slice.pitchSemitones
-                          : processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
+        ? slice.pitchSemitones
+        : processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
     const float effPan    = (slice.lockMask & kLockPan)
-                          ? slice.pan
-                          : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
+        ? slice.pan
+        : processor.apvts.getRawParameterValue (ParamIds::defaultPan)->load();
 
-    // ── Volume inline slider  (-100..+24 dB) ─────────────────────────────────
     auto makeVolLabel = [] (float v) -> juce::String
     {
         if (v <= -99.f) return "-inf";
@@ -716,14 +671,13 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
         [this] (float v)
         {
             DysektProcessor::Command cmd;
-            cmd.type        = DysektProcessor::CmdSetSliceParam;
-            cmd.intParam1   = DysektProcessor::FieldVolume;  // field ID
-            cmd.intParam2   = 0;                              // 0 = normal lock behaviour
+            cmd.type      = DysektProcessor::CmdSetSliceParam;
+            cmd.intParam1 = DysektProcessor::FieldVolume;
+            cmd.intParam2 = 0;
             cmd.floatParam1 = v;
             processor.pushCommand (cmd);
         });
 
-    // ── Pitch inline slider  (-48..+48 st) ───────────────────────────────────
     auto makePitchLabel = [] (float v) -> juce::String
     {
         return (v >= 0.f ? "+" : "") + juce::String (v, 2) + " st";
@@ -733,14 +687,13 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
         [this] (float v)
         {
             DysektProcessor::Command cmd;
-            cmd.type        = DysektProcessor::CmdSetSliceParam;
-            cmd.intParam1   = DysektProcessor::FieldPitch;   // field ID
-            cmd.intParam2   = 0;                              // 0 = normal lock behaviour
+            cmd.type      = DysektProcessor::CmdSetSliceParam;
+            cmd.intParam1 = DysektProcessor::FieldPitch;
+            cmd.intParam2 = 0;
             cmd.floatParam1 = v;
             processor.pushCommand (cmd);
         });
 
-    // ── Pan inline slider  (-1..+1) ───────────────────────────────────────────
     auto makePanLabel = [] (float v) -> juce::String
     {
         if (std::abs (v) < 0.01f) return "C";
@@ -752,34 +705,31 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
         [this] (float v)
         {
             DysektProcessor::Command cmd;
-            cmd.type        = DysektProcessor::CmdSetSliceParam;
-            cmd.intParam1   = DysektProcessor::FieldPan;     // field ID
-            cmd.intParam2   = 0;                              // 0 = normal lock behaviour
+            cmd.type      = DysektProcessor::CmdSetSliceParam;
+            cmd.intParam1 = DysektProcessor::FieldPan;
+            cmd.intParam2 = 0;
             cmd.floatParam1 = v;
             processor.pushCommand (cmd);
         });
 
-    // ── Mute-group sub-menu ───────────────────────────────────────────────────
     juce::PopupMenu muteMenu;
     {
         const int curMute = (slice.lockMask & kLockMuteGroup)
-                          ? slice.muteGroup
-                          : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load();
-        muteMenu.addItem (400, "Off  (0)", true, curMute == 0);
+            ? slice.muteGroup
+            : (int) processor.apvts.getRawParameterValue (ParamIds::defaultMuteGroup)->load();
+        muteMenu.addItem (400, "Off (0)", true, curMute == 0);
         for (int g = 1; g <= 16; ++g)
             muteMenu.addItem (400 + g, "Group " + juce::String (g), true, curMute == g);
     }
 
-    // ── Output-bus sub-menu ───────────────────────────────────────────────────
     juce::PopupMenu outMenu;
     {
         const int curOut = (slice.lockMask & kLockOutputBus) ? slice.outputBus : 0;
-        outMenu.addItem (500, "Main  (0)", true, curOut == 0);
+        outMenu.addItem (500, "Main (0)", true, curOut == 0);
         for (int o = 1; o <= 31; ++o)
             outMenu.addItem (500 + o, "Output " + juce::String (o + 1), true, curOut == o);
     }
 
-    // ── Root menu ─────────────────────────────────────────────────────────────
     juce::PopupMenu menu;
     menu.addItem (1, "Rename Slice...");
     menu.addItem (3, "Pad Color...");
@@ -793,7 +743,6 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
     menu.addSeparator();
     menu.addItem (2, "Delete Slice");
 
-    // Screen-space bounds of this pad (used to anchor the color picker later)
     const juce::Rectangle<int> padScreenBounds =
         cellBounds (idx) + getScreenPosition() - getPosition();
 
@@ -808,7 +757,6 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
         {
             if (result == 0) return;
 
-            // ── Rename ────────────────────────────────────────────────────
             if (result == 1)
             {
                 const auto& snap2 = processor.getUiSliceSnapshot();
@@ -817,7 +765,6 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
                 return;
             }
 
-            // ── Delete ────────────────────────────────────────────────────
             if (result == 2)
             {
                 DysektProcessor::Command cmd;
@@ -828,32 +775,29 @@ void PadGridView::showPadContextMenu (int idx, juce::Point<int> screenPos)
                 return;
             }
 
-            // ── Color picker ─────────────────────────────────────────────
             if (result == 3)
             {
                 launchColorPicker (idx, padScreenBounds);
                 return;
             }
 
-            // ── Mute group ────────────────────────────────────────────────
             if (result >= 400 && result < 500)
             {
                 DysektProcessor::Command cmd;
                 cmd.type        = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1   = DysektProcessor::FieldMuteGroup;  // field ID
-                cmd.intParam2   = 0;                                  // normal lock behaviour
+                cmd.intParam1   = DysektProcessor::FieldMuteGroup;
+                cmd.intParam2   = 0;
                 cmd.floatParam1 = (float) (result - 400);
                 processor.pushCommand (cmd);
                 return;
             }
 
-            // ── Output bus ────────────────────────────────────────────────
             if (result >= 500 && result < 600)
             {
                 DysektProcessor::Command cmd;
                 cmd.type        = DysektProcessor::CmdSetSliceParam;
-                cmd.intParam1   = DysektProcessor::FieldOutputBus;  // field ID
-                cmd.intParam2   = 0;                                  // normal lock behaviour
+                cmd.intParam1   = DysektProcessor::FieldOutputBus;
+                cmd.intParam2   = 0;
                 cmd.floatParam1 = (float) (result - 500);
                 processor.pushCommand (cmd);
                 return;
@@ -879,7 +823,6 @@ void PadGridView::launchColorPicker (int idx, juce::Rectangle<int> padScreenBoun
     selector->setCurrentColour (current);
     selector->setSize (280, 320);
 
-    // Pre-fill the 32 swatches with the same palette used by Slice.h
     static const juce::uint32 kPal[32] = {
         0xFFD82626, 0xFFF45F3D, 0xFFAD541E, 0xFFF28D0C,
         0xFFE0BC51, 0xFFC1B60A, 0xFFC2D826, 0xFFBBF43D,
@@ -889,17 +832,14 @@ void PadGridView::launchColorPicker (int idx, juce::Rectangle<int> padScreenBoun
         0xFF6351E0, 0xFF430AC1, 0xFF7F26D8, 0xFFBB3DF4, 0xFF9B1EAD,
         0xFFF20CE3, 0xFFE051BC, 0xFFC10A71, 0xFFD82669, 0xFFF43D5F,
     };
-    // Pre-fill swatches with the same palette used by Slice.h.
-    // setSwatchColour writes into whatever slots the selector already provides.
     const int numSwatches = selector->getNumSwatches();
     for (int i = 0; i < juce::jmin (numSwatches, 32); ++i)
         selector->setSwatchColour (i, juce::Colour (kPal[i]));
 
-    // Inline ChangeListener that forwards color changes to the processor
     struct ColourListener : public juce::ChangeListener
     {
         DysektProcessor& proc;
-        int              sliceIdx;
+        int sliceIdx;
         ColourListener (DysektProcessor& p, int i) : proc (p), sliceIdx (i) {}
         void changeListenerCallback (juce::ChangeBroadcaster* src) override
         {
@@ -914,16 +854,12 @@ void PadGridView::launchColorPicker (int idx, juce::Rectangle<int> padScreenBoun
         }
     };
 
-    // Ownership: the selector outlives us, so heap-allocate the listener and
-    // let the selector's ComponentListener chain clean it up via deleteWhenParentDeleted.
     auto* listener = new ColourListener (processor, idx);
     selector->addChangeListener (listener);
 
-    // Store raw pointer in properties so the selector can delete it on destruction
-    // by using a custom deleter component as a child.
     struct ListenerDeleter : public juce::Component
     {
-        juce::ChangeListener* target;
+        juce::ChangeListener*    target;
         juce::ChangeBroadcaster* broadcaster;
         ListenerDeleter (juce::ChangeListener* t, juce::ChangeBroadcaster* b)
             : target (t), broadcaster (b) {}
@@ -938,23 +874,37 @@ void PadGridView::launchColorPicker (int idx, juce::Rectangle<int> padScreenBoun
     selector->addAndMakeVisible (deleter);
 
     juce::CallOutBox::launchAsynchronously (
-        std::unique_ptr<juce::Component> (selector),
+        std::unique_ptr<juce::ColourSelector> (selector),
         padScreenBounds, nullptr);
 }
 
 //==============================================================================
+// FIX: repaintGrid() – only auto-switch banks when selectedSlice actually
+//      changes to a different value.  Without this guard the timer was
+//      re-evaluating on every tick and resetting currentBank back to 0
+//      (Bank A) the moment after the user clicked the Bank B button,
+//      because selectedSlice was still pointing at a Bank-A pad.
+//==============================================================================
 void PadGridView::repaintGrid()
 {
     const int activePad = processor.sliceManager.selectedSlice
-                              .load (std::memory_order_relaxed);
+        .load (std::memory_order_relaxed);
 
-    if (activePad >= 0 && activePad < kMaxPads)
+    // Only auto-switch banks when the selected slice actually changes.
+    // This prevents the timer from overriding a manual Bank A / Bank B
+    // button press on every subsequent tick.
+    if (activePad != lastAutoSwitchSlice)
     {
-        const int sliceBank = activePad / kPadsPerBank;
-        if (sliceBank != currentBank)
+        lastAutoSwitchSlice = activePad;
+
+        if (activePad >= 0 && activePad < kMaxPads)
         {
-            currentBank = sliceBank;
-            hoveredPad  = -1;
+            const int sliceBank = activePad / kPadsPerBank;
+            if (sliceBank != currentBank)
+            {
+                currentBank = sliceBank;
+                hoveredPad  = -1;
+            }
         }
     }
 

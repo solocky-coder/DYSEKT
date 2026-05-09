@@ -1,5 +1,5 @@
 #pragma once
-#include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_gui_extra/juce_gui_extra.h>
 
 class DysektProcessor;
 
@@ -20,8 +20,8 @@ public:
     ~PadGridView() override;
 
     //==========================================================================
-    void paint    (juce::Graphics& g) override;
-    void resized  () override;
+    void paint     (juce::Graphics& g) override;
+    void resized   () override;
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseUp   (const juce::MouseEvent& e) override;
     void mouseMove (const juce::MouseEvent& e) override;
@@ -35,29 +35,33 @@ public:
 
     /// Fired when the user chooses Rename from the right-click menu.
     /// The editor wires this to showRenameOverlay so the dialog stays inside the plugin window.
-    std::function<void (int sliceIdx, const juce::String& currentName)> onRenameRequest;
+    std::function<void(int idx, const juce::String& currentName)> onRenameRequest;
 
     //==========================================================================
     // Layout constants
-    static constexpr int kNumCols    = 4;   ///< Columns per bank.
-    static constexpr int kNumRows    = 4;   ///< Rows per bank.
-    static constexpr int kPadsPerBank = kNumCols * kNumRows;  ///< 16
-    static constexpr int kNumBanks   = 2;   ///< Bank A and Bank B.
-    static constexpr int kMaxPads    = kPadsPerBank * kNumBanks;  ///< 32
+    static constexpr int kNumCols     = 4;                          ///< Columns per bank.
+    static constexpr int kNumRows     = 4;                          ///< Rows per bank.
+    static constexpr int kPadsPerBank = kNumCols * kNumRows;        ///< 16
+    static constexpr int kNumBanks    = 2;                          ///< Bank A and Bank B.
+    static constexpr int kMaxPads     = kPadsPerBank * kNumBanks;   ///< 32
 
-    static constexpr int kBankBarH   = 30;  ///< Height of the bank-switcher bar (px).
-    static constexpr int kPadGap     = 5;   ///< Gap between cells (px).
-    static constexpr int kBarW       = 6;   ///< Width of the color accent bar on pad left.
-    static constexpr int kPadPadX    = 8;   ///< Horizontal outer padding.
-    static constexpr int kPadPadY    = 6;   ///< Vertical outer padding (below bank bar).
+    static constexpr int kBankBarH = 30;   ///< Height of the bank-switcher bar (px).
+    static constexpr int kPadGap   =  5;   ///< Gap between cells (px).
+    static constexpr int kBarW     =  6;   ///< Width of the color accent bar on pad left.
+    static constexpr int kPadPadX  =  8;   ///< Horizontal outer padding.
+    static constexpr int kPadPadY  =  6;   ///< Vertical outer padding (below bank bar).
 
 private:
     //==========================================================================
     DysektProcessor& processor;
 
-    int currentBank  = 0;   ///< 0 = Bank A, 1 = Bank B.
-    int hoveredPad   = -1;  ///< Absolute pad index under mouse (-1 = none).
-    int waveformMode = 0;   ///< Mirrors PluginEditor::waveformMode (0=Hard…7=Stepped).
+    int currentBank  = 0;    ///< 0 = Bank A, 1 = Bank B.
+    int hoveredPad   = -1;   ///< Absolute pad index under mouse (-1 = none).
+    int waveformMode = 0;    ///< Mirrors PluginEditor::waveformMode (0=Hard…7=Stepped).
+
+    /// Last selectedSlice value used for auto-bank-switching in repaintGrid().
+    /// Prevents the timer from resetting currentBank after a manual bank button press.
+    int lastAutoSwitchSlice = -1;
 
     //-- bank-switcher ----------------------------------------------------------
     juce::Rectangle<int> bankAButtonBounds;
