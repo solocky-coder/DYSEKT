@@ -2181,39 +2181,22 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // ── Poll global EQ param changes ──────────────────────────────────────────
     {
-        static float cachedEqLow   = -999.f,
-                     cachedEqLMG   = -999.f, cachedEqLMF = -999.f, cachedEqLMQ = -999.f,
-                     cachedEqMidG  = -999.f, cachedEqMidF = -999.f, cachedEqMidQ = -999.f,
-                     cachedEqHMG   = -999.f, cachedEqHMF  = -999.f, cachedEqHMQ  = -999.f,
-                     cachedEqHigh  = -999.f;
+        static float cachedEqLow = -999.f, cachedEqMidG = -999.f, cachedEqMidF = -999.f,
+                     cachedEqMidQ = -999.f, cachedEqHigh = -999.f;
         auto* pLow  = apvts.getRawParameterValue (ParamIds::globalEqLowGain);
-        auto* pLMG  = apvts.getRawParameterValue (ParamIds::globalEqLowMidGain);
-        auto* pLMF  = apvts.getRawParameterValue (ParamIds::globalEqLowMidFreq);
-        auto* pLMQ  = apvts.getRawParameterValue (ParamIds::globalEqLowMidQ);
         auto* pMidG = apvts.getRawParameterValue (ParamIds::globalEqMidGain);
         auto* pMidF = apvts.getRawParameterValue (ParamIds::globalEqMidFreq);
         auto* pMidQ = apvts.getRawParameterValue (ParamIds::globalEqMidQ);
-        auto* pHMG  = apvts.getRawParameterValue (ParamIds::globalEqHighMidGain);
-        auto* pHMF  = apvts.getRawParameterValue (ParamIds::globalEqHighMidFreq);
-        auto* pHMQ  = apvts.getRawParameterValue (ParamIds::globalEqHighMidQ);
         auto* pHigh = apvts.getRawParameterValue (ParamIds::globalEqHighGain);
-        if (pLow && pLMG && pLMF && pLMQ && pMidG && pMidF && pMidQ && pHMG && pHMF && pHMQ && pHigh)
+        if (pLow && pMidG && pMidF && pMidQ && pHigh)
         {
-            float l   = pLow->load(),
-                  lmg = pLMG->load(),  lmf = pLMF->load(),  lmq = pLMQ->load(),
-                  mg  = pMidG->load(), mf  = pMidF->load(),  mq  = pMidQ->load(),
-                  hmg = pHMG->load(),  hmf = pHMF->load(),  hmq = pHMQ->load(),
-                  h   = pHigh->load();
-            if (l   != cachedEqLow  || lmg != cachedEqLMG  || lmf != cachedEqLMF ||
-                lmq != cachedEqLMQ  || mg  != cachedEqMidG || mf  != cachedEqMidF ||
-                mq  != cachedEqMidQ || hmg != cachedEqHMG  || hmf != cachedEqHMF  ||
-                hmq != cachedEqHMQ  || h   != cachedEqHigh)
+            float l = pLow->load(), mg = pMidG->load(), mf = pMidF->load(),
+                  mq = pMidQ->load(), h = pHigh->load();
+            if (l != cachedEqLow || mg != cachedEqMidG || mf != cachedEqMidF ||
+                mq != cachedEqMidQ || h != cachedEqHigh)
             {
-                cachedEqLow  = l;
-                cachedEqLMG  = lmg; cachedEqLMF = lmf; cachedEqLMQ = lmq;
-                cachedEqMidG = mg;  cachedEqMidF = mf;  cachedEqMidQ = mq;
-                cachedEqHMG  = hmg; cachedEqHMF  = hmf; cachedEqHMQ  = hmq;
-                cachedEqHigh = h;
+                cachedEqLow = l; cachedEqMidG = mg; cachedEqMidF = mf;
+                cachedEqMidQ = mq; cachedEqHigh = h;
                 globalEqNeedsUpdate = true;
             }
         }
@@ -2794,24 +2777,16 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         // Rebuild coefficients if any global EQ param changed
         if (globalEqNeedsUpdate)
         {
-            double sr   = getSampleRate();
-            auto lowG   = apvts.getRawParameterValue (ParamIds::globalEqLowGain)->load();
-            auto lmG    = apvts.getRawParameterValue (ParamIds::globalEqLowMidGain)->load();
-            auto lmF    = apvts.getRawParameterValue (ParamIds::globalEqLowMidFreq)->load();
-            auto lmQ    = apvts.getRawParameterValue (ParamIds::globalEqLowMidQ)->load();
-            auto midG   = apvts.getRawParameterValue (ParamIds::globalEqMidGain)->load();
-            auto midF   = apvts.getRawParameterValue (ParamIds::globalEqMidFreq)->load();
-            auto midQ   = apvts.getRawParameterValue (ParamIds::globalEqMidQ)->load();
-            auto hmG    = apvts.getRawParameterValue (ParamIds::globalEqHighMidGain)->load();
-            auto hmF    = apvts.getRawParameterValue (ParamIds::globalEqHighMidFreq)->load();
-            auto hmQ    = apvts.getRawParameterValue (ParamIds::globalEqHighMidQ)->load();
-            auto hiG    = apvts.getRawParameterValue (ParamIds::globalEqHighGain)->load();
+            double sr = getSampleRate();
+            auto lowG = apvts.getRawParameterValue (ParamIds::globalEqLowGain)->load();
+            auto midG = apvts.getRawParameterValue (ParamIds::globalEqMidGain)->load();
+            auto midF = apvts.getRawParameterValue (ParamIds::globalEqMidFreq)->load();
+            auto midQ = apvts.getRawParameterValue (ParamIds::globalEqMidQ)->load();
+            auto hiG  = apvts.getRawParameterValue (ParamIds::globalEqHighGain)->load();
 
-            *globalEq.get<0>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowShelf   (sr,   80.f,  1.f,  std::pow (10.f, lowG / 20.f));
-            *globalEq.get<1>().coefficients = *juce::dsp::IIR::Coefficients<float>::makePeakFilter  (sr,  lmF,   lmQ,  std::pow (10.f, lmG  / 20.f));
-            *globalEq.get<2>().coefficients = *juce::dsp::IIR::Coefficients<float>::makePeakFilter  (sr,  midF,  midQ, std::pow (10.f, midG / 20.f));
-            *globalEq.get<3>().coefficients = *juce::dsp::IIR::Coefficients<float>::makePeakFilter  (sr,  hmF,   hmQ,  std::pow (10.f, hmG  / 20.f));
-            *globalEq.get<4>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf   (sr, 12000.f, 1.f, std::pow (10.f, hiG  / 20.f));
+            *globalEq.get<0>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowShelf  (sr, 200.f,   1.f, std::pow (10.f, lowG / 20.f));
+            *globalEq.get<1>().coefficients = *juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, midF, midQ, std::pow (10.f, midG / 20.f));
+            *globalEq.get<2>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, 8000.f,  1.f, std::pow (10.f, hiG  / 20.f));
             globalEqNeedsUpdate = false;
         }
 
