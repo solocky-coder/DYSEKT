@@ -43,6 +43,11 @@ public:
     void clearKeyzones    ();
     void autoScrollToZones();
 
+    /** Call with true when the SF-player panel is active, false when the
+     *  slicer is active.  Prevents slicer MIDI-note highlights from bleeding
+     *  into the SF-player keyboard even before a soundfont is loaded. */
+    void setSlicerHighlightEnabled (bool enabled) { slicerHighlightEnabled = enabled; repaint(); }
+
     /** Pass true for SFZ files (columns are drag-editable), false for SF2. */
     void setSfzEditable (bool editable);
 
@@ -138,6 +143,8 @@ private:
     std::vector<Keyzone>  keyzones;
 
     DysektProcessor& processor;
+
+    bool slicerHighlightEnabled = true; ///< false in SF-player mode — suppresses slicer note borders
 
     int baseOctave     = 3;
     int lastActiveNote = -1;

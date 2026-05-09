@@ -251,6 +251,12 @@ void DysektEditor::setUiMode (int mode)
  // Keep the EDIT|SFZ tab in sync
  headerBar.dualFrame().setPadGridActive (uiMode == 1);
 
+ // Slicer note highlights must not appear on the SF-player keyboard.
+ // Disable them as soon as we enter SF-player mode (uiMode == 1), before
+ // any soundfont has been loaded, so the KeysPanel guard works from the
+ // very first paint in that mode.
+ sfzDropdown.keysPanel.setSlicerHighlightEnabled (uiMode == 0);
+
  // Hide waveform overview immediately when switching to SFZ mode
  waveformOverview.setVisible (uiMode == 0);
 

@@ -940,14 +940,12 @@ void KeysPanel::paint (juce::Graphics& g)
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────────────
-    // The slicedNotes highlight (coloured accent outline) belongs to the sample-
-    // slicer engine.  When SFZ/SF2 zones are loaded the slicer snapshot is
-    // unrelated leftover data whose MIDI note numbers happen to coincide with
-    // piano keys, producing random coloured outlines.  Suppress it entirely
-    // while any keyzone is active; the zone-colour dots already convey the same
-    // information on the SFZ/SF2 keyboard.
+    // Populate slicedNotes only when the slicer is the active mode.
+    // When the SF-player panel is shown, slicerHighlightEnabled is set to false
+    // so slicer MIDI-note assignments never produce coloured outlines on the
+    // SF-player keyboard — regardless of whether keyzones have been loaded yet.
     std::set<int> slicedNotes;
-    if (keyzones.empty())
+    if (slicerHighlightEnabled)
     {
         const auto& ui = processor.getUiSliceSnapshot();
         for (int s = 0; s < ui.numSlices; ++s)
