@@ -399,7 +399,7 @@ void DysektLookAndFeel::drawAlertBox (juce::Graphics& g, juce::AlertWindow& aler
     const auto& t = getTheme();
 
     // Background
-    g.setColour (t.panelBg);
+    g.setColour (t.darkBar);
     g.fillRoundedRectangle (alert.getLocalBounds().toFloat(), 4.0f);
 
     // Accent border
@@ -411,7 +411,7 @@ void DysektLookAndFeel::drawAlertBox (juce::Graphics& g, juce::AlertWindow& aler
     g.setColour (t.accent.withAlpha (0.15f));
     g.fillRoundedRectangle (titleArea.toFloat(), 4.0f);
 
-    g.setColour (t.fg);
+    g.setColour (t.foreground);
     g.setFont (getAlertWindowTitleFont());
     g.drawFittedText (alert.getName(),
                       titleArea.reduced (8, 4),
