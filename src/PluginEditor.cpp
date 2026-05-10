@@ -481,11 +481,13 @@ void DysektEditor::paint (juce::Graphics& g)
  g.fillAll (getTheme().background);
 
  // Draw the CRT frame in waveform mode, or whenever trim mode forces the waveform visible
- const bool wvVisible = waveformView.isVisible() && waveformView.getHeight() > 0;
+ const bool wvVisible  = waveformView.isVisible() && waveformView.getHeight() > 0;
+ const bool padVisible = padGridView.isVisible()  && padGridView.getHeight()  > 0;
 
- if (wvVisible)
+ if (wvVisible || padVisible)
  {
- const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
+ const auto& frameSrc = wvVisible ? waveformView.getBounds() : padGridView.getBounds();
+ const auto outerF = waveformFrameRect (*this, frameSrc, trimDialog != nullptr);
 
  juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
  juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
@@ -517,15 +519,17 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  || (themeEditorPanel != nullptr);
  if (modalActive) return;
 
- const bool wvVisible = waveformView.isVisible() && waveformView.getHeight() > 0;
+ const bool wvVisible  = waveformView.isVisible() && waveformView.getHeight() > 0;
+ const bool padVisible = padGridView.isVisible()  && padGridView.getHeight()  > 0;
 
  // Scale all border pixel amounts proportionally to avoid sub-pixel overlap
  // at non-integer UI scales (1.5×, 1.75× etc.)
  const float sf = (float) getWidth() / (float) kBaseW;
 
- if (wvVisible)
+ if (wvVisible || padVisible)
  {
- const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
+ const auto& frameSrc = wvVisible ? waveformView.getBounds() : padGridView.getBounds();
+ const auto outerF = waveformFrameRect (*this, frameSrc, trimDialog != nullptr);
  const auto ac = getTheme().accent;
 
  g.setColour (ac.withAlpha (0.18f));
