@@ -258,7 +258,7 @@ void DysektEditor::setUiMode (int mode)
  sfzDropdown.keysPanel.setSlicerHighlightEnabled (uiMode == 0);
 
  // Hide waveform overview immediately when switching to SFZ mode
- waveformOverview.setVisible (uiMode == 0);
+ waveformOverview.setVisible (uiMode == 0 && !showPadGrid);
 
  // Show/hide sfzDropdown panel based on mode
  if (uiMode == 1)
