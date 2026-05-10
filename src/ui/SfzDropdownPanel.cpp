@@ -1754,8 +1754,16 @@ void SfzDropdownPanel::openSaveAsOverlay (bool thenOpenAddZone)
         if (! confirmed || dest == juce::File{})
             return;
 
-        if (currentFile.existsAsFile())
+        // When triggered from [+ ZONE] (thenOpenAddZone), always create a
+        // blank file — the user is starting a fresh custom SFZ, not cloning
+        // whatever was previously loaded.
+        if (thenOpenAddZone || ! currentFile.existsAsFile())
         {
+            dest.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+        }
+        else
+        {
+            // Plain "Save As" on an existing SFZ: copy the current content.
             const bool ok = currentFile.copyFileTo (dest);
             if (! ok)
             {
@@ -1765,10 +1773,6 @@ void SfzDropdownPanel::openSaveAsOverlay (bool thenOpenAddZone)
                     "Could not write:\n" + dest.getFullPathName());
                 return;
             }
-        }
-        else
-        {
-            dest.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
         }
 
         processor.sfzPlayer.loadFile (dest);
