@@ -532,8 +532,15 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  const auto outerF = waveformFrameRect (*this, frameSrc, trimDialog != nullptr);
  const auto ac = getTheme().accent;
 
- g.setColour (ac.withAlpha (0.18f));
- g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ // Clip to outerF so the expanded outer-glow border cannot bleed into the
+ // margin columns or below the SCB boundary, which would produce thin
+ // accent-coloured hairlines at the pad-grid edges in pad view.
+ {
+     juce::Graphics::ScopedSaveState clip (g);
+     g.reduceClipRegion (outerF.expanded (1.0f * sf).toNearestInt());
+     g.setColour (ac.withAlpha (0.18f));
+     g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ }
 
  g.setColour (ac.withAlpha (0.60f));
  g.drawRoundedRectangle (outerF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
@@ -550,8 +557,12 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  const auto outerF = waveformFrameRect (*this, sfzDropdown.getBounds(), false);
  const auto ac = getTheme().accent;
 
- g.setColour (ac.withAlpha (0.18f));
- g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ {
+     juce::Graphics::ScopedSaveState clip (g);
+     g.reduceClipRegion (outerF.expanded (1.0f * sf).toNearestInt());
+     g.setColour (ac.withAlpha (0.18f));
+     g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ }
 
  g.setColour (ac.withAlpha (0.60f));
  g.drawRoundedRectangle (outerF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
