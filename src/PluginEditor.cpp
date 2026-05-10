@@ -224,6 +224,19 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  param->setValueNotifyingHost (param->convertTo0to1 (savedScale));
  }
 
+ // Initialise hasSampleLoaded from the real processor state NOW, before
+ // setSize() triggers the first resized(). Without this, resized() runs
+ // with hasSampleLoaded=false even when a sample is already present
+ // (restored via setStateInformation), so the SCB and overview bounds are
+ // wrong for the very first paint. The timerCallback would correct them
+ // ~33ms later, but hosts often request a paint synchronously during
+ // construction — producing the flash of broken layout that disappears on
+ // the next open once async state has settled.
+ {
+     auto initSnap = processor.sampleData.getSnapshot();
+     hasSampleLoaded = (initSnap != nullptr && initSnap->buffer.getNumSamples() > 0);
+ }
+
  setWantsKeyboardFocus (true);
  setResizable (true, false);
  setResizeLimits (kBaseW / 2, kTotalH / 2, 3840, 2160);
@@ -258,7 +271,7 @@ void DysektEditor::setUiMode (int mode)
  sfzDropdown.keysPanel.setSlicerHighlightEnabled (uiMode == 0);
 
  // Hide waveform overview immediately when switching to SFZ mode
- waveformOverview.setVisible (uiMode == 0);
+ waveformOverview.setVisible (uiMode == 0 && !showPadGrid);
 
  // Show/hide sfzDropdown panel based on mode
  if (uiMode == 1)
@@ -481,11 +494,13 @@ void DysektEditor::paint (juce::Graphics& g)
  g.fillAll (getTheme().background);
 
  // Draw the CRT frame in waveform mode, or whenever trim mode forces the waveform visible
- const bool wvVisible = waveformView.isVisible() && waveformView.getHeight() > 0;
+ const bool wvVisible  = waveformView.isVisible() && waveformView.getHeight() > 0;
+ const bool padVisible = padGridView.isVisible()  && padGridView.getHeight()  > 0;
 
- if (wvVisible)
+ if (wvVisible || padVisible)
  {
- const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
+ const auto& frameSrc = wvVisible ? waveformView.getBounds() : padGridView.getBounds();
+ const auto outerF = waveformFrameRect (*this, frameSrc, trimDialog != nullptr);
 
  juce::ColourGradient outerGrad (juce::Colour (0xFF131313), 0.f, outerF.getY(),
  juce::Colour (0xFF0E0E0E), 0.f, outerF.getBottom(), false);
@@ -517,19 +532,28 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  || (themeEditorPanel != nullptr);
  if (modalActive) return;
 
- const bool wvVisible = waveformView.isVisible() && waveformView.getHeight() > 0;
+ const bool wvVisible  = waveformView.isVisible() && waveformView.getHeight() > 0;
+ const bool padVisible = padGridView.isVisible()  && padGridView.getHeight()  > 0;
 
  // Scale all border pixel amounts proportionally to avoid sub-pixel overlap
  // at non-integer UI scales (1.5×, 1.75× etc.)
  const float sf = (float) getWidth() / (float) kBaseW;
 
- if (wvVisible)
+ if (wvVisible || padVisible)
  {
- const auto outerF = waveformFrameRect (*this, waveformView.getBounds(), trimDialog != nullptr);
+ const auto& frameSrc = wvVisible ? waveformView.getBounds() : padGridView.getBounds();
+ const auto outerF = waveformFrameRect (*this, frameSrc, trimDialog != nullptr);
  const auto ac = getTheme().accent;
 
- g.setColour (ac.withAlpha (0.18f));
- g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ // Clip to outerF so the expanded outer-glow border cannot bleed into the
+ // margin columns or below the SCB boundary, which would produce thin
+ // accent-coloured hairlines at the pad-grid edges in pad view.
+ {
+     juce::Graphics::ScopedSaveState clip (g);
+     g.reduceClipRegion (outerF.expanded (1.0f * sf).toNearestInt());
+     g.setColour (ac.withAlpha (0.18f));
+     g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ }
 
  g.setColour (ac.withAlpha (0.60f));
  g.drawRoundedRectangle (outerF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
@@ -546,8 +570,12 @@ void DysektEditor::paintOverChildren (juce::Graphics& g)
  const auto outerF = waveformFrameRect (*this, sfzDropdown.getBounds(), false);
  const auto ac = getTheme().accent;
 
- g.setColour (ac.withAlpha (0.18f));
- g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ {
+     juce::Graphics::ScopedSaveState clip (g);
+     g.reduceClipRegion (outerF.expanded (1.0f * sf).toNearestInt());
+     g.setColour (ac.withAlpha (0.18f));
+     g.drawRoundedRectangle (outerF.expanded (1.0f * sf), 5.0f * sf, 1.0f * sf);
+ }
 
  g.setColour (ac.withAlpha (0.60f));
  g.drawRoundedRectangle (outerF.reduced (0.5f * sf), 4.0f * sf, 1.5f * sf);
@@ -690,8 +718,25 @@ void DysektEditor::resized()
 
  if (trimDialog != nullptr) {
  sliceControlBar.setBounds ({});
+ waveformOverview.setVisible (false);
  waveformOverview.setBounds ({});
  } else {
+ // Overview row: allocate space and show only when waveform view is active.
+ // Processed BEFORE SCB so overviewTopGuard is set correctly before SCB consumes area.
+ if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample && !showPadGrid)
+ {
+     auto overviewRow = area.removeFromBottom (kOverviewRowH);
+     const int overviewY = overviewRow.getY() + kInterGap;
+     waveformOverview.setVisible (true);
+     waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
+     overviewTopGuard = overviewRow.getY();
+ }
+ else
+ {
+     waveformOverview.setVisible (false);
+     waveformOverview.setBounds ({});
+ }
+
  if (hasRealSample && uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
  {
      auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
@@ -702,17 +747,8 @@ void DysektEditor::resized()
      sliceControlBar.setBounds ({});
  }
 
- if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample)
- {
- auto overviewRow = area.removeFromBottom (kOverviewRowH);
- const int overviewY = overviewRow.getY() + kInterGap;
- waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
- overviewTopGuard = overviewRow.getY();
- }
- else
- {
- waveformOverview.setBounds ({});
- }
+ if (showPadGrid)
+     overviewTopGuard = area.getBottom();
  }
 
  const int kFrameX = kFX;
@@ -1128,7 +1164,7 @@ void DysektEditor::timerCallback()
  resized(); repaint();
  }
 
- const bool overviewShouldShow = hasRealSampleNow && (uiMode == 0);
+ const bool overviewShouldShow = hasRealSampleNow && (uiMode == 0) && !showPadGrid;
  if (overviewShouldShow != waveformOverview.isVisible())
  {
  waveformOverview.setVisible (overviewShouldShow);
