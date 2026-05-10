@@ -155,6 +155,9 @@ void WaveformView::rebuildCacheIfNeeded()
 
 void WaveformView::paint (juce::Graphics& g)
 {
+ if (! isVisible() || getWidth() <= 0 || getHeight() <= 0)
+     return;
+
  // Explicitly clip to component bounds — prevents antialiased path edges
  // from bleeding into the surrounding frame border, especially on top/bottom.
  g.reduceClipRegion (getLocalBounds());

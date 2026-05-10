@@ -82,6 +82,7 @@ DysektEditor::DysektEditor (DysektProcessor& p)
  {
      showPadGrid = on;
      resized();
+     repaint(); // clear waveform/overview areas vacated by the old view
  };
  // When a new SF2/SFZ is loaded from the dropdown, reset the restore flag
  // so the timer re-populates the zone matrix on the next completed load.
