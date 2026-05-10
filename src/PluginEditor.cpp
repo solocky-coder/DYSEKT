@@ -712,6 +712,11 @@ void DysektEditor::resized()
  else
  {
  waveformOverview.setBounds ({});
+ // Pad grid is active and the overview row has not been removed from area,
+ // so extend frameBot all the way down to the SCB by updating the guard now
+ // that the SCB has been subtracted from area.
+ if (showPadGrid)
+     overviewTopGuard = area.getBottom();
  }
  }
 
