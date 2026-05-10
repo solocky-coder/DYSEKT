@@ -694,8 +694,25 @@ void DysektEditor::resized()
 
  if (trimDialog != nullptr) {
  sliceControlBar.setBounds ({});
+ waveformOverview.setVisible (false);
  waveformOverview.setBounds ({});
  } else {
+ // Overview row: allocate space and show only when waveform view is active.
+ // Processed BEFORE SCB so overviewTopGuard is set correctly before SCB consumes area.
+ if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample && !showPadGrid)
+ {
+     auto overviewRow = area.removeFromBottom (kOverviewRowH);
+     const int overviewY = overviewRow.getY() + kInterGap;
+     waveformOverview.setVisible (true);
+     waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
+     overviewTopGuard = overviewRow.getY();
+ }
+ else
+ {
+     waveformOverview.setVisible (false);
+     waveformOverview.setBounds ({});
+ }
+
  if (hasRealSample && uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
  {
      auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
@@ -706,23 +723,8 @@ void DysektEditor::resized()
      sliceControlBar.setBounds ({});
  }
 
- if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample && !showPadGrid)
- {
- auto overviewRow = area.removeFromBottom (kOverviewRowH);
- const int overviewY = overviewRow.getY() + kInterGap;
- waveformOverview.setBounds (kFX, overviewY, kFW, kOverviewH);
- overviewTopGuard = overviewRow.getY();
- }
- else
- {
- waveformOverview.setVisible (false);
- waveformOverview.setBounds ({});
- // Pad grid is active and the overview row has not been removed from area,
- // so extend frameBot all the way down to the SCB by updating the guard now
- // that the SCB has been subtracted from area.
  if (showPadGrid)
      overviewTopGuard = area.getBottom();
- }
  }
 
  const int kFrameX = kFX;
