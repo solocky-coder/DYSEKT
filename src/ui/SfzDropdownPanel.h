@@ -144,7 +144,8 @@ private:
     static bool appendZoneToSfz (const juce::File& sfzFile,
                                   const juce::File& sampleFile,
                                   int loKey, int hiKey, int rootKey);
-    void openSaveAsOverlay (bool thenOpenAddZone = false);
+    void openSaveAsOverlay();
+    void openSaveAsNewForZone (const juce::File& sampleFile);
 
     void showMidiLearnMenu (int fieldId, juce::Point<int> screenPos);
 
@@ -158,7 +159,11 @@ private:
         {
             top->addAndMakeVisible (*overlayPtr);
             overlayPtr->setBounds (top->getLocalBounds());
+            // setAlwaysOnTop ensures the overlay receives mouse events above all
+            // sibling components in the host's HWND on Windows VST3.
+            overlayPtr->setAlwaysOnTop (true);
             overlayPtr->toFront (true);
+            overlayPtr->grabKeyboardFocus();
         }
     }
 

@@ -521,6 +521,16 @@ void SfzDropdownPanel::onFileChosen (const juce::File& f)
         // Reset browser back to SFZ mode before showing the overlay
         fileBrowser.setMode (SfzFileBrowser::Mode::kSfz);
         closeBrowser();
+
+        if (! addZoneTargetSfz.existsAsFile())
+        {
+            // No SFZ loaded yet: ask the user to name a new file first,
+            // then continue to the key-range overlay with the chosen sample.
+            const juce::File chosenSample = f;  // capture before lambda
+            openSaveAsNewForZone (chosenSample);
+            return;
+        }
+
         showAddZoneOverlay (addZoneTargetSfz, f, addZonePrevHiKey);
         return;
     }
@@ -1633,21 +1643,13 @@ void SfzDropdownPanel::writeSfzZoneChange (const juce::File& f,
 
 void SfzDropdownPanel::openAddZoneChooser()
 {
-    // Resolve the target SFZ up front so onFileChosen can reference it
+    // Resolve the target SFZ (may be empty if nothing is loaded yet).
     juce::File targetSfz;
     if (processor.sfzPlayer.isLoaded())
     {
         const auto loaded = processor.sfzPlayer.getLoadedFile();
         if (loaded.getFileExtension().toLowerCase() == ".sfz")
             targetSfz = loaded;
-    }
-
-    if (! targetSfz.existsAsFile())
-    {
-        // Nothing loaded yet: show Save As so the user names the file first,
-        // then chain back into the sample browser.
-        openSaveAsOverlay (/*thenOpenAddZone=*/true);
-        return;
     }
 
     int prevHiKey = -1;
@@ -1658,13 +1660,17 @@ void SfzDropdownPanel::openAddZoneChooser()
             prevHiKey = juce::jmax (prevHiKey, z.hiKey);
     }
 
-    // Store for use in onFileChosen
-    addZoneTargetSfz    = targetSfz;
-    addZonePrevHiKey    = prevHiKey;
+    // Store for use in onFileChosen. targetSfz may be empty here; if so,
+    // onFileChosen will trigger "Save As" after the sample is picked.
+    addZoneTargetSfz = targetSfz;
+    addZonePrevHiKey = prevHiKey;
 
-    // Switch the inline browser to sample-pick mode and open it
+    // Open the sample browser first — pick the sample, then name the SFZ.
     fileBrowser.setMode (SfzFileBrowser::Mode::kAddZone);
-    fileBrowser.setRootDirectory (targetSfz.getParentDirectory());
+    const auto browserRoot = targetSfz.existsAsFile()
+                           ? targetSfz.getParentDirectory()
+                           : juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+    fileBrowser.setRootDirectory (browserRoot);
     openBrowser();
 }
 
@@ -1736,7 +1742,41 @@ bool SfzDropdownPanel::appendZoneToSfz (const juce::File& sfzFile,
     return ! stream.getStatus().failed();
 }
 
-void SfzDropdownPanel::openSaveAsOverlay (bool thenOpenAddZone)
+// Called after the user has already picked a sample but no SFZ is loaded yet.
+// Shows "Name your SFZ file", creates a blank file, then proceeds to AddZoneOverlay.
+void SfzDropdownPanel::openSaveAsNewForZone (const juce::File& sampleFile)
+{
+    const auto defaultPath = sampleFile.getParentDirectory()
+                                 .getChildFile ("Custom.sfz");
+    auto overlay = std::make_unique<SaveSfzOverlay> (defaultPath);
+
+    overlay->onResult = [this, sampleFile] (const juce::File& dest, bool confirmed)
+    {
+        juce::MessageManager::callAsync ([this] { hideOverlays(); });
+
+        if (! confirmed || dest == juce::File{})
+            return;
+
+        // Always create a fresh blank SFZ.
+        dest.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+
+        addZoneTargetSfz = dest;
+
+        processor.sfzPlayer.loadFile (dest);
+        reloadZones (dest);
+        repaint();
+
+        // Now show the key-range dialog with the already-chosen sample.
+        juce::MessageManager::callAsync ([this, sampleFile]
+        {
+            showAddZoneOverlay (addZoneTargetSfz, sampleFile, addZonePrevHiKey);
+        });
+    };
+
+    showOverlay (saveSfzOverlay, std::move (overlay));
+}
+
+void SfzDropdownPanel::openSaveAsOverlay()
 {
     const auto currentFile = processor.sfzPlayer.isLoaded()
                            ? processor.sfzPlayer.getLoadedFile()
@@ -1745,7 +1785,7 @@ void SfzDropdownPanel::openSaveAsOverlay (bool thenOpenAddZone)
 
     auto overlay = std::make_unique<SaveSfzOverlay> (currentFile);
 
-    overlay->onResult = [this, currentFile, thenOpenAddZone] (const juce::File& dest, bool confirmed)
+    overlay->onResult = [this, currentFile] (const juce::File& dest, bool confirmed)
     {
         // Defer hideOverlays() so it runs after fire() has returned and
         // SaveSfzOverlay is no longer on the call stack (use-after-free fix).
@@ -1754,16 +1794,9 @@ void SfzDropdownPanel::openSaveAsOverlay (bool thenOpenAddZone)
         if (! confirmed || dest == juce::File{})
             return;
 
-        // When triggered from [+ ZONE] (thenOpenAddZone), always create a
-        // blank file — the user is starting a fresh custom SFZ, not cloning
-        // whatever was previously loaded.
-        if (thenOpenAddZone || ! currentFile.existsAsFile())
+        if (currentFile.existsAsFile())
         {
-            dest.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
-        }
-        else
-        {
-            // Plain "Save As" on an existing SFZ: copy the current content.
+            // Copy existing SFZ content to the new location.
             const bool ok = currentFile.copyFileTo (dest);
             if (! ok)
             {
@@ -1774,15 +1807,14 @@ void SfzDropdownPanel::openSaveAsOverlay (bool thenOpenAddZone)
                 return;
             }
         }
+        else
+        {
+            dest.replaceWithText ("// Custom SFZ — built with SF-Player\n\n");
+        }
 
         processor.sfzPlayer.loadFile (dest);
         reloadZones (dest);
         repaint();
-
-        // If triggered from [+ ZONE] when nothing was loaded, open the
-        // sample browser to complete the Add Zone flow.
-        if (thenOpenAddZone)
-            juce::MessageManager::callAsync ([this] { openAddZoneChooser(); });
     };
 
     showOverlay (saveSfzOverlay, std::move (overlay));
