@@ -842,7 +842,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  int numSlices = ui.numSlices;
  const int kToggleBtnW = si (52);
  int rightEdge = getWidth() - si (8) - kToggleBtnW * 2 - si (4) - si (6); // two buttons + gap
- int row1y = si (5), row2y = si (36);
+ int row1y = si (7), row2y = si (38); // centred: (72-59)/2 = 6.5 → 7px top padding
  rootNoteArea = {}; // no longer drawn — LCD shows ROOT and SLICES
 
  if (idx < 0 || idx >= numSlices)
@@ -1042,7 +1042,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  }
  }
  g.setColour (getTheme().separator);
- g.drawHorizontalLine (si (34), (float) si (8), (float) getWidth() - (float) si (8));
+ g.drawHorizontalLine (si (36), (float) si (8), (float) getWidth() - (float) si (8));
 
  // ── Row 2 ─────────────────────────────────────────────────────────
  x = si (8);
@@ -1243,7 +1243,7 @@ locked, kLockRelease, F::FieldRelease, 0.f, relMaxSec, 0.001f, cw);
 
  // ── PAD / WAVE — two separate toggle buttons side by side ────────────────────────────────────
  {
-     const int btnY   = si (10);
+     const int btnY   = si (9);  // centred in row1 (y=7..35): (7+35-24)/2 = 9
      const int btnH   = si (24);
      const int gap    = si (4);
      const int rightX = getWidth() - si (8);
