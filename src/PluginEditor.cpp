@@ -702,7 +702,7 @@ void DysektEditor::resized()
      sliceControlBar.setBounds ({});
  }
 
- if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample)
+ if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample && !showPadGrid)
  {
  auto overviewRow = area.removeFromBottom (kOverviewRowH);
  const int overviewY = overviewRow.getY() + kInterGap;
