@@ -725,22 +725,23 @@ void DysektEditor::resized()
  // SCB first (bottommost), then overview row sits immediately above it.
  if (hasRealSample && uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
  {
-     if (showPadGrid)
      {
-         // In pad mode: don't steal from area (the pad grid keeps full height).
-         // Place the SCB vertically centred in the strip between the pad grid
-         // bottom and the plugin bottom edge (getHeight() - si(kMargin)).
-         const int pluginBottom = getHeight() - si (kMargin);
-         const int padBottom    = area.getBottom();
-         const int stripH       = pluginBottom - padBottom;
-         const int scbH         = si (kSliceCtrlH);
-         const int scbY         = padBottom + (stripH - scbH) / 2;
-         sliceControlBar.setBounds (kFX, scbY, kFW, scbH);
-     }
-     else
-     {
-         auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
-         sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+         const int scbH = si (kSliceCtrlH);
+         if (showPadGrid)
+         {
+             // In pad mode reserve the SCB height plus equal padding above and below
+             // so the bar sits visually centred between the pad grid and the
+             // plugin bottom edge rather than flush against the pad grid.
+             const int pad      = si (kMargin);
+             auto scbStrip      = area.removeFromBottom (scbH + pad * 2);
+             const int scbY     = scbStrip.getY() + (scbStrip.getHeight() - scbH) / 2;
+             sliceControlBar.setBounds (kFX, scbY, kFW, scbH);
+         }
+         else
+         {
+             auto scbStrip = area.removeFromBottom (scbH);
+             sliceControlBar.setBounds (kFX, scbStrip.getY(), kFW, scbH);
+         }
      }
  }
  else
