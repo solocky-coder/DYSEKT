@@ -722,8 +722,18 @@ void DysektEditor::resized()
  waveformOverview.setVisible (false);
  waveformOverview.setBounds ({});
  } else {
+ // SCB first (bottommost), then overview row sits immediately above it.
+ if (hasRealSample && uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
+ {
+     auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
+     sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+ }
+ else
+ {
+     sliceControlBar.setBounds ({});
+ }
+
  // Overview row: allocate space and show only when waveform view is active.
- // Processed BEFORE SCB so overviewTopGuard is set correctly before SCB consumes area.
  if (uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen && hasRealSample && !showPadGrid)
  {
      auto overviewRow = area.removeFromBottom (kOverviewRowH);
@@ -736,12 +746,6 @@ void DysektEditor::resized()
  {
      waveformOverview.setVisible (false);
      waveformOverview.setBounds ({});
- }
-
- if (hasRealSample && uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
- {
-     auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
-     sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
  }
  else
  {
