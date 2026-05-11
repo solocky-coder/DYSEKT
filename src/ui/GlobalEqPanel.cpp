@@ -18,7 +18,7 @@ GlobalEqPanel::GlobalEqPanel (DysektProcessor& p)
     nodes[BHigh]    = { BHigh,    0.f,  12000.f,1.f,  12000.f,true,  {} };
 
     // Allocate spectrum buffer — size matches SpectrumAnalyser::numBins (1024)
-    spectrumSmoothed.assign (DysektProcessor::SpectrumAnalyser::numBins, 0.f);
+    spectrumSmoothed.assign (SpectrumAnalyser::numBins, 0.f);
 
     setOpaque (false);
 
