@@ -441,24 +441,35 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
         float gVol   = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
 
-        float pitchN = 0.0f;
-        if (auto* p = processor.apvts.getParameter (ParamIds::defaultPitch))
-            pitchN = p->convertTo0to1 (gPitch);
-        else
-            pitchN = (gPitch + 48.0f) / 96.0f;
+        // Compute normalized knob positions using simple linear mapping so the
+        // visual arc position always matches the displayed number.
+        // Pitch:  -48..+48,  0 => 0.5  (symmetric, center = silence)
+        // Volume: -100..+24, 0 => ~0.5 visual centre — we pin the centre of
+        //         the arc to 0 dB by using a symmetric ±max-extent mapping:
+        //           norm = 0.5 + value / (2 * maxExtent)
+        //         where maxExtent = max(|min|, |max|) so the larger side just
+        //         reaches the end-stop and the smaller side stops before it.
+        //         This keeps 0 exactly at the 12-o'clock position for both knobs.
 
-        float volN = 0.0f;
-        if (auto* p = processor.apvts.getParameter (ParamIds::masterVolume))
-            volN = p->convertTo0to1 (gVol);
-        else
-            volN = (gVol + 100.0f) / 124.0f;
+        // Pitch: perfectly symmetric range, straightforward.
+        float pitchN = 0.5f + gPitch / 96.0f;   // (-48..+48) → (0..1)
+
+        // Volume: asymmetric range (-100..+24). Use maxExtent so 0 dB = centre.
+        constexpr float kVolMin = -100.0f, kVolMax = 24.0f;
+        constexpr float kVolExtent = 100.0f;   // max(|-100|, |24|) = 100
+        float volN = 0.5f + gVol / (2.0f * kVolExtent);
+        volN = juce::jlimit (0.0f, 1.0f, volN);
 
         juce::String pitchStr = (gPitch >= 0.0f ? "+" : "") + juce::String ((int) std::round (gPitch));
         juce::String volStr   = (gVol >= 0.0f ? "+" : "") + juce::String (gVol, 1);
 
         const int kr  = si (12);
-        const float kStart = juce::MathConstants<float>::pi * 1.25f;
-        const float kEnd   = juce::MathConstants<float>::pi * 2.75f;
+        // Arc sweep: 270° centered at 12 o'clock (up).
+        // In JUCE screen coords (clockwise from 3 o'clock), 12 o'clock = 3π/2.
+        // A 270° sweep centred there: kStart = 3π/4 (7:30), kEnd = 9π/4 (4:30).
+        // => norm=0 → 7:30, norm=0.5 → 12 o'clock, norm=1 → 4:30
+        const float kStart = juce::MathConstants<float>::pi * 0.75f;
+        const float kEnd   = juce::MathConstants<float>::pi * 2.25f;
 
         int kcy  = half + (h - half) / 2 - si (5);
         int k1cx = w / 3;
