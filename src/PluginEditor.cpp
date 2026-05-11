@@ -747,10 +747,6 @@ void DysektEditor::resized()
      waveformOverview.setVisible (false);
      waveformOverview.setBounds ({});
  }
- else
- {
-     sliceControlBar.setBounds ({});
- }
 
  if (showPadGrid)
      overviewTopGuard = area.getBottom();
