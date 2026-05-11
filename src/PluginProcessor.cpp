@@ -2810,6 +2810,9 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         globalEq.process (eqCtx);
     }
 
+    // ── Post-EQ spectrum analyser tap ─────────────────────────────────────────
+    spectrumAnalyser.pushSamples (buffer);
+
     // Decay all slice peak meters toward zero (60 dB/s at typical block sizes)
     static const float kDecayPerBlock = 0.60f;  // approx 60 dB/s at 512 @ 44100
     for (int si = 0; si < kMaxMeterSlices; ++si)

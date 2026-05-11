@@ -20,6 +20,82 @@
 struct SfzSlicePayload;
 
 //==============================================================================
+// ── Spectrum analyser — written from audio thread, read by GlobalEqPanel ──────
+// Lock-free double buffer.  Audio thread writes into whichever buffer the UI is
+// NOT reading, then atomically flips readIndex.  A torn frame is just a slightly
+// stale spectrum — no mutex needed.
+class SpectrumAnalyser
+{
+public:
+    static constexpr int fftOrder = 11;            // 2048-point FFT
+    static constexpr int fftSize  = 1 << fftOrder; // 2048
+    static constexpr int numBins  = fftSize / 2;   // 1024
+
+    SpectrumAnalyser()
+        : fft    (fftOrder),
+          window (fftSize, juce::dsp::WindowingFunction<float>::hann)
+    {
+        buffers[0].fill (0.f);
+        buffers[1].fill (0.f);
+    }
+
+    // Call from processBlock() AFTER the global EQ has processed.
+    void pushSamples (const juce::AudioBuffer<float>& buf)
+    {
+        const int numCh      = buf.getNumChannels();
+        const int numSamples = buf.getNumSamples();
+        if (numCh == 0 || numSamples == 0) return;
+
+        const float invCh = 1.f / (float) numCh;
+        for (int s = 0; s < numSamples; ++s)
+        {
+            float mono = 0.f;
+            for (int ch = 0; ch < numCh; ++ch)
+                mono += buf.getReadPointer (ch)[s];
+            pushSample (mono * invCh);
+        }
+    }
+
+    // UI thread: returns the latest completed FFT frame.
+    // Values are normalised 0..1  (1.0 = 0 dBFS, 0.0 = –80 dBFS).
+    const std::array<float, numBins>& getReadBuffer() const noexcept
+    {
+        return buffers[readIndex.load (std::memory_order_acquire)];
+    }
+
+private:
+    void pushSample (float sample)
+    {
+        fifo[fifoIndex++] = sample;
+        if (fifoIndex == fftSize)
+        {
+            fifoIndex = 0;
+            const int writeIdx = 1 - readIndex.load (std::memory_order_relaxed);
+            std::copy (fifo.begin(), fifo.end(), fftData.begin());
+            window.multiplyWithWindowingTable (fftData.data(), (size_t) fftSize);
+            fft.performFrequencyOnlyForwardTransform (fftData.data());
+            for (int i = 0; i < numBins; ++i)
+            {
+                const float mag = fftData[i] / (float) fftSize;
+                const float dB  = juce::Decibels::gainToDecibels (mag, -80.f);
+                buffers[writeIdx][i] = juce::jmap (dB, -80.f, 0.f, 0.f, 1.f);
+            }
+            readIndex.store (writeIdx, std::memory_order_release);
+        }
+    }
+
+    juce::dsp::FFT                      fft;
+    juce::dsp::WindowingFunction<float> window;
+    std::array<float, fftSize>          fifo     {};
+    std::array<float, fftSize>          fftData  {};
+    int                                 fifoIndex { 0 };
+    std::array<float, numBins>          buffers[2] {};
+    std::atomic<int>                    readIndex  { 0 };
+
+    JUCE_DECLARE_NON_COPYABLE (SpectrumAnalyser)
+};
+
+//==============================================================================
 class DysektProcessor : public juce::AudioProcessor
 {
 public:
@@ -256,6 +332,9 @@ public:
 
     // ── SFZ live player ───────────────────────────────────────────────────────
     SfzPlayer sfzPlayer;
+
+    // ── Spectrum analyser (post-EQ FFT data, read by GlobalEqPanel timer) ────
+    SpectrumAnalyser spectrumAnalyser;
 
     // =========================================================================
     // UI-readable state atomics

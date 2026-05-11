@@ -17,7 +17,35 @@ GlobalEqPanel::GlobalEqPanel (DysektProcessor& p)
     nodes[BHighMid] = { BHighMid, 0.f,  4000.f, 1.f,  4000.f, true,  {} };
     nodes[BHigh]    = { BHigh,    0.f,  12000.f,1.f,  12000.f,true,  {} };
 
+    // Allocate spectrum buffer — size matches SpectrumAnalyser::numBins (1024)
+    spectrumSmoothed.assign (DysektProcessor::SpectrumAnalyser::numBins, 0.f);
+
     setOpaque (false);
+
+    startTimerHz (30);   // 30 fps repaint for spectrum
+}
+
+GlobalEqPanel::~GlobalEqPanel()
+{
+    stopTimer();
+}
+
+// ── Timer callback — copies + smooths FFT data, triggers repaint ──────────────
+
+void GlobalEqPanel::timerCallback()
+{
+    spectrumSampleRate = processor.getSampleRate();
+    if (spectrumSampleRate <= 0.0) spectrumSampleRate = 44100.0;
+
+    const auto& fresh = processor.spectrumAnalyser.getReadBuffer();
+
+    // Exponential decay smoothing: 80% old + 20% new — gives the silky Pro-Q look.
+    // Increase kDecay toward 0.95 for slower movement, lower toward 0.60 for snappier.
+    static constexpr float kDecay = 0.80f;
+    for (size_t i = 0; i < spectrumSmoothed.size(); ++i)
+        spectrumSmoothed[i] = spectrumSmoothed[i] * kDecay + fresh[i] * (1.f - kDecay);
+
+    repaint();
 }
 
 // ── Paint ─────────────────────────────────────────────────────────────────────
@@ -97,6 +125,27 @@ void GlobalEqPanel::paint (juce::Graphics& g)
         g.drawText (lbl,
                     juce::Rectangle<float> (x - 14.f, plot.getBottom() + 2.f, 28.f, 10.f),
                     juce::Justification::centred, false);
+    }
+
+    // ── Spectrum analyser (drawn BEFORE EQ curve so curve sits on top) ────────
+    {
+        auto specPath = buildSpectrum();
+        if (! specPath.isEmpty())
+        {
+            // Filled area under the spectrum
+            auto filled = specPath;
+            filled.lineTo (plot.getRight(), plot.getBottom());
+            filled.lineTo (plot.getX(),     plot.getBottom());
+            filled.closeSubPath();
+            g.setColour (theme.accent.withAlpha (0.07f));
+            g.fillPath (filled);
+
+            // Spectrum line — noticeably dimmer than the EQ curve
+            g.setColour (theme.accent.withAlpha (0.28f));
+            g.strokePath (specPath, juce::PathStrokeType (1.1f,
+                          juce::PathStrokeType::curved,
+                          juce::PathStrokeType::rounded));
+        }
     }
 
     // ── EQ curve ─────────────────────────────────────────────────────────────
@@ -371,6 +420,49 @@ float GlobalEqPanel::xToFreq (float x) const
     float logHi = std::log10 (kPlotFreqHi);
     return std::pow (10.f, logLo + t * (logHi - logLo));
 }
+
+// ── Spectrum analyser path ────────────────────────────────────────────────────
+// Maps FFT bins → screen coordinates.
+// Bin i = frequency (i * sampleRate / fftSize).
+// Normalised value 0..1 is remapped to the dB range of the plot (-kGainMax..0).
+// We treat full amplitude (1.0) as 0 dB on the plot so that loud signals fill
+// the display without clipping the EQ headroom range.
+
+juce::Path GlobalEqPanel::buildSpectrum() const
+{
+    const int   numBins  = (int) spectrumSmoothed.size();
+    if (numBins == 0) return {};
+
+    const int   fftSize  = numBins * 2;
+    const float sr       = (float) spectrumSampleRate;
+    const float binHz    = sr / (float) fftSize;
+    auto        plot     = plotArea();
+
+    juce::Path path;
+    bool started = false;
+
+    for (int i = 1; i < numBins; ++i)
+    {
+        float hz = (float) i * binHz;
+        if (hz < kPlotFreqLo) continue;
+        if (hz > kPlotFreqHi) break;
+
+        float x = freqToX (hz);
+
+        // Map 0..1 normalised value to dB display range.
+        // 1.0 → 0 dB on plot (top of EQ headroom), 0.0 → -kGainMax (bottom).
+        float norm = spectrumSmoothed[i];
+        float dB   = juce::jmap (norm, 0.f, 1.f, -kGainMax, 0.f);
+        float y    = gainToY (juce::jlimit (-kGainMax, 0.f, dB));
+
+        if (! started) { path.startNewSubPath (x, y); started = true; }
+        else             path.lineTo (x, y);
+    }
+
+    return path;
+}
+
+// ── EQ curve ─────────────────────────────────────────────────────────────────
 
 // Biquad magnitude response for one band.
 // type: 0 = lowShelf, 1 = peakFilter, 2 = highShelf

@@ -5,7 +5,8 @@
 class DysektProcessor;
 
 /**
- * GlobalEqPanel — interactive 5-band parametric EQ with Bode-style magnitude curve.
+ * GlobalEqPanel — interactive 5-band parametric EQ with Bode-style magnitude curve
+ *                 and a real-time post-EQ spectrum analyser overlay.
  *
  * Bands:
  *   0  Low shelf     @ 80 Hz        (±18 dB)               — Y only
@@ -19,12 +20,18 @@ class DysektProcessor;
  *
  * The panel draws a theme-aware frame (gradient background, accent border)
  * matching the DualLcdControlFrame / MixerPanel visual language.
+ *
+ * Spectrum analyser:
+ *   Reads post-EQ FFT magnitude data from DysektProcessor::spectrumAnalyser.
+ *   Repaints at 30 Hz via juce::Timer.  The spectrum fill is drawn behind the
+ *   EQ curve so the curve always reads clearly on top.
  */
-class GlobalEqPanel : public juce::Component
+class GlobalEqPanel : public juce::Component,
+                      private juce::Timer
 {
 public:
     explicit GlobalEqPanel (DysektProcessor& p);
-    ~GlobalEqPanel() override = default;
+    ~GlobalEqPanel() override;
 
     void paint            (juce::Graphics&) override;
     void resized          () override;
@@ -59,7 +66,8 @@ private:
     float freqToX  (float hz) const;
     float xToFreq  (float x)  const;
 
-    juce::Path buildCurve() const;
+    juce::Path buildCurve()    const;
+    juce::Path buildSpectrum() const;   // ← new: spectrum analyser path
 
     static float filterMagnitudeAt (int type, float evalHz, float filterHz,
                                     float gainDb, float q, float sampleRate);
@@ -68,6 +76,9 @@ private:
 
     void resetBandToDefault (int band);
 
+    // ── Timer ─────────────────────────────────────────────────────────────────
+    void timerCallback() override;
+
     // ── State ─────────────────────────────────────────────────────────────────
     DysektProcessor& processor;
 
@@ -75,6 +86,12 @@ private:
     int   dragBand      = NoBand;
     float dragStartGain = 0.f;
     float dragStartFreq = 0.f;
+
+    // ── Spectrum snapshot (UI thread only, smoothed copy of FFT data) ─────────
+    // Size matches SpectrumAnalyser::numBins (1024).
+    // We use a plain std::vector so we don't need to know fftSize at header time.
+    std::vector<float> spectrumSmoothed;   // normalised 0..1
+    double             spectrumSampleRate = 44100.0;
 
     static constexpr float kNodeRadius = 7.f;
     static constexpr float kGainMax    = 18.f;
