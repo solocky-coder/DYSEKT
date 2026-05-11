@@ -725,8 +725,23 @@ void DysektEditor::resized()
  // SCB first (bottommost), then overview row sits immediately above it.
  if (hasRealSample && uiMode == 0 && activeSlot != SlotContent::Mixer && !normalBrowserOpen)
  {
-     auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
-     sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+     if (showPadGrid)
+     {
+         // In pad mode: don't steal from area (the pad grid keeps full height).
+         // Place the SCB vertically centred in the strip between the pad grid
+         // bottom and the plugin bottom edge (getHeight() - si(kMargin)).
+         const int pluginBottom = getHeight() - si (kMargin);
+         const int padBottom    = area.getBottom();
+         const int stripH       = pluginBottom - padBottom;
+         const int scbH         = si (kSliceCtrlH);
+         const int scbY         = padBottom + (stripH - scbH) / 2;
+         sliceControlBar.setBounds (kFX, scbY, kFW, scbH);
+     }
+     else
+     {
+         auto scbArea = area.removeFromBottom (si (kSliceCtrlH));
+         sliceControlBar.setBounds (juce::Rectangle<int> (kFX, scbArea.getY(), kFW, si (kSliceCtrlH)));
+     }
  }
  else
  {
