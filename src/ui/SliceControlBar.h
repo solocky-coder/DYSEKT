@@ -119,10 +119,6 @@ private:
     // paint()'s cells.clear() cannot invalidate the active drag mid-gesture.
     ParamCell activeCellSnapshot {};
 
-    // Root note cell (editable when no slices exist)
-    juce::Rectangle<int> rootNoteArea;
-    bool draggingRootNote = false;
-
     // Fine-mode toggle badge — hit area updated each paint, checked in mouseDown.
     juce::Rectangle<int> markerFineModeToggleArea;
 

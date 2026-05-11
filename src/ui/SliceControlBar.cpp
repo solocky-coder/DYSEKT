@@ -2,7 +2,8 @@
 
 // Synthetic field ID for the GLIDE cell — not in DysektProcessor::SliceParamField enum
 // because it maps directly to VoicePool::legatoGlideMs (global, not per-slice).
-static constexpr int kFieldGlide = 9998;
+static constexpr int kFieldGlide    = 9998;
+static constexpr int kFieldRootNote = 9999;
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "UIHelpers.h"
 #include "DysektLookAndFeel.h"
@@ -221,6 +222,7 @@ float SliceControlBar::toNorm (int fieldId, float v) const
         case F::FieldEqMidQ:     return juce::jlimit (0.f, 1.f, (v - 0.5f) / 3.5f);
         case F::FieldEqHighGain: return juce::jlimit (0.f, 1.f, (v + 18.f) / 36.f);
     case kFieldGlide:       return juce::jlimit (0.f, 1.f, v / 200.f);
+    case kFieldRootNote:    return juce::jlimit (0.f, 1.f, v / 127.f);
  default: return 0.5f;
  }
 }
@@ -843,8 +845,6 @@ void SliceControlBar::paint (juce::Graphics& g)
  const int kToggleBtnW = si (52);
  int rightEdge = getWidth() - si (8) - kToggleBtnW * 2 - si (4) - si (6); // two buttons + gap
  int row1y = si (7), row2y = si (38); // centred: (72-59)/2 = 6.5 → 7px top padding
- rootNoteArea = {}; // no longer drawn — LCD shows ROOT and SLICES
-
  if (idx < 0 || idx >= numSlices)
  {
  g.setFont (DysektLookAndFeel::makeFont (15.0f * paintSf));
@@ -1039,6 +1039,19 @@ void SliceControlBar::paint (juce::Graphics& g)
                     0.f, 1.f, 1.f,
                     false, true, cw);
      x += cw + si (4);
+
+     // ROOT — chromatic reference MIDI note (only meaningful when chromaticChannel > 0)
+     {
+         const int liveRoot = processor.sliceManager.rootNote.load (std::memory_order_relaxed);
+         static const char* kNoteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+         const int rn = juce::jlimit (0, 127, liveRoot);
+         juce::String rootStr = juce::String (kNoteNames[rn % 12]) + juce::String (rn / 12 - 2);
+         drawKnobCell (g, x, row1y, "ROOT", rootStr,
+                       toNorm (kFieldRootNote, (float) liveRoot),
+                       false, 0, kFieldRootNote,
+                       0.f, 127.f, 1.f, cw);
+         x += cw + si (4);
+     }
  }
  }
  g.setColour (getTheme().separator);
@@ -1319,7 +1332,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  }
 
  if (textEditor != nullptr) textEditor.reset();
- activeDragCell = -1; draggingRootNote = false;
+ activeDragCell = -1;
  auto pos = e.getPosition();
  const auto& ui = processor.getUiSliceSnapshot();
 
@@ -1336,14 +1349,6 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
      }
      repaint();
      return;
- }
-
- if (ui.numSlices == 0 && rootNoteArea.contains (pos))
- {
- DysektProcessor::Command gc; gc.type = DysektProcessor::CmdBeginGesture;
- processor.pushCommand (gc);
- draggingRootNote = true; dragStartY = pos.y;
- dragStartValue = (float) ui.rootNote; return;
  }
 
  // ── Priority pass: lock icons share bounds with their knob cell.
@@ -1465,6 +1470,9 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  case F::FieldMidiNote:    dragStartValue = (float) sl.midiNote; break;
  case kFieldGlide:
      dragStartValue = processor.voicePool.legatoGlideMs.load (std::memory_order_relaxed);
+     break;
+ case kFieldRootNote:
+     dragStartValue = (float) processor.sliceManager.rootNote.load (std::memory_order_relaxed);
      break;
  default: dragStartValue = 0.f; break;
  }
@@ -1613,15 +1621,6 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  }
  }
 
- if (draggingRootNote)
- {
- float deltaY = (float) (dragStartY - e.y);
- int newVal = juce::jlimit (0, 127, (int) (dragStartValue + deltaY * (127.f / 200.f)));
- DysektProcessor::Command cmd;
- cmd.type = DysektProcessor::CmdSetRootNote; cmd.intParam1 = newVal;
- processor.pushCommand (cmd); repaint(); return;
- }
-
  if (activeDragCell < 0) return;
  // Use the snapshot taken at mouseDown — cells[] is rebuilt by every repaint()
  // so indexing by activeDragCell after a repaint reads the wrong cell.
@@ -1671,6 +1670,19 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
         const float sensitivity = e.mods.isShiftDown() ? 0.2f : 1.0f; // ms/pixel
         float newMs = juce::jlimit (0.0f, 200.0f, dragStartValue - deltaY * sensitivity);
         processor.voicePool.legatoGlideMs.store (newMs, std::memory_order_relaxed);
+        repaint(); return;
+    }
+
+    // ROOT NOTE: send via command FIFO -- chromatic reference MIDI note
+    if (cell.fieldId == kFieldRootNote)
+    {
+        const float sensitivity = e.mods.isShiftDown() ? 0.1f : 0.4f; // notes/pixel
+        const int newRoot = juce::jlimit (0, 127,
+            (int) std::round (dragStartValue + deltaY * sensitivity));
+        DysektProcessor::Command cmd;
+        cmd.type      = DysektProcessor::CmdSetRootNote;
+        cmd.intParam1 = newRoot;
+        processor.pushCommand (cmd);
         repaint(); return;
     }
 
@@ -1811,7 +1823,6 @@ void SliceControlBar::mouseUp (const juce::MouseEvent& /*e*/)
  // Deactivate live drag (mirrors WaveformView::mouseUp)
  processor.liveDragSliceIdx.store (-1, std::memory_order_release);
  activeDragCell = -1;
- draggingRootNote = false;
 }
 
 // =============================================================================
@@ -1821,30 +1832,6 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
 {
  auto pos = e.getPosition();
  const auto& ui = processor.getUiSliceSnapshot();
-
- if (ui.numSlices == 0 && rootNoteArea.contains (pos))
- {
- textEditor = std::make_unique<juce::TextEditor>();
- addAndMakeVisible (*textEditor);
- textEditor->setBounds (rootNoteArea.getX(), rootNoteArea.getY() + 15,
- rootNoteArea.getWidth(), 16);
- textEditor->setFont (DysektLookAndFeel::makeFont (14.0f));
- textEditor->setColour (juce::TextEditor::backgroundColourId, getTheme().darkBar.brighter (0.15f));
- textEditor->setColour (juce::TextEditor::textColourId, getTheme().foreground);
- textEditor->setColour (juce::TextEditor::outlineColourId, getTheme().accent);
- textEditor->setText (juce::String (ui.rootNote), false);
- textEditor->selectAll(); textEditor->grabKeyboardFocus();
- textEditor->onReturnKey = [this] {
- if (! textEditor) return;
- int val = juce::jlimit (0, 127, textEditor->getText().getIntValue());
- DysektProcessor::Command cmd;
- cmd.type = DysektProcessor::CmdSetRootNote; cmd.intParam1 = val;
- processor.pushCommand (cmd); textEditor.reset(); repaint();
- };
- textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };
- textEditor->onFocusLost = [this] { textEditor.reset(); repaint(); };
- return;
- }
 
  for (int i = 0; i < (int) cells.size(); ++i)
  {
@@ -1885,6 +1872,34 @@ void SliceControlBar::mouseDoubleClick (const juce::MouseEvent& e)
  default: break;
  }
  }
+ // ROOT NOTE special case -- commits via CmdSetRootNote, not CmdSetSliceParam
+ if (cell.fieldId == kFieldRootNote)
+ {
+     const int liveRoot = processor.sliceManager.rootNote.load (std::memory_order_relaxed);
+     textEditor = std::make_unique<juce::TextEditor>();
+     addAndMakeVisible (*textEditor);
+     textEditor->setBounds (cell.x + kParamCellTextX, cell.y + 14,
+                            cell.w - kParamCellTextX - 2, 16);
+     textEditor->setFont (DysektLookAndFeel::makeFont (14.0f));
+     textEditor->setColour (juce::TextEditor::backgroundColourId, getTheme().darkBar.brighter (0.15f));
+     textEditor->setColour (juce::TextEditor::textColourId,    getTheme().foreground);
+     textEditor->setColour (juce::TextEditor::outlineColourId, getTheme().accent);
+     textEditor->setText (juce::String (liveRoot), false);
+     textEditor->selectAll(); textEditor->grabKeyboardFocus();
+     textEditor->onReturnKey = [this] {
+         if (! textEditor) return;
+         const int val = juce::jlimit (0, 127, textEditor->getText().getIntValue());
+         DysektProcessor::Command cmd;
+         cmd.type      = DysektProcessor::CmdSetRootNote;
+         cmd.intParam1 = val;
+         processor.pushCommand (cmd);
+         textEditor.reset(); repaint();
+     };
+     textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };
+     textEditor->onFocusLost = [this] { textEditor.reset(); repaint(); };
+     return;
+ }
+
  showTextEditor (cell, currentVal); return;
  }
 }

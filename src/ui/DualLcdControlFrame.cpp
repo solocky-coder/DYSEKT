@@ -436,18 +436,10 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         }
     }
 
-    // ── Bottom row: ROOT | PITCH | VOL knobs ─────────────────────────────────
+    // ── Bottom row: PITCH | VOL knobs ────────────────────────────────────────
     {
-        // Read live values — rootNote from the atomic directly (avoids snapshot lag);
-        // pitch and vol via getRawParameterValue for APVTS-live accuracy.
-        // Normalise using p->convertTo0to1() so the knob arc matches the param's
-        // own mapping exactly (important for any future skewed ranges).
-        const int   liveRoot = processor.sliceManager.rootNote.load (std::memory_order_relaxed);
         float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
         float gVol   = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
-
-        // rootNote is not an APVTS parameter — it is a plain 0-127 integer.
-        float rootN = (float) liveRoot / 127.0f;
 
         float pitchN = 0.0f;
         if (auto* p = processor.apvts.getParameter (ParamIds::defaultPitch))
@@ -461,9 +453,6 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         else
             volN = (gVol + 100.0f) / 124.0f;
 
-        static const char* noteNames[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-        int rn = juce::jlimit (0, 127, liveRoot);
-        juce::String rootStr  = juce::String (noteNames[rn % 12]) + juce::String (rn / 12 - 2);
         juce::String pitchStr = (gPitch >= 0.0f ? "+" : "") + juce::String ((int) std::round (gPitch));
         juce::String volStr   = (gVol >= 0.0f ? "+" : "") + juce::String (gVol, 1);
 
@@ -472,15 +461,13 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         const float kEnd   = juce::MathConstants<float>::pi * 2.75f;
 
         int kcy  = half + (h - half) / 2 - si (5);
-        int k1cx = w / 6;
-        int k2cx = w / 2;
-        int k3cx = w * 5 / 6;
+        int k1cx = w / 3;
+        int k2cx = w * 2 / 3;
 
         struct Knob { int cx; float norm; juce::String lbl; juce::String val; };
         Knob knobs[] = {
-            { k1cx, rootN,  "ROOT",  rootStr  },
-            { k2cx, pitchN, "PITCH", pitchStr },
-            { k3cx, volN,   "VOL",   volStr   },
+            { k1cx, pitchN, "PITCH", pitchStr },
+            { k2cx, volN,   "VOL",   volStr   },
         };
 
         for (auto& k : knobs)
@@ -512,9 +499,8 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             g.drawText (k.val, k.cx - si(18), kcy + kr + si(11), si(36), si(9), juce::Justification::centred);
         }
 
-        rootKnobArea  = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
-        pitchKnobArea = { k2cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
-        volKnobArea   = { k3cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
+        pitchKnobArea = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
+        volKnobArea   = { k2cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
     }
 }
 
@@ -522,8 +508,6 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
 void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
 {
-    if (textEditor) textEditor.reset();
-
     auto pos = e.getPosition();
     dragTarget = DragTarget::None;
 
@@ -587,13 +571,6 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
     }
 
     // Knobs
-    if (rootKnobArea.contains (pos))
-    {
-        dragTarget     = DragTarget::Root;
-        dragStartY     = pos.y;
-        dragStartValue = (float) processor.sliceManager.rootNote.load (std::memory_order_relaxed);
-        return;
-    }
     if (pitchKnobArea.contains (pos))
     {
         dragTarget     = DragTarget::Pitch;
@@ -620,17 +597,6 @@ void DualLcdControlFrame::mouseDrag (const juce::MouseEvent& e)
 
     switch (dragTarget)
     {
-        case DragTarget::Root:
-        {
-            float sens  = e.mods.isShiftDown() ? 0.1f : 0.4f;
-            int newRoot = juce::jlimit (0, 127, (int) std::round (dragStartValue + delta * sens));
-            DysektProcessor::Command cmd;
-            cmd.type      = DysektProcessor::CmdSetRootNote;
-            cmd.intParam1 = newRoot;
-            processor.pushCommand (cmd);
-            repaint();
-            break;
-        }
         case DragTarget::Pitch:
         {
             float sens = e.mods.isShiftDown() ? 0.05f : 0.5f;
@@ -662,41 +628,6 @@ void DualLcdControlFrame::mouseUp (const juce::MouseEvent&)
         if (auto* p = processor.apvts.getParameter (ParamIds::masterVolume))
             p->endChangeGesture();
     dragTarget = DragTarget::None;
-}
-
-void DualLcdControlFrame::mouseDoubleClick (const juce::MouseEvent& e)
-{
-    if (! rootKnobArea.contains (e.getPosition())) return;
-
-    const int liveRootForEdit = processor.sliceManager.rootNote.load (std::memory_order_relaxed);
-    textEditor = std::make_unique<juce::TextEditor>();
-    addAndMakeVisible (*textEditor);
-    {
-        const int edH = juce::roundToInt (16.0f * (float) getWidth() / 200.0f);
-        textEditor->setBounds (rootKnobArea.getX(), rootKnobArea.getBottom() - edH,
-                               rootKnobArea.getWidth(), edH);
-        textEditor->setFont (DysektLookAndFeel::makeFont (12.0f * (float) getWidth() / 200.0f));
-    }
-    textEditor->setColour (juce::TextEditor::backgroundColourId,
-                           getTheme().header.brighter (0.2f));
-    textEditor->setColour (juce::TextEditor::textColourId,    juce::Colours::white);
-    textEditor->setColour (juce::TextEditor::outlineColourId, getTheme().accent);
-    textEditor->setText (juce::String (liveRootForEdit), false);
-    textEditor->selectAll();
-    textEditor->grabKeyboardFocus();
-
-    textEditor->onReturnKey = [this] {
-        if (! textEditor) return;
-        int val = juce::jlimit (0, 127, textEditor->getText().getIntValue());
-        DysektProcessor::Command cmd;
-        cmd.type      = DysektProcessor::CmdSetRootNote;
-        cmd.intParam1 = val;
-        processor.pushCommand (cmd);
-        textEditor.reset();
-        repaint();
-    };
-    textEditor->onEscapeKey = [this] { textEditor.reset(); repaint(); };
-    textEditor->onFocusLost = [this] { textEditor.reset(); repaint(); };
 }
 
 void DualLcdControlFrame::mouseMove (const juce::MouseEvent& e)
