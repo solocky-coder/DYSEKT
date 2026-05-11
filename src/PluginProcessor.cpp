@@ -2181,22 +2181,32 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // ── Poll global EQ param changes ──────────────────────────────────────────
     {
-        static float cachedEqLow = -999.f, cachedEqMidG = -999.f, cachedEqMidF = -999.f,
-                     cachedEqMidQ = -999.f, cachedEqHigh = -999.f;
+        static float cachedEqLow = -999.f, cachedEqLowF = -999.f,
+                     cachedEqMidG = -999.f, cachedEqMidF = -999.f,
+                     cachedEqMidQ = -999.f,
+                     cachedEqHigh = -999.f, cachedEqHighF = -999.f;
         auto* pLow  = apvts.getRawParameterValue (ParamIds::globalEqLowGain);
+        auto* pLowF = apvts.getRawParameterValue (ParamIds::globalEqLowFreq);
         auto* pMidG = apvts.getRawParameterValue (ParamIds::globalEqMidGain);
         auto* pMidF = apvts.getRawParameterValue (ParamIds::globalEqMidFreq);
         auto* pMidQ = apvts.getRawParameterValue (ParamIds::globalEqMidQ);
         auto* pHigh = apvts.getRawParameterValue (ParamIds::globalEqHighGain);
-        if (pLow && pMidG && pMidF && pMidQ && pHigh)
+        auto* pHighF = apvts.getRawParameterValue (ParamIds::globalEqHighFreq);
+        if (pLow && pLowF && pMidG && pMidF && pMidQ && pHigh && pHighF)
         {
-            float l = pLow->load(), mg = pMidG->load(), mf = pMidF->load(),
-                  mq = pMidQ->load(), h = pHigh->load();
-            if (l != cachedEqLow || mg != cachedEqMidG || mf != cachedEqMidF ||
-                mq != cachedEqMidQ || h != cachedEqHigh)
+            float l = pLow->load(), lf = pLowF->load(),
+                  mg = pMidG->load(), mf = pMidF->load(),
+                  mq = pMidQ->load(),
+                  h = pHigh->load(), hf = pHighF->load();
+            if (l != cachedEqLow || lf != cachedEqLowF ||
+                mg != cachedEqMidG || mf != cachedEqMidF ||
+                mq != cachedEqMidQ ||
+                h != cachedEqHigh || hf != cachedEqHighF)
             {
-                cachedEqLow = l; cachedEqMidG = mg; cachedEqMidF = mf;
-                cachedEqMidQ = mq; cachedEqHigh = h;
+                cachedEqLow = l; cachedEqLowF = lf;
+                cachedEqMidG = mg; cachedEqMidF = mf;
+                cachedEqMidQ = mq;
+                cachedEqHigh = h; cachedEqHighF = hf;
                 globalEqNeedsUpdate = true;
             }
         }
@@ -2778,15 +2788,17 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         if (globalEqNeedsUpdate)
         {
             double sr = getSampleRate();
-            auto lowG = apvts.getRawParameterValue (ParamIds::globalEqLowGain)->load();
-            auto midG = apvts.getRawParameterValue (ParamIds::globalEqMidGain)->load();
-            auto midF = apvts.getRawParameterValue (ParamIds::globalEqMidFreq)->load();
-            auto midQ = apvts.getRawParameterValue (ParamIds::globalEqMidQ)->load();
-            auto hiG  = apvts.getRawParameterValue (ParamIds::globalEqHighGain)->load();
+            auto lowG  = apvts.getRawParameterValue (ParamIds::globalEqLowGain)->load();
+            auto lowF  = apvts.getRawParameterValue (ParamIds::globalEqLowFreq)->load();
+            auto midG  = apvts.getRawParameterValue (ParamIds::globalEqMidGain)->load();
+            auto midF  = apvts.getRawParameterValue (ParamIds::globalEqMidFreq)->load();
+            auto midQ  = apvts.getRawParameterValue (ParamIds::globalEqMidQ)->load();
+            auto hiG   = apvts.getRawParameterValue (ParamIds::globalEqHighGain)->load();
+            auto hiF   = apvts.getRawParameterValue (ParamIds::globalEqHighFreq)->load();
 
-            *globalEq.get<0>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowShelf  (sr, 200.f,   1.f, std::pow (10.f, lowG / 20.f));
+            *globalEq.get<0>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowShelf  (sr, lowF, 1.f, std::pow (10.f, lowG / 20.f));
             *globalEq.get<1>().coefficients = *juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, midF, midQ, std::pow (10.f, midG / 20.f));
-            *globalEq.get<2>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, 8000.f,  1.f, std::pow (10.f, hiG  / 20.f));
+            *globalEq.get<2>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, hiF,  1.f, std::pow (10.f, hiG  / 20.f));
             globalEqNeedsUpdate = false;
         }
 

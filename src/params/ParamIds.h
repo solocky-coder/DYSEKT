@@ -40,6 +40,7 @@ namespace ParamIds
 
     // v24: global EQ (post-mix, applied in PluginProcessor::processBlock)
     inline const juce::String globalEqLowGain     { "globalEqLowGain" };
+    inline const juce::String globalEqLowFreq     { "globalEqLowFreq" };
     inline const juce::String globalEqLowMidGain  { "globalEqLowMidGain" };
     inline const juce::String globalEqLowMidFreq  { "globalEqLowMidFreq" };
     inline const juce::String globalEqLowMidQ     { "globalEqLowMidQ" };
@@ -50,6 +51,7 @@ namespace ParamIds
     inline const juce::String globalEqHighMidFreq { "globalEqHighMidFreq" };
     inline const juce::String globalEqHighMidQ    { "globalEqHighMidQ" };
     inline const juce::String globalEqHighGain    { "globalEqHighGain" };
+    inline const juce::String globalEqHighFreq    { "globalEqHighFreq" };
     // Default per-slice EQ globals (used as fallback when slice has no lock)
     inline const juce::String defaultEqLowGain    { "defaultEqLowGain" };
     inline const juce::String defaultEqMidGain    { "defaultEqMidGain" };

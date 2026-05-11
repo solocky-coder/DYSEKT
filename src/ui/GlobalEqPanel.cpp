@@ -11,11 +11,11 @@ GlobalEqPanel::GlobalEqPanel (DysektProcessor& p)
     : processor (p)
 {
     //            band       gain  freq     q    defaultFreq  draggable
-    nodes[BLow]     = { BLow,     0.f,  80.f,   1.f,  80.f,   false, {} };
+    nodes[BLow]     = { BLow,     0.f,  80.f,   1.f,  80.f,   true,  {} };
     nodes[BLowMid]  = { BLowMid,  0.f,  250.f,  1.f,  250.f,  true,  {} };
     nodes[BMid]     = { BMid,     0.f,  1000.f, 1.f,  1000.f, true,  {} };
     nodes[BHighMid] = { BHighMid, 0.f,  4000.f, 1.f,  4000.f, true,  {} };
-    nodes[BHigh]    = { BHigh,    0.f,  12000.f,1.f,  12000.f,false, {} };
+    nodes[BHigh]    = { BHigh,    0.f,  12000.f,1.f,  12000.f,true,  {} };
 
     setOpaque (false);
 }
@@ -199,14 +199,16 @@ void GlobalEqPanel::mouseDrag (const juce::MouseEvent& e)
     // Y → gain
     n.gainDb = juce::jlimit (-kGainMax, kGainMax, yToGain (e.position.y));
 
-    // X → freq (peak bands only)
+    // X → freq (all bands now draggable)
     if (n.freqDraggable)
     {
         float rawFreq = xToFreq (e.position.x);
         float loLim = kPlotFreqLo, hiLim = kPlotFreqHi;
-        if (dragBand == BLowMid)  { loLim = kLowMidFreqLo;  hiLim = kLowMidFreqHi; }
-        if (dragBand == BMid)     { loLim = kMidFreqLo;      hiLim = kMidFreqHi; }
+        if (dragBand == BLow)     { loLim = 20.f;           hiLim = 500.f;          }
+        if (dragBand == BLowMid)  { loLim = kLowMidFreqLo;  hiLim = kLowMidFreqHi;  }
+        if (dragBand == BMid)     { loLim = kMidFreqLo;      hiLim = kMidFreqHi;     }
         if (dragBand == BHighMid) { loLim = kHighMidFreqLo;  hiLim = kHighMidFreqHi; }
+        if (dragBand == BHigh)    { loLim = 2000.f;          hiLim = 20000.f;        }
         n.freqHz = juce::jlimit (loLim, hiLim, rawFreq);
     }
 
@@ -219,14 +221,16 @@ void GlobalEqPanel::mouseDrag (const juce::MouseEvent& e)
 
     switch (dragBand)
     {
-        case BLow:     setP (ParamIds::globalEqLowGain,     n.gainDb); break;
+        case BLow:     setP (ParamIds::globalEqLowGain,     n.gainDb);
+                       setP (ParamIds::globalEqLowFreq,     n.freqHz); break;
         case BLowMid:  setP (ParamIds::globalEqLowMidGain,  n.gainDb);
                        setP (ParamIds::globalEqLowMidFreq,  n.freqHz); break;
         case BMid:     setP (ParamIds::globalEqMidGain,     n.gainDb);
                        setP (ParamIds::globalEqMidFreq,     n.freqHz); break;
         case BHighMid: setP (ParamIds::globalEqHighMidGain, n.gainDb);
                        setP (ParamIds::globalEqHighMidFreq, n.freqHz); break;
-        case BHigh:    setP (ParamIds::globalEqHighGain,    n.gainDb); break;
+        case BHigh:    setP (ParamIds::globalEqHighGain,    n.gainDb);
+                       setP (ParamIds::globalEqHighFreq,    n.freqHz); break;
         default: break;
     }
 
@@ -305,7 +309,7 @@ void GlobalEqPanel::layout()
     };
 
     nodes[BLow].gainDb     = getP (ParamIds::globalEqLowGain);
-    nodes[BLow].freqHz     = 80.f;
+    nodes[BLow].freqHz     = getP (ParamIds::globalEqLowFreq, 80.f);
 
     nodes[BLowMid].gainDb  = getP (ParamIds::globalEqLowMidGain);
     nodes[BLowMid].freqHz  = getP (ParamIds::globalEqLowMidFreq,  250.f);
@@ -320,7 +324,7 @@ void GlobalEqPanel::layout()
     nodes[BHighMid].q      = getP (ParamIds::globalEqHighMidQ,    1.f);
 
     nodes[BHigh].gainDb    = getP (ParamIds::globalEqHighGain);
-    nodes[BHigh].freqHz    = 12000.f;
+    nodes[BHigh].freqHz    = getP (ParamIds::globalEqHighFreq, 12000.f);
 
     for (auto& n : nodes)
         n.pos = { freqToX (n.freqHz), gainToY (n.gainDb) };
