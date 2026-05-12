@@ -491,87 +491,74 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             pitchKnobArea = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
         }
 
-        // ── VOL horizontal slider (right two-thirds) ────────────────────────
+        // ── VOL knob (right third) — same geometry as PITCH, same 0dB-centred logic ──
         {
-            constexpr float kVolMin = -100.0f, kVolMax = 24.0f;
-            float volN = (gVol - kVolMin) / (kVolMax - kVolMin);
-            volN = juce::jlimit (0.0f, 1.0f, volN);
+            // 0 dB → norm=0.5 (12 o'clock).  -24 dB → 0.0 (CCW stop).  +24 dB → 1.0 (CW stop).
+            // Values outside -24..+24 are clamped visually (the param itself goes to -100..+24).
+            constexpr float kVisMin = -24.0f, kVisMax = 24.0f;
+            const float volN = juce::jlimit (0.0f, 1.0f, (gVol - kVisMin) / (kVisMax - kVisMin));
 
-            // 0 dB normalised position (approx 0.806)
-            const float zeroN = (0.0f - kVolMin) / (kVolMax - kVolMin);
+            const int kr  = si (12);
+            const int kcy = rowTop + (rowBot - rowTop) / 2;
+            const int k2cx = w - w / 3;    // mirror of pitch knob on right side
 
-            // Geometry: track runs across right half with small inset
-            const int sliderH = si (5);    // track height
-            const int thumbW  = si (6);    // thumb width
-            const int thumbH  = si (14);   // thumb height (taller than track)
-            const int pad     = si (8);    // left/right inset
-            int trackLeft  = w / 2 + pad;
-            int trackRight = w - pad;
-            int trackW     = trackRight - trackLeft;
-            int sliderCy   = rowTop + (rowBot - rowTop) / 2;   // vertically centred
+            const float kStart   = juce::MathConstants<float>::pi * 0.75f;  // 7 o'clock
+            const float kEnd     = juce::MathConstants<float>::pi * 2.25f;  // 5 o'clock
+            const float arcLen   = kEnd - kStart;
+            const float halfPi   = juce::MathConstants<float>::halfPi;
+            const float arcStart = kStart + halfPi;
+            const float arcEnd   = kEnd   + halfPi;
 
-            // Thumb X: left=-100, right=+24
-            int thumbX = trackLeft + juce::roundToInt (volN * (float) trackW);
-
-            // Track background
+            // Track
+            juce::Path track;
+            track.addCentredArc ((float)k2cx, (float)kcy, (float)kr, (float)kr,
+                                  0.f, arcStart, arcEnd, true);
             g.setColour (getTheme().darkBar.brighter (0.3f));
-            g.fillRoundedRectangle ((float)trackLeft, (float)(sliderCy - sliderH / 2),
-                                    (float)trackW,    (float)sliderH, 2.f);
+            g.strokePath (track, juce::PathStrokeType (sf1 (1.5f)));
 
-            // Filled portion left to thumb
-            if (thumbX > trackLeft)
+            // Fill — bidirectional from 12 o'clock (0 dB = norm 0.5)
+            constexpr float zeroNorm  = 0.5f;
+            const float     zeroAngle = arcStart + (arcEnd - arcStart) * zeroNorm;
+            const float     normAngle = arcStart + (arcEnd - arcStart) * volN;
+
+            if (std::abs (volN - zeroNorm) > 0.005f)
             {
-                g.setColour (accent.withAlpha (0.55f));
-                g.fillRoundedRectangle ((float)trackLeft, (float)(sliderCy - sliderH / 2),
-                                        (float)(thumbX - trackLeft), (float)sliderH, 2.f);
+                juce::Path fill;
+                if (volN > zeroNorm)
+                    fill.addCentredArc ((float)k2cx, (float)kcy, (float)kr, (float)kr,
+                                         0.f, zeroAngle, normAngle, true);
+                else
+                    fill.addCentredArc ((float)k2cx, (float)kcy, (float)kr, (float)kr,
+                                         0.f, normAngle, zeroAngle, true);
+                g.setColour (accent);
+                g.strokePath (fill, juce::PathStrokeType (sf1 (2.2f)));
             }
 
-            // 0 dB tick — vertical line through track, small label above
-            {
-                int zeroX = trackLeft + juce::roundToInt (zeroN * (float) trackW);
-                g.setColour (fg.withAlpha (0.55f));
-                g.drawVerticalLine (zeroX,
-                                    (float)(sliderCy - sliderH / 2 - si (3)),
-                                    (float)(sliderCy + sliderH / 2 + si (3)));
-                g.setFont (DysektLookAndFeel::makeFont (sf1 (6.5f)));
-                g.setColour (fg.withAlpha (0.35f));
-                g.drawText ("0",
-                            zeroX - si (5), sliderCy - sliderH / 2 - si (10),
-                            si (10), si (8),
-                            juce::Justification::centred, false);
-            }
+            // 0 dB tick marker
+            g.setColour (fg.withAlpha (0.35f));
+            g.drawLine ((float)k2cx + (float)(kr - 3) * std::cos (zeroAngle),
+                        (float)kcy  + (float)(kr - 3) * std::sin (zeroAngle),
+                        (float)k2cx + (float)kr * std::cos (zeroAngle),
+                        (float)kcy  + (float)kr * std::sin (zeroAngle), 1.0f);
 
-            // Thumb — vertical pill
-            g.setColour (accent);
-            g.fillRoundedRectangle ((float)(thumbX - thumbW / 2), (float)(sliderCy - thumbH / 2),
-                                    (float)thumbW, (float)thumbH, 2.f);
-            g.setColour (accent.brighter (0.4f));
-            g.drawRoundedRectangle ((float)(thumbX - thumbW / 2), (float)(sliderCy - thumbH / 2),
-                                    (float)thumbW, (float)thumbH, 2.f, 1.f);
-            // Centre grip line on thumb
-            g.setColour (getTheme().background.withAlpha (0.6f));
-            g.drawVerticalLine (thumbX,
-                                (float)(sliderCy - thumbH / 2 + si (2)),
-                                (float)(sliderCy + thumbH / 2 - si (2)));
+            // Pointer line
+            float angle = kStart + volN * arcLen;
+            float lr = (float)kr - 2.0f;
+            g.setColour (accent.brighter (0.3f));
+            g.drawLine ((float)k2cx, (float)kcy,
+                        (float)k2cx + lr * std::cos (angle),
+                        (float)kcy  + lr * std::sin (angle), sf1 (1.3f));
 
-            // "VOL" label left of track, value below track centred
+            // Labels
             g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
             g.setColour (fg.withAlpha (0.45f));
-            g.drawText ("VOL",
-                        w / 2 - pad, sliderCy - si (5),
-                        pad - si (2), si (9),
-                        juce::Justification::centredRight, false);
+            g.drawText ("VOL", k2cx - si (16), kcy + kr + si (2), si (32), si (9), juce::Justification::centred);
 
             g.setFont (DysektLookAndFeel::makeFont (sf1 (8.0f)));
             g.setColour (accent.withAlpha (0.80f));
-            g.drawText (volStr,
-                        trackLeft, sliderCy + thumbH / 2 + si (2),
-                        trackW,    si (9),
-                        juce::Justification::centred, false);
+            g.drawText (volStr, k2cx - si (18), kcy + kr + si (11), si (36), si (9), juce::Justification::centred);
 
-            // Hit area: track + thumb height padding
-            volKnobArea = { trackLeft - si (4), sliderCy - thumbH / 2 - si (2),
-                            trackW    + si (8), thumbH + si (4) };
+            volKnobArea = { k2cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
         }
     }
 }
@@ -655,7 +642,7 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
     if (volKnobArea.contains (pos))
     {
         dragTarget     = DragTarget::Volume;
-        dragStartX     = pos.x;
+        dragStartY     = pos.y;
         dragStartValue = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
         if (auto* p = processor.apvts.getParameter (ParamIds::masterVolume))
             p->beginChangeGesture();
@@ -680,10 +667,9 @@ void DualLcdControlFrame::mouseDrag (const juce::MouseEvent& e)
         }
         case DragTarget::Volume:
         {
-            // Horizontal slider: right = louder, left = quieter
-            const float xDelta = (float)(e.x - dragStartX);
-            float sens = e.mods.isShiftDown() ? 0.1f : 1.0f;
-            float newV = juce::jlimit (-100.0f, 24.0f, dragStartValue + xDelta * sens);
+            // Vertical drag: up = louder, down = quieter — matches knob visual
+            float sens = e.mods.isShiftDown() ? 0.05f : 0.5f;
+            float newV = juce::jlimit (-100.0f, 24.0f, dragStartValue + delta * sens);
             if (auto* p = processor.apvts.getParameter (ParamIds::masterVolume))
                 p->setValueNotifyingHost (p->convertTo0to1 (newV));
             repaint();

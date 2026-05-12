@@ -164,7 +164,9 @@ juce::String MixerPanel::fmtMute (int mg) const
 // ─────────────────────────────────────────────────────────────────────────────
 //  Norm helpers
 // ─────────────────────────────────────────────────────────────────────────────
-float MixerPanel::toNormGain (float db)  const { return juce::jlimit (0.f, 1.f, (db + 100.f) / 124.f); }
+// 0 dB maps to 0.5 (12 o'clock).  Range: -24 dB (fully CCW) → +24 dB (fully CW).
+// Values below -24 clamp to 0; values above +24 clamp to 1.
+float MixerPanel::toNormGain (float db)  const { return juce::jlimit (0.f, 1.f, (db + 24.f) / 48.f); }
 float MixerPanel::toNormPan  (float pan) const { return juce::jlimit (0.f, 1.f, (pan + 1.f) * 0.5f); }
 float MixerPanel::toNormFcut (float hz)  const
 {
@@ -185,12 +187,13 @@ float MixerPanel::fromNormFcut (float n) const
 static constexpr int kKnobR = 7;   // knob radius (px) — slightly smaller than SCB
 
 void MixerPanel::drawKnobInRow (juce::Graphics& g, int cx, int cy,
-                                 float norm, bool locked, bool isMaster) const
+                                 float norm, bool locked, bool isMaster,
+                                 bool isGain) const
 {
     const auto& theme = getTheme();
     const float r = (float) kKnobR;
 
-    // Track arc (background)
+    // Track arc (background) — 270° sweep, 7 o'clock → 5 o'clock
     const float startA  = juce::MathConstants<float>::pi * 0.75f;
     const float arcLen  = juce::MathConstants<float>::pi * 1.5f;
     juce::Path track;
@@ -198,14 +201,50 @@ void MixerPanel::drawKnobInRow (juce::Graphics& g, int cx, int cy,
     g.setColour (theme.separator.withAlpha (0.6f));
     g.strokePath (track, juce::PathStrokeType (1.5f));
 
-    // Fill arc
-    if (norm > 0.001f)
+    // Fill arc — for gain knobs: bidirectional from 12 o'clock (norm = 0.5)
+    //            for all others: sweep from 7 o'clock (startA) as before
+    const auto fillCol = locked ? theme.lockActive
+                                : (isMaster ? theme.accent.brighter (0.15f) : theme.accent);
+    const float normC = juce::jlimit (0.f, 1.f, norm);
+
+    if (isGain)
     {
-        const float endAngle = startA + arcLen * juce::jlimit (0.f, 1.f, norm);
-        juce::Path fill;
-        fill.addCentredArc ((float)cx, (float)cy, r, r, 0.f, startA, endAngle, true);
-        g.setColour (locked ? theme.lockActive : (isMaster ? theme.accent.brighter (0.15f) : theme.accent));
-        g.strokePath (fill, juce::PathStrokeType (1.5f));
+        // 0 dB is at norm=0.5 → 12 o'clock (centre of the sweep)
+        constexpr float zeroNorm  = 0.5f;
+        const float     zeroAngle = startA + arcLen * zeroNorm;   // 12 o'clock
+
+        if (std::abs (normC - zeroNorm) > 0.005f)
+        {
+            juce::Path fill;
+            if (normC > zeroNorm)   // boost → fill rightward from centre
+                fill.addCentredArc ((float)cx, (float)cy, r, r, 0.f,
+                                    zeroAngle, startA + arcLen * normC, true);
+            else                    // cut → fill leftward from centre
+                fill.addCentredArc ((float)cx, (float)cy, r, r, 0.f,
+                                    startA + arcLen * normC, zeroAngle, true);
+            g.setColour (fillCol);
+            g.strokePath (fill, juce::PathStrokeType (1.5f));
+        }
+
+        // Small centre-tick marker at 12 o'clock so 0 dB is always visible
+        const float tx = (float)cx + r * std::cos (zeroAngle);
+        const float ty = (float)cy + r * std::sin (zeroAngle);
+        g.setColour (theme.foreground.withAlpha (0.30f));
+        g.drawLine ((float)cx + (r - 2.f) * std::cos (zeroAngle),
+                    (float)cy + (r - 2.f) * std::sin (zeroAngle),
+                    tx, ty, 1.0f);
+    }
+    else
+    {
+        // Non-gain knob: sweep from hard left stop
+        if (normC > 0.001f)
+        {
+            const float endAngle = startA + arcLen * normC;
+            juce::Path fill;
+            fill.addCentredArc ((float)cx, (float)cy, r, r, 0.f, startA, endAngle, true);
+            g.setColour (fillCol);
+            g.strokePath (fill, juce::PathStrokeType (1.5f));
+        }
     }
 
     // Centre dot
@@ -503,9 +542,19 @@ void MixerPanel::drawSliceRow (juce::Graphics& g, int ry, int idx, bool selected
         g.drawText (valStr, tx, ry + 1, tw, kRowH - 2, juce::Justification::centredLeft);
     };
 
-    // GAIN
+    // GAIN — isGain=true so fill is bidirectional from 12 o'clock
     const bool gainLocked = (sl.lockMask & kLockVolume) != 0;
-    drawCol (ColGain, toNormGain (sl.volume), gainLocked, fmtGain (sl.volume));
+    {
+        const int x  = colX (ColGain);
+        const int cx = x + kKnobR + 8;
+        drawKnobInRow (g, cx, kcy, toNormGain (sl.volume), gainLocked, false, /*isGain=*/true);
+        const int tx = cx + kKnobR + 4;
+        const int tw = kKnobColW - (tx - x) - 2;
+        g.setFont (DysektLookAndFeel::makeFont (12.0f));
+        g.setColour (gainLocked ? theme.foreground.withAlpha (0.90f)
+                                : theme.foreground.withAlpha (0.40f));
+        g.drawText (fmtGain (sl.volume), tx, ry + 1, tw, kRowH - 2, juce::Justification::centredLeft);
+    }
 
     // PAN — horizontal bipolar slider
     {
@@ -637,11 +686,11 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
 
     const int kcy = ry + kMasterH / 2;
 
-    auto drawMasterCol = [&] (Col col, float norm, const juce::String& valStr)
+    auto drawMasterCol = [&] (Col col, float norm, const juce::String& valStr, bool isGain = false)
     {
         const int x  = colX (col);
         const int cx = x + kKnobR + 8;
-        drawKnobInRow (g, cx, kcy, norm, false, true);
+        drawKnobInRow (g, cx, kcy, norm, false, true, isGain);
         const int tx = cx + kKnobR + 4;
         const int tw = kKnobColW - (tx - x) - 2;
         g.setFont (DysektLookAndFeel::makeFont (11.0f));
@@ -649,7 +698,7 @@ void MixerPanel::drawMasterRow (juce::Graphics& g, int ry) const
         g.drawText (valStr, tx, ry + 1, tw, kMasterH - 2, juce::Justification::centredLeft);
     };
 
-    drawMasterCol (ColGain, toNormGain (masterDb),  fmtGain (masterDb));
+    drawMasterCol (ColGain, toNormGain (masterDb),  fmtGain (masterDb), /*isGain=*/true);
 
     // Master PAN — horizontal bipolar slider
     {
@@ -734,7 +783,7 @@ void MixerPanel::drawSf2Row (juce::Graphics& g, int ry) const
     {
         const int x  = colX (ColGain);
         const int cx = x + kKnobR + 8;
-        drawKnobInRow (g, cx, kcy, toNormGain (volDb), false, true);
+        drawKnobInRow (g, cx, kcy, toNormGain (volDb), false, true, /*isGain=*/true);
         const int tx = cx + kKnobR + 4;
         const int tw = kKnobColW - (tx - x);
         g.setFont (DysektLookAndFeel::makeFont (12.0f));
