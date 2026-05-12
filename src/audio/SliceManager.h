@@ -6,7 +6,7 @@
 class SliceManager
 {
 public:
-    static constexpr int kMaxSlices = 128;
+    static constexpr int kMaxSlices = 32;
 
     /// Samples within which a placed marker snaps to an existing boundary.
     static constexpr int kSnapTolerance = 10;
