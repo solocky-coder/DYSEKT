@@ -2,6 +2,8 @@
 #include "DysektLookAndFeel.h"
 #include "../PluginProcessor.h"
 
+#include <windows.h>
+
 // ── ArchiveListModel ─────────────────────────────────────────────────────────
 
 int FileBrowserPanel::ArchiveListModel::getNumRows()
