@@ -31,6 +31,7 @@ public:
 private:
     void timerCallback() override;
     float pulsePhase    = 0.0f;   // 0..1, advances each timer tick
+    bool  wasArmed      = false;  // tracks arm state across updateMidiLearnPulse calls
     int   lastLiveDrag  = -1;      // last liveDragBoundsStart value seen, for repaint gating
     bool  padViewActive = false;   // mirrors editor showPadGrid
     juce::Rectangle<int> padToggleBtnArea;  // hit-tested in mouseDown — PADS button
