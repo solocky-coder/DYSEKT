@@ -81,7 +81,13 @@ void GlobalEqPanel::paint (juce::Graphics& g)
                 juce::Justification::centredLeft, false);
 
     // ── Grid ─────────────────────────────────────────────────────────────────
-    // Horizontal dB lines
+
+    // Minor horizontal dB lines (±3, ±9, ±15, ±18) — drawn first, very dim
+    g.setColour (theme.gridLine.withAlpha (0.22f));
+    for (int db : { -18, -15, -9, -3, 3, 9, 15, 18 })
+        g.drawHorizontalLine (juce::roundToInt (gainToY ((float) db)), plot.getX(), plot.getRight());
+
+    // Major horizontal dB lines (±6, ±12) and zero line
     for (int db : { -12, -6, 0, 6, 12 })
     {
         float y = gainToY ((float) db);
@@ -97,9 +103,17 @@ void GlobalEqPanel::paint (juce::Graphics& g)
         }
     }
 
-    // Vertical frequency lines
+    // Minor vertical frequency lines — per-decade subdivisions, drawn first, very dim
+    g.setColour (theme.gridLine.withAlpha (0.20f));
+    for (float hz : { 20.f, 30.f, 40.f, 60.f, 70.f, 80.f, 90.f,
+                      150.f, 200.f, 300.f, 400.f, 600.f, 700.f, 800.f, 900.f,
+                      1500.f, 2000.f, 3000.f, 4000.f, 6000.f, 7000.f, 8000.f, 9000.f,
+                      15000.f, 20000.f })
+        g.drawVerticalLine (juce::roundToInt (freqToX (hz)), plot.getY(), plot.getBottom());
+
+    // Major vertical frequency lines — decade markers
     g.setColour (theme.gridLine.withAlpha (0.55f));
-    for (float hz : { 50.f, 100.f, 200.f, 500.f, 1000.f, 2000.f, 5000.f, 10000.f, 20000.f })
+    for (float hz : { 50.f, 100.f, 500.f, 1000.f, 5000.f, 10000.f })
         g.drawVerticalLine (juce::roundToInt (freqToX (hz)), plot.getY(), plot.getBottom());
 
     // ── dB labels (right edge) ───────────────────────────────────────────────
@@ -118,8 +132,8 @@ void GlobalEqPanel::paint (juce::Graphics& g)
     g.setColour (theme.foreground.withAlpha (0.35f));
     g.setFont (DysektLookAndFeel::makeFont (8.f));
     for (auto [hz, lbl] : std::initializer_list<std::pair<float, const char*>>{
-            { 100.f, "100" }, { 500.f, "500" }, { 1000.f, "1k" },
-            { 5000.f, "5k" }, { 10000.f, "10k" } })
+            { 100.f, "100" }, { 200.f, "200" }, { 500.f, "500" }, { 1000.f, "1k" },
+            { 2000.f, "2k" }, { 5000.f, "5k" }, { 10000.f, "10k" } })
     {
         float x = freqToX (hz);
         g.drawText (lbl,
