@@ -444,20 +444,13 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         // Compute normalized knob positions using simple linear mapping so the
         // visual arc position always matches the displayed number.
         // Pitch:  -48..+48,  0 => 0.5  (symmetric, center = silence)
-        // Volume: -100..+24, 0 => ~0.5 visual centre — we pin the centre of
-        //         the arc to 0 dB by using a symmetric ±max-extent mapping:
-        //           norm = 0.5 + value / (2 * maxExtent)
-        //         where maxExtent = max(|min|, |max|) so the larger side just
-        //         reaches the end-stop and the smaller side stops before it.
-        //         This keeps 0 exactly at the 12-o'clock position for both knobs.
+        // Pitch: symmetric range (-48..+48 st), straightforward linear map.
+        float pitchN = 0.5f + gPitch / 96.0f;
 
-        // Pitch: perfectly symmetric range, straightforward.
-        float pitchN = 0.5f + gPitch / 96.0f;   // (-48..+48) → (0..1)
-
-        // Volume: asymmetric range (-100..+24). Use maxExtent so 0 dB = centre.
+        // Volume: linear map across the full -100..+24 dB range.
+        // -100 dB = arc-min (0), +24 dB = arc-max (1).
         constexpr float kVolMin = -100.0f, kVolMax = 24.0f;
-        constexpr float kVolExtent = 100.0f;   // max(|-100|, |24|) = 100
-        float volN = 0.5f + gVol / (2.0f * kVolExtent);
+        float volN = (gVol - kVolMin) / (kVolMax - kVolMin);
         volN = juce::jlimit (0.0f, 1.0f, volN);
 
         juce::String pitchStr = (gPitch >= 0.0f ? "+" : "") + juce::String ((int) std::round (gPitch));
