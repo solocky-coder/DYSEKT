@@ -872,13 +872,13 @@ void SliceControlBar::paint (juce::Graphics& g)
      return (s.lockMask & bit) ? sliceVal : globalVal;
  };
 
- const float effPitch    = resolveF (kLockPitch,   s.pitchSemitones,  apvtsVal (ParamIds::defaultPitch));
+ const float effPitch    = s.pitchSemitones;   // always per-slice — never falls back to global
  const float effCents    = resolveF (kLockCentsDetune, s.centsDetune,  apvtsVal (ParamIds::defaultCentsDetune));
  const float effAttack   = s.attackSec;    // always per-slice
  const float effDecay    = s.decaySec;     // always per-slice
  const float effSustain  = s.sustainLevel; // always per-slice
  const float effRelease  = s.releaseSec;   // always per-slice
- const float effVolume   = resolveF (kLockVolume,  s.volume,          apvtsVal (ParamIds::masterVolume));
+ const float effVolume   = s.volume;            // always per-slice — never falls back to global
  const float effPan      = resolveF (kLockPan,     s.pan,             apvtsVal (ParamIds::defaultPan));
  const float effTonality = resolveF (kLockTonality, s.tonalityHz,     apvtsVal (ParamIds::defaultTonality));
  const float effFormant  = resolveF (kLockFormant,  s.formantSemitones, apvtsVal (ParamIds::defaultFormant));
@@ -1448,7 +1448,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  switch (cell.fieldId)
  {
  case F::FieldBpm:         dragStartValue = sl.bpm; break;
- case F::FieldPitch:       dragStartValue = res (kLockPitch,       sl.pitchSemitones,   apvtsRaw (ParamIds::defaultPitch)); break;
+ case F::FieldPitch:       dragStartValue = sl.pitchSemitones; break;  // always per-slice
  case F::FieldCentsDetune: dragStartValue = res (kLockCentsDetune, sl.centsDetune,      apvtsRaw (ParamIds::defaultCentsDetune)); break;
  case F::FieldTonality:    dragStartValue = res (kLockTonality,    sl.tonalityHz,       apvtsRaw (ParamIds::defaultTonality)); break;
  case F::FieldFormant:     dragStartValue = res (kLockFormant,     sl.formantSemitones, apvtsRaw (ParamIds::defaultFormant)); break;
@@ -1457,7 +1457,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  case F::FieldDecay:       dragStartValue = sl.decaySec;     break;
  case F::FieldSustain:     dragStartValue = sl.sustainLevel; break;
  case F::FieldRelease:     dragStartValue = sl.releaseSec;   break;
- case F::FieldVolume:      dragStartValue = res (kLockVolume,      sl.volume,           apvtsRaw (ParamIds::masterVolume)); break;
+ case F::FieldVolume:      dragStartValue = sl.volume; break;           // always per-slice
  case F::FieldPan:         dragStartValue = res (kLockPan,         sl.pan,              apvtsRaw (ParamIds::defaultPan)); break;
         case F::FieldEqLowGain:   dragStartValue = res (kLockEqLow,   sl.eqLowGain,    apvtsRaw (ParamIds::defaultEqLowGain)); break;
         case F::FieldEqMidGain:   dragStartValue = res (kLockEqMid,   sl.eqMidGain,    apvtsRaw (ParamIds::defaultEqMidGain)); break;
