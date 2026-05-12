@@ -620,55 +620,199 @@ void FileBrowserPanel::refreshTheme()
 
 void FileBrowserPanel::detectCloudFolders()
 {
-    auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
+    auto home    = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
+    auto appData = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
 
-    struct CloudDef { const char* name; const char* rel; };
-    static const CloudDef defs[] =
+    // Dedup helper: only add if the directory exists and isn't already listed.
+    auto tryAdd = [&] (const juce::String& name, const juce::File& dir)
     {
-        { "iCloud",       "Library/Mobile Documents/com~apple~CloudDocs" },
-        { "Dropbox",      "Dropbox"                                       },
-        { "Dropbox",      "Dropbox (Personal)"                           },
-        { "OneDrive",     "OneDrive"                                      },
-        { "OneDrive",     "OneDrive - Personal"                           },
+        if (! dir.isDirectory()) return;
+        for (auto& b : bookmarks)
+            if (b.path == dir) return;
+        bookmarks.add ({ name, dir, false });
     };
 
-    for (auto& d : defs)
+    // ── OneDrive ──────────────────────────────────────────────────────────────
+    // The user can relocate the OneDrive folder, so we read the authoritative
+    // path from the registry instead of guessing.
+    //
+    // Helper: open a registry key and read a REG_SZ / REG_EXPAND_SZ value.
+    auto readRegSz = [] (HKEY hive, const wchar_t* subKey,
+                         const wchar_t* valueName) -> juce::String
     {
-        auto f = home.getChildFile (d.rel);
-        if (f.isDirectory())
+        HKEY  key     = nullptr;
+        DWORD type    = 0;
+        DWORD bufSize = 0;
+
+        if (RegOpenKeyExW (hive, subKey, 0, KEY_READ, &key) != ERROR_SUCCESS)
+            return {};
+
+        RegQueryValueExW (key, valueName, nullptr, &type, nullptr, &bufSize);
+
+        juce::String result;
+        if ((type == REG_SZ || type == REG_EXPAND_SZ) && bufSize > 0)
         {
-            bool dupe = false;
-            for (auto& b : bookmarks)
-                if (b.path == f) { dupe = true; break; }
-            if (! dupe)
-                bookmarks.add ({ d.name, f, false });
+            juce::HeapBlock<wchar_t> buf (bufSize / sizeof (wchar_t) + 1, true);
+            if (RegQueryValueExW (key, valueName, nullptr, &type,
+                                  reinterpret_cast<LPBYTE> (buf.getData()),
+                                  &bufSize) == ERROR_SUCCESS)
+                result = juce::String (buf.getData());
+        }
+        RegCloseKey (key);
+        return result;
+    };
+
+    // 1. Personal OneDrive  (HKCU\Software\Microsoft\OneDrive  "UserFolder")
+    {
+        auto path = readRegSz (HKEY_CURRENT_USER,
+                               L"Software\\Microsoft\\OneDrive",
+                               L"UserFolder");
+        if (path.isNotEmpty())
+            tryAdd ("OneDrive", juce::File (path));
+    }
+
+    // 2. Work / school OneDrive accounts (one sub-key per account GUID under
+    //    HKCU\Software\Microsoft\OneDrive\Accounts\<GUID>)
+    {
+        HKEY accountsKey = nullptr;
+        if (RegOpenKeyExW (HKEY_CURRENT_USER,
+                           L"Software\\Microsoft\\OneDrive\\Accounts",
+                           0, KEY_READ, &accountsKey) == ERROR_SUCCESS)
+        {
+            wchar_t subName[256] = {};
+            DWORD   subNameLen   = static_cast<DWORD> (std::size (subName));
+
+            for (DWORD i = 0;
+                 RegEnumKeyExW (accountsKey, i, subName, &subNameLen,
+                                nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS;
+                 ++i, subNameLen = static_cast<DWORD> (std::size (subName)))
+            {
+                juce::String sub = "Software\\Microsoft\\OneDrive\\Accounts\\"
+                                   + juce::String (subName);
+
+                auto path = readRegSz (HKEY_CURRENT_USER, sub.toWideCharPointer(),
+                                       L"UserFolder");
+                if (path.isEmpty()) continue;
+
+                // "DisplayName" distinguishes "Personal" from a work tenant name.
+                auto display = readRegSz (HKEY_CURRENT_USER, sub.toWideCharPointer(),
+                                          L"DisplayName");
+                juce::String label = display.isNotEmpty()
+                                     ? "OneDrive \u2013 " + display
+                                     : "OneDrive";
+                tryAdd (label, juce::File (path));
+            }
+            RegCloseKey (accountsKey);
         }
     }
 
-    auto cs = home.getChildFile ("Library/CloudStorage");
-    if (cs.isDirectory())
-    {
-        auto children = cs.findChildFiles (juce::File::findDirectories, false);
-        for (auto& dir : children)
-        {
-            auto raw = dir.getFileName();
-            juce::String display;
-            if (raw.startsWithIgnoreCase ("GoogleDrive"))  display = "Google Drive";
-            else if (raw.startsWithIgnoreCase ("OneDrive")) display = "OneDrive";
-            else if (raw.startsWithIgnoreCase ("Dropbox"))  display = "Dropbox";
-            else if (raw.startsWithIgnoreCase ("Box"))      display = "Box";
-            else display = raw.upToFirstOccurrenceOf ("-", false, false);
-            if (display.isEmpty()) display = raw;
+    // 3. Hard-coded fallbacks for very old OneDrive installs that pre-date the
+    //    registry key, or installs where the key is missing.
+    tryAdd ("OneDrive",            home.getChildFile ("OneDrive"));
+    tryAdd ("OneDrive - Personal", home.getChildFile ("OneDrive - Personal"));
 
-            bool dupe = false;
-            for (auto& b : bookmarks)
-                if (b.path == dir) { dupe = true; break; }
-            if (! dupe)
-                bookmarks.add ({ display, dir, false });
+    // ── Dropbox ───────────────────────────────────────────────────────────────
+    // Dropbox writes the real sync root into %APPDATA%\Dropbox\info.json:
+    //   {"personal":{"path":"C:\\Users\\..."},"business":{"path":"..."}}
+    // We do a lightweight string scan — no JSON parser needed since the
+    // format is stable and documented by Dropbox.
+    {
+        bool foundViaJson = false;
+        auto infoJson = appData.getChildFile ("Dropbox/info.json");
+
+        if (infoJson.existsAsFile())
+        {
+            auto text = infoJson.loadFileAsString();
+            int  pos  = 0;
+
+            while (true)
+            {
+                int keyPos = text.indexOf (pos, "\"path\"");
+                if (keyPos < 0) break;
+
+                int colon  = text.indexOf (keyPos + 6, ":");
+                if (colon  < 0) break;
+
+                int q1 = text.indexOf (colon + 1, "\"");
+                if (q1 < 0) break;
+
+                // Walk to the closing quote, honouring backslash escapes.
+                int q2 = q1 + 1;
+                while (q2 < text.length())
+                {
+                    if (text[q2] == '\\') { q2 += 2; continue; }
+                    if (text[q2] == '"')  break;
+                    ++q2;
+                }
+
+                auto rawPath = text.substring (q1 + 1, q2)
+                                   .replace ("\\\\", "\\");
+                if (rawPath.isNotEmpty())
+                {
+                    tryAdd ("Dropbox", juce::File (rawPath));
+                    foundViaJson = true;
+                }
+                pos = q2 + 1;
+            }
         }
+
+        // Fallback for installs where info.json is absent.
+        if (! foundViaJson)
+        {
+            tryAdd ("Dropbox",            home.getChildFile ("Dropbox"));
+            tryAdd ("Dropbox (Personal)", home.getChildFile ("Dropbox (Personal)"));
+        }
+    }
+
+    // ── Google Drive ──────────────────────────────────────────────────────────
+    // "Google Drive for Desktop" mounts as a virtual lettered drive.
+    // The chosen drive letter is stored in the registry.
+    {
+        auto mountPoint = readRegSz (HKEY_CURRENT_USER,
+                                     L"Software\\Google\\DriveFS",
+                                     L"MountPoint");
+        if (mountPoint.isNotEmpty())
+        {
+            // Each signed-in Google account gets its own sub-folder named after
+            // the account email address under the mount root.
+            auto mountRoot = juce::File (mountPoint + "\\");
+            auto accounts  = mountRoot.findChildFiles (juce::File::findDirectories, false);
+
+            if (accounts.isEmpty())
+            {
+                tryAdd ("Google Drive", mountRoot);
+            }
+            else
+            {
+                for (auto& acct : accounts)
+                {
+                    auto label = (accounts.size() == 1)
+                                 ? juce::String ("Google Drive")
+                                 : "Google Drive (" + acct.getFileName() + ")";
+                    tryAdd (label, acct);
+                }
+            }
+        }
+
+        // Fallback: older "Backup and Sync" client syncs into the home directory.
+        tryAdd ("Google Drive",          home.getChildFile ("Google Drive"));
+        tryAdd ("Google Drive (My Drive)",home.getChildFile ("Google Drive (My Drive)"));
+    }
+
+    // ── Box ───────────────────────────────────────────────────────────────────
+    // Box stores its sync root in HKCU\Software\Box\Box  "SyncRootFolder".
+    {
+        auto boxPath = readRegSz (HKEY_CURRENT_USER,
+                                  L"Software\\Box\\Box",
+                                  L"SyncRootFolder");
+        if (boxPath.isNotEmpty())
+            tryAdd ("Box", juce::File (boxPath));
+
+        // Fallback for Box Sync (older client) which used a home-relative folder.
+        tryAdd ("Box",      home.getChildFile ("Box"));
+        tryAdd ("Box Sync", home.getChildFile ("Box Sync"));
     }
 }
-
 // ── Local bookmark persistence ────────────────────────────────────────────────
 
 static juce::File getBookmarksFile()
