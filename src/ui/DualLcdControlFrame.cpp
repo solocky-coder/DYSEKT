@@ -436,80 +436,139 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         }
     }
 
-    // ── Bottom row: PITCH | VOL knobs ────────────────────────────────────────
+    // ── Bottom row: PITCH knob (left) | VOL vertical slider (right) ─────────
     {
         float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
         float gVol   = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
 
-        // Compute normalized knob positions using simple linear mapping so the
-        // visual arc position always matches the displayed number.
-        // Pitch:  -48..+48,  0 => 0.5  (symmetric, center = silence)
-        // Pitch: symmetric range (-48..+48 st), straightforward linear map.
-        float pitchN = 0.5f + gPitch / 96.0f;
-
-        // Volume: linear map across the full -100..+24 dB range.
-        // -100 dB = arc-min (0), +24 dB = arc-max (1).
-        constexpr float kVolMin = -100.0f, kVolMax = 24.0f;
-        float volN = (gVol - kVolMin) / (kVolMax - kVolMin);
-        volN = juce::jlimit (0.0f, 1.0f, volN);
-
         juce::String pitchStr = (gPitch >= 0.0f ? "+" : "") + juce::String ((int) std::round (gPitch));
-        juce::String volStr   = (gVol >= 0.0f ? "+" : "") + juce::String (gVol, 1);
+        juce::String volStr   = (gVol   >= 0.0f ? "+" : "") + juce::String (gVol, 1);
 
-        const int kr  = si (12);
-        // Arc sweep: 270° centred at 12 o'clock.
-        // cos/sin use standard trig (0 = 3 o'clock, clockwise in screen coords).
-        // addCentredArc uses JUCE convention (0 = 12 o'clock, clockwise).
-        // kStart/kEnd drive the indicator line (cos/sin); arcStart/arcEnd are
-        // shifted +π/2 for addCentredArc so the gap lands at the bottom (6 o'clock).
-        const float kStart    = juce::MathConstants<float>::pi * 0.75f;   // 7:30 in trig
-        const float kEnd      = juce::MathConstants<float>::pi * 2.25f;   // 4:30 in trig
-        const float halfPi    = juce::MathConstants<float>::halfPi;
-        const float arcStart  = kStart + halfPi;   // 7:30 in JUCE arc coords
-        const float arcEnd    = kEnd   + halfPi;   // 4:30 in JUCE arc coords
+        // ── Shared vertical geometry ─────────────────────────────────────────
+        int rowTop = half + si (4);
+        int rowBot = h   - si (20);   // leave room for label + value below
 
-        int kcy  = half + (h - half) / 2 - si (5);
-        int k1cx = w / 3;
-        int k2cx = w * 2 / 3;
-
-        struct Knob { int cx; float norm; juce::String lbl; juce::String val; };
-        Knob knobs[] = {
-            { k1cx, pitchN, "PITCH", pitchStr },
-            { k2cx, volN,   "VOL",   volStr   },
-        };
-
-        for (auto& k : knobs)
+        // ── PITCH knob (left third) ──────────────────────────────────────────
         {
-            float angle = kStart + k.norm * (kEnd - kStart);
+            float pitchN = 0.5f + gPitch / 96.0f;   // -48..+48 → 0..1
+
+            const int kr = si (12);
+            int kcy  = rowTop + (rowBot - rowTop) / 2;
+            int k1cx = w / 3;
+
+            const float kStart   = juce::MathConstants<float>::pi * 0.75f;
+            const float kEnd     = juce::MathConstants<float>::pi * 2.25f;
+            const float halfPi   = juce::MathConstants<float>::halfPi;
+            const float arcStart = kStart + halfPi;
+            const float arcEnd   = kEnd   + halfPi;
+            float angle    = kStart + pitchN * (kEnd - kStart);
+            float arcAngle = arcStart + pitchN * (arcEnd - arcStart);
 
             juce::Path track;
-            track.addCentredArc ((float)k.cx,(float)kcy,(float)kr,(float)kr,0.f,arcStart,arcEnd,true);
+            track.addCentredArc ((float)k1cx,(float)kcy,(float)kr,(float)kr,0.f,arcStart,arcEnd,true);
             g.setColour (getTheme().darkBar.brighter (0.3f));
             g.strokePath (track, juce::PathStrokeType (sf1 (1.5f)));
 
-            float arcAngle = arcStart + k.norm * (arcEnd - arcStart);
             juce::Path arc;
-            arc.addCentredArc ((float)k.cx,(float)kcy,(float)kr,(float)kr,0.f,arcStart,arcAngle,true);
+            arc.addCentredArc ((float)k1cx,(float)kcy,(float)kr,(float)kr,0.f,arcStart,arcAngle,true);
             g.setColour (accent);
             g.strokePath (arc, juce::PathStrokeType (sf1 (2.2f)));
 
             float lr = (float) kr - 2.0f;
             g.setColour (accent.brighter (0.3f));
-            g.drawLine ((float)k.cx, (float)kcy,
-                        (float)k.cx + lr * std::cos (angle),
+            g.drawLine ((float)k1cx, (float)kcy,
+                        (float)k1cx + lr * std::cos (angle),
                         (float)kcy  + lr * std::sin (angle), sf1 (1.3f));
 
             g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
             g.setColour (fg.withAlpha (0.45f));
-            g.drawText (k.lbl, k.cx - si(16), kcy + kr + si(2), si(32), si(9), juce::Justification::centred);
+            g.drawText ("PITCH", k1cx - si(16), kcy + kr + si(2), si(32), si(9), juce::Justification::centred);
 
             g.setFont (DysektLookAndFeel::makeFont (sf1 (8.0f)));
             g.setColour (accent.withAlpha (0.80f));
-            g.drawText (k.val, k.cx - si(18), kcy + kr + si(11), si(36), si(9), juce::Justification::centred);
+            g.drawText (pitchStr, k1cx - si(18), kcy + kr + si(11), si(36), si(9), juce::Justification::centred);
+
+            pitchKnobArea = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
         }
 
-        pitchKnobArea = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
-        volKnobArea   = { k2cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
+        // ── VOL vertical slider (right two-thirds, centred) ──────────────────
+        {
+            constexpr float kVolMin = -100.0f, kVolMax = 24.0f;
+            // Linear map: -100→bottom (norm=0), +24→top (norm=1)
+            float volN = (gVol - kVolMin) / (kVolMax - kVolMin);
+            volN = juce::jlimit (0.0f, 1.0f, volN);
+
+            // 0 dB position in normalised space
+            const float zeroN = (0.0f - kVolMin) / (kVolMax - kVolMin);   // ≈ 0.806
+
+            // Slider geometry
+            const int sliderW  = si (6);    // track width
+            const int thumbH   = si (6);    // thumb height
+            const int thumbW   = si (14);   // thumb width
+            int k2cx           = (w / 3) + (w * 2 / 3) / 2;   // centre of right two-thirds
+            int trackTop       = rowTop;
+            int trackBot       = rowBot - si (20);  // above label
+            int trackH         = trackBot - trackTop;
+
+            // Thumb Y: top=max, bottom=min  (inverted so dragging up = louder)
+            int thumbY = trackTop + juce::roundToInt ((1.0f - volN) * (float) trackH);
+
+            // Track background
+            g.setColour (getTheme().darkBar.brighter (0.3f));
+            g.fillRoundedRectangle ((float)(k2cx - sliderW / 2), (float)trackTop,
+                                    (float)sliderW, (float)trackH, 2.f);
+
+            // Filled portion from bottom up to thumb (represents current level)
+            int fillTop = thumbY;
+            int fillBot = trackBot;
+            if (fillBot > fillTop)
+            {
+                g.setColour (accent.withAlpha (0.55f));
+                g.fillRoundedRectangle ((float)(k2cx - sliderW / 2), (float)fillTop,
+                                        (float)sliderW, (float)(fillBot - fillTop), 2.f);
+            }
+
+            // 0 dB tick mark — prominent, labelled
+            {
+                int zeroY = trackTop + juce::roundToInt ((1.0f - zeroN) * (float) trackH);
+                g.setColour (fg.withAlpha (0.55f));
+                g.drawHorizontalLine (zeroY,
+                                      (float)(k2cx - sliderW / 2 - si (3)),
+                                      (float)(k2cx + sliderW / 2 + si (3)));
+                g.setFont (DysektLookAndFeel::makeFont (sf1 (6.5f)));
+                g.setColour (fg.withAlpha (0.35f));
+                g.drawText ("0",
+                            k2cx + sliderW / 2 + si (4), zeroY - si (4),
+                            si (10), si (8),
+                            juce::Justification::centredLeft, false);
+            }
+
+            // Thumb
+            g.setColour (accent);
+            g.fillRoundedRectangle ((float)(k2cx - thumbW / 2), (float)(thumbY - thumbH / 2),
+                                    (float)thumbW, (float)thumbH, 2.f);
+            g.setColour (accent.brighter (0.4f));
+            g.drawRoundedRectangle ((float)(k2cx - thumbW / 2), (float)(thumbY - thumbH / 2),
+                                    (float)thumbW, (float)thumbH, 2.f, 1.f);
+            // Centre grip line on thumb
+            g.setColour (getTheme().background.withAlpha (0.6f));
+            g.drawHorizontalLine (thumbY,
+                                  (float)(k2cx - thumbW / 2 + si (2)),
+                                  (float)(k2cx + thumbW / 2 - si (2)));
+
+            // Labels
+            g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
+            g.setColour (fg.withAlpha (0.45f));
+            g.drawText ("VOL", k2cx - si(16), trackBot + si(3), si(32), si(9), juce::Justification::centred);
+
+            g.setFont (DysektLookAndFeel::makeFont (sf1 (8.0f)));
+            g.setColour (accent.withAlpha (0.80f));
+            g.drawText (volStr, k2cx - si(18), trackBot + si(12), si(36), si(9), juce::Justification::centred);
+
+            // Hit area covers full track + thumb width with some padding
+            volKnobArea = { k2cx - thumbW / 2 - si(4), trackTop - si(4),
+                            thumbW + si(8), trackH + si(8) };
+        }
     }
 }
 
