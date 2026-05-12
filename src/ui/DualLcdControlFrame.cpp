@@ -491,83 +491,87 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             pitchKnobArea = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
         }
 
-        // ── VOL vertical slider (right two-thirds, centred) ──────────────────
+        // ── VOL horizontal slider (right two-thirds) ────────────────────────
         {
             constexpr float kVolMin = -100.0f, kVolMax = 24.0f;
-            // Linear map: -100→bottom (norm=0), +24→top (norm=1)
             float volN = (gVol - kVolMin) / (kVolMax - kVolMin);
             volN = juce::jlimit (0.0f, 1.0f, volN);
 
-            // 0 dB position in normalised space
-            const float zeroN = (0.0f - kVolMin) / (kVolMax - kVolMin);   // ≈ 0.806
+            // 0 dB normalised position (approx 0.806)
+            const float zeroN = (0.0f - kVolMin) / (kVolMax - kVolMin);
 
-            // Slider geometry
-            const int sliderW  = si (6);    // track width
-            const int thumbH   = si (6);    // thumb height
-            const int thumbW   = si (14);   // thumb width
-            int k2cx           = (w / 3) + (w * 2 / 3) / 2;   // centre of right two-thirds
-            int trackTop       = rowTop;
-            int trackBot       = rowBot - si (20);  // above label
-            int trackH         = trackBot - trackTop;
+            // Geometry: track runs across right half with small inset
+            const int sliderH = si (5);    // track height
+            const int thumbW  = si (6);    // thumb width
+            const int thumbH  = si (14);   // thumb height (taller than track)
+            const int pad     = si (8);    // left/right inset
+            int trackLeft  = w / 2 + pad;
+            int trackRight = w - pad;
+            int trackW     = trackRight - trackLeft;
+            int sliderCy   = rowTop + (rowBot - rowTop) / 2;   // vertically centred
 
-            // Thumb Y: top=max, bottom=min  (inverted so dragging up = louder)
-            int thumbY = trackTop + juce::roundToInt ((1.0f - volN) * (float) trackH);
+            // Thumb X: left=-100, right=+24
+            int thumbX = trackLeft + juce::roundToInt (volN * (float) trackW);
 
             // Track background
             g.setColour (getTheme().darkBar.brighter (0.3f));
-            g.fillRoundedRectangle ((float)(k2cx - sliderW / 2), (float)trackTop,
-                                    (float)sliderW, (float)trackH, 2.f);
+            g.fillRoundedRectangle ((float)trackLeft, (float)(sliderCy - sliderH / 2),
+                                    (float)trackW,    (float)sliderH, 2.f);
 
-            // Filled portion from bottom up to thumb (represents current level)
-            int fillTop = thumbY;
-            int fillBot = trackBot;
-            if (fillBot > fillTop)
+            // Filled portion left to thumb
+            if (thumbX > trackLeft)
             {
                 g.setColour (accent.withAlpha (0.55f));
-                g.fillRoundedRectangle ((float)(k2cx - sliderW / 2), (float)fillTop,
-                                        (float)sliderW, (float)(fillBot - fillTop), 2.f);
+                g.fillRoundedRectangle ((float)trackLeft, (float)(sliderCy - sliderH / 2),
+                                        (float)(thumbX - trackLeft), (float)sliderH, 2.f);
             }
 
-            // 0 dB tick mark — prominent, labelled
+            // 0 dB tick — vertical line through track, small label above
             {
-                int zeroY = trackTop + juce::roundToInt ((1.0f - zeroN) * (float) trackH);
+                int zeroX = trackLeft + juce::roundToInt (zeroN * (float) trackW);
                 g.setColour (fg.withAlpha (0.55f));
-                g.drawHorizontalLine (zeroY,
-                                      (float)(k2cx - sliderW / 2 - si (3)),
-                                      (float)(k2cx + sliderW / 2 + si (3)));
+                g.drawVerticalLine (zeroX,
+                                    (float)(sliderCy - sliderH / 2 - si (3)),
+                                    (float)(sliderCy + sliderH / 2 + si (3)));
                 g.setFont (DysektLookAndFeel::makeFont (sf1 (6.5f)));
                 g.setColour (fg.withAlpha (0.35f));
                 g.drawText ("0",
-                            k2cx + sliderW / 2 + si (4), zeroY - si (4),
+                            zeroX - si (5), sliderCy - sliderH / 2 - si (10),
                             si (10), si (8),
-                            juce::Justification::centredLeft, false);
+                            juce::Justification::centred, false);
             }
 
-            // Thumb
+            // Thumb — vertical pill
             g.setColour (accent);
-            g.fillRoundedRectangle ((float)(k2cx - thumbW / 2), (float)(thumbY - thumbH / 2),
+            g.fillRoundedRectangle ((float)(thumbX - thumbW / 2), (float)(sliderCy - thumbH / 2),
                                     (float)thumbW, (float)thumbH, 2.f);
             g.setColour (accent.brighter (0.4f));
-            g.drawRoundedRectangle ((float)(k2cx - thumbW / 2), (float)(thumbY - thumbH / 2),
+            g.drawRoundedRectangle ((float)(thumbX - thumbW / 2), (float)(sliderCy - thumbH / 2),
                                     (float)thumbW, (float)thumbH, 2.f, 1.f);
             // Centre grip line on thumb
             g.setColour (getTheme().background.withAlpha (0.6f));
-            g.drawHorizontalLine (thumbY,
-                                  (float)(k2cx - thumbW / 2 + si (2)),
-                                  (float)(k2cx + thumbW / 2 - si (2)));
+            g.drawVerticalLine (thumbX,
+                                (float)(sliderCy - thumbH / 2 + si (2)),
+                                (float)(sliderCy + thumbH / 2 - si (2)));
 
-            // Labels
+            // "VOL" label left of track, value below track centred
             g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
             g.setColour (fg.withAlpha (0.45f));
-            g.drawText ("VOL", k2cx - si(16), trackBot + si(3), si(32), si(9), juce::Justification::centred);
+            g.drawText ("VOL",
+                        w / 2 - pad, sliderCy - si (5),
+                        pad - si (2), si (9),
+                        juce::Justification::centredRight, false);
 
             g.setFont (DysektLookAndFeel::makeFont (sf1 (8.0f)));
             g.setColour (accent.withAlpha (0.80f));
-            g.drawText (volStr, k2cx - si(18), trackBot + si(12), si(36), si(9), juce::Justification::centred);
+            g.drawText (volStr,
+                        trackLeft, sliderCy + thumbH / 2 + si (2),
+                        trackW,    si (9),
+                        juce::Justification::centred, false);
 
-            // Hit area covers full track + thumb width with some padding
-            volKnobArea = { k2cx - thumbW / 2 - si(4), trackTop - si(4),
-                            thumbW + si(8), trackH + si(8) };
+            // Hit area: track + thumb height padding
+            volKnobArea = { trackLeft - si (4), sliderCy - thumbH / 2 - si (2),
+                            trackW    + si (8), thumbH + si (4) };
         }
     }
 }
@@ -651,7 +655,7 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
     if (volKnobArea.contains (pos))
     {
         dragTarget     = DragTarget::Volume;
-        dragStartY     = pos.y;
+        dragStartX     = pos.x;
         dragStartValue = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
         if (auto* p = processor.apvts.getParameter (ParamIds::masterVolume))
             p->beginChangeGesture();
@@ -676,8 +680,10 @@ void DualLcdControlFrame::mouseDrag (const juce::MouseEvent& e)
         }
         case DragTarget::Volume:
         {
+            // Horizontal slider: right = louder, left = quieter
+            const float xDelta = (float)(e.x - dragStartX);
             float sens = e.mods.isShiftDown() ? 0.1f : 1.0f;
-            float newV = juce::jlimit (-100.0f, 24.0f, dragStartValue + delta * sens);
+            float newV = juce::jlimit (-100.0f, 24.0f, dragStartValue + xDelta * sens);
             if (auto* p = processor.apvts.getParameter (ParamIds::masterVolume))
                 p->setValueNotifyingHost (p->convertTo0to1 (newV));
             repaint();

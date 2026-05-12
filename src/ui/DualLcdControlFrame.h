@@ -73,6 +73,7 @@ private:
     DragTarget dragTarget    = DragTarget::None;
     float  dragStartValue    = 0.0f;
     int    dragStartY        = 0;
+    int    dragStartX        = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DualLcdControlFrame)
 };
