@@ -464,12 +464,16 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         juce::String volStr   = (gVol >= 0.0f ? "+" : "") + juce::String (gVol, 1);
 
         const int kr  = si (12);
-        // Arc sweep: 270° centered at 12 o'clock (up).
-        // In JUCE screen coords (clockwise from 3 o'clock), 12 o'clock = 3π/2.
-        // A 270° sweep centred there: kStart = 3π/4 (7:30), kEnd = 9π/4 (4:30).
-        // => norm=0 → 7:30, norm=0.5 → 12 o'clock, norm=1 → 4:30
-        const float kStart = juce::MathConstants<float>::pi * 0.75f;
-        const float kEnd   = juce::MathConstants<float>::pi * 2.25f;
+        // Arc sweep: 270° centred at 12 o'clock.
+        // cos/sin use standard trig (0 = 3 o'clock, clockwise in screen coords).
+        // addCentredArc uses JUCE convention (0 = 12 o'clock, clockwise).
+        // kStart/kEnd drive the indicator line (cos/sin); arcStart/arcEnd are
+        // shifted +π/2 for addCentredArc so the gap lands at the bottom (6 o'clock).
+        const float kStart    = juce::MathConstants<float>::pi * 0.75f;   // 7:30 in trig
+        const float kEnd      = juce::MathConstants<float>::pi * 2.25f;   // 4:30 in trig
+        const float halfPi    = juce::MathConstants<float>::halfPi;
+        const float arcStart  = kStart + halfPi;   // 7:30 in JUCE arc coords
+        const float arcEnd    = kEnd   + halfPi;   // 4:30 in JUCE arc coords
 
         int kcy  = half + (h - half) / 2 - si (5);
         int k1cx = w / 3;
@@ -486,12 +490,13 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             float angle = kStart + k.norm * (kEnd - kStart);
 
             juce::Path track;
-            track.addCentredArc ((float)k.cx,(float)kcy,(float)kr,(float)kr,0.f,kStart,kEnd,true);
+            track.addCentredArc ((float)k.cx,(float)kcy,(float)kr,(float)kr,0.f,arcStart,arcEnd,true);
             g.setColour (getTheme().darkBar.brighter (0.3f));
             g.strokePath (track, juce::PathStrokeType (sf1 (1.5f)));
 
+            float arcAngle = arcStart + k.norm * (arcEnd - arcStart);
             juce::Path arc;
-            arc.addCentredArc ((float)k.cx,(float)kcy,(float)kr,(float)kr,0.f,kStart,angle,true);
+            arc.addCentredArc ((float)k.cx,(float)kcy,(float)kr,(float)kr,0.f,arcStart,arcAngle,true);
             g.setColour (accent);
             g.strokePath (arc, juce::PathStrokeType (sf1 (2.2f)));
 
