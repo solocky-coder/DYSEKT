@@ -47,8 +47,8 @@ SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
 
 void SliceControlBar::timerCallback()
 {
-    // Advance pulse at ~1.2 Hz (full cycle every ~0.85s)
-    pulsePhase += 1.0f / (30.0f / 1.2f);
+    // Advance pulse at ~0.6 Hz (full cycle every ~1.67s)
+    pulsePhase += 1.0f / (30.0f / 0.6f);
     if (pulsePhase >= 1.0f) pulsePhase -= 1.0f;
 
     // Real-time repaint for CC-driven marker movement
