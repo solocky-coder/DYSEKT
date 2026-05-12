@@ -424,9 +424,11 @@ float GlobalEqPanel::xToFreq (float x) const
 // ── Spectrum analyser path ────────────────────────────────────────────────────
 // Maps FFT bins → screen coordinates.
 // Bin i = frequency (i * sampleRate / fftSize).
-// Normalised value 0..1 is remapped to the dB range of the plot (-kGainMax..0).
-// We treat full amplitude (1.0) as 0 dB on the plot so that loud signals fill
-// the display without clipping the EQ headroom range.
+//
+// SpectrumAnalyser normalises values as: 0.0 = –80 dBFS, 1.0 = 0 dBFS.
+// We map that 0..1 range directly across the full plot height so the spectrum
+// fills the display at all volume levels — the EQ ±dB gridlines are a separate
+// overlay and don't constrain how tall the spectrum can be.
 
 juce::Path GlobalEqPanel::buildSpectrum() const
 {
@@ -449,11 +451,10 @@ juce::Path GlobalEqPanel::buildSpectrum() const
 
         float x = freqToX (hz);
 
-        // Map 0..1 normalised value to dB display range.
-        // 1.0 → 0 dB on plot (top of EQ headroom), 0.0 → -kGainMax (bottom).
-        float norm = spectrumSmoothed[i];
-        float dB   = juce::jmap (norm, 0.f, 1.f, -kGainMax, 0.f);
-        float y    = gainToY (juce::jlimit (-kGainMax, 0.f, dB));
+        // norm is 0..1 where 1.0 = 0 dBFS, 0.0 = –80 dBFS.
+        // Map linearly to the full plot height: norm=1 → top, norm=0 → bottom.
+        float norm = juce::jlimit (0.f, 1.f, spectrumSmoothed[i]);
+        float y    = plot.getBottom() - norm * plot.getHeight();
 
         if (! started) { path.startNewSubPath (x, y); started = true; }
         else             path.lineTo (x, y);
