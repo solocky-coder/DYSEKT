@@ -109,6 +109,20 @@ std::unique_ptr<SampleData::DecodedSample> SampleData::decodeFromFile (const juc
     sourceBuffer.clear();
     reader->read (&sourceBuffer, 0, numFrames, 0, true, true);
 
+    // ── Scrub non-finite samples ──────────────────────────────────────────────
+    // A corrupt MP3 frame, a truncated file, or a partial dr_mp3 decode can
+    // deposit NaN or ±Inf into the buffer. A single non-finite sample that
+    // reaches the DAW's output buffer is enough to crash most hosts. Zero them
+    // here before anything else (resampler, mipmap builder, voice pool) can
+    // touch the data. Only the decoded region [0, numFrames) needs scanning;
+    // the pad beyond is already zero-filled by sourceBuffer.clear() above.
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        float* p = sourceBuffer.getWritePointer (ch);
+        for (int i = 0; i < numFrames; ++i)
+            if (! std::isfinite (p[i])) p[i] = 0.0f;
+    }
+
     // Trim reported size back to numFrames — avoidReallocating keeps the larger
     // allocation so the pad stays zero-filled; downstream code sees numFrames only.
     sourceBuffer.setSize (numChannels, numFrames, /*keepExisting=*/true,
