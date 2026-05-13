@@ -116,9 +116,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         juce::NormalisableRange<float> (-24.0f, 24.0f, 0.1f),
         0.0f));
 
-    params.push_back (std::make_unique<juce::AudioParameterBool> (
-);
-
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParamIds::defaultGrainMode, 1 },
         "Sample Grain Mode",

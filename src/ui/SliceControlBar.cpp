@@ -945,11 +945,6 @@ void SliceControlBar::paint (juce::Graphics& g)
  toNorm (F::FieldFormant, fv),
  true, 0, F::FieldFormant, -24.f, 24.f, 0.1f, cw);
  x += cw + si (4);
-
- bool fmntCVal = effFComp;
- drawParamCell (g, x, row1y, "FMNT C", fmntCVal ? "ON" : "OFF",
- 0.f, 1.f, 1.f, true, false, cw);
- x += cw + si (4);
  }
  // STRETCH — boolean (no lock)
  {
