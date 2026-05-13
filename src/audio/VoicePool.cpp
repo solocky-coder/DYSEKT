@@ -95,8 +95,9 @@ void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
     float tonalityLimit = (tonalityHz > 0.0f && sr > 0.0) ? (float)(tonalityHz / sr) : 0.0f;
     v.stretcher->setTransposeSemitones (pitchSemis, tonalityLimit);
 
-    if (formantSemis != 0.0f)
-        v.stretcher->setFormantSemitones (formantSemis, false);
+    // formantComp always true — compensation keeps formants stable during pitch shift
+    if (pitchSemis != 0.0f || formantSemis != 0.0f)
+        v.stretcher->setFormantSemitones (formantSemis, true);
 
     v.stretchOutReadPos = 0;
     v.stretchOutAvail   = 0;
