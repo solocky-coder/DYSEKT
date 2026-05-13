@@ -69,7 +69,7 @@ void LazyChopEngine::startPreview (VoicePool& voicePool, int fromPos)
             v.stretchPitchSemis = p.pitch;
             v.stretchSrcPos = fromPos;
             VoicePool::initStretcher (v, p.pitch, p.sampleRate,
-                                      p.tonality, p.formant, p.formantComp, *p.sample);
+                                      p.tonality, p.formant, *p.sample);
         }
     }
     else if (algo == 1 && p.sample != nullptr)
@@ -81,7 +81,7 @@ void LazyChopEngine::startPreview (VoicePool& voicePool, int fromPos)
         v.stretchPitchSemis = p.pitch;
         v.stretchSrcPos = fromPos;
         VoicePool::initStretcher (v, p.pitch, p.sampleRate,
-                                  p.tonality, p.formant, p.formantComp, *p.sample);
+                                  p.tonality, p.formant, *p.sample);
     }
     else
     {

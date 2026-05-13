@@ -155,7 +155,6 @@ void SliceLcdDisplay::buildDisplayData()
     data.stretchEnabled  = sl.stretchEnabled;
     data.tonalityHz      = sl.tonalityHz;
     data.formantSemitones = sl.formantSemitones;
-    data.formantComp     = sl.formantComp;
 
     data.releaseTail     = sl.releaseTail;
     data.outputBus       = sl.outputBus;
@@ -350,7 +349,6 @@ void SliceLcdDisplay::drawFlagsRow (juce::Graphics& g, int /*row*/)
                   data.globalMono,     DysektProcessor::FieldGlobalMono,     false },
         { "STR",  data.stretchEnabled, DysektProcessor::FieldStretchEnabled,  false },
         { "TAIL", data.releaseTail,    DysektProcessor::FieldReleaseTail,    false },
-        { "FMC",  data.formantComp,    DysektProcessor::FieldFormantComp,    false },
     };
 
     const int numFlags  = (int) std::size (flags);
@@ -548,8 +546,6 @@ void SliceLcdDisplay::mouseDown (const juce::MouseEvent& e)
             case F::FieldReleaseTail:
                 cmd.floatParam1 = data.releaseTail ? 0.0f : 1.0f;
                 break;
-            case F::FieldFormantComp:
-                cmd.floatParam1 = data.formantComp ? 0.0f : 1.0f;
                 break;
             default:
                 return;

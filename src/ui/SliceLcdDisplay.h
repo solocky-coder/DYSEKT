@@ -67,7 +67,6 @@ private:
  bool stretchEnabled = false;
  float tonalityHz = 0.0f;
  float formantSemitones = 0.0f;
- bool formantComp = false;
  bool releaseTail = false;
  int outputBus = 0;
  float bpm = 120.0f;

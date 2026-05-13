@@ -16,7 +16,7 @@ enum LockBit : uint32_t
     kLockStretch       = 512,
     kLockTonality      = 1024,
     kLockFormant       = 2048,
-    kLockFormantComp   = 4096,
+    // kLockFormantComp removed — FMC feature removed
     kLockGrainMode     = 8192,
     kLockVolume        = 16384,
     kLockReleaseTail   = 32768,
@@ -56,7 +56,6 @@ struct Slice
     bool     stretchEnabled = false;
     float    tonalityHz     = 0.0f;
     float    formantSemitones = 0.0f;
-    bool     formantComp    = false;
     int      grainMode      = 0;        // reserved (was Bungee grain mode — kept for preset compat)
     float    volume         = 0.0f;     // dB, -100..+24
     bool     releaseTail    = false;

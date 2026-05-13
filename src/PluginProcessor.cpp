@@ -54,7 +54,7 @@ private:
 static constexpr uint32_t kValidLockMask =
     kLockBpm | kLockPitch | kLockAlgorithm | kLockAttack | kLockDecay | kLockSustain
     | kLockRelease | kLockMuteGroup | kLockStretch | kLockTonality | kLockFormant
-    | kLockFormantComp | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
+    | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
     | kLockOutputBus | kLockLoop | kLockOneShot | kLockCentsDetune
     | kLockPan | kLockFilter;
 static Slice sanitiseRestoredSlice (Slice s)
@@ -152,7 +152,6 @@ DysektProcessor::DysektProcessor()
     stretchParam   = apvts.getRawParameterValue (ParamIds::defaultStretchEnabled);
     tonalityParam  = apvts.getRawParameterValue (ParamIds::defaultTonality);
     formantParam   = apvts.getRawParameterValue (ParamIds::defaultFormant);
-    formantCompParam = apvts.getRawParameterValue (ParamIds::defaultFormantComp);
     grainModeParam   = apvts.getRawParameterValue (ParamIds::defaultGrainMode);
     releaseTailParam = apvts.getRawParameterValue (ParamIds::defaultReleaseTail);
     reverseParam     = apvts.getRawParameterValue (ParamIds::defaultReverse);
@@ -735,7 +734,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 psp.dawBpm         = dawBpm.load();
                 psp.tonality       = tonalityParam->load();
                 psp.formant        = formantParam->load();
-                psp.formantComp    = formantCompParam->load() > 0.5f;
                 psp.grainMode      = (int) grainModeParam->load();
                 psp.sampleRate     = currentSampleRate;
                 psp.sample         = &sampleData;
@@ -826,8 +824,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                         s.tonalityHz = (s.lockMask & kLockTonality) ? s.tonalityHz : tonalityParam->load();
                     else if (bit == kLockFormant)
                         s.formantSemitones = (s.lockMask & kLockFormant) ? s.formantSemitones : formantParam->load();
-                    else if (bit == kLockFormantComp)
-                        s.formantComp = (s.lockMask & kLockFormantComp) ? s.formantComp : formantCompParam->load() > 0.5f;
                     else if (bit == kLockGrainMode)
                         s.grainMode = (s.lockMask & kLockGrainMode) ? s.grainMode : (int) grainModeParam->load();
                     else if (bit == kLockVolume)
@@ -876,7 +872,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     if (!(s.lockMask & kLockCentsDetune))   s.centsDetune      = centsDetuneParam->load();
                     if (!(s.lockMask & kLockTonality))      s.tonalityHz       = tonalityParam->load();
                     if (!(s.lockMask & kLockFormant))       s.formantSemitones = formantParam->load();
-                    if (!(s.lockMask & kLockFormantComp))   s.formantComp      = formantCompParam->load()  > 0.5f;
                     if (!(s.lockMask & kLockGrainMode))     s.grainMode        = (int) grainModeParam->load();
                     if (!(s.lockMask & kLockVolume))        s.volume           = masterVolParam->load();
                     if (!(s.lockMask & kLockPan))           s.pan              = panParam->load();
@@ -926,7 +921,6 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldStretchEnabled: s.stretchEnabled = val > 0.5f; if (!skipLock) s.lockMask |= kLockStretch; break;
                     case FieldTonality:  s.tonalityHz = val;        if (!skipLock) s.lockMask |= kLockTonality;    break;
                     case FieldFormant:   s.formantSemitones = val;   if (!skipLock) s.lockMask |= kLockFormant;     break;
-                    case FieldFormantComp: s.formantComp = val > 0.5f; if (!skipLock) s.lockMask |= kLockFormantComp; break;
                     case FieldGrainMode:  s.grainMode = (int) val;   if (!skipLock) s.lockMask |= kLockGrainMode;  break;
                     case FieldVolume:     s.volume = val;            if (!skipLock) s.lockMask |= kLockVolume;    break;
                     case FieldReleaseTail: s.releaseTail = val > 0.5f; if (!skipLock) s.lockMask |= kLockReleaseTail; break;
@@ -2004,7 +1998,6 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.dawBpm           = dawBpm.load();
                 p.globalTonality   = tonalityParam->load();
                 p.globalFormant    = formantParam->load();
-                p.globalFormantComp = formantCompParam->load() > 0.5f;
                 // globalGrainMode removed — Grain was a duplicate of Tonal
                 p.globalVolume     = masterVolParam->load();
                 p.globalReleaseTail = releaseTailParam->load() > 0.5f;
@@ -2873,7 +2866,6 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
         // v5 fields
         stream.writeFloat (s.tonalityHz);
         stream.writeFloat (s.formantSemitones);
-        stream.writeBool (s.formantComp);
         // v6 fields
         stream.writeInt (s.grainMode);
         // v7 fields
@@ -2985,7 +2977,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         parsed.colour         = juce::Colour ((juce::uint32) stream.readInt());
         parsed.tonalityHz     = stream.readFloat();
         parsed.formantSemitones = stream.readFloat();
-        parsed.formantComp    = stream.readBool();
+        stream.readBool(); // formantComp removed — consume for stream alignment
         parsed.grainMode      = stream.readInt();
         parsed.volume         = stream.readFloat();
         parsed.releaseTail    = stream.readBool();

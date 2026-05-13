@@ -82,7 +82,7 @@ void VoicePool::setMaxActiveVoices (int n)
 }
 
 void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
-                                float tonalityHz, float formantSemis, bool formantComp,
+                                float tonalityHz, float formantSemis,
                                 const SampleData& sample)
 {
     int blockSize = std::max (256, (int)(sr * 0.023)); // ~1024 @ 44.1k (~23ms)
@@ -95,8 +95,8 @@ void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
     float tonalityLimit = (tonalityHz > 0.0f && sr > 0.0) ? (float)(tonalityHz / sr) : 0.0f;
     v.stretcher->setTransposeSemitones (pitchSemis, tonalityLimit);
 
-    if (formantSemis != 0.0f || formantComp)
-        v.stretcher->setFormantSemitones (formantSemis, formantComp);
+    if (formantSemis != 0.0f)
+        v.stretcher->setFormantSemitones (formantSemis, false);
 
     v.stretchOutReadPos = 0;
     v.stretchOutAvail   = 0;
@@ -183,11 +183,10 @@ void VoicePool::startVoiceUnsliced (int voiceIdx, const VoiceStartParams& p,
 
     const float tonality = p.globalTonality;
     const float formant  = p.globalFormant;
-    const bool  fComp    = p.globalFormantComp;
 
     if (p.globalStretch)
     {
-        initStretcher (v, pitchSt, sampleRate, tonality, formant, fComp, sample);
+        initStretcher (v, pitchSt, sampleRate, tonality, formant, sample);
     }
     else
     {
@@ -266,9 +265,6 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
 
     float tonality = sm.resolveParam (sliceIdx, kLockTonality,    s.tonalityHz,        p.globalTonality);
     float formant  = sm.resolveParam (sliceIdx, kLockFormant,     s.formantSemitones,  p.globalFormant);
-    bool  fComp    = sm.resolveParam (sliceIdx, kLockFormantComp,
-                                      s.formantComp ? 1.0f : 0.0f,
-                                      p.globalFormantComp ? 1.0f : 0.0f) > 0.5f;
 
     // grainMode / hopAdj removed — Grain algo was a duplicate of Tonal
 
@@ -358,7 +354,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
         v.stretchPitchSemis = pitch;
         v.stretchSrcPos     = rev ? (sliceEnd - 1) : s.startSample;
 
-        initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
+        initStretcher (v, pitch, sampleRate, tonality, formant, sample);
     }
     else
     {
@@ -372,7 +368,7 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
             v.stretchPitchSemis = pitch;
             v.stretchSrcPos     = rev ? (sliceEnd - 1) : s.startSample;
 
-            initStretcher (v, pitch, sampleRate, tonality, formant, fComp, sample);
+            initStretcher (v, pitch, sampleRate, tonality, formant, sample);
         }
         else
         {

@@ -117,9 +117,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         0.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { ParamIds::defaultFormantComp, 1 },
-        "Sample Formant Comp",
-        false));
+);
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParamIds::defaultGrainMode, 1 },

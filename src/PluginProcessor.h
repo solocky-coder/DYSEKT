@@ -118,7 +118,6 @@ public:
         FieldStretchEnabled,
         FieldTonality,
         FieldFormant,
-        FieldFormantComp,
         FieldGrainMode,
         FieldVolume,
         FieldReleaseTail,
@@ -567,7 +566,6 @@ private:
     std::atomic<float>* stretchParam      { nullptr };
     std::atomic<float>* tonalityParam     { nullptr };
     std::atomic<float>* formantParam      { nullptr };
-    std::atomic<float>* formantCompParam  { nullptr };
     std::atomic<float>* grainModeParam    { nullptr };
     std::atomic<float>* releaseTailParam  { nullptr };
     std::atomic<float>* reverseParam      { nullptr };
