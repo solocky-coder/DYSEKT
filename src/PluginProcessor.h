@@ -322,6 +322,7 @@ public:
     // =========================================================================
     // Public subsystem members (accessed directly by UI)
     // =========================================================================
+    juce::MidiKeyboardState keyboardState; // kept for safe removeListener teardown
     juce::AudioProcessorValueTreeState apvts;
     SliceManager     sliceManager;
     VoicePool        voicePool;
