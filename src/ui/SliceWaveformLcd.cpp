@@ -164,38 +164,30 @@ void SliceWaveformLcd::buildEnvelopeNodes()
      releaseMs = s.releaseSec   * 1000.0f;
  }
 
- // Layout (display-only proportions — must match commitNodes exactly):
- // Attack : [0 .. ax ] attack peak always at top
- // Decay : [ax .. dx ] falls from peak to sustain
- // Sustain : [dx .. kSEnd ] flat plateau
- // Release : [rx .. 1.0 ] falls from sustain to silence (drag left = more tail)
- static constexpr float kAX   = 0.85f; // attack can span up to 85% of display
- static constexpr float kRMax = 0.99f;
+    // Fixed zones — each stage occupies its own band regardless of other stages.
+    // Must match commitNodes and mouseDrag constants exactly.
+    //   Attack  [0.00..0.25]  Decay  [0.25..0.50]
+    //   Sustain [0.50..0.75]  Release[0.75..1.00]
+    static constexpr float kAStart = 0.00f, kAEnd = 0.25f;
+    static constexpr float kDStart = 0.25f, kDEnd = 0.50f;
+    static constexpr float kSEnd_c = 0.75f;
+    static constexpr float kRStart = 0.75f, kREnd = 1.00f;
 
- const float sliceDurMs_  = juce::jmax (1.0f, getSliceDurMs());
- const float kAttackViewMs = sliceDurMs_;
- const float kDecayViewMs  = sliceDurMs_;
- const float releaseViewMs = sliceDurMs_;
+    const float sliceDurMs_   = juce::jmax (1.0f, getSliceDurMs());
+    const float kAttackViewMs  = sliceDurMs_;
+    const float kDecayViewMs   = sliceDurMs_;
+    const float releaseViewMs  = sliceDurMs_;
 
- const float attackNorm = std::sqrt (juce::jmin (attackMs / kAttackViewMs, 1.0f));
- const float decayNorm  = std::sqrt (juce::jmin (decayMs  / kDecayViewMs,  1.0f));
+    const float attackNorm  = std::sqrt (juce::jmin (attackMs  / kAttackViewMs,  1.0f));
+    const float decayNorm   = std::sqrt (juce::jmin (decayMs   / kDecayViewMs,   1.0f));
+    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / releaseViewMs,  1.0f));
 
- env.ax = juce::jlimit (0.0f, kAX, attackNorm * kAX);
-
- // D and S share the remaining space proportionally (Hold removed)
- const float remain    = kRMax - env.ax;
- const float kDX_eff   = env.ax + remain * 0.45f; // decay zone end
- const float kSEnd_eff = env.ax + remain * 0.65f; // sustain plateau end
-
- env.dx = juce::jlimit (env.ax, kDX_eff,
-                         env.ax + decayNorm * (kDX_eff - env.ax));
- env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
- env.ay    = 0.04f; // attack peak near top (standard ADSR visual)
- env.sxEnd = kSEnd_eff;
-
- // R node: fade-out END — moves right as release grows (matches knob direction)
- env.rx = juce::jlimit (kSEnd_eff, 1.0f,
-                         kSEnd_eff + (releaseMs / releaseViewMs) * (1.0f - kSEnd_eff));
+    env.ax    = juce::jlimit (kAStart, kAEnd, kAStart + attackNorm  * (kAEnd - kAStart));
+    env.dx    = juce::jlimit (kDStart, kDEnd, kDStart + decayNorm   * (kDEnd - kDStart));
+    env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
+    env.ay    = 0.04f;
+    env.sxEnd = kSEnd_c;
+    env.rx    = juce::jlimit (kRStart, kREnd, kRStart + releaseNorm * (kREnd - kRStart));
 
  // Rebuild node list
  envNodes.clear();
@@ -221,26 +213,24 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 
 void SliceWaveformLcd::commitNodes()
 {
- // Inverse-map (must match buildEnvelopeNodes constants exactly)
- static constexpr float kAX   = 0.85f;
- static constexpr float kRMax = 0.99f;
+    // Inverse-map — fixed zones, must match buildEnvelopeNodes exactly.
+    static constexpr float kAStart = 0.00f, kAEnd = 0.25f;
+    static constexpr float kDStart = 0.25f, kDEnd = 0.50f;
+    static constexpr float kRStart = 0.75f, kREnd = 1.00f;
 
- const float sliceDurMs_c  = juce::jmax (1.0f, getSliceDurMs());
- const float kAttackViewMs = sliceDurMs_c;
- const float kDecayViewMs  = sliceDurMs_c;
- const float releaseViewMs = sliceDurMs_c;
+    const float sliceDurMs_c   = juce::jmax (1.0f, getSliceDurMs());
+    const float kAttackViewMs  = sliceDurMs_c;
+    const float kDecayViewMs   = sliceDurMs_c;
+    const float releaseViewMs  = sliceDurMs_c;
 
- const float remain_c  = kRMax - env.ax;
- const float kDX_eff   = env.ax + remain_c * 0.45f;
- const float kSEnd_eff = env.ax + remain_c * 0.65f;
+    const float aRatio = (env.ax - kAStart) / juce::jmax (0.001f, kAEnd - kAStart);
+    const float dRatio = (env.dx - kDStart) / juce::jmax (0.001f, kDEnd - kDStart);
+    const float rRatio = (env.rx - kRStart) / juce::jmax (0.001f, kREnd - kRStart);
 
- const float aRatio = env.ax / kAX;
- const float dRatio = (kDX_eff > env.ax) ? (env.dx - env.ax) / (kDX_eff - env.ax) : 0.0f;
-
- const float attackMs  = juce::jlimit (0.0f, kAttackViewMs, aRatio * aRatio * kAttackViewMs);
- const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,  dRatio * dRatio * kDecayViewMs);
- const float sustainPc = juce::jlimit (0.0f, 100.0f, (1.0f - env.sy) * 100.0f);
- const float releaseMs = juce::jlimit (0.0f, releaseViewMs, (env.rx - kSEnd_eff) / juce::jmax (0.001f, 1.0f - kSEnd_eff) * releaseViewMs);
+    const float attackMs  = juce::jlimit (0.0f, kAttackViewMs,  aRatio * aRatio * kAttackViewMs);
+    const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,   dRatio * dRatio * kDecayViewMs);
+    const float sustainPc = juce::jlimit (0.0f, 100.0f, (1.0f - env.sy) * 100.0f);
+    const float releaseMs = juce::jlimit (0.0f, releaseViewMs,  rRatio * rRatio * releaseViewMs);
 
     // Read the lock state for the selected slice so we can decide whether to
     // write per-slice or global APVTS — mirroring SliceControlBar::mouseDrag
@@ -477,20 +467,19 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  const float yn  = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
 
  // Dynamic layout — must match buildEnvelopeNodes exactly
- static constexpr float kAX   = 0.85f;
- static constexpr float kRMax = 0.99f;
+    static constexpr float kAStart = 0.00f, kAEnd = 0.25f;
+    static constexpr float kDStart = 0.25f, kDEnd = 0.50f;
+    static constexpr float kSEnd_c = 0.75f;
+    static constexpr float kRStart = 0.75f, kREnd = 1.00f;
 
  if (dragRole == NodeRole::Attack)
  {
  // A: X only — peak height is always maximum
- env.ax = juce::jlimit (0.0f, kAX, xn);
+        env.ax    = juce::jlimit (kAStart, kAEnd, xn);
  }
 
  // Recalculate dynamic zones every drag tick (attack movement shifts D/S/R zones)
- const float remain    = kRMax - env.ax;
- const float kDX_eff   = env.ax + remain * 0.45f;  // matches buildEnvelopeNodes
- const float kSEnd_eff = env.ax + remain * 0.65f;
- env.sxEnd = kSEnd_eff;
+        env.sxEnd = kSEnd_c;
 
  // Standard ADSR behaviour: D/S/R nodes keep their own positions unless Attack
  // physically overlaps them. Only push them forward to avoid visual overlap —
@@ -498,14 +487,13 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  // every time A was moved, which is non-standard and confusing).
  if (dragRole == NodeRole::Attack)
  {
-     if (env.dx < env.ax) env.dx = env.ax;  // push D only if A overtook it
      if (env.rx < env.dx) env.rx = env.dx;  // push R only if D pushed into it
  }
 
  if (dragRole == NodeRole::Decay)
  {
  // D: X only — controls how far decay extends before sustain
- env.dx = juce::jlimit (env.ax, kDX_eff, xn);
+        env.dx    = juce::jlimit (kDStart, kDEnd, xn);
  }
  else if (dragRole == NodeRole::Sustain)
  {
@@ -515,7 +503,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  else if (dragRole == NodeRole::Release)
  {
  // R: X only — drag right = longer release tail (later fade end)
- env.rx = juce::jlimit (kSEnd_eff, 1.0f, rxn);
+        env.rx    = juce::jlimit (kRStart, kREnd, rxn);
  }
 
  // Rebuild envNodes[] from updated env.* (no param read during drag)
@@ -524,7 +512,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  a.colour = kColAttack; a.label = "A"; envNodes.add (a);
  EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
  d.colour = kColDecay; d.label = "D"; envNodes.add (d);
- EnvNode s; s.xn = (env.dx + kSEnd_eff) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
+    EnvNode s; s.xn = (kSEnd_c + kRStart) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
  s.colour = kColSustain; s.label = "S"; envNodes.add (s);
  EnvNode r; r.xn = env.rx; r.yn = env.sy; r.role = NodeRole::Release;
  r.colour = kColRelease; r.label = "R"; envNodes.add (r);
