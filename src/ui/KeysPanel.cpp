@@ -740,7 +740,23 @@ KeysPanel::KeysPanel (DysektProcessor& p) : processor (p)
     startTimerHz (30);
 }
 
-KeysPanel::~KeysPanel() { stopTimer(); }
+KeysPanel::~KeysPanel()
+{
+    stopTimer();
+
+    // If the panel is destroyed while a note is held or a pending note-off is
+    // queued, force the note-off into the processor now.  Without this, the
+    // note stays "active" in JUCE's MidiKeyboardState and causes a use-after-
+    // free crash inside MidiKeyboardState::removeListener during plugin teardown.
+    const int noteToRelease = (lastActiveNote >= 0) ? lastActiveNote
+                            : (pendingNoteOff  >= 0) ? pendingNoteOff
+                            : -1;
+    if (noteToRelease >= 0)
+    {
+        processor.sfzUiNoteOffRequest.store (noteToRelease, std::memory_order_relaxed);
+        processor.sfzUiNoteOnRequest .store (-1,            std::memory_order_relaxed);
+    }
+}
 
 // =============================================================================
 
