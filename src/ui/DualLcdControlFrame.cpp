@@ -405,27 +405,26 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
     {
         const int btnSz  = si (28);
         const int btnY   = (half - btnSz) / 2;
-        const int gap    = (w - 5 * btnSz) / 6;
+        const int gap    = (w - 4 * btnSz) / 5;
 
         filIconArea        = { gap,                       btnY, btnSz, btnSz };
         waIconArea         = { gap * 2 + btnSz,           btnY, btnSz, btnSz };
         midiFollowIconArea = { gap * 3 + btnSz * 2,       btnY, btnSz, btnSz };
         bodeIconArea       = { gap * 4 + btnSz * 3,       btnY, btnSz, btnSz };
-        eqIconArea         = { gap * 5 + btnSz * 4,       btnY, btnSz, btnSz };
+        eqIconArea         = {};
         sfzIconArea        = {};
 
         drawIcon (g, filIconArea       .toFloat(), 0, browserActive);
         drawIcon (g, waIconArea        .toFloat(), 1, waveMode != 0);
         drawIcon (g, midiFollowIconArea.toFloat(), 2, midiFollowActive);
         drawIcon (g, bodeIconArea      .toFloat(), 3, bodeActive);
-        drawIcon (g, eqIconArea        .toFloat(), 5, eqActive);
 
         // ── Hover tooltip label ──────────────────────────────────────
         if (hoveredIcon >= 0)
         {
-            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER", "GLOBAL EQ" };
+            static const char* kLabels[] = { "FILE BROWSER", "WAVEFORM", "MIDI FOLLOW", "MIXER" };
             const juce::Rectangle<int>* areas[] = { &filIconArea, &waIconArea,
-                                                     &midiFollowIconArea, &bodeIconArea, &eqIconArea };
+                                                     &midiFollowIconArea, &bodeIconArea };
             const auto& area = *areas[hoveredIcon];
             const int labelH  = si (9);
             const int labelY  = area.getY() - labelH - 2;
@@ -436,7 +435,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         }
     }
 
-    // ── Bottom row: PITCH knob (left) | VOL vertical slider (right) ─────────
+    // ── Bottom row: GLOBAL PITCH (left) | GLOBAL EQ (centre) | GLOBAL VOL (right) ─────────
     {
         float gPitch = processor.apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
         float gVol   = processor.apvts.getRawParameterValue (ParamIds::masterVolume)->load();
@@ -448,13 +447,16 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
         int rowTop = half + si (4);
         int rowBot = h   - si (20);   // leave room for label + value below
 
-        // ── PITCH knob (left third) ──────────────────────────────────────────
+        // Three equally-spaced centres: 1/4, 1/2, 3/4
+        const int k1cx = w / 4;
+        const int kcx  = w / 2;
+        const int k2cx = w - w / 4;
+        const int kcy  = rowTop + (rowBot - rowTop) / 2;
+        const int kr   = si (12);
+
+        // ── GLOBAL PITCH knob (left quarter) ────────────────────────────────
         {
             float pitchN = 0.5f + gPitch / 96.0f;   // -48..+48 → 0..1
-
-            const int kr = si (12);
-            int kcy  = rowTop + (rowBot - rowTop) / 2;
-            int k1cx = w / 3;
 
             const float kStart   = juce::MathConstants<float>::pi * 0.75f;
             const float kEnd     = juce::MathConstants<float>::pi * 2.25f;
@@ -482,7 +484,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
 
             g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
             g.setColour (fg.withAlpha (0.45f));
-            g.drawText ("PITCH", k1cx - si(16), kcy + kr + si(2), si(32), si(9), juce::Justification::centred);
+            g.drawText ("GLOBAL PITCH", k1cx - si(28), kcy + kr + si(2), si(56), si(9), juce::Justification::centred);
 
             g.setFont (DysektLookAndFeel::makeFont (sf1 (8.0f)));
             g.setColour (accent.withAlpha (0.80f));
@@ -491,16 +493,24 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             pitchKnobArea = { k1cx - kr - 5, kcy - kr - 3, (kr + 5) * 2, (kr + 5) * 2 };
         }
 
-        // ── VOL knob (right third) — same geometry as PITCH, same 0dB-centred logic ──
+        // ── GLOBAL EQ button (centre) ────────────────────────────────────────
+        {
+            // Draw the EQ icon scaled to match knob radius
+            const int eqSz = kr * 2;
+            eqIconArea = { kcx - kr, kcy - kr, eqSz, eqSz };
+            drawIcon (g, eqIconArea.toFloat(), 5, eqActive);
+
+            g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
+            g.setColour (fg.withAlpha (0.45f));
+            g.drawText ("GLOBAL EQ", kcx - si(28), kcy + kr + si(2), si(56), si(9), juce::Justification::centred);
+        }
+
+        // ── GLOBAL VOL knob (right quarter) — 0dB-centred logic ─────────────
         {
             // 0 dB → norm=0.5 (12 o'clock).  -24 dB → 0.0 (CCW stop).  +24 dB → 1.0 (CW stop).
             // Values outside -24..+24 are clamped visually (the param itself goes to -100..+24).
             constexpr float kVisMin = -24.0f, kVisMax = 24.0f;
             const float volN = juce::jlimit (0.0f, 1.0f, (gVol - kVisMin) / (kVisMax - kVisMin));
-
-            const int kr  = si (12);
-            const int kcy = rowTop + (rowBot - rowTop) / 2;
-            const int k2cx = w - w / 3;    // mirror of pitch knob on right side
 
             const float kStart   = juce::MathConstants<float>::pi * 0.75f;  // 7 o'clock
             const float kEnd     = juce::MathConstants<float>::pi * 2.25f;  // 5 o'clock
@@ -552,7 +562,7 @@ void DualLcdControlFrame::paint (juce::Graphics& g)
             // Labels
             g.setFont (DysektLookAndFeel::makeFont (sf1 (7.5f), true));
             g.setColour (fg.withAlpha (0.45f));
-            g.drawText ("VOL", k2cx - si (16), kcy + kr + si (2), si (32), si (9), juce::Justification::centred);
+            g.drawText ("GLOBAL VOL", k2cx - si (28), kcy + kr + si (2), si (56), si (9), juce::Justification::centred);
 
             g.setFont (DysektLookAndFeel::makeFont (sf1 (8.0f)));
             g.setColour (accent.withAlpha (0.80f));
@@ -599,14 +609,6 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
         if (onBodeToggle) onBodeToggle();
         return;
     }
-    if (eqIconArea.contains (pos))
-    {
-        eqActive = ! eqActive;
-        repaint();
-        if (onEqToggle) onEqToggle();
-        return;
-    }
-
     // ── EDIT | SFZ tabs ──────────────────────────────────────────────────────
     if (editTabArea.contains (pos))
     {
@@ -629,7 +631,14 @@ void DualLcdControlFrame::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // Knobs
+    // Knobs + EQ button (bottom row)
+    if (eqIconArea.contains (pos))
+    {
+        eqActive = ! eqActive;
+        repaint();
+        if (onEqToggle) onEqToggle();
+        return;
+    }
     if (pitchKnobArea.contains (pos))
     {
         dragTarget     = DragTarget::Pitch;
@@ -698,7 +707,6 @@ void DualLcdControlFrame::mouseMove (const juce::MouseEvent& e)
     else if (waIconArea.contains (pos))         found = 1;
     else if (midiFollowIconArea.contains (pos)) found = 2;
     else if (bodeIconArea.contains (pos))       found = 3;
-    else if (eqIconArea.contains (pos))         found = 4;
 
     if (found != hoveredIcon)
     {
