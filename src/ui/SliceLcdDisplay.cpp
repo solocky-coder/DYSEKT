@@ -689,11 +689,16 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 4, panStr, pitStr);
     }
 
-    // ── Row 5:  DET:+xct  |  (right empty) ───────────────────────────────────
+    // ── Row 5:  TUNE:+xct  |  FLTR:xxxxxHz ─────────────────────────────────
     {
         const float det = data.centsDetune;
-        juce::String detStr = juce::String ("DET:") + (det >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (det)) + "ct";
-        drawRowPair (g, 5, detStr, {});
+        juce::String detStr = juce::String ("TUNE:") + (det >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (det)) + "ct";
+        juce::String fltrStr = "FLTR:" + (data.filterCutoff >= 9999.0f
+            ? juce::String ("OFF")
+            : (data.filterCutoff >= 1000.0f
+                ? juce::String (data.filterCutoff / 1000.0f, 1) + "k"
+                : juce::String (juce::roundToInt (data.filterCutoff)) + "Hz"));
+        drawRowPair (g, 5, detStr, fltrStr);
     }
 
     // ── Row 6:  A:xxxms  |  D:xxxms ──────────────────────────────────────────
@@ -710,7 +715,7 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 7, susStr, relStr);
     }
 
-    // ── Row 8:  BODY:+x.xst  |  TUNE:xxx ────────────────────────────────────
+    // ── Row 8:  BODY:+x.xst  |  ROOT:xxxHz ────────────────────────────────────
     {
         const float fmnt = data.formantSemitones;
         juce::String fmntStr = juce::String ("BODY:") + (fmnt >= 0.0f ? "+" : "")
@@ -721,16 +726,11 @@ void SliceLcdDisplay::paint (juce::Graphics& g)
         drawRowPair (g, 8, fmntStr, tonalStr);
     }
 
-    // ── Row 9:  RESO:x.xx  |  (right empty) ─────────────────────────────────
+    // ── Row 9:  RESO:x.xx  |  OUT:xx ────────────────────────────────────────
     {
-        juce::String fresStr = "RESO " + juce::String (data.filterRes, 2);
-        drawRowPair (g, 9, fresStr, {});
-    }
-
-    // ── Row 10:  OUT:xx  |  (BPM removed — host-controlled) ─────────────────
-    {
-        juce::String outStr = "OUT:" + juce::String (data.outputBus + 1);
-        drawRowPair (g, 10, outStr, {});
+        juce::String fresStr = "RESO:" + juce::String (data.filterRes, 2);
+        juce::String outStr  = "OUT:"  + juce::String (data.outputBus + 1);
+        drawRowPair (g, 9, fresStr, outStr);
     }
 
     // ── Floating flags — right-edge vertical column (always visible) ──────────
