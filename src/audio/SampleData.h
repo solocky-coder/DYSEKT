@@ -30,6 +30,12 @@ public:
         std::array<PeakMipmap, kNumMipmapLevels> peakMipmaps;
         juce::String fileName;
         juce::String filePath;
+
+        // Pre-built snapshot for applyDecodedSample — avoids a large heap
+        // allocation + memcpy on the real-time audio thread.  Set by
+        // decodeFromFile() on the background decode thread; consumed (and
+        // nulled) by applyDecodedSample().
+        std::shared_ptr<DecodedSample> prebuiltSnapshot;
     };
 
     using SnapshotPtr = std::shared_ptr<const DecodedSample>;

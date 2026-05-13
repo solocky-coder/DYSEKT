@@ -176,6 +176,23 @@ std::unique_ptr<SampleData::DecodedSample> SampleData::decodeFromFile (const juc
     decoded->fileName     = file.getFileName();
     decoded->filePath     = file.getFullPathName();
     buildMipmapsForBuffer (decoded->buffer, decoded->peakMipmaps);
+
+    // ── Pre-build the UI snapshot here on the background decode thread ────────
+    // applyDecodedSample() is called from processBlock() (real-time thread).
+    // Building a snapshot there requires malloc + memcpy of the full audio
+    // buffer (up to 75 MB for a 3-min file), which easily blows the audio
+    // budget at 64/128-sample block sizes and crashes the DAW.
+    // By building it here we pay that cost once, off the hot path, and let
+    // applyDecodedSample() do nothing but pointer swaps.
+    {
+        auto view           = std::make_shared<DecodedSample>();
+        view->buffer        = decoded->buffer;       // deep copy — background thread only
+        view->peakMipmaps   = decoded->peakMipmaps;  // deep copy — background thread only
+        view->fileName      = decoded->fileName;
+        view->filePath      = decoded->filePath;
+        decoded->prebuiltSnapshot = std::move (view);
+    }
+
     return decoded;
 }
 
@@ -184,16 +201,17 @@ void SampleData::applyDecodedSample (std::unique_ptr<DecodedSample> decoded)
     if (decoded == nullptr)
         return;
 
-    buffer        = std::move (decoded->buffer);
-    peakMipmaps   = std::move (decoded->peakMipmaps);
+    // All four operations below are allocation-free (pointer swaps or trivial
+    // copies of small strings), making this safe to call from processBlock().
+    buffer         = std::move (decoded->buffer);
+    peakMipmaps    = std::move (decoded->peakMipmaps);
     loadedFileName = decoded->fileName;
     loadedFilePath = decoded->filePath;
 
-    auto view          = std::make_shared<DecodedSample>();
-    view->buffer       = buffer;
-    view->peakMipmaps  = peakMipmaps;
-    view->fileName     = loadedFileName;
-    view->filePath     = loadedFilePath;
+    // Consume the snapshot that decodeFromFile() pre-built on the background
+    // thread.  This is a shared_ptr move — no heap allocation, no memcpy.
+    jassert (decoded->prebuiltSnapshot != nullptr);
+    auto view = std::move (decoded->prebuiltSnapshot);
 
 #if INTERSECT_HAS_STD_ATOMIC_SHARED_PTR
     snapshot.store (std::static_pointer_cast<const DecodedSample> (view),
