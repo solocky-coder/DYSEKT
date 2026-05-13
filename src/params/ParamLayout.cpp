@@ -116,6 +116,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         juce::NormalisableRange<float> (-24.0f, 24.0f, 0.1f),
         0.0f));
 
+    params.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParamIds::defaultFormantComp, 1 },
+        "Sample Formant Comp",
+        false));
+
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParamIds::defaultGrainMode, 1 },
         "Sample Grain Mode",
@@ -269,6 +274,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParamLayout::createLayout()
         "Global EQ High Freq",
         juce::NormalisableRange<float> (2000.0f, 20000.0f, 1.0f, 0.4f),
         12000.0f));
+
+    // v25: master audio-domain pitch shift (semitones) — applied post-EQ on summed output
+    params.push_back (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamIds::masterPitch, 1 },
+        "Master Pitch",
+        juce::NormalisableRange<float> (-24.0f, 24.0f, 0.01f),
+        0.0f));
 
     return { params.begin(), params.end() };
 }

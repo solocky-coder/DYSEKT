@@ -4,6 +4,7 @@
 #include <atomic>
 #include <array>
 #include <deque>
+#include <vector>
 
 #include "audio/Slice.h"
 #include "audio/SampleData.h"
@@ -16,6 +17,12 @@
 #include "MidiLearnManager.h"
 #include "params/ParamIds.h"
 #include "params/ParamLayout.h"
+
+// Forward-declare to avoid pulling the full signalsmith header into every TU
+// that includes PluginProcessor.h.  The stretcher lives only in the .cpp.
+namespace signalsmith { namespace stretch {
+    template<typename Sample, class RandomEngine> struct SignalsmithStretch;
+}}
 
 struct SfzSlicePayload;
 
@@ -118,6 +125,7 @@ public:
         FieldStretchEnabled,
         FieldTonality,
         FieldFormant,
+        FieldFormantComp,
         FieldGrainMode,
         FieldVolume,
         FieldReleaseTail,
@@ -322,7 +330,6 @@ public:
     // =========================================================================
     // Public subsystem members (accessed directly by UI)
     // =========================================================================
-    juce::MidiKeyboardState keyboardState; // kept for safe removeListener teardown
     juce::AudioProcessorValueTreeState apvts;
     SliceManager     sliceManager;
     VoicePool        voicePool;
@@ -567,6 +574,7 @@ private:
     std::atomic<float>* stretchParam      { nullptr };
     std::atomic<float>* tonalityParam     { nullptr };
     std::atomic<float>* formantParam      { nullptr };
+    std::atomic<float>* formantCompParam  { nullptr };
     std::atomic<float>* grainModeParam    { nullptr };
     std::atomic<float>* releaseTailParam  { nullptr };
     std::atomic<float>* reverseParam      { nullptr };
@@ -579,6 +587,7 @@ private:
     std::atomic<float>* filterResParam    { nullptr };
     std::atomic<float>* sliceStartParam   { nullptr };
     std::atomic<float>* sliceEndParam     { nullptr };
+    std::atomic<float>* masterPitchParam  { nullptr };  // v25: master audio-domain pitch shift
 
     // =========================================================================
     // Playback state
@@ -595,6 +604,15 @@ private:
         juce::dsp::IIR::Filter<float>    // band 4: high shelf (~12 kHz)
     > globalEq;
     bool globalEqNeedsUpdate = true;
+
+    // ── v25: master audio-domain pitch shift (post-EQ, pre-output) ───────────
+    // Uses signalsmith-stretch in pitch-only mode (stretch ratio = 1.0).
+    // Allocated in prepareToPlay; nullptr until then.
+    std::unique_ptr<signalsmith::stretch::SignalsmithStretch<float, void>> masterPitchShifter;
+    float  masterPitchSemitones = 0.0f;   // last applied value — avoid reinit on no change
+    // Per-channel scratch buffers resized in prepareToPlay
+    std::vector<float> masterPitchScratchL;
+    std::vector<float> masterPitchScratchR;
 
     friend class SoundFontLoader;
 

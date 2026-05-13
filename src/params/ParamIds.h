@@ -17,6 +17,7 @@ namespace ParamIds
     inline const juce::String defaultStretchEnabled { "defaultStretchEnabled" };
     inline const juce::String defaultTonality     { "defaultTonality" };
     inline const juce::String defaultFormant      { "defaultFormant" };
+    inline const juce::String defaultFormantComp  { "defaultFormantComp" };
     inline const juce::String defaultGrainMode     { "defaultGrainMode" };
     inline const juce::String defaultReleaseTail  { "defaultReleaseTail" };
     inline const juce::String defaultReverse      { "defaultReverse" };
@@ -57,4 +58,7 @@ namespace ParamIds
     inline const juce::String defaultEqMidFreq    { "defaultEqMidFreq" };
     inline const juce::String defaultEqMidQ       { "defaultEqMidQ" };
     inline const juce::String defaultEqHighGain   { "defaultEqHighGain" };
+
+    // v25: master audio-domain pitch shift (semitones, applied post-EQ on summed output)
+    inline const juce::String masterPitch         { "masterPitch" };
 }

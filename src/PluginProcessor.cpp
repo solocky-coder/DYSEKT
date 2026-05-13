@@ -3,6 +3,7 @@
 #include "audio/GrainEngine.h"
 #include "audio/AudioAnalysis.h"
 #include "audio/SoundFontLoader.h"
+#include "signalsmith-stretch.h"   // v25: master audio-domain pitch shift
 #include <BinaryData.h>
 #include <functional>
 #include <memory>
@@ -54,7 +55,7 @@ private:
 static constexpr uint32_t kValidLockMask =
     kLockBpm | kLockPitch | kLockAlgorithm | kLockAttack | kLockDecay | kLockSustain
     | kLockRelease | kLockMuteGroup | kLockStretch | kLockTonality | kLockFormant
-    | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
+    | kLockFormantComp | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
     | kLockOutputBus | kLockLoop | kLockOneShot | kLockCentsDetune
     | kLockPan | kLockFilter;
 static Slice sanitiseRestoredSlice (Slice s)
@@ -152,6 +153,7 @@ DysektProcessor::DysektProcessor()
     stretchParam   = apvts.getRawParameterValue (ParamIds::defaultStretchEnabled);
     tonalityParam  = apvts.getRawParameterValue (ParamIds::defaultTonality);
     formantParam   = apvts.getRawParameterValue (ParamIds::defaultFormant);
+    formantCompParam = apvts.getRawParameterValue (ParamIds::defaultFormantComp);
     grainModeParam   = apvts.getRawParameterValue (ParamIds::defaultGrainMode);
     releaseTailParam = apvts.getRawParameterValue (ParamIds::defaultReleaseTail);
     reverseParam     = apvts.getRawParameterValue (ParamIds::defaultReverse);
@@ -164,23 +166,13 @@ DysektProcessor::DysektProcessor()
     filterResParam    = apvts.getRawParameterValue (ParamIds::defaultFilterRes);
     sliceStartParam  = apvts.getRawParameterValue (ParamIds::sliceStart);
     sliceEndParam    = apvts.getRawParameterValue (ParamIds::sliceEnd);
+    masterPitchParam = apvts.getRawParameterValue (ParamIds::masterPitch);  // v25
     publishUiSliceSnapshot();
 }
 
 DysektProcessor::~DysektProcessor()
 {
-    // Stop the background load thread before releasing anything else.
-    // This prevents the LoadJob from touching processor state after members
-    // begin destructing (e.g. writing to completedLoadData after it's freed).
     fileLoadPool.removeAllJobs (true, 5000);
-
-    // Flush JUCE's keyboard state so that when AudioProcessor's base destructor
-    // calls MidiKeyboardState::removeListener it has zero active notes and never
-    // attempts a handleNoteOff virtual call on any (potentially freed) listener.
-    // releaseResources() is the correct place for this but some hosts (Nuendo)
-    // do not call it before destroying the processor, so we guard here as well.
-    keyboardState.allNotesOff (0);
-
     auto* pending = completedLoadData.exchange (nullptr, std::memory_order_acq_rel);
     delete pending;
     auto* failed = completedLoadFailure.exchange (nullptr, std::memory_order_acq_rel);
@@ -242,29 +234,21 @@ void DysektProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         globalEq.prepare (spec);
         globalEqNeedsUpdate = true;
     }
+
+    // ── v25: master audio-domain pitch shifter ────────────────────────────────
+    {
+        const int blockSize = samplesPerBlock > 0 ? samplesPerBlock : 512;
+        masterPitchShifter = std::make_unique<signalsmith::stretch::SignalsmithStretch<float, void>>();
+        masterPitchShifter->presetDefault (2, (float) sampleRate);
+        masterPitchSemitones = 0.0f;
+        // Allocate scratch buffers with extra headroom for the stretcher's latency
+        const int scratchSize = blockSize * 4;
+        masterPitchScratchL.assign (scratchSize, 0.0f);
+        masterPitchScratchR.assign (scratchSize, 0.0f);
+    }
 }
 
-void DysektProcessor::releaseResources()
-{
-    // Discard any in-flight UI note requests so processBlock never injects
-    // a stale note-on after the host has started tearing down.
-    sfzUiNoteOnRequest .store (-1, std::memory_order_relaxed);
-    sfzUiNoteOffRequest.store (-1, std::memory_order_relaxed);
-    uiNoteOnRequest    .store (-1, std::memory_order_relaxed);
-    uiNoteOffRequest   .store (-1, std::memory_order_relaxed);
-
-    // Clear the sfz active-note display bitmask so the UI starts clean on re-open.
-    sfzActiveNotes[0].store (0, std::memory_order_relaxed);
-    sfzActiveNotes[1].store (0, std::memory_order_relaxed);
-
-    // JUCE's MidiKeyboardState::removeListener calls handleNoteOff() on every
-    // registered listener for each currently-active note.  If any note is still
-    // "on" in the keyboard state when the processor is destroyed and a listener
-    // has already been freed, that virtual call crashes (vtable = 0xffffffff).
-    // allNotesOff(0) clears every active note on every channel so removeListener
-    // has nothing to iterate over, making teardown safe regardless of host order.
-    keyboardState.allNotesOff (0);
-}
+void DysektProcessor::releaseResources() {}
 
 void DysektProcessor::requestSampleLoad (const juce::File& file, LoadKind kind)
 {
@@ -765,6 +749,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 psp.dawBpm         = dawBpm.load();
                 psp.tonality       = tonalityParam->load();
                 psp.formant        = formantParam->load();
+                psp.formantComp    = formantCompParam->load() > 0.5f;
                 psp.grainMode      = (int) grainModeParam->load();
                 psp.sampleRate     = currentSampleRate;
                 psp.sample         = &sampleData;
@@ -855,6 +840,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
                         s.tonalityHz = (s.lockMask & kLockTonality) ? s.tonalityHz : tonalityParam->load();
                     else if (bit == kLockFormant)
                         s.formantSemitones = (s.lockMask & kLockFormant) ? s.formantSemitones : formantParam->load();
+                    else if (bit == kLockFormantComp)
+                        s.formantComp = (s.lockMask & kLockFormantComp) ? s.formantComp : formantCompParam->load() > 0.5f;
                     else if (bit == kLockGrainMode)
                         s.grainMode = (s.lockMask & kLockGrainMode) ? s.grainMode : (int) grainModeParam->load();
                     else if (bit == kLockVolume)
@@ -903,6 +890,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     if (!(s.lockMask & kLockCentsDetune))   s.centsDetune      = centsDetuneParam->load();
                     if (!(s.lockMask & kLockTonality))      s.tonalityHz       = tonalityParam->load();
                     if (!(s.lockMask & kLockFormant))       s.formantSemitones = formantParam->load();
+                    if (!(s.lockMask & kLockFormantComp))   s.formantComp      = formantCompParam->load()  > 0.5f;
                     if (!(s.lockMask & kLockGrainMode))     s.grainMode        = (int) grainModeParam->load();
                     if (!(s.lockMask & kLockVolume))        s.volume           = masterVolParam->load();
                     if (!(s.lockMask & kLockPan))           s.pan              = panParam->load();
@@ -952,6 +940,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldStretchEnabled: s.stretchEnabled = val > 0.5f; if (!skipLock) s.lockMask |= kLockStretch; break;
                     case FieldTonality:  s.tonalityHz = val;        if (!skipLock) s.lockMask |= kLockTonality;    break;
                     case FieldFormant:   s.formantSemitones = val;   if (!skipLock) s.lockMask |= kLockFormant;     break;
+                    case FieldFormantComp: s.formantComp = val > 0.5f; if (!skipLock) s.lockMask |= kLockFormantComp; break;
                     case FieldGrainMode:  s.grainMode = (int) val;   if (!skipLock) s.lockMask |= kLockGrainMode;  break;
                     case FieldVolume:     s.volume = val;            if (!skipLock) s.lockMask |= kLockVolume;    break;
                     case FieldReleaseTail: s.releaseTail = val > 0.5f; if (!skipLock) s.lockMask |= kLockReleaseTail; break;
@@ -2029,6 +2018,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.dawBpm           = dawBpm.load();
                 p.globalTonality   = tonalityParam->load();
                 p.globalFormant    = formantParam->load();
+                p.globalFormantComp = formantCompParam->load() > 0.5f;
                 // globalGrainMode removed — Grain was a duplicate of Tonal
                 p.globalVolume     = masterVolParam->load();
                 p.globalReleaseTail = releaseTailParam->load() > 0.5f;
@@ -2203,49 +2193,34 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
-    // ── Poll global EQ param changes (all 5 bands) ────────────────────────────
+    // ── Poll global EQ param changes ──────────────────────────────────────────
     {
-        static float cachedLowG  = -999.f, cachedLowF  = -999.f,
-                     cachedLMidG = -999.f, cachedLMidF = -999.f, cachedLMidQ = -999.f,
-                     cachedMidG  = -999.f, cachedMidF  = -999.f, cachedMidQ  = -999.f,
-                     cachedHMidG = -999.f, cachedHMidF = -999.f, cachedHMidQ = -999.f,
-                     cachedHighG = -999.f, cachedHighF = -999.f;
-
-        auto* pLowG  = apvts.getRawParameterValue (ParamIds::globalEqLowGain);
-        auto* pLowF  = apvts.getRawParameterValue (ParamIds::globalEqLowFreq);
-        auto* pLMidG = apvts.getRawParameterValue (ParamIds::globalEqLowMidGain);
-        auto* pLMidF = apvts.getRawParameterValue (ParamIds::globalEqLowMidFreq);
-        auto* pLMidQ = apvts.getRawParameterValue (ParamIds::globalEqLowMidQ);
-        auto* pMidG  = apvts.getRawParameterValue (ParamIds::globalEqMidGain);
-        auto* pMidF  = apvts.getRawParameterValue (ParamIds::globalEqMidFreq);
-        auto* pMidQ  = apvts.getRawParameterValue (ParamIds::globalEqMidQ);
-        auto* pHMidG = apvts.getRawParameterValue (ParamIds::globalEqHighMidGain);
-        auto* pHMidF = apvts.getRawParameterValue (ParamIds::globalEqHighMidFreq);
-        auto* pHMidQ = apvts.getRawParameterValue (ParamIds::globalEqHighMidQ);
-        auto* pHighG = apvts.getRawParameterValue (ParamIds::globalEqHighGain);
+        static float cachedEqLow = -999.f, cachedEqLowF = -999.f,
+                     cachedEqMidG = -999.f, cachedEqMidF = -999.f,
+                     cachedEqMidQ = -999.f,
+                     cachedEqHigh = -999.f, cachedEqHighF = -999.f;
+        auto* pLow  = apvts.getRawParameterValue (ParamIds::globalEqLowGain);
+        auto* pLowF = apvts.getRawParameterValue (ParamIds::globalEqLowFreq);
+        auto* pMidG = apvts.getRawParameterValue (ParamIds::globalEqMidGain);
+        auto* pMidF = apvts.getRawParameterValue (ParamIds::globalEqMidFreq);
+        auto* pMidQ = apvts.getRawParameterValue (ParamIds::globalEqMidQ);
+        auto* pHigh = apvts.getRawParameterValue (ParamIds::globalEqHighGain);
         auto* pHighF = apvts.getRawParameterValue (ParamIds::globalEqHighFreq);
-
-        if (pLowG && pLowF && pLMidG && pLMidF && pLMidQ &&
-            pMidG && pMidF && pMidQ &&
-            pHMidG && pHMidF && pHMidQ && pHighG && pHighF)
+        if (pLow && pLowF && pMidG && pMidF && pMidQ && pHigh && pHighF)
         {
-            float lg  = pLowG->load(),  lf  = pLowF->load(),
-                  lmg = pLMidG->load(), lmf = pLMidF->load(), lmq = pLMidQ->load(),
-                  mg  = pMidG->load(),  mf  = pMidF->load(),  mq  = pMidQ->load(),
-                  hmg = pHMidG->load(), hmf = pHMidF->load(), hmq = pHMidQ->load(),
-                  hg  = pHighG->load(), hf  = pHighF->load();
-
-            if (lg  != cachedLowG  || lf  != cachedLowF  ||
-                lmg != cachedLMidG || lmf != cachedLMidF || lmq != cachedLMidQ ||
-                mg  != cachedMidG  || mf  != cachedMidF  || mq  != cachedMidQ  ||
-                hmg != cachedHMidG || hmf != cachedHMidF || hmq != cachedHMidQ ||
-                hg  != cachedHighG || hf  != cachedHighF)
+            float l = pLow->load(), lf = pLowF->load(),
+                  mg = pMidG->load(), mf = pMidF->load(),
+                  mq = pMidQ->load(),
+                  h = pHigh->load(), hf = pHighF->load();
+            if (l != cachedEqLow || lf != cachedEqLowF ||
+                mg != cachedEqMidG || mf != cachedEqMidF ||
+                mq != cachedEqMidQ ||
+                h != cachedEqHigh || hf != cachedEqHighF)
             {
-                cachedLowG  = lg;  cachedLowF  = lf;
-                cachedLMidG = lmg; cachedLMidF = lmf; cachedLMidQ = lmq;
-                cachedMidG  = mg;  cachedMidF  = mf;  cachedMidQ  = mq;
-                cachedHMidG = hmg; cachedHMidF = hmf; cachedHMidQ = hmq;
-                cachedHighG = hg;  cachedHighF = hf;
+                cachedEqLow = l; cachedEqLowF = lf;
+                cachedEqMidG = mg; cachedEqMidF = mf;
+                cachedEqMidQ = mq;
+                cachedEqHigh = h; cachedEqHighF = hf;
                 globalEqNeedsUpdate = true;
             }
         }
@@ -2827,27 +2802,17 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         if (globalEqNeedsUpdate)
         {
             double sr = getSampleRate();
-            auto lowG   = apvts.getRawParameterValue (ParamIds::globalEqLowGain)->load();
-            auto lowF   = apvts.getRawParameterValue (ParamIds::globalEqLowFreq)->load();
-            auto lowMidG = apvts.getRawParameterValue (ParamIds::globalEqLowMidGain)->load();
-            auto lowMidF = apvts.getRawParameterValue (ParamIds::globalEqLowMidFreq)->load();
-            auto lowMidQ = apvts.getRawParameterValue (ParamIds::globalEqLowMidQ)->load();
-            auto midG   = apvts.getRawParameterValue (ParamIds::globalEqMidGain)->load();
-            auto midF   = apvts.getRawParameterValue (ParamIds::globalEqMidFreq)->load();
-            auto midQ   = apvts.getRawParameterValue (ParamIds::globalEqMidQ)->load();
-            auto hiMidG = apvts.getRawParameterValue (ParamIds::globalEqHighMidGain)->load();
-            auto hiMidF = apvts.getRawParameterValue (ParamIds::globalEqHighMidFreq)->load();
-            auto hiMidQ = apvts.getRawParameterValue (ParamIds::globalEqHighMidQ)->load();
-            auto hiG    = apvts.getRawParameterValue (ParamIds::globalEqHighGain)->load();
-            auto hiF    = apvts.getRawParameterValue (ParamIds::globalEqHighFreq)->load();
+            auto lowG  = apvts.getRawParameterValue (ParamIds::globalEqLowGain)->load();
+            auto lowF  = apvts.getRawParameterValue (ParamIds::globalEqLowFreq)->load();
+            auto midG  = apvts.getRawParameterValue (ParamIds::globalEqMidGain)->load();
+            auto midF  = apvts.getRawParameterValue (ParamIds::globalEqMidFreq)->load();
+            auto midQ  = apvts.getRawParameterValue (ParamIds::globalEqMidQ)->load();
+            auto hiG   = apvts.getRawParameterValue (ParamIds::globalEqHighGain)->load();
+            auto hiF   = apvts.getRawParameterValue (ParamIds::globalEqHighFreq)->load();
 
-            // Direct Ptr assignment — safe on first call when coefficients is null.
-            // The *lhs = *rhs form requires lhs to be non-null and crashes on first processBlock.
-            globalEq.get<0>().coefficients = juce::dsp::IIR::Coefficients<float>::makeLowShelf  (sr, lowF,   1.f,    std::pow (10.f, lowG   / 20.f));
-            globalEq.get<1>().coefficients = juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, lowMidF, lowMidQ, std::pow (10.f, lowMidG / 20.f));
-            globalEq.get<2>().coefficients = juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, midF,   midQ,   std::pow (10.f, midG   / 20.f));
-            globalEq.get<3>().coefficients = juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, hiMidF, hiMidQ, std::pow (10.f, hiMidG / 20.f));
-            globalEq.get<4>().coefficients = juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, hiF,   1.f,    std::pow (10.f, hiG    / 20.f));
+            *globalEq.get<0>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowShelf  (sr, lowF, 1.f, std::pow (10.f, lowG / 20.f));
+            *globalEq.get<1>().coefficients = *juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, midF, midQ, std::pow (10.f, midG / 20.f));
+            *globalEq.get<2>().coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, hiF,  1.f, std::pow (10.f, hiG  / 20.f));
             globalEqNeedsUpdate = false;
         }
 
@@ -2857,6 +2822,48 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         juce::dsp::AudioBlock<float> eqBlock (chans, 2, (size_t) ns);
         juce::dsp::ProcessContextReplacing<float> eqCtx (eqBlock);
         globalEq.process (eqCtx);
+    }
+
+    // ── v25: master audio-domain pitch shift (post-EQ, pre-output) ───────────
+    if (masterPitchShifter && busL[0] != nullptr)
+    {
+        const float targetSemitones = masterPitchParam ? masterPitchParam->load() : 0.0f;
+        const int   ns              = buffer.getNumSamples();
+
+        if (std::abs (targetSemitones) > 0.005f)   // bypass entirely at 0 semitones
+        {
+            // Update pitch ratio whenever the knob moves
+            if (std::abs (targetSemitones - masterPitchSemitones) > 0.005f)
+            {
+                masterPitchSemitones = targetSemitones;
+                const float ratio = std::pow (2.0f, targetSemitones / 12.0f);
+                masterPitchShifter->setTransposeFactor (ratio);
+            }
+
+            // Ensure scratch buffers are large enough
+            if ((int) masterPitchScratchL.size() < ns)
+            {
+                masterPitchScratchL.assign ((size_t) ns * 2, 0.0f);
+                masterPitchScratchR.assign ((size_t) ns * 2, 0.0f);
+            }
+
+            // Build non-owning input / output pointer arrays for signalsmith API
+            float* inPtrs[2]  = { busL[0], busR[0] ? busR[0] : busL[0] };
+            float* outPtrs[2] = { masterPitchScratchL.data(), masterPitchScratchR.data() };
+
+            masterPitchShifter->process (inPtrs, ns, outPtrs, ns);
+
+            // Copy pitch-shifted output back into the main bus
+            juce::FloatVectorOperations::copy (busL[0], outPtrs[0], ns);
+            if (busR[0])
+                juce::FloatVectorOperations::copy (busR[0], outPtrs[1], ns);
+        }
+        else if (std::abs (masterPitchSemitones) > 0.005f)
+        {
+            // Just crossed through zero — reset stretcher state to avoid stale tail
+            masterPitchShifter->reset();
+            masterPitchSemitones = 0.0f;
+        }
     }
 
     // ── Post-EQ spectrum analyser tap ─────────────────────────────────────────
@@ -2922,7 +2929,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
         // v5 fields
         stream.writeFloat (s.tonalityHz);
         stream.writeFloat (s.formantSemitones);
-        stream.writeBool (true);  // formantComp removed — hardcoded true (always compensate)
+        stream.writeBool (s.formantComp);
         // v6 fields
         stream.writeInt (s.grainMode);
         // v7 fields
@@ -3034,7 +3041,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         parsed.colour         = juce::Colour ((juce::uint32) stream.readInt());
         parsed.tonalityHz     = stream.readFloat();
         parsed.formantSemitones = stream.readFloat();
-        stream.readBool();  // formantComp removed — consume byte for stream alignment
+        parsed.formantComp    = stream.readBool();
         parsed.grainMode      = stream.readInt();
         parsed.volume         = stream.readFloat();
         parsed.releaseTail    = stream.readBool();
