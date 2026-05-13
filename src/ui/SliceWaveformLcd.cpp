@@ -187,7 +187,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
     env.ay    = 0.04f;
     env.sxEnd = kSEnd_c;
-    env.rx    = juce::jlimit (kRStart, kREnd, kRStart + releaseNorm * (kREnd - kRStart));
+    env.rx    = juce::jlimit (kRStart, kREnd, kREnd - releaseNorm * (kREnd - kRStart));
 
  // Rebuild node list
  envNodes.clear();
@@ -225,7 +225,7 @@ void SliceWaveformLcd::commitNodes()
 
     const float aRatio = (env.ax - kAStart) / juce::jmax (0.001f, kAEnd - kAStart);
     const float dRatio = (env.dx - kDStart) / juce::jmax (0.001f, kDEnd - kDStart);
-    const float rRatio = (env.rx - kRStart) / juce::jmax (0.001f, kREnd - kRStart);
+    const float rRatio = (kREnd - env.rx) / juce::jmax (0.001f, kREnd - kRStart);
 
     const float attackMs  = juce::jlimit (0.0f, kAttackViewMs,  aRatio * aRatio * kAttackViewMs);
     const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,   dRatio * dRatio * kDecayViewMs);
@@ -512,7 +512,7 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  a.colour = kColAttack; a.label = "A"; envNodes.add (a);
  EnvNode d; d.xn = env.dx; d.yn = env.sy; d.role = NodeRole::Decay;
  d.colour = kColDecay; d.label = "D"; envNodes.add (d);
-    EnvNode s; s.xn = (kSEnd_c + kRStart) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
+    EnvNode s; s.xn = (env.dx + env.sxEnd) * 0.5f; s.yn = env.sy; s.role = NodeRole::Sustain;
  s.colour = kColSustain; s.label = "S"; envNodes.add (s);
  EnvNode r; r.xn = env.rx; r.yn = env.sy; r.role = NodeRole::Release;
  r.colour = kColRelease; r.label = "R"; envNodes.add (r);
