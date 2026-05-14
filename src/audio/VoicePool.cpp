@@ -231,6 +231,11 @@ void VoicePool::startVoice (int voiceIdx, const VoiceStartParams& p,
     // (globalOneShot is intentionally always false; see PluginProcessor.)
     const bool isOneShot = s.oneShot || (p.globalOneShot > 0.5f);
 
+    // In one-shot mode, default decay to the natural slice duration so the
+    // envelope rides the full sample without the user needing to adjust anything.
+    if (isOneShot && decay < 0.0001f)
+        decay = (float)(sliceEnd - s.startSample) / (float) sampleRate;
+
     // Resolve hold time for this slice.
     const float holdSec = sm.resolveParam (sliceIdx, kLockHold,
                                            s.holdSec,
