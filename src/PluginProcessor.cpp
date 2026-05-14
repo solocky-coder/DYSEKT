@@ -3,7 +3,6 @@
 #include "audio/GrainEngine.h"
 #include "audio/AudioAnalysis.h"
 #include "audio/SoundFontLoader.h"
-#include "signalsmith-stretch.h"   // v25: master audio-domain pitch shift
 #include <BinaryData.h>
 #include <functional>
 #include <memory>
@@ -55,7 +54,7 @@ private:
 static constexpr uint32_t kValidLockMask =
     kLockBpm | kLockPitch | kLockAlgorithm | kLockAttack | kLockDecay | kLockSustain
     | kLockRelease | kLockMuteGroup | kLockStretch | kLockTonality | kLockFormant
-    | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
+    | kLockFormantComp | kLockGrainMode | kLockVolume | kLockReleaseTail | kLockReverse
     | kLockOutputBus | kLockLoop | kLockOneShot | kLockCentsDetune
     | kLockPan | kLockFilter;
 static Slice sanitiseRestoredSlice (Slice s)
@@ -153,6 +152,7 @@ DysektProcessor::DysektProcessor()
     stretchParam   = apvts.getRawParameterValue (ParamIds::defaultStretchEnabled);
     tonalityParam  = apvts.getRawParameterValue (ParamIds::defaultTonality);
     formantParam   = apvts.getRawParameterValue (ParamIds::defaultFormant);
+    formantCompParam = apvts.getRawParameterValue (ParamIds::defaultFormantComp);
     grainModeParam   = apvts.getRawParameterValue (ParamIds::defaultGrainMode);
     releaseTailParam = apvts.getRawParameterValue (ParamIds::defaultReleaseTail);
     reverseParam     = apvts.getRawParameterValue (ParamIds::defaultReverse);
@@ -165,7 +165,6 @@ DysektProcessor::DysektProcessor()
     filterResParam    = apvts.getRawParameterValue (ParamIds::defaultFilterRes);
     sliceStartParam  = apvts.getRawParameterValue (ParamIds::sliceStart);
     sliceEndParam    = apvts.getRawParameterValue (ParamIds::sliceEnd);
-    masterPitchParam = apvts.getRawParameterValue (ParamIds::masterPitch);  // v25
     publishUiSliceSnapshot();
 }
 
@@ -232,18 +231,6 @@ void DysektProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         spec.numChannels      = 2;
         globalEq.prepare (spec);
         globalEqNeedsUpdate = true;
-    }
-
-    // ── v25: master audio-domain pitch shifter ────────────────────────────────
-    {
-        const int blockSize = samplesPerBlock > 0 ? samplesPerBlock : 512;
-        masterPitchShifter = std::make_unique<signalsmith::stretch::SignalsmithStretch<float, void>>();
-        masterPitchShifter->presetDefault (2, (float) sampleRate);
-        masterPitchSemitones = 0.0f;
-        // Allocate scratch buffers with extra headroom for the stretcher's latency
-        const int scratchSize = blockSize * 4;
-        masterPitchScratchL.assign (scratchSize, 0.0f);
-        masterPitchScratchR.assign (scratchSize, 0.0f);
     }
 }
 
@@ -748,6 +735,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                 psp.dawBpm         = dawBpm.load();
                 psp.tonality       = tonalityParam->load();
                 psp.formant        = formantParam->load();
+                psp.formantComp    = formantCompParam->load() > 0.5f;
                 psp.grainMode      = (int) grainModeParam->load();
                 psp.sampleRate     = currentSampleRate;
                 psp.sample         = &sampleData;
@@ -838,6 +826,8 @@ void DysektProcessor::handleCommand (const Command& cmd)
                         s.tonalityHz = (s.lockMask & kLockTonality) ? s.tonalityHz : tonalityParam->load();
                     else if (bit == kLockFormant)
                         s.formantSemitones = (s.lockMask & kLockFormant) ? s.formantSemitones : formantParam->load();
+                    else if (bit == kLockFormantComp)
+                        s.formantComp = (s.lockMask & kLockFormantComp) ? s.formantComp : formantCompParam->load() > 0.5f;
                     else if (bit == kLockGrainMode)
                         s.grainMode = (s.lockMask & kLockGrainMode) ? s.grainMode : (int) grainModeParam->load();
                     else if (bit == kLockVolume)
@@ -886,6 +876,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     if (!(s.lockMask & kLockCentsDetune))   s.centsDetune      = centsDetuneParam->load();
                     if (!(s.lockMask & kLockTonality))      s.tonalityHz       = tonalityParam->load();
                     if (!(s.lockMask & kLockFormant))       s.formantSemitones = formantParam->load();
+                    if (!(s.lockMask & kLockFormantComp))   s.formantComp      = formantCompParam->load()  > 0.5f;
                     if (!(s.lockMask & kLockGrainMode))     s.grainMode        = (int) grainModeParam->load();
                     if (!(s.lockMask & kLockVolume))        s.volume           = masterVolParam->load();
                     if (!(s.lockMask & kLockPan))           s.pan              = panParam->load();
@@ -935,6 +926,7 @@ void DysektProcessor::handleCommand (const Command& cmd)
                     case FieldStretchEnabled: s.stretchEnabled = val > 0.5f; if (!skipLock) s.lockMask |= kLockStretch; break;
                     case FieldTonality:  s.tonalityHz = val;        if (!skipLock) s.lockMask |= kLockTonality;    break;
                     case FieldFormant:   s.formantSemitones = val;   if (!skipLock) s.lockMask |= kLockFormant;     break;
+                    case FieldFormantComp: s.formantComp = val > 0.5f; if (!skipLock) s.lockMask |= kLockFormantComp; break;
                     case FieldGrainMode:  s.grainMode = (int) val;   if (!skipLock) s.lockMask |= kLockGrainMode;  break;
                     case FieldVolume:     s.volume = val;            if (!skipLock) s.lockMask |= kLockVolume;    break;
                     case FieldReleaseTail: s.releaseTail = val > 0.5f; if (!skipLock) s.lockMask |= kLockReleaseTail; break;
@@ -1650,8 +1642,8 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                         switch (fid)
                         {
                             case FieldBpm:          return (sl.lockMask & kLockBpm)         ? sl.bpm              : apvts.getRawParameterValue (ParamIds::defaultBpm)->load();
-                            case FieldPitch:        return (sl.lockMask & kLockPitch)        ? sl.pitchSemitones   : apvts.getRawParameterValue (ParamIds::defaultPitch)->load();
-                            case FieldCentsDetune:  return (sl.lockMask & kLockCentsDetune)  ? sl.centsDetune      : apvts.getRawParameterValue (ParamIds::defaultCentsDetune)->load();
+                            case FieldPitch:        return sl.pitchSemitones;
+                            case FieldCentsDetune:  return sl.centsDetune;
                             case FieldPan:          return (sl.lockMask & kLockPan)          ? sl.pan              : apvts.getRawParameterValue (ParamIds::defaultPan)->load();
                             case FieldFilterCutoff: return (sl.lockMask & kLockFilter)       ? sl.filterCutoff     : apvts.getRawParameterValue (ParamIds::defaultFilterCutoff)->load();
                             case FieldFilterRes:    return (sl.lockMask & kLockFilter)       ? sl.filterRes        : apvts.getRawParameterValue (ParamIds::defaultFilterRes)->load();
@@ -2012,6 +2004,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                 p.dawBpm           = dawBpm.load();
                 p.globalTonality   = tonalityParam->load();
                 p.globalFormant    = formantParam->load();
+                p.globalFormantComp = formantCompParam->load() > 0.5f;
                 // globalGrainMode removed — Grain was a duplicate of Tonal
                 p.globalVolume     = masterVolParam->load();
                 p.globalReleaseTail = releaseTailParam->load() > 0.5f;
@@ -2817,48 +2810,6 @@ void DysektProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         globalEq.process (eqCtx);
     }
 
-    // ── v25: master audio-domain pitch shift (post-EQ, pre-output) ───────────
-    if (masterPitchShifter && busL[0] != nullptr)
-    {
-        const float targetSemitones = masterPitchParam ? masterPitchParam->load() : 0.0f;
-        const int   ns              = buffer.getNumSamples();
-
-        if (std::abs (targetSemitones) > 0.005f)   // bypass entirely at 0 semitones
-        {
-            // Update pitch ratio whenever the knob moves
-            if (std::abs (targetSemitones - masterPitchSemitones) > 0.005f)
-            {
-                masterPitchSemitones = targetSemitones;
-                const float ratio = std::pow (2.0f, targetSemitones / 12.0f);
-                masterPitchShifter->setTransposeFactor (ratio);
-            }
-
-            // Ensure scratch buffers are large enough
-            if ((int) masterPitchScratchL.size() < ns)
-            {
-                masterPitchScratchL.assign ((size_t) ns * 2, 0.0f);
-                masterPitchScratchR.assign ((size_t) ns * 2, 0.0f);
-            }
-
-            // Build non-owning input / output pointer arrays for signalsmith API
-            float* inPtrs[2]  = { busL[0], busR[0] ? busR[0] : busL[0] };
-            float* outPtrs[2] = { masterPitchScratchL.data(), masterPitchScratchR.data() };
-
-            masterPitchShifter->process (inPtrs, ns, outPtrs, ns);
-
-            // Copy pitch-shifted output back into the main bus
-            juce::FloatVectorOperations::copy (busL[0], outPtrs[0], ns);
-            if (busR[0])
-                juce::FloatVectorOperations::copy (busR[0], outPtrs[1], ns);
-        }
-        else if (std::abs (masterPitchSemitones) > 0.005f)
-        {
-            // Just crossed through zero — reset stretcher state to avoid stale tail
-            masterPitchShifter->reset();
-            masterPitchSemitones = 0.0f;
-        }
-    }
-
     // ── Post-EQ spectrum analyser tap ─────────────────────────────────────────
     spectrumAnalyser.pushSamples (buffer);
 
@@ -2922,6 +2873,7 @@ void DysektProcessor::getStateInformation (juce::MemoryBlock& destData)
         // v5 fields
         stream.writeFloat (s.tonalityHz);
         stream.writeFloat (s.formantSemitones);
+        stream.writeBool (s.formantComp);
         // v6 fields
         stream.writeInt (s.grainMode);
         // v7 fields
@@ -3033,7 +2985,7 @@ void DysektProcessor::setStateInformation (const void* data, int sizeInBytes)
         parsed.colour         = juce::Colour ((juce::uint32) stream.readInt());
         parsed.tonalityHz     = stream.readFloat();
         parsed.formantSemitones = stream.readFloat();
-        stream.readBool();  // legacy formantComp — removed, consumed for format compatibility
+        parsed.formantComp    = stream.readBool();
         parsed.grainMode      = stream.readInt();
         parsed.volume         = stream.readFloat();
         parsed.releaseTail    = stream.readBool();

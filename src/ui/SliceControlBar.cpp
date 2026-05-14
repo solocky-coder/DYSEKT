@@ -47,8 +47,8 @@ SliceControlBar::SliceControlBar (DysektProcessor& p) : processor (p)
 
 void SliceControlBar::timerCallback()
 {
-    // Advance pulse at ~0.6 Hz (full cycle every ~1.67s)
-    pulsePhase += 1.0f / (30.0f / 0.6f);
+    // Advance pulse at ~1.2 Hz (full cycle every ~0.85s)
+    pulsePhase += 1.0f / (30.0f / 1.2f);
     if (pulsePhase >= 1.0f) pulsePhase -= 1.0f;
 
     // Real-time repaint for CC-driven marker movement
@@ -70,13 +70,11 @@ void SliceControlBar::timerCallback()
 
 void SliceControlBar::updateMidiLearnPulse()
 {
-    // Reset pulse phase only on the rising edge of arm (false → true).
-    // Previously this reset pulsePhase every call while armed, which fought
-    // the timer and prevented the animation from ever advancing.
-    const bool nowArmed = processor.midiLearn.isArmed();
-    if (nowArmed && !wasArmed)
+    // Timer is always running (started in constructor for real-time CC repaint).
+    // Just reset pulse phase when arming so the blink starts cleanly.
+    // Also keep requesting repaints during the 300ms arrow fade-out window.
+    if (processor.midiLearn.isArmed())
         pulsePhase = 0.0f;
-    wasArmed = nowArmed;
 
     const int lastMs  = processor.markerRelLastMs.load (std::memory_order_relaxed);
     const int elapsed = (int) juce::Time::getMillisecondCounter() - lastMs;
@@ -874,8 +872,8 @@ void SliceControlBar::paint (juce::Graphics& g)
      return (s.lockMask & bit) ? sliceVal : globalVal;
  };
 
- const float effPitch    = resolveF (kLockPitch,   s.pitchSemitones,  apvtsVal (ParamIds::defaultPitch));
- const float effCents    = resolveF (kLockCentsDetune, s.centsDetune,  apvtsVal (ParamIds::defaultCentsDetune));
+ const float effPitch    = s.pitchSemitones;
+ const float effCents    = s.centsDetune;
  const float effAttack   = s.attackSec;    // always per-slice
  const float effDecay    = s.decaySec;     // always per-slice
  const float effSustain  = s.sustainLevel; // always per-slice
@@ -884,6 +882,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  const float effPan      = resolveF (kLockPan,     s.pan,             apvtsVal (ParamIds::defaultPan));
  const float effTonality = resolveF (kLockTonality, s.tonalityHz,     apvtsVal (ParamIds::defaultTonality));
  const float effFormant  = resolveF (kLockFormant,  s.formantSemitones, apvtsVal (ParamIds::defaultFormant));
+ const bool  effFComp    = resolveF (kLockFormantComp, s.formantComp ? 1.f : 0.f, apvtsVal (ParamIds::defaultFormantComp)) > 0.5f;
 
  const int   effOutputBus = (int) resolveF (kLockOutputBus, (float) s.outputBus, 0.0f);
  const bool  effStretch  = resolveF (kLockStretch, s.stretchEnabled ? 1.f : 0.f, apvtsVal (ParamIds::defaultStretchEnabled)) > 0.5f;
@@ -944,6 +943,12 @@ void SliceControlBar::paint (juce::Graphics& g)
  (fv >= 0.f ? "+" : "") + juce::String (fv, 1),
  toNorm (F::FieldFormant, fv),
  true, 0, F::FieldFormant, -24.f, 24.f, 0.1f, cw);
+ x += cw + si (4);
+
+ bool fmntCVal = effFComp;
+ drawParamCell (g, x, row1y, "FMNT C", fmntCVal ? "ON" : "OFF",
+ true, 0, F::FieldFormantComp,
+ 0.f, 1.f, 1.f, true, false, cw);
  x += cw + si (4);
  }
  // STRETCH — boolean (no lock)
@@ -1055,10 +1060,7 @@ void SliceControlBar::paint (juce::Graphics& g)
  // ── Row 2 ─────────────────────────────────────────────────────────
  x = si (8);
  int adsrGroupX1 = x, adsrGroupX2 = x;
-// All three time stages share the same maximum: the selected slice duration.
-// This keeps the knob arcs and the SliceWaveformLcd node positions in sync —
-// both map 0..sliceDurSec to the full 0..1 visual range.
-float sliceMaxSec = 5.0f;
+float relMaxSec = 5.0f;
 {
     const int total = processor.sampleData.getNumFrames();
     if (total > 0)
@@ -1067,12 +1069,9 @@ float sliceMaxSec = 5.0f;
         const int sliceLen = sliceEnd - s.startSample;
         const float sr = (float) processor.voicePool.getSampleRate();
         if (sliceLen > 0 && sr > 0.0f)
-            sliceMaxSec = juce::jmax (0.001f, (float) sliceLen / sr);
+            relMaxSec = juce::jmax (0.001f, (float) sliceLen / sr);
     }
 }
-const float relMaxSec = sliceMaxSec; // kept for any remaining references
-const float atkMaxSec = sliceMaxSec;
-const float decMaxSec = sliceMaxSec;
 
  // ATK — knob (stored seconds, display ms)
  {
@@ -1081,8 +1080,8 @@ const float decMaxSec = sliceMaxSec;
  float atk = effAttack;
  drawKnobCell (g, x, row2y, "ATK",
  juce::String ((int) (atk * 1000.f)) + "ms",
- juce::jlimit (0.f, 1.f, atk / atkMaxSec),
- locked, kLockAttack, F::FieldAttack, 0.f, atkMaxSec, 0.001f, cw);
+ toNorm (F::FieldAttack, atk),
+ locked, kLockAttack, F::FieldAttack, 0.f, 1.f, 0.001f, cw);
  x += cw + si (4);
  }
 
@@ -1095,8 +1094,8 @@ const float decMaxSec = sliceMaxSec;
  float dec = effDecay;
  drawKnobCell (g, x, row2y, "DEC",
  juce::String ((int) (dec * 1000.f)) + "ms",
- juce::jlimit (0.f, 1.f, dec / decMaxSec),
- locked, kLockDecay, F::FieldDecay, 0.f, decMaxSec, 0.001f, cw);
+ toNorm (F::FieldDecay, dec),
+ locked, kLockDecay, F::FieldDecay, 0.f, 5.f, 0.001f, cw);
  x += cw + si (4);
  }
 
@@ -1449,8 +1448,8 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  switch (cell.fieldId)
  {
  case F::FieldBpm:         dragStartValue = sl.bpm; break;
- case F::FieldPitch:       dragStartValue = res (kLockPitch,       sl.pitchSemitones,   apvtsRaw (ParamIds::defaultPitch)); break;
- case F::FieldCentsDetune: dragStartValue = res (kLockCentsDetune, sl.centsDetune,      apvtsRaw (ParamIds::defaultCentsDetune)); break;
+ case F::FieldPitch:       dragStartValue = sl.pitchSemitones; break;
+ case F::FieldCentsDetune: dragStartValue = sl.centsDetune;    break;
  case F::FieldTonality:    dragStartValue = res (kLockTonality,    sl.tonalityHz,       apvtsRaw (ParamIds::defaultTonality)); break;
  case F::FieldFormant:     dragStartValue = res (kLockFormant,     sl.formantSemitones, apvtsRaw (ParamIds::defaultFormant)); break;
  case F::FieldAttack:      dragStartValue = sl.attackSec;    break;
@@ -1492,6 +1491,7 @@ void SliceControlBar::mouseDown (const juce::MouseEvent& e)
  bool currentVal = false;
  using F = DysektProcessor;
  if (cell.fieldId == F::FieldStretchEnabled) currentVal = sliceLocked ? sl.stretchEnabled : (processor.apvts.getRawParameterValue (ParamIds::defaultStretchEnabled)->load() > 0.5f);
+ else if (cell.fieldId == F::FieldFormantComp) currentVal = sliceLocked ? sl.formantComp : (processor.apvts.getRawParameterValue (ParamIds::defaultFormantComp)->load() > 0.5f);
  else if (cell.fieldId == F::FieldReleaseTail) currentVal = sliceLocked ? sl.releaseTail : (processor.apvts.getRawParameterValue (ParamIds::defaultReleaseTail)->load() > 0.5f);
  else if (cell.fieldId == F::FieldReverse) currentVal = sliceLocked ? sl.reverse : (processor.apvts.getRawParameterValue (ParamIds::defaultReverse)->load() > 0.5f);
  else if (cell.fieldId == F::FieldChromaticLegato) currentVal = sl.chromaticLegato;
@@ -1708,34 +1708,21 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  || cell.fieldId == F::FieldRelease);
  bool isBpm = (cell.fieldId == F::FieldBpm);
 
- // Compute slice duration for ADSR sensitivity scaling — matches paint() logic.
- float sliceMaxSec = 5.0f;
- {
-     const int sel = processor.getUiSliceSnapshot().selectedSlice;
-     const int total = processor.sampleData.getNumFrames();
-     if (sel >= 0 && total > 0)
-     {
-         const int sliceEnd = processor.sliceManager.getEndForSlice (sel, total);
-         const int sliceLen = sliceEnd - processor.getUiSliceSnapshot().slices[(size_t) sel].startSample;
-         const float sr = (float) processor.voicePool.getSampleRate();
-         if (sliceLen > 0 && sr > 0.0f)
-             sliceMaxSec = juce::jmax (0.001f, (float) sliceLen / sr);
-     }
- }
-
  float newNative;
  if (isAdsr || isBpm)
  {
- // Sensitivity in display units (ms) per pixel.
- // All time stages now share the slice duration as their maximum, so
- // sensitivity scales with it: ~sliceMs/500 ms/px gives ~500px full sweep.
- // Shift = fine mode (÷10).
- const float sliceMs = sliceMaxSec * 1000.f;
+ // Sensitivity in display units per pixel:
+ // Attack: 2 ms/px (range 0-1000ms → 500px full sweep)
+ // Decay: 10 ms/px (range 0-5000ms → 500px full sweep)
+ // Release: 10 ms/px
+ // Sustain: 0.5 %/px (range 0-100% → 200px full sweep)
+ // BPM: 2 bpm/px
+ // Shift = fine mode (÷10)
  float sensitivity = 1.0f;
- if (cell.fieldId == F::FieldAttack) sensitivity = juce::jmax (1.0f, sliceMs / 500.f);
- else if (cell.fieldId == F::FieldHold)    sensitivity = 10.0f;
- else if (cell.fieldId == F::FieldDecay)   sensitivity = juce::jmax (1.0f, sliceMs / 500.f);
- else if (cell.fieldId == F::FieldRelease) sensitivity = juce::jmax (1.0f, sliceMs / 500.f);
+ if (cell.fieldId == F::FieldAttack) sensitivity = 2.0f;
+ else if (cell.fieldId == F::FieldHold)  sensitivity = 10.0f;
+ else if (cell.fieldId == F::FieldDecay) sensitivity = 10.0f;
+ else if (cell.fieldId == F::FieldRelease) sensitivity = 10.0f;
  else if (cell.fieldId == F::FieldSustain) sensitivity = 0.5f;
  else if (cell.fieldId == F::FieldBpm) sensitivity = 2.0f;
  if (e.mods.isShiftDown()) sensitivity *= 0.1f;
