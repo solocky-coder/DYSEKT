@@ -12,6 +12,7 @@ struct PreviewStretchParams
     float dawBpm         = 120.0f;
     float tonality       = 0.0f;
     float formant        = 0.0f;
+    bool  formantComp    = false;
     int   grainMode      = 0;
     double sampleRate    = 44100.0;
     const SampleData* sample = nullptr;

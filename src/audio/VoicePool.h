@@ -24,6 +24,7 @@ struct VoiceStartParams
     float dawBpm = 120.0f;
     float globalTonality = 0.0f;
     float globalFormant = 0.0f;
+    bool globalFormantComp = false;
     float globalVolume = 0.0f; // dB
     bool globalReleaseTail = false;
     bool globalReverse = false;
@@ -91,7 +92,7 @@ public:
 
     // Public helpers so LazyChopEngine can initialise stretch on preview voice
     static void initStretcher (Voice& v, float pitchSemis, double sr,
-                                float tonalityHz, float formantSemis,
+                                float tonalityHz, float formantSemis, bool formantComp,
                                 const SampleData& sample);
 
     void killVoicesForChromaticLegato (int sliceIdx);
