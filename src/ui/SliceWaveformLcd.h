@@ -40,21 +40,21 @@ private:
     // ── Snapshot used for one paint pass ─────────────────────────────────────
     struct DisplayData
     {
-        bool          hasSlice     { false };
-        bool          hasSample    { false };
-        int           sliceIndex   { -1 };
-        int           numSlices    { 0 };
-        int           startSample  { 0 };
-        int           endSample    { 0 };
-        int           totalFrames  { 0 };
-        int           midiNote     { 60 };
-        float         volume       { 0.0f };
-        float         pan          { 0.0f };
+        bool          hasSlice       { false };
+        bool          hasSample      { false };
+        int           sliceIndex     { -1 };
+        int           numSlices      { 0 };
+        int           startSample    { 0 };
+        int           endSample      { 0 };
+        int           totalFrames    { 0 };
+        int           midiNote       { 60 };
+        float         volume         { 0.0f };
+        float         pan            { 0.0f };
         float         pitchSemitones { 0.0f };
 
-        double        sampleRate   { 44100.0 };
+        double        sampleRate     { 44100.0 };
         juce::String  sampleName;
-        bool          isDefault    { false };
+        bool          isDefault      { false };
         juce::Array<float> peaks;
     };
 
@@ -106,9 +106,9 @@ private:
     // Cache of computed nodes (rebuilt each paint + mouse event)
     juce::Array<EnvNode> envNodes;    // P1..P3 + sustain handle
 
-    NodeRole dragRole     { NodeRole::None };
-    NodeRole hovRole      { NodeRole::None };
-    float    dragStartX   { 0.0f };
+    NodeRole dragRole        { NodeRole::None };
+    NodeRole hovRole         { NodeRole::None };
+    float    dragStartX      { 0.0f };
     int      postCommitGuard { 0 };   // frames to skip rebuild after commitNodes()
     int      lastEnvSnapVer  { -1 };  // snapshot version when env was last built
 
