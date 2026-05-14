@@ -124,6 +124,8 @@ private:
     // Content area cached in resized() / used for hit testing
     juce::Rectangle<float> screenArea;
 
+    int lastBuiltSliceIndex { -1 };  // slice index for which env.rx was last initialised
+
     static const juce::Colour kBg;
     static const juce::Colour kBezel;
     static const juce::Colour kPhosphor;

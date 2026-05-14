@@ -174,6 +174,16 @@ void SliceWaveformLcd::buildEnvelopeNodes()
     static constexpr float kMin = 0.01f, kMax = 0.99f;
     static constexpr float kGap = 0.01f;
 
+    // When the selected slice changes, snap R to the end of the slice so the
+    // node starts at the true slice boundary rather than wherever the release
+    // time mapping lands (which for short default release values is far from end).
+    if (sel != lastBuiltSliceIndex)
+    {
+        env.rx    = kMax;
+        env.sxEnd = kMax;
+        lastBuiltSliceIndex = sel;
+    }
+
     const float sliceDurMs_  = juce::jmax (1.0f, getSliceDurMs());
     const float kViewMs      = sliceDurMs_;
 
