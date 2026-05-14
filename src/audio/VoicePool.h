@@ -2,6 +2,7 @@
 #include "Voice.h"
 #include "SliceManager.h"
 #include "SampleData.h"
+#include "signalsmith-stretch.h"
 #include <array>
 #include <atomic>
 
@@ -92,7 +93,7 @@ public:
 
     // Public helpers so LazyChopEngine can initialise stretch on preview voice
     static void initStretcher (Voice& v, float pitchSemis, double sr,
-                                float tonalityHz, float formantSemis, bool formantComp,
+                                float tonalityHz, float formantSemis,
                                 const SampleData& sample);
 
     void killVoicesForChromaticLegato (int sliceIdx);
