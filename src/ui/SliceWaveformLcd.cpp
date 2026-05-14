@@ -183,7 +183,7 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 
     // Place A and R first, then fit D in the remaining span.
     const float ax_raw = kMin + attackNorm  * (kMax - kMin);
-    const float rx_raw = kMax - releaseNorm * (kMax - kMin);
+    const float rx_raw = kMin + releaseNorm * (kMax - kMin);
 
     env.ax = juce::jlimit (kMin, kMax - 2.0f * kGap, ax_raw);
     env.rx = juce::jlimit (env.ax + 2.0f * kGap, kMax, rx_raw);
@@ -229,8 +229,8 @@ void SliceWaveformLcd::commitNodes()
 
     // A: position within full [kMin..kMax] span
     const float aRatio = (env.ax - kMin) / juce::jmax (0.001f, kMax - kMin);
-    // R: position within full [kMin..kMax] span (inverted — left = longer)
-    const float rRatio = (kMax - env.rx) / juce::jmax (0.001f, kMax - kMin);
+    // R: position within full [kMin..kMax] span (same direction as A — right = longer)
+    const float rRatio = (env.rx - kMin) / juce::jmax (0.001f, kMax - kMin);
     // D: position within [ax+kGap .. rx-kGap] span
     const float dSpan  = env.rx - env.ax - 2.0f * kGap;
     const float dRatio = (env.dx - (env.ax + kGap)) / juce::jmax (0.001f, dSpan);
