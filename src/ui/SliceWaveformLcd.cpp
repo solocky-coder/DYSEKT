@@ -164,30 +164,38 @@ void SliceWaveformLcd::buildEnvelopeNodes()
      releaseMs = s.releaseSec   * 1000.0f;
  }
 
-    // Fixed zones — each stage occupies its own band regardless of other stages.
-    // Must match commitNodes and mouseDrag constants exactly.
-    //   Attack  [0.00..0.25]  Decay  [0.25..0.50]
-    //   Sustain [0.50..0.75]  Release[0.75..1.00]
-    static constexpr float kAStart = 0.00f, kAEnd = 0.25f;
-    static constexpr float kDStart = 0.25f, kDEnd = 0.50f;
-    static constexpr float kSEnd_c = 0.75f;
-    static constexpr float kRStart = 0.75f, kREnd = 1.00f;
+    // Free layout — A, D, R travel the full [0..1] width with only a small
+    // minimum separation (kGap) enforced between adjacent nodes.
+    // A:  0=no attack (node at left edge),  1=full-length attack (node at right).
+    // R:  0=no release (node at right edge), 1=full-length release (node at left).
+    // D:  mapped proportionally into the span [ax+kGap .. rx-kGap].
+    // Sustain plateau = [dx .. rx]; sxEnd == rx (no separate constant needed).
+    // Must match commitNodes and mouseDrag exactly.
+    static constexpr float kMin = 0.01f, kMax = 0.99f;
+    static constexpr float kGap = 0.01f;
 
-    const float sliceDurMs_   = juce::jmax (1.0f, getSliceDurMs());
-    const float kAttackViewMs  = sliceDurMs_;
-    const float kDecayViewMs   = sliceDurMs_;
-    const float releaseViewMs  = sliceDurMs_;
+    const float sliceDurMs_  = juce::jmax (1.0f, getSliceDurMs());
+    const float kViewMs      = sliceDurMs_;
 
-    const float attackNorm  = std::sqrt (juce::jmin (attackMs  / kAttackViewMs,  1.0f));
-    const float decayNorm   = std::sqrt (juce::jmin (decayMs   / kDecayViewMs,   1.0f));
-    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / releaseViewMs,  1.0f));
+    const float attackNorm  = std::sqrt (juce::jmin (attackMs  / kViewMs, 1.0f));
+    const float decayNorm   = std::sqrt (juce::jmin (decayMs   / kViewMs, 1.0f));
+    const float releaseNorm = std::sqrt (juce::jmin (releaseMs / kViewMs, 1.0f));
 
-    env.ax    = juce::jlimit (kAStart, kAEnd, kAStart + attackNorm  * (kAEnd - kAStart));
-    env.dx    = juce::jlimit (kDStart, kDEnd, kDStart + decayNorm   * (kDEnd - kDStart));
+    // Place A and R first, then fit D in the remaining span.
+    const float ax_raw = kMin + attackNorm  * (kMax - kMin);
+    const float rx_raw = kMax - releaseNorm * (kMax - kMin);
+
+    env.ax = juce::jlimit (kMin, kMax - 2.0f * kGap, ax_raw);
+    env.rx = juce::jlimit (env.ax + 2.0f * kGap, kMax, rx_raw);
+
+    const float dSpan = env.rx - env.ax - 2.0f * kGap;
+    env.dx = juce::jlimit (env.ax + kGap,
+                           env.rx - kGap,
+                           env.ax + kGap + decayNorm * dSpan);
+
     env.sy    = juce::jlimit (0.04f, 0.94f, 1.0f - (sustainPc / 100.0f));
     env.ay    = 0.04f;
-    env.sxEnd = kSEnd_c;
-    env.rx    = juce::jlimit (kRStart, kREnd, kREnd - releaseNorm * (kREnd - kRStart));
+    env.sxEnd = env.rx;
 
  // Rebuild node list
  envNodes.clear();
@@ -213,24 +221,24 @@ void SliceWaveformLcd::buildEnvelopeNodes()
 
 void SliceWaveformLcd::commitNodes()
 {
-    // Inverse-map — fixed zones, must match buildEnvelopeNodes exactly.
-    static constexpr float kAStart = 0.00f, kAEnd = 0.25f;
-    static constexpr float kDStart = 0.25f, kDEnd = 0.50f;
-    static constexpr float kRStart = 0.75f, kREnd = 1.00f;
+    // Inverse-map — must match buildEnvelopeNodes exactly.
+    static constexpr float kMin = 0.01f, kMax = 0.99f;
+    static constexpr float kGap = 0.01f;
 
-    const float sliceDurMs_c   = juce::jmax (1.0f, getSliceDurMs());
-    const float kAttackViewMs  = sliceDurMs_c;
-    const float kDecayViewMs   = sliceDurMs_c;
-    const float releaseViewMs  = sliceDurMs_c;
+    const float kViewMs = juce::jmax (1.0f, getSliceDurMs());
 
-    const float aRatio = (env.ax - kAStart) / juce::jmax (0.001f, kAEnd - kAStart);
-    const float dRatio = (env.dx - kDStart) / juce::jmax (0.001f, kDEnd - kDStart);
-    const float rRatio = (kREnd - env.rx) / juce::jmax (0.001f, kREnd - kRStart);
+    // A: position within full [kMin..kMax] span
+    const float aRatio = (env.ax - kMin) / juce::jmax (0.001f, kMax - kMin);
+    // R: position within full [kMin..kMax] span (inverted — left = longer)
+    const float rRatio = (kMax - env.rx) / juce::jmax (0.001f, kMax - kMin);
+    // D: position within [ax+kGap .. rx-kGap] span
+    const float dSpan  = env.rx - env.ax - 2.0f * kGap;
+    const float dRatio = (env.dx - (env.ax + kGap)) / juce::jmax (0.001f, dSpan);
 
-    const float attackMs  = juce::jlimit (0.0f, kAttackViewMs,  aRatio * aRatio * kAttackViewMs);
-    const float decayMs   = juce::jlimit (0.0f, kDecayViewMs,   dRatio * dRatio * kDecayViewMs);
+    const float attackMs  = juce::jlimit (0.0f, kViewMs, aRatio * aRatio * kViewMs);
+    const float decayMs   = juce::jlimit (0.0f, kViewMs, dRatio * dRatio * kViewMs);
     const float sustainPc = juce::jlimit (0.0f, 100.0f, (1.0f - env.sy) * 100.0f);
-    const float releaseMs = juce::jlimit (0.0f, releaseViewMs,  rRatio * rRatio * releaseViewMs);
+    const float releaseMs = juce::jlimit (0.0f, kViewMs, rRatio * rRatio * kViewMs);
 
     // Read the lock state for the selected slice so we can decide whether to
     // write per-slice or global APVTS — mirroring SliceControlBar::mouseDrag
@@ -463,48 +471,35 @@ void SliceWaveformLcd::mouseDrag (const juce::MouseEvent& e)
  const float oy = screenArea.getY();
 
  const float xn  = juce::jlimit (0.01f, 0.99f, (e.position.x - ox) / W);
- const float rxn = juce::jlimit (0.0f,  1.0f,  (e.position.x - ox) / W); // full-range for R
  const float yn  = juce::jlimit (0.02f, 0.98f, (e.position.y - oy) / H);
 
- // Dynamic layout — must match buildEnvelopeNodes exactly
-    static constexpr float kAStart = 0.00f, kAEnd = 0.25f;
-    static constexpr float kDStart = 0.25f, kDEnd = 0.50f;
-    static constexpr float kSEnd_c = 0.75f;
-    static constexpr float kRStart = 0.75f, kREnd = 1.00f;
+ // Free layout — must match buildEnvelopeNodes / commitNodes exactly.
+    static constexpr float kMin = 0.01f, kMax = 0.99f;
+    static constexpr float kGap = 0.01f;
 
  if (dragRole == NodeRole::Attack)
  {
- // A: X only — peak height is always maximum
-        env.ax    = juce::jlimit (kAStart, kAEnd, xn);
+     // A: X only — clamp to [kMin, dx-kGap] so it never crosses D
+     env.ax    = juce::jlimit (kMin, env.dx - kGap, xn);
  }
-
- // Recalculate dynamic zones every drag tick (attack movement shifts D/S/R zones)
-        env.sxEnd = kSEnd_c;
-
- // Standard ADSR behaviour: D/S/R nodes keep their own positions unless Attack
- // physically overlaps them. Only push them forward to avoid visual overlap —
- // do NOT re-clamp them into the proportional zone (that caused them to jump
- // every time A was moved, which is non-standard and confusing).
- if (dragRole == NodeRole::Attack)
+ else if (dragRole == NodeRole::Decay)
  {
-     if (env.rx < env.dx) env.rx = env.dx;  // push R only if D pushed into it
- }
-
- if (dragRole == NodeRole::Decay)
- {
- // D: X only — controls how far decay extends before sustain
-        env.dx    = juce::jlimit (kDStart, kDEnd, xn);
+     // D: X only — stays between A and R
+     env.dx    = juce::jlimit (env.ax + kGap, env.rx - kGap, xn);
  }
  else if (dragRole == NodeRole::Sustain)
  {
- // S: Y only — sustain level
- env.sy = juce::jlimit (0.04f, 0.94f, yn);
+     // S: Y only — sustain level
+     env.sy = juce::jlimit (0.04f, 0.94f, yn);
  }
  else if (dragRole == NodeRole::Release)
  {
- // R: X only — drag right = longer release tail (later fade end)
-        env.rx    = juce::jlimit (kRStart, kREnd, rxn);
+     // R: X only — clamp to [dx+kGap, kMax] so it never crosses D
+     env.rx    = juce::jlimit (env.dx + kGap, kMax, xn);
  }
+
+ // Plateau end always tracks R
+ env.sxEnd = env.rx;
 
  // Rebuild envNodes[] from updated env.* (no param read during drag)
  envNodes.clear();
@@ -638,10 +633,7 @@ void SliceWaveformLcd::drawWaveform (juce::Graphics& g, const juce::Rectangle<fl
  g.strokePath (lineTop, sharp);
  g.strokePath (lineBot, sharp);
 
- // Slice boundary markers
- g.setColour (sliceCol.withAlpha (0.50f));
- g.drawVerticalLine (juce::roundToInt (area.getX() + 1), area.getY(), area.getBottom());
- g.drawVerticalLine (juce::roundToInt (area.getRight() - 1), area.getY(), area.getBottom());
+
 }
 
 void SliceWaveformLcd::drawSegmentLabel (juce::Graphics& g,

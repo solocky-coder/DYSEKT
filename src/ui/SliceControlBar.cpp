@@ -1055,7 +1055,10 @@ void SliceControlBar::paint (juce::Graphics& g)
  // ── Row 2 ─────────────────────────────────────────────────────────
  x = si (8);
  int adsrGroupX1 = x, adsrGroupX2 = x;
-float relMaxSec = 5.0f;
+// All three time stages share the same maximum: the selected slice duration.
+// This keeps the knob arcs and the SliceWaveformLcd node positions in sync —
+// both map 0..sliceDurSec to the full 0..1 visual range.
+float sliceMaxSec = 5.0f;
 {
     const int total = processor.sampleData.getNumFrames();
     if (total > 0)
@@ -1064,9 +1067,12 @@ float relMaxSec = 5.0f;
         const int sliceLen = sliceEnd - s.startSample;
         const float sr = (float) processor.voicePool.getSampleRate();
         if (sliceLen > 0 && sr > 0.0f)
-            relMaxSec = juce::jmax (0.001f, (float) sliceLen / sr);
+            sliceMaxSec = juce::jmax (0.001f, (float) sliceLen / sr);
     }
 }
+const float relMaxSec = sliceMaxSec; // kept for any remaining references
+const float atkMaxSec = sliceMaxSec;
+const float decMaxSec = sliceMaxSec;
 
  // ATK — knob (stored seconds, display ms)
  {
@@ -1075,8 +1081,8 @@ float relMaxSec = 5.0f;
  float atk = effAttack;
  drawKnobCell (g, x, row2y, "ATK",
  juce::String ((int) (atk * 1000.f)) + "ms",
- toNorm (F::FieldAttack, atk),
- locked, kLockAttack, F::FieldAttack, 0.f, 1.f, 0.001f, cw);
+ juce::jlimit (0.f, 1.f, atk / atkMaxSec),
+ locked, kLockAttack, F::FieldAttack, 0.f, atkMaxSec, 0.001f, cw);
  x += cw + si (4);
  }
 
@@ -1089,8 +1095,8 @@ float relMaxSec = 5.0f;
  float dec = effDecay;
  drawKnobCell (g, x, row2y, "DEC",
  juce::String ((int) (dec * 1000.f)) + "ms",
- toNorm (F::FieldDecay, dec),
- locked, kLockDecay, F::FieldDecay, 0.f, 5.f, 0.001f, cw);
+ juce::jlimit (0.f, 1.f, dec / decMaxSec),
+ locked, kLockDecay, F::FieldDecay, 0.f, decMaxSec, 0.001f, cw);
  x += cw + si (4);
  }
 
@@ -1705,18 +1711,16 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  float newNative;
  if (isAdsr || isBpm)
  {
- // Sensitivity in display units per pixel:
- // Attack: 2 ms/px (range 0-1000ms → 500px full sweep)
- // Decay: 10 ms/px (range 0-5000ms → 500px full sweep)
- // Release: 10 ms/px
- // Sustain: 0.5 %/px (range 0-100% → 200px full sweep)
- // BPM: 2 bpm/px
- // Shift = fine mode (÷10)
+ // Sensitivity in display units (ms) per pixel.
+ // All time stages now share the slice duration as their maximum, so
+ // sensitivity scales with it: ~sliceMs/500 ms/px gives ~500px full sweep.
+ // Shift = fine mode (÷10).
+ const float sliceMs = sliceMaxSec * 1000.f;
  float sensitivity = 1.0f;
- if (cell.fieldId == F::FieldAttack) sensitivity = 2.0f;
- else if (cell.fieldId == F::FieldHold)  sensitivity = 10.0f;
- else if (cell.fieldId == F::FieldDecay) sensitivity = 10.0f;
- else if (cell.fieldId == F::FieldRelease) sensitivity = 10.0f;
+ if (cell.fieldId == F::FieldAttack) sensitivity = juce::jmax (1.0f, sliceMs / 500.f);
+ else if (cell.fieldId == F::FieldHold)    sensitivity = 10.0f;
+ else if (cell.fieldId == F::FieldDecay)   sensitivity = juce::jmax (1.0f, sliceMs / 500.f);
+ else if (cell.fieldId == F::FieldRelease) sensitivity = juce::jmax (1.0f, sliceMs / 500.f);
  else if (cell.fieldId == F::FieldSustain) sensitivity = 0.5f;
  else if (cell.fieldId == F::FieldBpm) sensitivity = 2.0f;
  if (e.mods.isShiftDown()) sensitivity *= 0.1f;
