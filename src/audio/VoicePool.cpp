@@ -651,9 +651,10 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
                 }
                 else
                 {
-                    // noteOff() is a no-op in one-shot mode, so use forceRelease
-                    // to guarantee the voice actually terminates when sample data runs out.
-                    if (v.envelope.getState() != AdsrEnvelope::Release)
+                    // One-shot voices: let the ADSR decay drive the voice to Done naturally.
+                    // Gate voices: forceRelease so the voice doesn't play silence forever
+                    // waiting for a note-off that may never come.
+                    if (v.envelope.getState() != AdsrEnvelope::Release && !v.oneShot)
                         v.envelope.forceRelease (kShortReleaseSec, sampleRate);
                 }
             }
@@ -743,9 +744,10 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
                 }
                 else
                 {
-                    // noteOff() is a no-op in one-shot mode, so use forceRelease
-                    // to guarantee the voice actually terminates when sample data runs out.
-                    if (v.envelope.getState() != AdsrEnvelope::Release)
+                    // One-shot voices: let the ADSR decay drive the voice to Done naturally.
+                    // Gate voices: forceRelease so the voice doesn't play silence forever
+                    // waiting for a note-off that may never come.
+                    if (v.envelope.getState() != AdsrEnvelope::Release && !v.oneShot)
                         v.envelope.forceRelease (kShortReleaseSec, sampleRate);
 
                     newPos = juce::jlimit ((double) v.startSample, (double) v.endSample - 1, newPos);
