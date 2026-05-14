@@ -1708,6 +1708,21 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  || cell.fieldId == F::FieldRelease);
  bool isBpm = (cell.fieldId == F::FieldBpm);
 
+ // Compute slice duration for ADSR sensitivity scaling — matches paint() logic.
+ float sliceMaxSec = 5.0f;
+ {
+     const int sel = processor.getUiSliceSnapshot().selectedSlice;
+     const int total = processor.sampleData.getNumFrames();
+     if (sel >= 0 && total > 0)
+     {
+         const int sliceEnd = processor.sliceManager.getEndForSlice (sel, total);
+         const int sliceLen = sliceEnd - processor.getUiSliceSnapshot().slices[(size_t) sel].startSample;
+         const float sr = (float) processor.voicePool.getSampleRate();
+         if (sliceLen > 0 && sr > 0.0f)
+             sliceMaxSec = juce::jmax (0.001f, (float) sliceLen / sr);
+     }
+ }
+
  float newNative;
  if (isAdsr || isBpm)
  {
