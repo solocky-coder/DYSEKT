@@ -91,6 +91,7 @@ void VoicePool::initStretcher (Voice& v, float pitchSemis, double sr,
     if (! v.stretcher)
         v.stretcher = std::make_shared<signalsmith::stretch::SignalsmithStretch<float>>();
     v.stretcher->configure (2, blockSize, interval, false);
+    v.stretcher->reset();  // flush stale STFT state from any prior voice that used this slot
 
     float tonalityLimit = (tonalityHz > 0.0f && sr > 0.0) ? (float)(tonalityHz / sr) : 0.0f;
     v.stretcher->setTransposeSemitones (pitchSemis, tonalityLimit);
@@ -782,6 +783,7 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
     }
 
     // ── Pan ───────────────────────────────────────────────────────────[...]
+    voiceL *= v.panL;
     voiceR *= v.panR;
 
     outL = voiceL;
