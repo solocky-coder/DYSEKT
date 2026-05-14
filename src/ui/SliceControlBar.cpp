@@ -1114,13 +1114,14 @@ float relMaxSec = 5.0f;
  {
  bool locked = (s.lockMask & kLockRelease) != 0;
  float rel = effRelease;
-// REL knob norm uses the same sqrt curve as SliceWaveformLcd so the
-// knob arc initialises at a position that corresponds to the amount of
-// release stored in the slice (matches the LCD's perceptual mapping).
-// Linear (rel/relMaxSec) was previously used, which caused the knob
-// arc to diverge from the node position at moderate release values.
+// REL knob norm mirrors SliceWaveformLcd's inverted sqrt mapping:
+//   LCD:  rx = kMax - sqrt(releaseMs/kViewMs) * range   → node RIGHT when rel=0
+//   Knob: norm = 1 - sqrt(rel/relMaxSec)                → arc RIGHT when rel=0
+// This aligns the knob arc direction with the node position:
+//   rel=0ms  → norm=1.0 → knob hard RIGHT  (node at hard right)
+//   rel=max  → norm=0.0 → knob hard LEFT   (node at hard left)
 const float relNorm = juce::jlimit (0.f, 1.f,
-    std::sqrt (juce::jmin (rel / relMaxSec, 1.0f)));
+    1.0f - std::sqrt (juce::jmin (rel / relMaxSec, 1.0f)));
  drawKnobCell (g, x, row2y, "REL",
  juce::String ((int) (rel * 1000.f)) + "ms",
  relNorm,
@@ -1742,7 +1743,9 @@ void SliceControlBar::mouseDrag (const juce::MouseEvent& e)
  else if (cell.fieldId == F::FieldSustain)
  { ds *= 100.f; dmin *= 100.f; dmax *= 100.f; }
 
- float dv = juce::jlimit (dmin, dmax, ds + deltaY * sensitivity);
+ // Release knob is inverted (right=less release): drag-up must decrease value.
+ const float relSign = (cell.fieldId == F::FieldRelease) ? -1.0f : 1.0f;
+ float dv = juce::jlimit (dmin, dmax, ds + relSign * deltaY * sensitivity);
 
  if (cell.fieldId == F::FieldAttack ||
  cell.fieldId == F::FieldHold ||
