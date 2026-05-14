@@ -1114,8 +1114,13 @@ float relMaxSec = 5.0f;
  {
  bool locked = (s.lockMask & kLockRelease) != 0;
  float rel = effRelease;
-// REL spans the full selected-slice duration; matches SliceWaveformLcd mapping.
-const float relNorm = juce::jlimit (0.f, 1.f, rel / relMaxSec);
+// REL knob norm uses the same sqrt curve as SliceWaveformLcd so the
+// knob arc initialises at a position that corresponds to the amount of
+// release stored in the slice (matches the LCD's perceptual mapping).
+// Linear (rel/relMaxSec) was previously used, which caused the knob
+// arc to diverge from the node position at moderate release values.
+const float relNorm = juce::jlimit (0.f, 1.f,
+    std::sqrt (juce::jmin (rel / relMaxSec, 1.0f)));
  drawKnobCell (g, x, row2y, "REL",
  juce::String ((int) (rel * 1000.f)) + "ms",
  relNorm,
