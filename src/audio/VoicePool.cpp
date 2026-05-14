@@ -396,7 +396,7 @@ void VoicePool::releaseNote (int note)
 void VoicePool::releaseNoteForced (int note)
 {
     for (int i = 0; i < maxActive; ++i)
-        if (voices[i].active && voices[i].midiNote == note)
+        if (voices[i].active && voices[i].midiNote == note && !voices[i].oneShot)
             voices[i].envelope.forceRelease (kKillReleaseSec, sampleRate);
 }
 
@@ -651,10 +651,16 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
                 }
                 else
                 {
-                    // One-shot voices: let the ADSR decay drive the voice to Done naturally.
+                    if (v.oneShot)
+                    {
+                        // One-shot: sample played to end — deactivate immediately.
+                        v.active = false;
+                        voicePositions[i].store (0.0f, std::memory_order_relaxed);
+                        return;
+                    }
                     // Gate voices: forceRelease so the voice doesn't play silence forever
                     // waiting for a note-off that may never come.
-                    if (v.envelope.getState() != AdsrEnvelope::Release && !v.oneShot)
+                    if (v.envelope.getState() != AdsrEnvelope::Release)
                         v.envelope.forceRelease (kShortReleaseSec, sampleRate);
                 }
             }
@@ -744,10 +750,19 @@ void VoicePool::processVoiceSample (int i, const SampleData& sample, double /*sr
                 }
                 else
                 {
-                    // One-shot voices: let the ADSR decay drive the voice to Done naturally.
+                    if (v.oneShot)
+                    {
+                        // One-shot: sample played to end — deactivate immediately.
+                        // The ADSR is irrelevant here; position reaching endSample IS the termination.
+                        v.active = false;
+                        voicePositions[i].store (0.0f, std::memory_order_relaxed);
+                        outL = voiceL * v.panL;
+                        outR = voiceR * v.panR;
+                        return;
+                    }
                     // Gate voices: forceRelease so the voice doesn't play silence forever
                     // waiting for a note-off that may never come.
-                    if (v.envelope.getState() != AdsrEnvelope::Release && !v.oneShot)
+                    if (v.envelope.getState() != AdsrEnvelope::Release)
                         v.envelope.forceRelease (kShortReleaseSec, sampleRate);
 
                     newPos = juce::jlimit ((double) v.startSample, (double) v.endSample - 1, newPos);

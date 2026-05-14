@@ -2095,6 +2095,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                             voicePool.muteGroup (mg, voiceIdx);
                             if (legato)
                                 voicePool.killVoicesForChromaticLegato (ci);
+                            p.globalMuteGroup = mg; // ensure voice stamps the same group used for killing
                             voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
                         }
 
@@ -2133,6 +2134,7 @@ void DysektProcessor::processMidi (const juce::MidiBuffer& midi)
                                                                        (float) s.muteGroup, (float) p.globalMuteGroup);
                         voicePool.muteGroup (mg, voiceIdx);
                         p.sliceIdx = sliceIdx;
+                        p.globalMuteGroup = mg; // ensure voice stamps the same group used for killing
                         voicePool.startVoice (voiceIdx, p, sliceManager, sampleData);
                     }
                     } // end if (!handled)
