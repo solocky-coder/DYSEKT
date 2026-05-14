@@ -112,7 +112,8 @@ private:
     NodeRole hovRole         { NodeRole::None };
     float    dragStartX      { 0.0f };
     int      postCommitGuard { 0 };   // frames to skip rebuild after commitNodes()
-    int      lastEnvSnapVer  { -1 };  // snapshot version when env was last built
+    int      lastEnvSnapVer      { -1 };  // snapshot version when env was last built
+    int      lastBuiltSliceIndex { -1 };  // selected slice when env was last built
 
     // Last-seen global APVTS ADSR values — used by repaintLcd() to detect knob
     // changes that do not increment the slice snapshot version.
@@ -123,8 +124,6 @@ private:
 
     // Content area cached in resized() / used for hit testing
     juce::Rectangle<float> screenArea;
-
-    int lastBuiltSliceIndex { -1 };  // slice index for which env.rx was last initialised
 
     static const juce::Colour kBg;
     static const juce::Colour kBezel;
