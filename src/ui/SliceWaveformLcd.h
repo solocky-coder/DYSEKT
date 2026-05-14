@@ -77,14 +77,16 @@ private:
     float envAt (float xn)  const;     // interpolated Y at position xn
 
     void drawBackground   (juce::Graphics& g);
-    void drawWaveform     (juce::Graphics& g, const juce::Rectangle<int>& area);
-    void drawEnvelope     (juce::Graphics& g, const juce::Rectangle<int>& area);
-    void drawNodes        (juce::Graphics& g, const juce::Rectangle<int>& area);
+    void drawWaveform     (juce::Graphics& g, const juce::Rectangle<float>& area);
+    void drawEnvelope     (juce::Graphics& g, const juce::Rectangle<float>& area);
+    void drawNodes        (juce::Graphics& g, const juce::Rectangle<float>& area);
     void drawNoData       (juce::Graphics& g);
     void drawSegmentLabel (juce::Graphics& g, float x0, float y0,
                            float x1, float y1, const char* text,
-                           juce::Colour col, const juce::Rectangle<int>& area);
-    void drawPlayhead     (juce::Graphics& g, const juce::Rectangle<int>& area);
+                           juce::Colour col, const juce::Rectangle<float>& area);
+    void drawSegmentLabel (juce::Graphics& g, const char* text,
+                           juce::Colour col, const juce::Rectangle<float>& area);
+    void drawPlayhead     (juce::Graphics& g, const juce::Rectangle<float>& area);
 
     NodeRole hitTest (juce::Point<float> pos) const;
 
@@ -120,7 +122,7 @@ private:
     float lastApvtsRelease { -1.0f };
 
     // Content area cached in resized() / used for hit testing
-    juce::Rectangle<int> screenArea;
+    juce::Rectangle<float> screenArea;
 
     static const juce::Colour kBg;
     static const juce::Colour kBezel;
