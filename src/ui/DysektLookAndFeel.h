@@ -59,9 +59,10 @@ public:
     static juce::Font makeFont     (float pointSize, bool bold = false);  // Barlow Condensed — labels
     static juce::Font makeMonoFont (float pointSize, bool bold = false);  // JetBrains Mono   — values/numbers
 
-private:
     static juce::Typeface::Ptr sRegularTypeface;   // BarlowCondensed-Regular  — labels
     static juce::Typeface::Ptr sBoldTypeface;      // BarlowCondensed-SemiBold — bold labels
+
+private:
     static juce::Typeface::Ptr sMonoTypeface;      // JetBrainsMono-Regular    — values/numbers
     static juce::Typeface::Ptr sMonoBoldTypeface;  // JetBrainsMono-Bold       — bold values
     static float sMenuScale;
