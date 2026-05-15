@@ -26,44 +26,52 @@ void FileBrowserPanel::ArchiveListModel::paintListBoxItem (int row, juce::Graphi
         g.fillAll();
     }
 
-    g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
+    // Derive all font heights and badge/icon sizes from the row height h.
+    // Reference row height is 18 px; ratios preserve the original proportions.
+    const float fh = (float) h;
+    g.setFont (juce::Font (juce::FontOptions{}.withHeight (fh * 0.61f)));  // ~11 px at h=18
 
     // Folder icon placeholder
     if (R.isFolder)
     {
         g.setColour (T.accent.withAlpha (0.6f));
-        g.drawText (u8"\U0001F4C1", 4, 0, 18, h, juce::Justification::centredLeft);
+        g.drawText (u8"\U0001F4C1", 4, 0, h, h, juce::Justification::centredLeft);
         g.setColour (selected ? T.accent : T.foreground.withAlpha (0.8f));
-        g.drawText (R.name, 24, 0, w - 28, h, juce::Justification::centredLeft, true);
+        g.drawText (R.name, h + 6, 0, w - h - 10, h, juce::Justification::centredLeft, true);
     }
     else
     {
+        const int rightCols = juce::roundToInt (fh * 6.67f);   // ~120 px at h=18
         g.setColour (selected ? T.accent : T.foreground.withAlpha (0.75f));
-        g.drawText (R.name, 4, 0, w - 120, h, juce::Justification::centredLeft, true);
+        g.drawText (R.name, 4, 0, w - rightCols, h, juce::Justification::centredLeft, true);
 
         // Format badge
         if (R.format.isNotEmpty())
         {
-            auto badgeW = 40;
-            auto badgeRect = juce::Rectangle<int> (w - badgeW - 60, (h - 13) / 2, badgeW, 13);
+            const int badgeH    = juce::roundToInt (fh * 0.72f);   // ~13 px at h=18
+            const int badgeW    = 40;
+            const int sizeColW  = juce::roundToInt (fh * 3.33f);   // ~60 px at h=18
+            auto badgeRect = juce::Rectangle<int> (w - badgeW - sizeColW,
+                                                   (h - badgeH) / 2, badgeW, badgeH);
             g.setColour (T.accent.withAlpha (0.18f));
             g.fillRoundedRectangle (badgeRect.toFloat(), 2.0f);
             g.setColour (T.accent.withAlpha (0.85f));
-            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.0f)));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (fh * 0.50f)));  // ~9 px at h=18
             g.drawText (R.format, badgeRect, juce::Justification::centred);
         }
 
         // Size
         if (R.sizeBytes > 0)
         {
-            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f)));
+            const int sizeW = juce::roundToInt (fh * 3.06f);   // ~55 px at h=18
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (fh * 0.53f)));  // ~9.5 px at h=18
             g.setColour (T.foreground.withAlpha (0.4f));
             juce::String sizeStr;
             if (R.sizeBytes >= 1024 * 1024)
                 sizeStr = juce::String (R.sizeBytes / (1024 * 1024)) + " MB";
             else
                 sizeStr = juce::String (R.sizeBytes / 1024) + " KB";
-            g.drawText (sizeStr, w - 58, 0, 55, h, juce::Justification::centredRight, true);
+            g.drawText (sizeStr, w - sizeW - 3, 0, sizeW, h, juce::Justification::centredRight, true);
         }
     }
 }
