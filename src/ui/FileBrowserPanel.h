@@ -14,6 +14,17 @@ class SmallListLookAndFeel : public juce::LookAndFeel_V4
 public:
     SmallListLookAndFeel() {}
 
+    // Use the same BarlowCondensed typeface as DysektLookAndFeel so that file-list
+    // text is rendered with the correct custom font rather than falling back to a
+    // system typeface (which can be nearly invisible at small sizes on dark backgrounds).
+    juce::Typeface::Ptr getTypefaceForFont (const juce::Font& f) override
+    {
+        auto style = f.getTypefaceStyle().toLowerCase();
+        if (f.isBold() || style.contains ("bold") || style.contains ("semi"))
+            return DysektLookAndFeel::sBoldTypeface;
+        return DysektLookAndFeel::sRegularTypeface;
+    }
+
     void refreshTheme()
     {
         const auto& t = getTheme();
